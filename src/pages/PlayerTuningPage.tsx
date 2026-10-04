@@ -4,12 +4,13 @@
 // - 本页面保存的是“之后开始播放的新视频”的永久默认值；
 // - 右键菜单只临时改变当前视频，下一视频恢复本页面设置的永久默认。
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Button, Input, Radio, RadioGroup, Select, Spinner } from '@fluentui/react-components';
-import { ArrowLeft, CheckCircle2, FolderOpen, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, FolderOpen } from 'lucide-react';
 import { configApi, type PublicConfig, type MpvValidationResult, type MpvRuntimeStatus } from '../api/config';
 import { pickFile } from '../platform/folderPicker';
 import { useUiStore } from '../stores/ui';
+import { SettingsFeedback, SettingsField, SettingsSection } from '../components/ui/SettingsPrimitives';
 import '../styles/player-tuning.css';
 
 type Anime4kMode = 'off' | 'a' | 'b' | 'c' | 'a+a' | 'b+b' | 'c+a';
@@ -47,6 +48,7 @@ export default function PlayerTuningPage({ embedded = false, initialConfig, runt
   onPlayerTested?: () => Promise<void>;
 } = {}) {
   const goBack = useUiStore((state) => state.goBack);
+  const playerModeId = useId();
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [mode, setMode] = useState<Anime4kMode>('off');
   const [quality, setQuality] = useState<Anime4kQuality>('balanced');
@@ -188,12 +190,11 @@ export default function PlayerTuningPage({ embedded = false, initialConfig, runt
       </div>}
 
       <p className="player-tuning-note">选择播放器，再调整它的默认效果。保存后对新开始播放的视频生效。</p>
-      {loading && <div className="player-tuning-loading" role="status"><Spinner size="tiny" /> 正在读取配置…</div>}
+      {loading && <SettingsFeedback busy>正在读取配置…</SettingsFeedback>}
       {!loading && !config && <Button onClick={() => setLoadAttempt((value) => value + 1)}>重新读取</Button>}
       {config && !loading && <>
-      <section className="player-tuning-section">
-        <h3 id="player-mode-label">选择播放器</h3>
-        <RadioGroup aria-labelledby="player-mode-label" value={playerMode} disabled={busy}
+      <SettingsSection title="选择播放器" headingId={playerModeId}>
+        <RadioGroup aria-labelledby={playerModeId} value={playerMode} disabled={busy}
           onChange={(_, data) => { clearFeedback(); setPlayerMode(data.value as PlayerMode); }}>
           {PLAYER_MODE_OPTIONS.map((item) => <Radio key={item.value} value={item.value} label={item.label} />)}
         </RadioGroup>
@@ -203,20 +204,15 @@ export default function PlayerTuningPage({ embedded = false, initialConfig, runt
             : '使用你自己的 MPV 整合包，KumiPlayer 不会修改该目录中的配置或脚本。'}
         </p>
           {playerMode === 'external' && (
-            <div className="player-tuning-field">
-              <label htmlFor="external-player-path">整合包 MPV 可执行文件</label>
-              <div className="player-tuning-path-row">
+            <SettingsField label="整合包 MPV 可执行文件" description="填写目录后可点击检测，自动定位其中的 mpv.exe。"
+              action={<Button appearance="secondary" disabled={busy} icon={<FolderOpen size={16} />} onClick={() => void chooseExternalPlayer()}>选择</Button>}>
                 <Input
-                  id="external-player-path"
                   value={externalPath}
                   disabled={busy}
                   placeholder="粘贴 mpv.exe 路径或整合包目录"
                   onChange={(_, data) => { clearFeedback(); setExternalPath(data.value); }}
                 />
-                <Button appearance="secondary" disabled={busy} icon={<FolderOpen size={16} />} onClick={() => void chooseExternalPlayer()}>选择</Button>
-              </div>
-              <p className="player-tuning-note">填写目录后可点击检测，自动定位其中的 mpv.exe。</p>
-            </div>
+            </SettingsField>
           )}
         <div className="player-tuning-tools">
           <Button disabled={busy || (playerMode === 'external' && !externalPath.trim())} icon={testing ? <Spinner size="tiny" /> : undefined} onClick={() => void testPlayer()}>{testing ? '正在检测…' : '检测播放器'}</Button>
@@ -231,29 +227,24 @@ export default function PlayerTuningPage({ embedded = false, initialConfig, runt
           ? '内置播放器已就绪'
           : '内置播放器文件或脚本需要检查，请点击「检测播放器」查看结果。'}</p>}
         {selectionChanged && <p className="player-tuning-note">播放器或路径已更改，请先保存再打开对应配置文件夹。</p>}
-        {validation && <div className={validation.ok ? 'player-tuning-saved' : 'player-tuning-error'} role={validation.ok ? 'status' : 'alert'}>
-          {validation.ok ? <CheckCircle2 size={15} /> : <TriangleAlert size={15} />}
+        {validation && <SettingsFeedback intent={validation.ok ? 'success' : 'error'}>
           <span>{validation.message}{validation.version && !validation.message.includes(validation.version) ? ` · ${validation.version}` : ''}</span>
-        </div>}
-      </section>
+        </SettingsFeedback>}
+      </SettingsSection>
 
       {playerMode === 'internal' ? (
-      <section className="player-tuning-section">
-        <h3>Anime4K 默认效果</h3>
-        <p className="player-tuning-note">默认关闭。开启后可在播放中比较效果，右键菜单的调整仅影响当前视频。</p>
+      <SettingsSection title="Anime4K 默认效果" description="默认关闭。开启后可在播放中比较效果，右键菜单的调整仅影响当前视频。">
           <div className="player-tuning-fields">
-            <div className="player-tuning-field">
-              <label htmlFor="anime4k-mode">模式</label>
-              <Select id="anime4k-mode" value={mode} disabled={busy} onChange={(_, data) => { clearFeedback(); setMode(data.value as Anime4kMode); }}>
+            <SettingsField label="模式">
+              <Select value={mode} disabled={busy} onChange={(_, data) => { clearFeedback(); setMode(data.value as Anime4kMode); }}>
                 {MODE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </Select>
-            </div>
-            <div className="player-tuning-field">
-              <label htmlFor="anime4k-quality">质量</label>
-              <Select id="anime4k-quality" value={quality} disabled={busy || mode === 'off'} onChange={(_, data) => { clearFeedback(); setQuality(data.value as Anime4kQuality); }}>
+            </SettingsField>
+            <SettingsField label="质量">
+              <Select value={quality} disabled={busy || mode === 'off'} onChange={(_, data) => { clearFeedback(); setQuality(data.value as Anime4kQuality); }}>
                 {QUALITY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </Select>
-            </div>
+            </SettingsField>
           </div>
         <details className="player-tuning-help-details">
         <summary>如何选择效果与质量</summary>
@@ -267,17 +258,16 @@ export default function PlayerTuningPage({ embedded = false, initialConfig, runt
           <li>播放 4K 视频出现掉帧时，先关闭 Anime4K 确认是否恢复流畅；仅降到“轻量”也可能不足。较低分辨率视频可再试轻量档或更短模式。“已应用”只代表着色器链已下发并被 MPV 接受，不代表当前 GPU 帧预算已经足够。</li>
         </ul>
         </details>
-      </section>
-      ) : <section className="player-tuning-section">
-        <h3>画面效果与播放联动</h3>
+      </SettingsSection>
+      ) : <SettingsSection title="画面效果与播放联动">
         <p className="player-tuning-note">Anime4K 由整合包管理，请使用整合包自己的菜单或快捷键调节。</p>
         <p className="player-tuning-note">KumiPlayer 记录播放进度并支持续播，不追加内置 Anime4K、快捷键或截图脚本。</p>
-      </section>}
+      </SettingsSection>}
       </>}
 
-      {error && <div className="player-tuning-error" role="alert"><TriangleAlert size={15} /> {error}</div>}
-      {saved && <div className="player-tuning-saved" role="status"><CheckCircle2 size={15} /> 已保存，之后播放的新视频将使用新默认值</div>}
-      {configFolderOpened && <div className="player-tuning-saved" role="status"><CheckCircle2 size={15} /> 已打开 MPV 配置文件夹</div>}
+      {error && <SettingsFeedback intent="error">{error}</SettingsFeedback>}
+      {saved && <SettingsFeedback intent="success">已保存，之后播放的新视频将使用新默认值</SettingsFeedback>}
+      {configFolderOpened && <SettingsFeedback intent="success">已打开 MPV 配置文件夹</SettingsFeedback>}
 
       <div className="player-tuning-actions">
         <Button appearance="primary" icon={saving ? <Spinner size="tiny" /> : <CheckCircle2 size={15} />} disabled={busy || !config || (playerMode === 'external' && !externalPath.trim())} onClick={() => void save()}>

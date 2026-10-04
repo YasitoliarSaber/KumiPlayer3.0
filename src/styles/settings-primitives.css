@@ -1,0 +1,46 @@
+@layer components {
+  /* 共享设置语义：沿用现有页面表面与 Fluent 阶梯，不另选配色。 */
+  .kp-settings-section,
+  .kp-settings-form {
+    --kp-settings-gap: var(--kp-space-m, 12px);
+    --kp-settings-padding: var(--kp-space-l, 16px);
+    --kp-settings-radius: var(--kp-radius-xl, 8px);
+    --kp-settings-surface: var(--surface-raised, var(--kp-color-bg-1));
+    --kp-settings-border: var(--border, var(--kp-color-stroke-2));
+    --kp-settings-muted: var(--text-secondary, var(--kp-color-fg-3));
+    display: grid;
+    gap: var(--kp-settings-gap);
+    min-width: 0;
+  }
+
+  .kp-settings-section {
+    padding: var(--kp-settings-padding);
+    border: var(--kp-stroke-thin, 1px) solid var(--kp-settings-border);
+    border-radius: var(--kp-settings-radius);
+    background: var(--kp-settings-surface);
+  }
+
+  .kp-settings-section-heading { display: grid; gap: var(--kp-space-xs, 4px); }
+  .kp-settings-section-heading h3 {
+    margin: 0;
+    font-size: var(--kp-font-size-400, 16px);
+    line-height: var(--kp-line-height-400, 22px);
+    font-weight: 600;
+  }
+  .kp-settings-description {
+    margin: 0;
+    color: var(--kp-settings-muted);
+    font-size: var(--kp-font-size-300, 14px);
+    line-height: var(--kp-line-height-300, 20px);
+    overflow-wrap: anywhere;
+  }
+
+  .kp-settings-field { min-width: 0; }
+  .kp-settings-field-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--kp-space-s, 8px); }
+  .kp-settings-field-controls--action { grid-template-columns: minmax(0, 1fr) auto; }
+  .kp-settings-field-controls > .fui-Input,
+  .kp-settings-field-controls > .fui-Select { min-width: 0; width: 100%; }
+  .kp-settings-field-action { display: flex; align-items: flex-start; }
+  .kp-settings-feedback { min-width: 0; overflow-wrap: anywhere; }
+  .kp-settings-feedback .fui-MessageBarBody { min-width: 0; }
+}
