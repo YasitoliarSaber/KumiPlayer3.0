@@ -326,6 +326,12 @@ def _boundary_work_key(evidence: SourceEvidence, facts: ParsedFacts) -> str:
         return ""
     context = structure_decision(facts)
     if context and context.get("title"):
+        series_title = _main_series_identity_title(facts)
+        if (facts.group_type == "special" and series_title
+                and _is_series_container(str(context.get("series_container") or ""))):
+            # 电影目录里明确保留的 SP 仍归已声明的主系列，不因叶目录年份
+            # 再制造一张只有特别篇的 TV 卡；独立电影/外传已在入口隔离。
+            return f"title:{_boundary_key_title(series_title)}::{_effective_media_type(facts)}"
         title = _boundary_key_title(_strip_boundary_season_marker(str(context["title"])))
         scoped = bool(context.get("season_scoped"))
         year = "" if scoped else str(context.get("year") or facts.year_candidate or "")
@@ -371,6 +377,9 @@ def _work_key(facts: ParsedFacts, evidence: SourceEvidence | None = None) -> str
     # 不能跨越已显式标出的独立作品/外传边界。后者仍由本地结构键保持隔离，
     # 并在 revision 预览阶段校验是否与既有绑定冲突。
     context = structure_decision(facts) or {}
+    if _structure_overridden(facts, include_numbering=False):
+        # 人工事实优先于解析时缓存的目录身份，不把改名重新拉回原系列。
+        return f"title:{_boundary_key_title(facts.work_title)}:{facts.year_candidate or ''}:{_effective_media_type(facts)}"
     if context.get("filename_identity"):
         # 子目录重复合集名时，编号前的具体文件标题才是子作品身份。
         # 同一范围内只忽略分隔符变体，不把它当成母系列或在线季度。
@@ -1490,6 +1499,130 @@ def _build_relations(work_rows: OrderedDict[str, dict]) -> list[ResolvedWorkRela
     return relations
 
 
+def _structure_overridden(facts: ParsedFacts, *, include_numbering: bool = True) -> bool:
+    context = structure_decision(facts) or {}
+    if context.get("boundary_rule") or context.get("ordering_applied"):
+        return False
+    original = context.get("parsed_identity")
+    if isinstance(original, dict):
+        return any(getattr(facts, field) != value for field, value in original.items()
+                   if include_numbering or field != "season_candidate")
+    title = next((trace.value for trace in facts.decision_trace if trace.field == "work_title"), facts.work_title)
+    return bool(context and title != facts.work_title)
+
+
+def _derive_structure_boundaries(
+    entries: list[tuple[SourceEvidence, ParsedFacts]],
+) -> list[tuple[SourceEvidence, ParsedFacts]]:
+    """只在整批具备共同标题/不同季证据时收口，不反写观察事实。"""
+    families: dict[tuple[str, str], list[ParsedFacts]] = defaultdict(list)
+    blocked_families: set[tuple[str, str]] = set()
+    sibling_titles: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for evidence, facts in entries:
+        context = structure_decision(facts) or {}
+        scopes = context.get("collection_scopes", [])
+        if _structure_overridden(facts):
+            if scopes:
+                blocked_families.add((evidence.root_id, scopes[-1]))
+            continue
+        if facts.content_class != "regular":
+            continue
+        family = context.get("season_family")
+        if scopes:
+            scope = (evidence.root_id, scopes[-1])
+            if not family or not family[2] or family[0] != scopes[-1]:
+                blocked_families.add(scope)
+            else:
+                families[scope].append(facts)
+        if context.get("parent_scope") and context.get("series_container"):
+            sibling_titles[(evidence.root_id, context["parent_scope"])].add(normalized_title(str(context.get("title") or "")))
+    proven_families = {
+        scope for scope, members in families.items()
+        if scope not in blocked_families
+        and len({normalized_title(structure_decision(facts)["season_family"][2]) for facts in members}) == 1
+        and len({facts.season_candidate for facts in members if facts.season_candidate is not None}) > 1
+    }
+    family_decisions = {}
+    for scope in proven_families:
+        members = families[scope]
+        family = structure_decision(members[0])["season_family"]
+        shared_file_title = sorted(structure_decision(member)["season_family"][2] for member in members)[0]
+        shared_base = normalized_title(shared_file_title)
+        child_names_match = any(normalized_title(str(structure_decision(member).get("title") or "")).startswith(shared_base)
+                                for member in members)
+        parent_title = _parse_work_title_and_year(family[1])[0]
+        promote_parent = not child_names_match and bool(re.search(r"(?i)(?:系列|\bseries\b)\s*$", parent_title))
+        title = (re.sub(r"(?i)(?:系列|\bseries\b)\s*$", "", parent_title).strip()
+                 if promote_parent else shared_file_title)
+        family_decisions[scope] = title, promote_parent
+    numbered_series: dict[tuple[str, str, str], str] = {}
+    for evidence, facts in entries:
+        context = structure_decision(facts) or {}
+        if (_structure_overridden(facts) or facts.content_class != "regular"
+                or not context.get("series_container") or not context.get("season_scoped")):
+            continue
+        match = re.fullmatch(r"(.+?)\s+([2-9])", str(context.get("title") or ""))
+        scope = (evidence.root_id, context.get("parent_scope", ""))
+        if (match and context.get("directory_season") == int(match[2])
+                and normalized_title(match[1]) in sibling_titles.get(scope, set())):
+            numbered_series[(*scope, normalized_title(match[1]))] = match[1]
+    derived = []
+    for evidence, facts in entries:
+        context = structure_decision(facts) or {}
+        if _structure_overridden(facts):
+            derived.append((evidence, facts))
+            continue
+        family = context.get("season_family")
+        title = str(context.get("title") or "")
+        updated = None
+        if family and (evidence.root_id, family[0]) in proven_families and facts.content_class in {"regular", CONTENT_CLASS_PLAYABLE_SPECIAL}:
+            title, promote_parent = family_decisions[(evidence.root_id, family[0])]
+            updated = {**context, "container": family[1] if promote_parent else context["container"], "title": title, "year": None,
+                       "collections": context.get("collections", [])[:-1] if promote_parent else context.get("collections", []),
+                       "collection_scopes": context.get("collection_scopes", [])[:-1] if promote_parent else context.get("collection_scopes", []),
+                       "season_scoped": True, "boundary_rule": "shared_title_explicit_seasons"}
+        elif facts.content_class in {"regular", CONTENT_CLASS_PLAYABLE_SPECIAL} and context.get("series_container"):
+            match = re.fullmatch(r"(.+?)\s+([2-9])", title)
+            scope = (evidence.root_id, context.get("parent_scope", ""))
+            base = match[1] if match and context.get("directory_season") == int(match[2]) else title
+            canonical = numbered_series.get((*scope, normalized_title(base)))
+            if canonical:
+                title = canonical
+                updated = {**context, "title": title, "year": None, "season_scoped": True,
+                           "boundary_rule": "sibling_title_numbered_season"}
+        if updated:
+            facts = replace(facts, work_title=title, series_group=title, card_type="main_series",
+                            relation_type="main", decision_trace=tuple(
+                                replace(trace, value=updated) if trace.field == "structure_context" else trace
+                                for trace in facts.decision_trace))
+        derived.append((evidence, facts))
+    return derived
+
+
+def _align_provider_boundary_keys(
+    entries: list[tuple[SourceEvidence, ParsedFacts]], keys: dict[str, str],
+) -> None:
+    """同一作品边界内协调正片与低置信特别篇；相同 hint 不跨子作品合并。"""
+    boundary_providers: dict[str, set[str]] = defaultdict(set)
+    boundary_hints: dict[str, set[str]] = defaultdict(set)
+    for evidence, facts in entries:
+        if not structure_decision(facts) or facts.card_type == "standalone" or _structure_overridden(facts):
+            continue
+        boundary = _boundary_work_key(evidence, facts)
+        key = keys[evidence.evidence_id]
+        if key.startswith("provider:"):
+            boundary_providers[boundary].add(key)
+        if facts.tmdb_hint_id and facts.tmdb_hint_type:
+            boundary_hints[boundary].add(f"provider:{facts.tmdb_hint_type.casefold()}:{facts.tmdb_hint_id}")
+    for evidence, facts in entries:
+        if not structure_decision(facts) or facts.card_type == "standalone" or _structure_overridden(facts):
+            continue
+        boundary = _boundary_work_key(evidence, facts)
+        providers = boundary_providers.get(boundary, set())
+        if boundary and len(providers) == 1 and not (boundary_hints.get(boundary, set()) - providers):
+            keys[evidence.evidence_id] = next(iter(providers))
+
+
 class MediaResolver:
     """Resolver 只负责聚合，不修改输入事实、不淘汰 Asset。"""
 
@@ -1506,6 +1639,7 @@ class MediaResolver:
             for evidence, facts in entries
             if _is_admitted(facts)
         ]
+        admitted_raw = _derive_structure_boundaries(admitted_raw)
         directory_orders: dict[tuple[str, str], set[int]] = defaultdict(set)
         for evidence, facts in admitted_raw:
             ordering = (structure_decision(facts) or {}).get("ordering")
@@ -1618,6 +1752,7 @@ class MediaResolver:
             for evidence, facts in admitted
         }
         _coalesce_missing_year_keys(admitted, entry_work_keys)
+        _align_provider_boundary_keys(admitted, entry_work_keys)
         # 特别篇编号分配**只对显式声明附属关系的准入条目**生效：新解析器已把附属
         # 内容排除在准入集合外，这里服务升级前的人工事实与既有绑定。
         for evidence, facts in admitted:

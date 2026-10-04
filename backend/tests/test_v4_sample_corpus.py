@@ -285,8 +285,11 @@ def test_root_sample_provider_identity_merge_has_no_phantom_200_episode_work():
         for work in graph.works
     }
 
-    # OVA / 正片外传不再被发行形式反向排除后，最大的作品是 69 集。
-    assert max(episode_counts.values()) == 69
+    # 明确副标题季归回主作品后，刀剑神域四组正片合计 96 集；不能用旧的
+    # 69 集上限逼迫正确的多季作品重新拆卡。逐季核对防止重复发布包叠加。
+    assert _work_season_counts(graph, "刀剑神域") == {0: 13, 1: 25, 2: 24, 3: 24, 4: 23}
+    assert episode_counts["刀剑神域"] == 96
+    assert max(episode_counts.values()) == 96
     assert {title: count for title, count in episode_counts.items() if count > 100} == {}
     # Re:Zero 只保留正片三季 66 集（25+25+16），不再叠加 66 个 S00 特典。
     assert episode_counts["Re：从零开始的异世界生活"] == 66

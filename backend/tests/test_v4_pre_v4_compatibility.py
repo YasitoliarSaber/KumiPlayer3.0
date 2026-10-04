@@ -110,18 +110,22 @@ def test_pre_v4_series_seasons_specials_and_movie_keep_their_boundaries():
     movie_work = next(work for work in graph.works if work.media_type == "movie")
     tv_episodes = [episode for episode in graph.episodes if episode.work_key == tv_work.work_key]
 
-    assert {episode.local_season_number for episode in tv_episodes} == {1, 2}
+    assert {episode.local_season_number for episode in tv_episodes if episode.episode_kind == "regular"} == {1, 2}
     assert len(graph.work_assets) == 1
     assert graph.work_assets[0].work_key == movie_work.work_key
-    # 反向断言：剧场版目录里的 SP02 按用户 2026-09-24 规则不入库。
-    # （SP 文件位于 movie 目录下，旧契约把它当作剧集特别篇归入 tv Work。）
+    # 用户 2026-10-02 的明确 SP 准入优先于旧的全部特别篇排除合同；
+    # 电影仍保持独立，SP02 保留为主作品可播放的本地特别篇。
     special_facts = [
         facts for item, facts in parsed if "[SP02]" in item.relative_path
     ]
     assert len(special_facts) == 1
     assert special_facts[0].group_type == "special"
-    assert special_facts[0].is_importable is False
-    assert not any(episode.episode_kind == "special" for episode in graph.episodes)
+    assert special_facts[0].is_importable is True
+    specials = [episode for episode in graph.episodes if episode.episode_kind == "special"]
+    assert len(specials) == 1
+    assert specials[0].work_key == tv_work.work_key
+    assert specials[0].local_season_number == 0
+    assert specials[0].asset_evidence_ids == (evidence[3].evidence_id,)
 
 
 def test_pre_v4_continuous_absolute_numbers_are_rebased_inside_explicit_later_season():

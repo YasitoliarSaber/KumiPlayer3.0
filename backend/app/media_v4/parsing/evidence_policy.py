@@ -48,6 +48,7 @@ from app.media_v4.domain.identity import (
     NumberingEvidence,
 )
 from app.recognition.episode_title import fractional_episode_token as _fractional_episode_token
+from app.recognition.media import _is_series_container
 
 # --- 词法词表 ---------------------------------------------------------------
 
@@ -405,6 +406,12 @@ def parse_numbering(
                     if bare is not None:
                         episode = bare
                         episode_origin = ORIGIN_LOCAL_UNSCOPED
+            else:
+                # 中文季号已声明时，后面的 [01] 仍是集号，不因已有季号跳过。
+                bare = _bare_number(tokens)
+                if bare is not None:
+                    episode = bare
+                    episode_origin = ORIGIN_LOCAL_UNSCOPED
 
     explicit_season = _SEASON_TOKEN_RE.search(stem)
     if explicit_season is not None:
@@ -666,7 +673,9 @@ def classify_content(
     fraction = fractional_episode_token(tokens)
     zero = numbering.episode == 0
     release_dir = next(
-        (token for token in directory if _segment_token(token.name) in {"ova", "ovas", "oad", "oads"}),
+        (token for token in directory if _segment_token(token.name) in {"ova", "ovas", "oad", "oads"}
+         or (not _is_series_container(token.name)
+             and re.search(r"(?i)[\[【]\s*(?:OVA|OAD)\s*[\]】]", token.name))),
         None,
     )
     selected_release = bool(release_form) or release_dir is not None

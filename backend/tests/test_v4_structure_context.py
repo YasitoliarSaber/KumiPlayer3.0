@@ -27,10 +27,10 @@ def resolve(paths, *, prefix="", provider="quark", root_container=""):
 
 def semantics(graph):
     return sorted((work.preferred_title, work.media_type,
-                   sorted((episode.local_season_number, episode.local_episode_number,
-                           episode.episode_kind, episode.asset_evidence_ids)
-                          for episode in graph.episodes if episode.work_key == work.work_key))
-                  for work in graph.works)
+                   sorted([(episode.local_season_number, episode.local_episode_number,
+                            episode.episode_kind, episode.asset_evidence_ids)
+                           for episode in graph.episodes if episode.work_key == work.work_key], key=repr))
+                   for work in graph.works)
 
 
 @pytest.mark.parametrize("provider", ["quark", "pan115", "baidu", "local"])

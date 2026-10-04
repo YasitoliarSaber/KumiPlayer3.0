@@ -165,7 +165,7 @@ _EPISODE_TITLE_RELEASE_ONLY = re.compile(
 )
 
 
-_CJK_EPISODE_TOKEN = re.compile(r"第\s*0*(\d{1,4})\s*(?:[集话話回]|(?=[\u4e00-\u9fff]|$))")
+_CJK_EPISODE_TOKEN = re.compile(r"第\s*0*(\d{1,4})(?!\d)(?!\s*季)\s*(?:[集话話回]|(?=[\u4e00-\u9fff]|$))")
 _CJK_LEADING_EPISODE = re.compile(r"^0*(\d{2,4})\s*(?=[\u4e00-\u9fff])")
 
 
@@ -352,7 +352,7 @@ def _parse_sidecar_nfo(evidence: SourceEvidence) -> tuple[int | None, str, str, 
 class V4Parser:
     """从一个 SourceEvidence 生成一个不可变 ParsedFacts。"""
 
-    VERSION = "v4-parser-12"
+    VERSION = "v4-parser-13"
 
     @classmethod
     def _parsed_fact_id(cls, evidence: SourceEvidence) -> str:
@@ -641,7 +641,12 @@ class V4Parser:
         ):
             resolved_series_group = title_decision.series_group
         decision_trace = (
-            DecisionTrace(field="structure_context", value=context.trace_value(),
+            DecisionTrace(field="structure_context", value={**context.trace_value(), "parsed_identity": {
+                "work_title": resolved_work_title, "series_group": resolved_series_group,
+                "media_type": resolved_media_type, "card_type": resolved_card_type,
+                "relation_type": resolved_relation_type, "season_candidate": numbering.season,
+                "group_type": group_type, "year_candidate": guess.year,
+            }},
                           origin=ORIGIN_DIRECTORY, scope="local", rule_id="semantic_ancestor_context"),
             *( (DecisionTrace(field="unknown_filename_identity", value=unknown_filename_identity,
                               origin=ORIGIN_DIRECTORY, scope="local", rule_id="unmarked_independent_title_candidate"),)

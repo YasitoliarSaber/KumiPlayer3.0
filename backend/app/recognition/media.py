@@ -1267,7 +1267,7 @@ def _check_path_context_special(
     """
     # 收集所有要检查的目录（排除作品容器本身）
     deeper_dirs = [d for d in parent_dirs if d != work_container]
-    if subwork_dir and subwork_dir not in deeper_dirs:
+    if subwork_dir and subwork_dir != work_container and subwork_dir not in deeper_dirs:
         deeper_dirs.append(subwork_dir)
 
     # Special 目录标记只认明确目录名/括号标签，不从系列容器的范围说明里
@@ -1315,7 +1315,14 @@ def _check_path_context_special(
         "movie": ("movie", "movie"),
         "映画": ("movie", "movie"),
     }
-    for d in deeper_dirs:
+    standalone_dirs = list(deeper_dirs)
+    container_title, _ = _parse_work_title_and_year(work_container)
+    if (work_container and work_container not in standalone_dirs
+            and not _is_series_container(work_container)
+            and re.search(r"(?i)(?:剧场版|映画|\bmovie\b|总集篇)", container_title)):
+        # 具名电影本身可以是作品边界；只供电影判定，不把根 OVA 当附属子目录。
+        standalone_dirs.append(work_container)
+    for d in standalone_dirs:
         d_lower = d.lower()
         for keyword, (media_type, relation_type) in _STANDALONE_DIR_KEYWORDS.items():
             if keyword in d_lower:
@@ -2001,6 +2008,11 @@ def recognize_media(
         subwork_dir = path_context["subwork_dir"]
         parent_dirs = list(path_context["parent_dirs"])
         local_series_container = path_context["series_container"]
+    # 子作品可以同时是当前 Work 边界。它相对于真正父系列的身份线索单独使用，
+    # 不再伪装成 Work 边界下面的目录，避免根 OVA 被当成附属目录。
+    collection_child_dir = subwork_dir
+    if path_context is not None and local_series_container:
+        collection_child_dir = collection_child_dir or work_container
     own_title_override = _own_title_subwork_override(filename, parent_dirs, work_container)
     tmdb_hint_id, tmdb_hint_type = _extract_tmdb_hint(relative_path)
     if tmdb_hint_id is None and allow_verified_titles:
@@ -2062,7 +2074,7 @@ def recognize_media(
     # 2. 附属视频（PV/CM/Menu/Trailer/Eyecatch）不能落进 Special/S00
     guess = _check_auxiliary(filename, parent_dirs)
     if guess:
-        _attach_local_collection_subwork_identity(guess, subwork_dir, local_series_container)
+        _attach_local_collection_subwork_identity(guess, collection_child_dir, local_series_container)
         _enrich_guess(guess, source, work_title, year, original_title, series_group, subwork_dir, clean_warnings, clean_needs_review, tmdb_hint_id, tmdb_hint_type, own_title_override=own_title_override)
         return guess
 
@@ -2071,7 +2083,7 @@ def recognize_media(
         filename,
         relative_path,
         parent_dirs,
-        subwork_dir,
+        collection_child_dir,
         work_container,
         local_series_container,
     )
