@@ -345,3 +345,16 @@
 - 当前源码与真实 MPV 探针证实：后端加载 portable_config 后再 include 自有层，而自有层的 hwdec=auto-safe 会覆盖用户选择的 hwdec=no 或 hwdec=auto-copy。本次移除自有层中的这一项，默认 auto-safe 仍保留在 portable_config；OSD 与受控队列约束保持原值，外部整合包执行路径不变。
 - 新增隔离配置回归：修改前两个用户偏好测试失败，默认值测试通过；修改后真实 MPV 读回 no、auto-copy、auto-safe 三种预期值，并同时确认 directory-mode=ignore。探针使用空音视频输出与临时目录，不读取媒体或写入真实播放状态。相关配置、菜单与外部模式回归共 44 项通过；未执行 EXE 打包，未验证真实视频的解码性能或桌面端观感。
 - 配置清单更新至 mpv-runtime-config-2026-10-04-r24；没有变更二进制、第三方脚本或发布许可状态。
+### 2026-10-04 · 修复中文字幕不自动加载（slang 顺序 / 子目录 / 内封乱标记）（r25）
+
+- **更新**：
+  - `config/kumiplayer/mpv.conf`（自有层）新增字幕策略段：`sub-auto=fuzzy`、`sub-file-paths=sub;subs;subtitles;Subtitles;字幕`、`slang=sc,chs,zh-cn,zh-hans,zh-sg,cn,gb,zh,zh-hant,zh-tw,zh-hk,zh-mo,tc,cht`、`subs-fallback=default`、`subs-with-matching-audio=yes`。
+  - `config/portable_config/mpv.conf`（可替换层）移除同名四项字幕声明，改为指向自有层的说明。字幕自动挂载属于应用行为，用户整体替换整合包后不能丢失。
+  - `runtime-manifest.json` 配置版本 `r24` → `r25`。
+- **根因（真实 MPV 实测 + v0.41.0 源码）**：三处独立缺陷叠加，都表现为「简体中文字幕不自动加载」：
+  1. **slang 顺序**：`mp_match_lang`（`misc/language.c`）用 `score = INT_MAX - slang 索引` 打分，索引越小优先级越高。旧顺序把繁体 `tc`(8)、`zh-hant`(3)/`zh-tw`(4)/`zh-hk`(5)/`zh-mo`(6) 排在简体 `sc`(7)/`chs`(10) 之前，于是 `.chs.ass` + `.tc.ass` 会选中繁体。实测被误判给繁体的组合有 `.chs+.tc`、`.chs+.zh-Hant`、`.chs+.zh-TW`、`.sc+.zh-Hant`、`.cn+.tc`、`.gb+.cht`；重排后 8 组全部选中简体。
+  2. **子目录不扫描**：mpv 在 Windows 上 `sub-file-paths` 默认为空，`sub/`、`subs/`、`subtitles/`、`字幕/` 里的同名字幕此前完全不加载（日志只出现一次 `Loading external files in <媒体目录>`）。实测配置后四个目录均加载。注意分隔符是**分号**，写成冒号会被当成单个不存在的路径而静默失效。
+  3. **内封字幕语言标记不规范 + `subs-fallback=no`**：`Chinese` / `und` / 无 language tag 的内封字幕按 slang 匹配不到任何轨道，`no` 会让字幕一条都不选。实测改为 `default` 后，带 default 标记的上述三类字幕全部选中（`yes` 会选中任意第一条轨道（含英文），故不采用）。
+- **依据**：mpv v0.41.0 源码 `misc/language.c`（`mp_guess_lang_from_filename` 主标签限 2–3 字母、`mp_match_lang` 的 `INT_MAX-idx` 打分与 ISO639-2 归一化 `zh/zho → chi`）、`player/external_files.c`（外挂字幕 prio 与 exact/fuzzy/all 的挂载范围）、`player/loadfile.c`（`subs_matching_audio` / `subs_fallback` 的选轨判据）；`--sub-auto` / `--sub-file-paths` / `--slang` / `--subs-fallback` / `--subs-with-matching-audio` 官方手册。
+- **验证**：内置 mpv v0.41.0 真实探针——生产配置层（`--config-dir=portable_config` + `--include=kumiplayer/mpv.conf`）读回五项生效值；临时可替换层写入相反取值（`slang=ja,jpn`、`sub-auto=no`、`subs-fallback=no`）仍被自有层覆盖；8 组简繁对照全部选中简体；4 个子目录字幕全部加载。新增 `backend/tests/test_mpv_subtitle_policy.py`（5 项，含静态顺序契约与真实 MPV 覆盖验证），`backend/tests -k mpv` 全绿。**未做**真机播放肉眼确认，也未在用户实际媒体库上复现原始故障。
+- **未覆盖（已知限制）**：纯中文或下划线语言标记（`.简体.ass`、`.zh_cn.ass`）无法被 mpv 识别为语言码（主标签限 2–3 字母），若同目录简体用中文词命名而繁体用标准码，仍可能选中繁体（实测 `.简体+.tc`、`.zh_cn+.tc` 仍选 tc）；与视频名完全不同名的字幕（不含视频名）在 `sub-auto=fuzzy` 下不会被自动挂载。两者都需要重命名文件或后续自有 Lua 脚本兜底。
