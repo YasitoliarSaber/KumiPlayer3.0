@@ -1465,19 +1465,56 @@
   min-width: 0;
 }
 
+/* 作品墙评分角标：海报左上角的轻量媒体元数据（Micro Badge）。
+   参考 WinUI InfoBadge 的定位——非交互装饰元素，不承载强调色语义。
+   因此不设 hover/focus 态与 pointer 事件；评分语义由卡片按钮承载。 */
 .rating-badge {
   position: absolute;
-  bottom: 8px;
-  right: 8px;
+  top: 7px;
+  left: 7px;
+  right: auto;
+  bottom: auto;
   z-index: 2;
-  background: rgba(28, 28, 28, 0.72);
-  color: #fbbf24;
-  padding: 3px 7px;
+  pointer-events: none;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-width: 30px;
+  height: 22px;
+  padding: 0 6px;
+
+  border: 1px solid rgba(255, 255, 255, .12);
   border-radius: 6px;
+
+  background: rgba(15, 19, 25, .72);
+  backdrop-filter: blur(6px) saturate(1.05);
+  -webkit-backdrop-filter: blur(6px) saturate(1.05);
+
+  color: rgba(255, 255, 255, .92);
   font-size: 12px;
-  font-weight: 600;
-  line-height: 1.1;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, .18);
+  font-weight: 650;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .16);
+}
+
+/* 三个外观中评分的位置、尺寸与信息结构完全一致，仅允许材质微调。 */
+:root[data-theme='fluent'] .rating-badge {
+  background: rgba(25, 36, 50, .72);
+  border-color: rgba(255, 255, 255, .14);
+}
+
+:root[data-theme='cinema'] .rating-badge {
+  background: rgba(10, 12, 15, .76);
+  border-color: rgba(255, 255, 255, .12);
+}
+
+:root[data-theme='mica'] .rating-badge {
+  background: rgba(35, 40, 47, .68);
+  border-color: rgba(255, 255, 255, .14);
 }
 
 .episode-item {
@@ -12949,7 +12986,7 @@ body > .detail-tool-overlay .candidate-card:is(:hover, :focus-visible) {
 }
 
 .virtual-poster-grid .rating-badge {
-  background: rgba(28, 28, 28, .82);
+  /* 作品墙滚动性能：角标保留各主题的半透明底色，但禁用 backdrop blur。 */
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }

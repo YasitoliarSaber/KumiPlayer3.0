@@ -133,7 +133,7 @@ function PosterCard({
 
         {work.rating > 0 && (
           <div className="rating-badge">
-            ★ {work.rating.toFixed(1)}
+            {work.rating.toFixed(1)}
           </div>
         )}
       </div>
