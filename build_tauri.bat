@@ -151,7 +151,7 @@ if /I "%KUMIPLAYER_KEEP_BUILD_CACHE%"=="1" (
 ) else (
     echo Removing regenerable Rust and frontend dependency caches...
     powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\cleanup_build_cache.ps1"
-    if %ERRORLEVEL% neq 0 (
+    if errorlevel 1 (
         echo [WARNING] Release succeeded, but one or more build caches could not be removed.
     )
 )
