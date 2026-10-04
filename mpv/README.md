@@ -71,7 +71,7 @@ mpv.exe
 
 | 自有层内容 | 注入机制 | 内置模式 | 外部整合包 | 前置条件与风险 |
 |---|---|---|---|---|
-| `mpv.conf`（hwdec、load-stats-overlay、osd-bar、directory-mode） | `--include`（覆盖） | 注入 | 不注入 | 会覆盖整合包的解码与 OSD 取值 |
+| `mpv.conf`（load-stats-overlay、osd-bar、directory-mode） | `--include`（覆盖） | 注入 | 不注入 | 保留内置界面与受控队列约束；hwdec 默认只在可替换层设置，自有层不接管解码偏好 |
 | `scripts/kumiplayer_anime4k.lua` | `--script` + `--script-opt` | 注入 | 可注入 | 依赖自有层 `shaders/anime4k-v4.0.1/`；必须同时注入 `kumiplayer_anime4k-shaders_dir`（脚本自 2026-09-24 起不再依赖 `~~/shaders/`） |
 | `scripts/screenshot_to_video_dir.lua` | `--script` | 注入 | 谨慎 | 会改写 `screenshot-directory` / `screenshot-format` / `screenshot-template`，等于接管整合包的截图行为 |
 | `scripts/kumiplayer_bindings.lua` | `--script` | 注入 | 可注入 | 功能键全为弱绑定（整合包 `input.conf` 优先）；仅 `Ctrl+v` 是强绑定屏蔽，会覆盖整合包同键 |

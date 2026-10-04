@@ -339,3 +339,9 @@
 - `thumbfast.lua` 新增可选 `tone_mapping_backend` 与 `quiet_failures`，受控配置启用 `gpu` 与静默降级。HDR 预览使用 MPV 原生 Vulkan GPU 滤镜并在预览子进程中指定 BT.709 / sRGB / hable；主播放器不注入这些输出参数。GPU/API 不可用时立即重试一次不带 HDR 映射的普通预览，重试仍失败就关闭当前文件的预览并仅记录退出状态；切文件恢复尝试与色调映射，旧文件回调仍有代际保护。上游默认 zscale 和独立前端配置提示保留。兼容重试的 HDR 预览色彩可能不准确，不影响主视频渲染。
 - 官方依据：https://mpv.io/manual/stable/#video-filters-gpu （原生 GPU 滤镜有实验性限制，因此设置逐文件兼容重试）；第三方脚本的原始来源、许可证与 upstream hash 保留，清单标记本地改动，不更新二进制。
 - 验证：新增回归 7 项通过，真实内置 MPV 编码 PQ / HLG / SDR 缩略图，另用隔离 HDR Matroska 验证实际 thumbfast 子进程和 `.bgra` 叠加产物；故障模拟覆盖单次重试、持续失败停止、下一文件恢复、旧回调隔离、SDR 启动失败静默停止。未执行 EXE 打包，未验证用户具体剧场版的端到端播放。
+
+### 2026-10-04 · 解码偏好归还可替换配置层（r24）
+
+- 当前源码与真实 MPV 探针证实：后端加载 portable_config 后再 include 自有层，而自有层的 hwdec=auto-safe 会覆盖用户选择的 hwdec=no 或 hwdec=auto-copy。本次移除自有层中的这一项，默认 auto-safe 仍保留在 portable_config；OSD 与受控队列约束保持原值，外部整合包执行路径不变。
+- 新增隔离配置回归：修改前两个用户偏好测试失败，默认值测试通过；修改后真实 MPV 读回 no、auto-copy、auto-safe 三种预期值，并同时确认 directory-mode=ignore。探针使用空音视频输出与临时目录，不读取媒体或写入真实播放状态。相关配置、菜单与外部模式回归共 44 项通过；未执行 EXE 打包，未验证真实视频的解码性能或桌面端观感。
+- 配置清单更新至 mpv-runtime-config-2026-10-04-r24；没有变更二进制、第三方脚本或发布许可状态。

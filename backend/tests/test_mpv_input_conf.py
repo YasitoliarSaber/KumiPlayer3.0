@@ -94,7 +94,8 @@ def test_kumiplayer_forced_config_exists():
     forced = PROJECT_ROOT / "mpv/config/kumiplayer/mpv.conf"
     assert forced.is_file()
     text = forced.read_text(encoding="utf-8")
-    assert "hwdec=auto-safe" in text
+    active_lines = [line.strip() for line in text.splitlines() if not line.lstrip().startswith("#")]
+    assert not any(line.startswith("hwdec=") for line in active_lines)
     assert "load-stats-overlay=no" in text
     # 禁用 mpv 原生 OSD 进度条（滚轮 seek 不弹粗条，进度由 uosc 时间轴提供）
     assert "osd-bar=no" in text
