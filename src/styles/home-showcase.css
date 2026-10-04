@@ -1,0 +1,21 @@
+@layer pages {
+  .home-feature-autoplay {
+    /* 库内未分层样式仍生效，图上操作的定位与对比度在此明确接管。 */
+    position: absolute !important;
+    right: 16px;
+    top: 16px;
+    z-index: 5;
+    min-width: 32px !important;
+    height: 32px;
+    color: white !important;
+    background: rgb(0 0 0 / .35) !important;
+    border: 1px solid rgb(255 255 255 / .2);
+  }
+  .home-feature-autoplay:hover { color: white !important; background: rgb(0 0 0 / .55) !important; }
+  .home-feature-autoplay:focus-visible { outline: 2px solid white; outline-offset: 2px; }
+  @media (forced-colors: active) {
+    .home-feature-autoplay,
+    .home-feature-autoplay:hover { color: ButtonText !important; background: ButtonFace !important; border-color: ButtonText; }
+    .home-feature-autoplay:focus-visible { outline-color: Highlight; }
+  }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, Spinner } from '@fluentui/react-components';
+import { Button, Select, Spinner } from '@fluentui/react-components';
 import {
   Database,
   ExternalLink,
@@ -707,7 +707,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
           </summary>
           <div className="settings-collapsible-body">
             <div className="settings-inline">
-              <input type="password" value={bangumiToken} onChange={(event) => setBangumiToken(event.target.value)} className="settings-input min-w-0 flex-1" placeholder="粘贴 Bangumi 个人访问令牌" autoComplete="off" />
+              <input type="password" aria-label="Bangumi 个人访问令牌" value={bangumiToken} onChange={(event) => setBangumiToken(event.target.value)} className="settings-input min-w-0 flex-1" placeholder="粘贴 Bangumi 个人访问令牌" autoComplete="off" />
               <PrimaryButton onClick={loginBangumi} busy={bangumiLoading} disabled={!bangumiToken.trim()}>{authStatus === 'reauth_required' ? '更新登录信息' : '验证并登录'}</PrimaryButton>
             </div>
             <div className="settings-note">令牌只保存在本机安全存储中，提交前会先通过 Bangumi 当前用户接口验证；授权失效时更新 Token 不会丢失已保存的账户资料。</div>
@@ -732,9 +732,9 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
     <div className="settings-shell settings-shell-settings settings-focused">
       <main className="settings-content fade-in-soft">
         {(configLoading || activeAction) && (
-          <div className="settings-loading">
+          <div className="settings-loading" role="status">
             <Spinner size="tiny" />
-            {activeAction ? `${activeAction}中...` : '保存或加载中...'}
+            {activeAction ? `${activeAction}中…` : '保存或加载中…'}
           </div>
         )}
         {operationMessage && !activeAction && (
@@ -830,7 +830,7 @@ function ConfigRow({ label, value, onSave, secret = false, placeholder = '', fol
   useEffect(() => setDraft(secret ? '' : value || ''), [secret, value]);
   const resolvedPlaceholder = secret && value ? '已配置；粘贴新凭据可替换' : placeholder;
   return (
-    <div className="settings-config-row">
+    <div className="settings-config-row settings-config-row--with-action">
       <label htmlFor={inputId}>{label}</label>
       {folder ? <FolderPathInput inputId={inputId} label={label} value={draft} onChange={setDraft} placeholder={placeholder} /> : <input id={inputId} type={secret ? 'password' : 'text'} value={draft} onChange={(event) => setDraft(event.target.value)} className="settings-input" placeholder={resolvedPlaceholder} autoComplete={secret ? 'off' : undefined} />}
       <GhostButton onClick={() => { onSave(draft); if (secret) setDraft(''); }} disabled={secret && !draft.trim()}>保存</GhostButton>
@@ -839,12 +839,13 @@ function ConfigRow({ label, value, onSave, secret = false, placeholder = '', fol
 }
 
 function NumberRow({ label, value, onSave }: { label: string; value: number; onSave: (value: number) => void }) {
+  const inputId = useId();
   const [draft, setDraft] = useState(String(value ?? 0));
   useEffect(() => setDraft(String(value ?? 0)), [value]);
   return (
-    <div className="settings-config-row">
-      <label>{label}</label>
-      <input type="number" value={draft} onChange={(event) => setDraft(event.target.value)} className="settings-input" />
+    <div className="settings-config-row settings-config-row--with-action">
+      <label htmlFor={inputId}>{label}</label>
+      <input id={inputId} type="number" value={draft} onChange={(event) => setDraft(event.target.value)} className="settings-input" />
       <GhostButton onClick={() => onSave(Number(draft) || 0)}>保存</GhostButton>
     </div>
   );
@@ -855,11 +856,11 @@ function SelectRow({ label, value, options, onSave }: { label: string; value: st
   const [draft, setDraft] = useState(value || '');
   useEffect(() => setDraft(value || ''), [value]);
   return (
-    <div className="settings-config-row">
+    <div className="settings-config-row settings-config-row--with-action">
       <label htmlFor={inputId}>{label}</label>
-      <select id={inputId} value={draft} onChange={(event) => setDraft(event.target.value)} className="settings-input">
+      <Select id={inputId} value={draft} onChange={(_, data) => setDraft(data.value)} className="settings-select-control">
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
+      </Select>
       <GhostButton onClick={() => onSave(draft)}>保存</GhostButton>
     </div>
   );
@@ -878,7 +879,7 @@ function ToggleRow({ label, active, onChange }: { label: string; active: boolean
 
 function PrimaryButton({ onClick, children, busy = false, disabled = false }: { onClick: () => void; children: ReactNode; busy?: boolean; disabled?: boolean }) {
   return (
-    <Button appearance="primary" onClick={onClick} className="settings-primary-btn fluent-settings-btn" disabled={disabled || busy} icon={busy ? <Spinner size="tiny" /> : undefined}>
+    <Button appearance="primary" onClick={onClick} disabled={disabled || busy} icon={busy ? <Spinner size="tiny" /> : undefined}>
       {busy ? '处理中' : children}
     </Button>
   );
@@ -886,7 +887,7 @@ function PrimaryButton({ onClick, children, busy = false, disabled = false }: { 
 
 function GhostButton({ onClick, children, busy = false, disabled = false }: { onClick: () => void; children: ReactNode; busy?: boolean; disabled?: boolean }) {
   return (
-    <Button appearance="secondary" onClick={onClick} className="settings-ghost-btn fluent-settings-btn" disabled={disabled || busy} icon={busy ? <Spinner size="tiny" /> : undefined}>
+    <Button appearance="secondary" onClick={onClick} disabled={disabled || busy} icon={busy ? <Spinner size="tiny" /> : undefined}>
       {busy ? '处理中' : children}
     </Button>
   );

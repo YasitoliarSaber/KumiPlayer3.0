@@ -45,6 +45,8 @@ test('侧栏与分类标题和刷新按钮同步名称，渲染普通文本并�
   render(<><Sidebar /><CategoryPage /></>);
   const navigation = screen.getByRole('button', { name: /<b>追更剧集<\/b>/ });
   fireEvent.click(navigation);
+  expect(navigation).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('button', { name: /^番剧/ })).not.toHaveAttribute('aria-current');
   expect(useUiStore.getState().activeCategory).toBe('seasonal');
   expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('<b>追更剧集</b>');
   expect(screen.getByRole('heading', { level: 1 }).querySelector('b')).toBeNull();

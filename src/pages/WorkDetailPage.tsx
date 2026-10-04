@@ -1567,6 +1567,7 @@ export default function WorkDetailPage() {
                   onChange={(event) => setScrapeQuery(event.target.value)}
                   className="settings-input min-w-0 flex-1"
                   placeholder="搜索词"
+                  aria-label="刮削搜索词"
                 />
                 <input
                   value={scrapeYear}
@@ -1574,6 +1575,7 @@ export default function WorkDetailPage() {
                   className="settings-input detail-year-input"
                   inputMode="numeric"
                   placeholder="年份"
+                  aria-label="刮削年份"
                 />
                 <button className="detail-action-btn" onClick={searchScrapeCandidates} disabled={scrapeBusy}>
                   {scrapeBusy ? '搜索中...' : '搜索候选'}
@@ -1630,7 +1632,7 @@ export default function WorkDetailPage() {
                   )}
                 </div>
                 <div className="settings-inline">
-                  <input ref={bangumiSearchInputRef} value={bangumiQuery} onChange={(e) => setBangumiQuery(e.target.value)} className="settings-input min-w-0 flex-1" placeholder="Bangumi 条目名" />
+                  <input ref={bangumiSearchInputRef} aria-label="Bangumi 条目名" value={bangumiQuery} onChange={(e) => setBangumiQuery(e.target.value)} className="settings-input min-w-0 flex-1" placeholder="Bangumi 条目名" />
                   <button className="settings-ghost-btn" onClick={searchBangumi} disabled={bangumiSearching}>
                     {bangumiSearching ? '搜索中' : '搜索'}
                   </button>
@@ -1652,7 +1654,7 @@ export default function WorkDetailPage() {
                   />
                 )}
                 <div className="settings-inline detail-bangumi-status-row">
-                  <select className="settings-input min-w-0 flex-1" defaultValue="" onChange={(event) => event.target.value && void setBangumiCollection(Number(event.target.value))}>
+                  <select aria-label="Bangumi 收藏状态" className="settings-input min-w-0 flex-1" defaultValue="" onChange={(event) => event.target.value && void setBangumiCollection(Number(event.target.value))}>
                     <option value="">{bangumiCollection ? `当前：${collectionLabel(bangumiCollection.type)}` : '修改收藏状态'}</option>
                     {bangumiCollectionTypes.map((item) => (
                       <option key={item.value} value={item.value}>{item.label}</option>

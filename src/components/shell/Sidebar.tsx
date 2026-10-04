@@ -130,6 +130,7 @@ export default function Sidebar() {
         <button
           onClick={() => { setQuery(''); goManage(); }}
           className={`sidebar-nav-item relative w-full ${page === 'manage' ? 'active' : ''}`}
+          aria-current={page === 'manage' ? 'page' : undefined}
           title={sidebarExpanded ? undefined : '媒体管理'}
         >
           <NavIcon name="manage" />
@@ -138,6 +139,7 @@ export default function Sidebar() {
         <button
           onClick={handleSettings}
           className={`sidebar-nav-item relative w-full ${page === 'settings' ? 'active' : ''}`}
+          aria-current={page === 'settings' ? 'page' : undefined}
           title={sidebarExpanded ? undefined : '设置'}
         >
           <NavIcon name="settings" />
@@ -194,6 +196,7 @@ function NavItem({
     <button
       onClick={() => onClick(item)}
       className={`sidebar-nav-item relative w-full ${active ? 'active' : ''}`}
+      aria-current={active ? 'page' : undefined}
       title={expanded ? undefined : item.label}
     >
       <NavIcon name={item.icon} />

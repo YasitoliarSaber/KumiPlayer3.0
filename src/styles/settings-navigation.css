@@ -26,6 +26,9 @@
   }
   .settings-focused .settings-section-head h3 { font-size: 15px !important; }
   .settings-focused .settings-config-row { grid-template-columns: 144px minmax(0, 1fr) !important; }
+  .settings-focused .settings-config-row--with-action { grid-template-columns: 144px minmax(0, 1fr) auto !important; }
+  .settings-focused .settings-config-row > .fui-Button { justify-self: start; }
+  .settings-focused .settings-select-control { width: 100%; min-width: 0; }
   .settings-focused .settings-input { min-width: 0; width: 100%; min-height: 36px !important; height: 36px !important; padding: 6px 10px !important; font-size: 13px !important; line-height: 20px !important; }
   .settings-focused .sources-password-input .settings-input { padding-right: 40px !important; }
   .settings-focused .settings-config-row > span { font-size: 13px !important; }
@@ -83,11 +86,16 @@
   .settings-focused .settings-connection-toolbar { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
   .settings-focused .settings-connection-field { flex: 0 1 360px; min-width: 220px; }
   .settings-focused .settings-connection-toolbar > button { margin-bottom: 2px; }
+  @media (max-width: 980px) {
+    .settings-focused .settings-config-row--with-action { grid-template-columns: minmax(0, 1fr) auto !important; }
+    .settings-focused .settings-config-row--with-action > label { grid-column: 1 / -1; }
+  }
   @media (max-width: 760px) {
     .settings-focused { grid-template-columns: minmax(0, 1fr) !important; padding: 16px 14px 40px !important; gap: 16px !important; }
     .settings-focused .settings-outline-popover-wrap { top: 0 !important; max-height: none; background: var(--app-bg); padding: 6px 0 !important; }
     .settings-focused .settings-outline-nav { scrollbar-width: thin; }
-    .settings-focused .settings-config-row { grid-template-columns: minmax(0, 1fr) !important; gap: 6px; }
+    .settings-focused .settings-config-row,
+    .settings-focused .settings-config-row--with-action { grid-template-columns: minmax(0, 1fr) !important; gap: 6px; }
     .settings-focused .sources-route-card-main { grid-template-columns: minmax(0, 1fr) auto; }
     .settings-focused .sources-route-card-main .fui-Select { grid-column: 1; grid-row: 2; width: 100%; }
     .settings-focused .sources-route-card-main > button { grid-column: 2; grid-row: 1 / 3; }

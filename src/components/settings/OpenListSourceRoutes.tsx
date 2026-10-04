@@ -105,10 +105,10 @@ export default function OpenListSourceRoutes({
       ) : (
         <>
           <div className="sources-openlist-actions">
-            <Button appearance="secondary" size="small" onClick={() => void handleDiscover()} className="settings-ghost-btn fluent-settings-btn" disabled={isBusy}>
+            <Button appearance="secondary" size="small" onClick={() => void handleDiscover()} disabled={isBusy}>
               {actionLock === 'refresh' ? '处理中…' : '刷新来源目录'}
             </Button>
-            <Button appearance="primary" size="small" onClick={() => void handleSave()} className="settings-primary-btn fluent-settings-btn" disabled={dirtyCount === 0 || isBusy}>
+            <Button appearance="primary" size="small" onClick={() => void handleSave()} disabled={dirtyCount === 0 || isBusy}>
               {actionLock === 'save' ? '处理中…' : '保存更改'}
             </Button>
             {dirtyCount > 0 && <span className="sources-dirty-hint">有 {dirtyCount} 项更改尚未保存。</span>}
@@ -135,7 +135,7 @@ export default function OpenListSourceRoutes({
                     <Select aria-label={`${route.label || route.remote_prefix}的网盘类型`} value={route.provider_id} disabled={isBusy} onChange={(event) => handleUpdate(route.remote_prefix, { provider_id: event.target.value as ProviderId })}>
                       {ROUTE_PROVIDER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </Select>
-                    <Button appearance="subtle" size="small" aria-expanded={isExpanded} onClick={() => toggleEdit(route.remote_prefix)} className="settings-ghost-btn fluent-settings-btn">
+                    <Button appearance="subtle" size="small" aria-expanded={isExpanded} onClick={() => toggleEdit(route.remote_prefix)}>
                       {isExpanded ? '收起' : '编辑'}
                     </Button>
                   </div>

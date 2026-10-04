@@ -88,6 +88,16 @@ const config = {
 };
 
 describe('SettingsPage 信息架构', () => {
+  test('令牌输入和数值设置具有可访问标签，保存仍只修改对应字段', async () => {
+    render(<SettingsPage />);
+    expect(await screen.findByLabelText('Bangumi 个人访问令牌')).toHaveAttribute('type', 'password');
+    fireEvent.click(screen.getByRole('button', { name: '元数据与图片' }));
+    fireEvent.click(screen.getByText('高级参数'));
+    const timeout = screen.getByRole('spinbutton', { name: 'TMDB 超时' });
+    fireEvent.change(timeout, { target: { value: '25' } });
+    fireEvent.click(within(timeout.closest('.settings-config-row')!).getByRole('button', { name: '保存' }));
+    expect(api.patchConfig).toHaveBeenCalledWith({ tmdb_timeout: 25 });
+  });
   test('分类名称保存复用本机UI偏好，不写后台配置', async () => {
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));

@@ -310,10 +310,10 @@ export default function OpenListSettingsPanel({
       </div>
 
       <div className="sources-openlist-actions">
-        <Button appearance="secondary" size="small" aria-expanded={editorOpen} onClick={() => setEditorOpen((v) => !v)} className="settings-ghost-btn fluent-settings-btn" disabled={busy}>
+        <Button appearance="secondary" size="small" aria-expanded={editorOpen} onClick={() => setEditorOpen((v) => !v)} disabled={busy}>
           {editorOpen ? '收起连接设置' : '管理连接'}
         </Button>
-        <Button appearance="primary" size="small" onClick={primaryAction} className="settings-primary-btn fluent-settings-btn" disabled={Boolean(busy)}>
+        <Button appearance="primary" size="small" onClick={primaryAction} disabled={Boolean(busy)}>
           {busy ? '处理中…' : primaryLabel}
         </Button>
       </div>
@@ -352,7 +352,7 @@ export default function OpenListSettingsPanel({
             </div>
             {skipVerificationOffered && (
               <div className="sources-openlist-actions">
-                <Button appearance="secondary" size="small" onClick={handleSaveSkipVerification} className="settings-ghost-btn fluent-settings-btn" disabled={Boolean(busy)}>
+                <Button appearance="secondary" size="small" onClick={handleSaveSkipVerification} disabled={Boolean(busy)}>
                   仍然保存（不验证）
                 </Button>
                 <span className="sources-route-hint">登录验证失败时仍可先把账号密码保存下来，稍后再点「检查连接」确认。</span>

@@ -5232,7 +5232,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settings-section:hover { border-color: var(--border-strong) !important; box-shadow: 0 4px 16px color-mix(in srgb, var(--text) 7%, transparent) !important; }
 .settings-hero { border-radius: 10px !important; }
 .settings-section-head h3 { font-size: 16px !important; }
-.settings-shell input, .settings-shell select, .settings-shell textarea {
+.settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]), .settings-shell select:not(.fui-Select__select), .settings-shell textarea {
   border-color: var(--border) !important;
   background: color-mix(in srgb, var(--surface-solid) 76%, transparent) !important;
   color: var(--text) !important;
@@ -6136,13 +6136,13 @@ body, .app-shell, .app-shell main { background: var(--content-bg) !important; }
 :root[data-theme='cinema'] textarea::placeholder { color: #778391 !important; opacity: 1; }
 :root[data-theme='cinema'] select option { background: #181e28; color: #f2f4f7; }
 :root[data-theme='cinema'] .settings-ghost-btn,
-:root[data-theme='cinema'] .settings-actions button {
+:root[data-theme='cinema'] .settings-actions button:not(.fui-Button) {
   background: #202734 !important;
   border-color: rgba(225, 232, 242, .16) !important;
   color: #e8ecf2 !important;
 }
 :root[data-theme='cinema'] .settings-ghost-btn:hover,
-:root[data-theme='cinema'] .settings-actions button:hover { background: #293241 !important; }
+:root[data-theme='cinema'] .settings-actions button:not(.fui-Button):hover { background: #293241 !important; }
 .settings-shell { max-width: 1280px !important; grid-template-columns: minmax(0, 1fr) 184px !important; gap: 36px !important; }
 .settings-panel-stack { gap: 12px !important; }
 .settings-section { padding: 16px 18px !important; }
@@ -6216,7 +6216,7 @@ body,
 }
 :root[data-theme='cinema'] .settings-shell p,
 :root[data-theme='cinema'] .settings-shell small,
-:root[data-theme='cinema'] .settings-shell span,
+:root[data-theme='cinema'] .settings-shell span:not(:where(.fui-Button *, .fui-Switch *, .fui-MessageBar *)),
 :root[data-theme='cinema'] .settings-note,
 :root[data-theme='cinema'] .settings-list-row,
 :root[data-theme='cinema'] .workbench-card span,
@@ -6240,8 +6240,8 @@ body,
 :root[data-theme='cinema'] .detail-page h3 {
   color: #f5f7fa !important;
 }
-:root[data-theme='cinema'] .settings-shell input,
-:root[data-theme='cinema'] .settings-shell select,
+:root[data-theme='cinema'] .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
+:root[data-theme='cinema'] .settings-shell select:not(.fui-Select__select),
 :root[data-theme='cinema'] .settings-shell textarea,
 :root[data-theme='cinema'] .detail-page input:not([type='range']),
 :root[data-theme='cinema'] .detail-page select,
@@ -6250,7 +6250,7 @@ body,
   border-color: rgba(226, 233, 242, .14) !important;
   color: #eef2f7 !important;
 }
-:root[data-theme='cinema'] .settings-shell input::placeholder,
+:root[data-theme='cinema'] .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"])::placeholder,
 :root[data-theme='cinema'] .settings-shell textarea::placeholder,
 :root[data-theme='cinema'] .detail-page input:not([type='range'])::placeholder,
 :root[data-theme='cinema'] .detail-page textarea::placeholder {
@@ -6266,7 +6266,7 @@ body,
   border-color: rgba(226, 233, 242, .12) !important;
   color: #d7dde5 !important;
 }
-:root[data-theme='cinema'] .settings-actions button,
+:root[data-theme='cinema'] .settings-actions button:not(.fui-Button),
 :root[data-theme='cinema'] .settings-ghost-btn,
 :root[data-theme='cinema'] .detail-action-btn {
   color: #edf1f6 !important;
@@ -6647,7 +6647,7 @@ body {
 .page-title-block p,
 .settings-shell p,
 .settings-shell small,
-.settings-shell span,
+.settings-shell span:not(:where(.fui-Button *, .fui-Switch *, .fui-MessageBar *)),
 .settings-note,
 .settings-list-row,
 .settings-nav-item small,
@@ -6686,7 +6686,7 @@ body {
 }
 
 .detail-action-btn,
-.settings-actions button,
+.settings-actions button:not(.fui-Button),
 .settings-ghost-btn,
 .settings-primary-btn,
 .empty-state-action {
@@ -6697,7 +6697,7 @@ body {
 }
 
 .detail-action-btn:hover,
-.settings-actions button:hover,
+.settings-actions button:not(.fui-Button):hover,
 .settings-ghost-btn:hover {
   border-color: color-mix(in srgb, var(--accent) 36%, var(--border)) !important;
   background: var(--surface-soft) !important;
@@ -6721,8 +6721,8 @@ body {
   color: #111318 !important;
 }
 
-.settings-shell input,
-.settings-shell select,
+.settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
+.settings-shell select:not(.fui-Select__select),
 .settings-shell textarea,
 .detail-page input:not([type='range']),
 .detail-page select,
@@ -6733,7 +6733,7 @@ body {
   border-radius: 6px !important;
 }
 
-.settings-shell input::placeholder,
+.settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"])::placeholder,
 .settings-shell textarea::placeholder,
 .detail-page input:not([type='range'])::placeholder,
 .detail-page textarea::placeholder {
@@ -7581,8 +7581,8 @@ select option {
   align-items: center !important;
 }
 
-.settings-shell input,
-.settings-shell select,
+.settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
+.settings-shell select:not(.fui-Select__select),
 .settings-shell textarea,
 .settings-input {
   min-width: 0 !important;
@@ -7593,8 +7593,8 @@ select option {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 2%, transparent) !important;
 }
 
-.settings-shell input:focus,
-.settings-shell select:focus,
+.settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]):focus,
+.settings-shell select:not(.fui-Select__select):focus,
 .settings-shell textarea:focus,
 .settings-input:focus {
   outline: 2px solid color-mix(in srgb, var(--accent-strong) 36%, transparent) !important;
@@ -7604,7 +7604,7 @@ select option {
 
 .settings-shell p,
 .settings-shell small,
-.settings-shell span,
+.settings-shell span:not(:where(.fui-Button *, .fui-Switch *, .fui-MessageBar *)),
 .settings-note,
 .settings-list-row,
 .workbench-card span,
@@ -7634,14 +7634,14 @@ select option {
 }
 
 .settings-ghost-btn,
-.settings-actions button {
+.settings-actions button:not(.fui-Button) {
   border-color: var(--border) !important;
   background: color-mix(in srgb, var(--surface-raised) 90%, transparent) !important;
   color: var(--text) !important;
 }
 
 .settings-ghost-btn:hover,
-.settings-actions button:hover {
+.settings-actions button:not(.fui-Button):hover {
   border-color: var(--border-strong) !important;
   background: var(--surface-soft) !important;
 }
@@ -7675,8 +7675,8 @@ select option {
 :root[data-theme='cinema'] .workbench-card,
 :root[data-theme='cinema'] .workbench-overview,
 :root[data-theme='cinema'] .workbench-input-panel,
-:root[data-theme='cinema'] .settings-shell input,
-:root[data-theme='cinema'] .settings-shell select,
+:root[data-theme='cinema'] .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
+:root[data-theme='cinema'] .settings-shell select:not(.fui-Select__select),
 :root[data-theme='cinema'] .settings-shell textarea,
 :root[data-theme='cinema'] .settings-input {
   background: rgba(27, 30, 36, .94) !important;
@@ -7686,7 +7686,7 @@ select option {
 
 :root[data-theme='cinema'] .settings-shell p,
 :root[data-theme='cinema'] .settings-shell small,
-:root[data-theme='cinema'] .settings-shell span,
+:root[data-theme='cinema'] .settings-shell span:not(:where(.fui-Button *, .fui-Switch *, .fui-MessageBar *)),
 :root[data-theme='cinema'] .settings-note,
 :root[data-theme='cinema'] .settings-list-row,
 :root[data-theme='cinema'] .workbench-card span,
@@ -8086,7 +8086,7 @@ body::before {
 .settings-nav-item,
 .appearance-card,
 .import-choice,
-.settings-actions button,
+.settings-actions button:not(.fui-Button),
 .detail-action-btn {
   transition: background 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out), box-shadow 160ms var(--ease-out), transform 160ms var(--ease-out) !important;
 }
@@ -8181,8 +8181,8 @@ body::before {
   color: var(--text) !important;
 }
 
-.settings-shell input,
-.settings-shell select,
+.settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
+.settings-shell select:not(.fui-Select__select),
 .settings-shell textarea,
 .settings-input,
 .detail-page input:not([type='range']),
@@ -8195,8 +8195,8 @@ body::before {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 2%, transparent), 0 1px 1px color-mix(in srgb, var(--text) 4%, transparent) !important;
 }
 
-.settings-shell input:focus,
-.settings-shell select:focus,
+.settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]):focus,
+.settings-shell select:not(.fui-Select__select):focus,
 .settings-shell textarea:focus,
 .settings-input:focus,
 .detail-page input:not([type='range']):focus,
@@ -8211,7 +8211,7 @@ body::before {
 
 .settings-shell p,
 .settings-shell small,
-.settings-shell span,
+.settings-shell span:not(:where(.fui-Button *, .fui-Switch *, .fui-MessageBar *)),
 .settings-note,
 .settings-list-row,
 .workbench-card span,
@@ -8271,8 +8271,8 @@ body::before {
   color: var(--accent-contrast) !important;
 }
 
-:root[data-theme='cinema'] .settings-shell input,
-:root[data-theme='cinema'] .settings-shell select,
+:root[data-theme='cinema'] .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
+:root[data-theme='cinema'] .settings-shell select:not(.fui-Select__select),
 :root[data-theme='cinema'] .settings-shell textarea,
 :root[data-theme='cinema'] .settings-input,
 :root[data-theme='cinema'] .detail-page input:not([type='range']),
@@ -8321,7 +8321,7 @@ body::before {
   .settings-nav-item,
   .appearance-card,
   .import-choice,
-  .settings-actions button,
+  .settings-actions button:not(.fui-Button),
   .detail-action-btn {
     transition: none !important;
     transform: none !important;
@@ -9408,6 +9408,9 @@ body::before {
   --sidebar-control: rgba(41, 41, 41, .44);
   --sidebar-control-hover: rgba(51, 51, 51, .66);
   --sidebar-control-active: rgba(61, 61, 61, .80);
+  --sidebar-selection-background: rgb(255 255 255 / .055);
+  --sidebar-selection-border: transparent;
+  --sidebar-selection-shadow: none;
   --sidebar-accent-rail: #479ef5;
 }
 
@@ -9474,12 +9477,28 @@ body::before {
 }
 
 .sidebar-nav-item.active {
-  background:
+  background: var(--sidebar-selection-background,
     linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 76%),
-    var(--sidebar-control-active) !important;
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border)) !important;
+    var(--sidebar-control-active)) !important;
+  border-color: var(--sidebar-selection-border, color-mix(in srgb, var(--accent) 28%, var(--border))) !important;
   color: var(--text) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 20%, transparent), 0 1px 2px color-mix(in srgb, var(--text) 7%, transparent) !important;
+  box-shadow: var(--sidebar-selection-shadow, inset 0 0 0 1px color-mix(in srgb, #fff 20%, transparent), 0 1px 2px color-mix(in srgb, var(--text) 7%, transparent)) !important;
+}
+
+:root[data-theme='cinema'] .sidebar-nav-item.active:hover {
+  background: rgb(255 255 255 / .085) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+@media (forced-colors: active) {
+  .sidebar-nav-item.active,
+  :root[data-theme='cinema'] .sidebar-nav-item.active:hover {
+    background: Highlight !important;
+    color: HighlightText !important;
+    border-color: Highlight !important;
+    box-shadow: none !important;
+  }
 }
 
 .sidebar-nav-item.active::before {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Button } from '@fluentui/react-components';
 import { useLibraryStore } from '../stores/library';
 import { useUiStore, type CategoryKey } from '../stores/ui';
 import { matchesSourceFilter } from '../utils/sourceFilter';
@@ -12,9 +13,10 @@ import {
   selectHomeCategoryWorks,
   selectSessionShowcase,
 } from '../utils/homeShowcase';
-import { ArrowRight, ChevronLeft, ChevronRight, FolderPlus, LibraryBig } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, FolderPlus, LibraryBig, Pause, Play } from 'lucide-react';
 import DecodedImage from '../components/ui/DecodedImage';
 import { preferredArtworkPath } from '../utils/artwork';
+import '../styles/home-showcase.css';
 
 const categories: { key: CategoryKey; label: string }[] = [
   { key: 'anime_series', label: '番剧' },
@@ -34,6 +36,19 @@ export default function HomePage() {
   const [visibleFeatureIndex, setVisibleFeatureIndex] = useState(0);
   const [decodedFeatureImages, setDecodedFeatureImages] = useState<ReadonlySet<string>>(() => new Set());
   const [featureTimerKey, setFeatureTimerKey] = useState(0);
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+  const [autoplayPaused, setAutoplayPaused] = useState(false);
+  const [featureHovered, setFeatureHovered] = useState(false);
+  const [featureFocused, setFeatureFocused] = useState(false);
+
+  useEffect(() => {
+    const preference = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (!preference) return;
+    const update = () => setReducedMotion(preference.matches);
+    update();
+    preference.addEventListener?.('change', update);
+    return () => preference.removeEventListener?.('change', update);
+  }, []);
 
   const displayWorks = useMemo(
     () => works.filter((work) => matchesSourceFilter(work, source)),
@@ -77,12 +92,12 @@ export default function HomePage() {
   }, [decodedFeatureImages, normalizedFeatureIndex, requestedFeatureImage]);
 
   useEffect(() => {
-    if (featuredWorks.length <= 1) return;
+    if (featuredWorks.length <= 1 || reducedMotion || autoplayPaused || featureHovered || featureFocused) return;
     const timer = window.setInterval(() => {
       setFeatureIndex((value) => randomNextIndex(value, featuredWorks.length));
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [featuredWorks.length, featureTimerKey]);
+  }, [featuredWorks.length, featureTimerKey, reducedMotion, autoplayPaused, featureHovered, featureFocused]);
 
   const resetFeatureTimer = () => setFeatureTimerKey((value) => value + 1);
   const markFeatureReady = (index: number) => {
@@ -139,7 +154,8 @@ export default function HomePage() {
 
       {featuredWorks.length > 0 && (
         <section className="home-showcase">
-          <div className="home-feature">
+          <div className="home-feature" onMouseEnter={() => setFeatureHovered(true)} onMouseLeave={() => setFeatureHovered(false)}
+            onFocusCapture={() => setFeatureFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFeatureFocused(false); }}>
           {featuredWorks.map((work, index) => {
             const image = featureImageUrl(work);
             const active = index === normalizedVisibleFeatureIndex;
@@ -209,6 +225,10 @@ export default function HomePage() {
                 );
               })}
             </div>
+            {!reducedMotion && <Button appearance="subtle" size="small" className="home-feature-autoplay"
+              aria-label={autoplayPaused ? '恢复自动推荐' : '暂停自动推荐'} title={autoplayPaused ? '恢复自动推荐' : '暂停自动推荐'}
+              aria-pressed={autoplayPaused} icon={autoplayPaused ? <Play size={15} aria-hidden="true" /> : <Pause size={15} aria-hidden="true" />}
+              onClick={() => setAutoplayPaused(value => !value)} />}
             </>
           )}
           </div>
