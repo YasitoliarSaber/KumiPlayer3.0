@@ -66,6 +66,8 @@ UNMAPPED_INSUFFICIENT_EVIDENCE = "insufficient_numbering_evidence"
 UNMAPPED_PROVIDER_RESOURCE_MISSING = "provider_resource_missing"
 UNMAPPED_PROVIDER_UNAVAILABLE = "provider_unavailable"
 UNMAPPED_NUMBERING_CONFLICT = "numbering_conflict"
+UNMAPPED_CHILD_SCOPE = "ambiguous_provider_child_scope"
+UNMAPPED_INCOMPLETE_COORDINATES = "incomplete_provider_coordinates"
 UNMAPPED_REASONS = (
     UNMAPPED_MISSING_LOCAL_NUMBER,
     UNMAPPED_UNKNOWN_LOCAL_SEASON,
@@ -73,6 +75,8 @@ UNMAPPED_REASONS = (
     UNMAPPED_PROVIDER_RESOURCE_MISSING,
     UNMAPPED_PROVIDER_UNAVAILABLE,
     UNMAPPED_NUMBERING_CONFLICT,
+    UNMAPPED_CHILD_SCOPE,
+    UNMAPPED_INCOMPLETE_COORDINATES,
 )
 
 #: 只有这些状态证明远端服务/协议确有故障；其余无映射一律不得写成"服务不可用"。
@@ -81,6 +85,7 @@ PROVIDER_FAILURE_STATES = frozenset({"source_unavailable", "failed"})
 #: 连续编号映射的充分依据（C-004）：逐条既有映射、明确 absolute、版本化已核验
 #: 偏移规则、以及 Provider 明确给出的分部边界。
 MAPPING_BASIS_EXISTING = "existing_mapping"
+MAPPING_BASIS_EXISTING_SEASON = "existing_season_mapping"
 MAPPING_BASIS_ABSOLUTE = "explicit_absolute"
 MAPPING_BASIS_VERIFIED_OFFSET = "verified_season_offset"
 MAPPING_BASIS_EPISODE_TITLE = "verified_episode_title"
@@ -96,6 +101,8 @@ _UNMAPPED_REASON_LABELS = {
     UNMAPPED_PROVIDER_RESOURCE_MISSING: "在线条目不存在",
     UNMAPPED_PROVIDER_UNAVAILABLE: "在线资料暂不可用",
     UNMAPPED_NUMBERING_CONFLICT: "编号证据互相冲突",
+    UNMAPPED_CHILD_SCOPE: "子作品与在线大系列的编号范围未对齐",
+    UNMAPPED_INCOMPLETE_COORDINATES: "已有逐集在线季集坐标不完整",
 }
 
 
@@ -1446,6 +1453,21 @@ def _fetch_provider_metadata(target: dict) -> dict:
         )
 
 
+def _provider_child_scope(target: dict, provider_id: int, work_detail: dict | None) -> bool:
+    """关系与共享在线身份提供范围证据；仅本地/在线标题不同不构成子作品。"""
+    scope = target.get("provider_identity_scope") or {}
+    if isinstance(scope, dict):
+        if scope.get("confirmed_child"):
+            return True
+        if str(provider_id) in {str(value) for value in scope.get("shared_distinct_tv_ids") or []}:
+            return True
+    group = _normalize_title(target.get("series_group"))
+    local = _normalize_title(target.get("preferred_title"))
+    related = bool(target.get("relation_type") or target.get("card_type"))
+    remote_titles = {_normalize_title((work_detail or {}).get(key)) for key in ("name", "original_name")}
+    return bool(group and local and group != local and related and group in remote_titles)
+
+
 def _build_tv_episode_mappings(
     client: TMDBClient,
     provider_id: int,
@@ -1473,6 +1495,48 @@ def _build_tv_episode_mappings(
         if isinstance(item, dict) and _positive_int(item.get("season_number"))
     })
     verified_offsets = _normalize_verified_offsets(target.get("verified_season_offsets"))
+    child_scope = _provider_child_scope(target, provider_id, work_detail)
+    eligible: list[dict] = []
+    child_candidates: dict[int, list[dict]] = {}
+    for episode in local_episodes:
+        provider_season = _positive_int(episode.get("provider_season_number"))
+        provider_episode = _positive_int(episode.get("provider_episode_number"))
+        if (episode.get("provider_mapping_source") == "season"
+                and provider_season and provider_episode is None
+                and not episode.get("incomplete_provider_mapping")):
+            # 已有整季对齐定义了在线季范围，季内本地集号可用于查找；这不是
+            # 给不完整逐集映射借字段。SQL 在 epm 存在时始终标为 episode。
+            local_number = _positive_int(episode.get("local_episode_number"))
+            if not local_number:
+                _record_unmapped(diagnostics, episode, UNMAPPED_MISSING_LOCAL_NUMBER)
+                continue
+            eligible.append({
+                **episode, "provider_episode_number": local_number,
+                "mapping_basis": MAPPING_BASIS_EXISTING_SEASON,
+                "mapping_evidence": {"provider_season_number": provider_season,
+                                     "local_episode_number": local_number,
+                                     "rule_version": "existing_season_mapping-v1"},
+            })
+            continue
+        complete = bool(provider_season and provider_episode)
+        partial = not complete and any(episode.get(key) is not None for key in
+                                      ("provider_season_number", "provider_episode_number"))
+        if partial or episode.get("incomplete_provider_mapping"):
+            _record_unmapped(diagnostics, episode, UNMAPPED_INCOMPLETE_COORDINATES)
+            continue
+        if child_scope and not complete:
+            rule = verified_offsets.get(_positive_int(episode.get("local_season_number"))) or {}
+            remote_season = _positive_int(rule.get("provider_season_number"))
+            has_numbering_evidence = bool(rule or _absolute_number(episode) is not None)
+            if remote_season is None and provider_regular_seasons == [1] and has_numbering_evidence:
+                remote_season = 1
+            if remote_season and has_numbering_evidence:
+                child_candidates.setdefault(remote_season, []).append(episode)
+            else:
+                _record_unmapped(diagnostics, episode, UNMAPPED_CHILD_SCOPE)
+            continue
+        eligible.append(episode)
+    local_episodes = eligible
 
     def fetch(provider_season: int) -> dict | None:
         """按 Provider 季号读取并缓存季详情；失败只记录一次错误分类。"""
@@ -1494,6 +1558,32 @@ def _build_tv_episode_mappings(
             return None
         season_cache[provider_season] = season if isinstance(season, dict) else {"episodes": []}
         return season_cache[provider_season]
+
+    for provider_season, episodes in child_candidates.items():
+        online_season = fetch(provider_season)
+        if online_season is None:
+            error = season_errors.get(provider_season) or {}
+            reason = UNMAPPED_PROVIDER_RESOURCE_MISSING if error.get("verified_missing") else UNMAPPED_PROVIDER_UNAVAILABLE
+            if season_results is not None and provider_season not in reported_seasons:
+                reported_seasons.add(provider_season)
+                season_results.append({
+                    "season_id": str(episodes[0].get("season_id") or ""),
+                    "local_season_number": _positive_int(episodes[0].get("local_season_number")),
+                    "provider_season_number": provider_season,
+                    "status": "provider_resource_missing" if error.get("verified_missing") else "source_unavailable",
+                    "reason_code": str(error.get("reason_code") or "source_unavailable"),
+                    "failure_stage": str(error.get("failure_stage") or "season_detail"),
+                    "retryable": bool(error.get("retryable")),
+                })
+            for episode in episodes:
+                _record_unmapped(diagnostics, episode, reason)
+            continue
+        aligned = _map_continuous_season(
+            episodes, online_season, verified_offsets=verified_offsets,
+            provider_season_number=provider_season, diagnostics=diagnostics,
+            allow_coordinate_fallback=False,
+        )
+        local_episodes.extend(episode for episode in aligned if not episode.get("unmapped_reason"))
 
     # 在线只有一季、本地却分了多季：只能按充分依据逐条映射，绝不按集数推断偏移。
     continuous_scope = provider_regular_seasons == [1] and any(
@@ -1681,6 +1771,7 @@ def _map_continuous_season(
     verified_offsets: Any = None,
     provider_season_number: int = 1,
     diagnostics: dict[str, Any] | None = None,
+    allow_coordinate_fallback: bool = True,
 ) -> list[dict]:
     """只生成线上编号副本，不改本地分季，也不推断偏移（C-004）。
 
@@ -1718,13 +1809,19 @@ def _map_continuous_season(
         existing_season = _positive_int(episode.get("provider_season_number"))
         existing_number = _positive_int(episode.get("provider_episode_number"))
 
+        if existing_season and existing_number and existing_season != provider_season_number:
+            # 完整逐集映射属于自己的在线季，不受其他本地季的连续编号规则覆盖。
+            mapped.append(copy)
+            continue
+
         if existing_season == provider_season_number and existing_number:
             # 1) 已有适用逐条映射优先；与明确 absolute 相斥时只记录冲突，不覆盖稳定映射。
-            copy["mapping_basis"] = MAPPING_BASIS_EXISTING
-            copy["mapping_evidence"] = {
-                "provider_season_number": existing_season,
-                "provider_episode_number": existing_number,
-            }
+            if copy.get("mapping_basis") != MAPPING_BASIS_EXISTING_SEASON:
+                copy["mapping_basis"] = MAPPING_BASIS_EXISTING
+                copy["mapping_evidence"] = {
+                    "provider_season_number": existing_season,
+                    "provider_episode_number": existing_number,
+                }
             if absolute is not None and absolute != existing_number:
                 copy["mapping_conflict"] = UNMAPPED_NUMBERING_CONFLICT
                 _record_conflict(diagnostics, episode, UNMAPPED_NUMBERING_CONFLICT)
@@ -1742,7 +1839,8 @@ def _map_continuous_season(
                 evidence = {"absolute_episode_number": absolute}
             else:
                 reason = UNMAPPED_PROVIDER_RESOURCE_MISSING
-        if target_number is None and season and number and season in rules:
+        if (target_number is None and season and number and season in rules
+                and rules[season].get("provider_season_number", provider_season_number) == provider_season_number):
             # 3) 带版本的已核验 local→Provider 偏移规则（允许季号缺口）。
             rule = rules[season]
             candidate = int(rule["offset"]) + number
@@ -1780,7 +1878,7 @@ def _map_continuous_season(
                 target_number, basis = matches[0], MAPPING_BASIS_EPISODE_TITLE
                 evidence = {'rule_version': 'unique_episode_title-v1',
                             'provider_episode_number': target_number, 'matched_title': title}
-        if (target_number is None and absolute is None and season == provider_season_number
+        if (allow_coordinate_fallback and target_number is None and absolute is None and season == provider_season_number
                 and season not in rules and number in remote and existing_season in {None, provider_season_number}
                 and existing_number is None):
             # 同季同集的命名空间对应不需要跨季偏移；后续季仍须独立编号证据。

@@ -1679,8 +1679,12 @@ class V4RevisionService:
 
     @staticmethod
     def _graph_digest(graph: ResolvedMediaGraph) -> str:
+        payload = asdict(graph)
+        if not graph.collections:
+            # 没有新层级的旧草稿保持原摘要，避免仅添加空字段使确认失效。
+            payload.pop("collections", None)
         return hashlib.sha256(
-            json.dumps(asdict(graph), sort_keys=True, ensure_ascii=False).encode("utf-8")
+            json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
 
     def create_draft(
@@ -2177,6 +2181,23 @@ class V4RevisionService:
                             """,
                             (work_id, normalized_title),
                         )
+
+                # 非媒体合集只在确认事务中保存，不制造父 Work/Season。
+                collection_ids = {group.collection_key: "col_" + hashlib.sha256(
+                    group.collection_key.encode("utf-8")).hexdigest()[:32] for group in graph.collections}
+                for group in graph.collections:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO media_collections(collection_id,collection_key,preferred_title,root_id,created_at) VALUES(?,?,?,?,?)",
+                        (collection_ids[group.collection_key], group.collection_key, group.preferred_title,
+                         group.root_id, created_at),
+                    )
+                for group in graph.collections:
+                    if group.parent_collection_key:
+                        conn.execute("UPDATE media_collections SET parent_collection_id=? WHERE collection_id=? AND parent_collection_id IS NULL",
+                                     (collection_ids[group.parent_collection_key], collection_ids[group.collection_key]))
+                    for key in group.member_work_keys:
+                        conn.execute("INSERT OR IGNORE INTO revision_collection_members(revision_id,collection_id,work_id) VALUES(?,?,?)",
+                                     (revision_id, collection_ids[group.collection_key], work_ids[key]))
 
                 # P-001 7.7 R4：持久化作品关系；父 Work 可能只存在于已确认数据库。
                 for relation in graph.relations:

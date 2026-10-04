@@ -1025,7 +1025,7 @@ def _clean_standalone_dir_title(dirname: str) -> str:
 def _is_generic_movie_directory_title(title: str) -> bool:
     """判断目录名是否仅是电影分类标签，而不是可刮削的作品标题。"""
     normalized = re.sub(r"[\s._\-·:：/\\()（）【】\[\]]+", "", title or "").casefold()
-    return normalized in {"剧场版", "movie", "movies", "映画", "电影"}
+    return normalized in {"剧场版", "movie", "movies", "映画", "电影", "剧场版合集", "电影合集", "moviecollection", "moviescollection"}
 
 
 def _qualify_standalone_child_title(title: str, series_container: str) -> str:
@@ -1971,6 +1971,7 @@ def recognize_media(
     existing_year: int | None = None,
     root_container: str = "",
     allow_verified_titles: bool = True,
+    path_context: dict | None = None,
 ) -> MediaGuess:
     """识别单个视频文件的媒体结构
 
@@ -1994,6 +1995,12 @@ def recognize_media(
     subwork_dir = _extract_subwork_dir(relative_path, source)
     top_category = _extract_top_category(relative_path, source)
     local_series_container = _extract_local_series_container(relative_path, source)
+    if path_context is not None:
+        # V4 使用来源无关的语义祖先；旧调用方继续使用原入口合同。
+        work_container = path_context["work_container"]
+        subwork_dir = path_context["subwork_dir"]
+        parent_dirs = list(path_context["parent_dirs"])
+        local_series_container = path_context["series_container"]
     own_title_override = _own_title_subwork_override(filename, parent_dirs, work_container)
     tmdb_hint_id, tmdb_hint_type = _extract_tmdb_hint(relative_path)
     if tmdb_hint_id is None and allow_verified_titles:

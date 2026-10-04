@@ -15,6 +15,7 @@ from app.media_v4.domain.identity import (
     CONTENT_CLASS_MOVIE,
     CONTENT_CLASS_PLAYABLE_SPECIAL,
     NON_IMPORTABLE_CONTENT_CLASSES,
+    ORIGIN_DIRECTORY,
     ORIGIN_LOCAL_UNSCOPED,
     DecisionTrace,
 )
@@ -34,16 +35,18 @@ from app.media_v4.parsing.evidence_policy import (
     parse_numbering,
     tokenize_filename,
 )
+from app.media_v4.parsing.structure import structure_context
 from app.media_v4.sources.adapters import provider_to_source
 from app.recognition.media import (
+    _extract_release_movie_title,
     _extract_series_name_from_filename,
-    _extract_work_container,
     _is_bracket_heavy,
     _is_generic_category_name,
     _is_group_folder,
     _is_series_container,
     _looks_like_plain_season_dir,
     _parse_work_title_and_year,
+    _qualify_standalone_child_title,
     recognize_media,
 )
 
@@ -272,50 +275,6 @@ def _is_root_internal_structure(value: str) -> bool:
     )
 
 
-def _structural_series_group(relative_path: str, source: str) -> str:
-    """从完整路径恢复旧版 MediaUnit 的显式系列合集身份。"""
-
-    parts = [part for part in PurePosixPath(relative_path).parts if part]
-    directories = parts[:-1]
-
-    def _explicit_season_child(container_index: int) -> bool:
-        child = directories[container_index + 1] if container_index + 1 < len(directories) else ""
-        return bool(
-            child
-            and (
-                _is_root_internal_structure(child)
-                or re.search(
-                    r"(?i)(?:\[S\d{1,2}(?:\.\d+)?\]|S\d{1,2}\s*$|Season\s*\d+|第\s*\d+\s*季)",
-                    child,
-                )
-            )
-        )
-
-    def _structural_from(container: str) -> str:
-        if not container or _is_bracket_heavy(container):
-            return ""
-        explicit_collection = bool(
-            re.search(r"(?i)(?:系列|合集|\bseries\b|\bcollection\b)\s*$", container)
-        )
-        if container not in directories:
-            return ""
-        if not (_is_series_container(container) or explicit_collection or _explicit_season_child(directories.index(container))):
-            return ""
-        title, _ = _parse_work_title_and_year(container)
-        return title.strip()
-
-    container = _extract_work_container(relative_path, source)
-    primary = _structural_from(container)
-    if primary:
-        return primary
-    # 3.2：真实发布目录常把字幕组与质量标签带进季目录名（bracket-heavy），
-    # 使作品容器被拒。此时回退到顶层系列合集目录，且仅当其子目录带明确
-    # 季号标记才吸收；外传/电影目录没有季号标记，不会被该回退吞并。
-    if directories and directories[0] != container and not _is_bracket_heavy(directories[0]):
-        return _structural_from(directories[0])
-    return ""
-
-
 _NFO_MAX_BYTES = 256 * 1024
 
 
@@ -393,7 +352,7 @@ def _parse_sidecar_nfo(evidence: SourceEvidence) -> tuple[int | None, str, str, 
 class V4Parser:
     """从一个 SourceEvidence 生成一个不可变 ParsedFacts。"""
 
-    VERSION = "v4-parser-11"
+    VERSION = "v4-parser-12"
 
     @classmethod
     def _parsed_fact_id(cls, evidence: SourceEvidence) -> str:
@@ -473,6 +432,13 @@ class V4Parser:
             parse_relative,
             root_container,
         )
+        context = structure_context(evidence, root_container)
+        parse_relative = context.path
+        if context.work_container or context.collections:
+            # 上下文已有具名作品边界时，选中根不再冒充主系列。
+            effective_root_container = ""
+        if context.filename_identity:
+            existing_title = context.filename_identity
         guess = recognize_media(
             filename,
             parse_relative,
@@ -483,7 +449,16 @@ class V4Parser:
             # 首次解析事实。V4 的可信身份由显式 hint、NFO、既有 binding
             # 与候选解析阶段统一处理。
             allow_verified_titles=False,
+            path_context={"work_container": context.work_container,
+                          "subwork_dir": context.subwork_dir,
+                          "parent_dirs": context.parent_dirs,
+                          "series_container": context.series_container},
         )
+        if (guess.card_type == "standalone" and context.series_container
+                and context.series_container not in context.collections):
+            # 显式 TV+外传结构中的关系词短标题仍须带具体父作品名；共享
+            # 结构把作品边界移到叶目录后，不再把叶目录当作它自己的父名。
+            guess.work_title = _qualify_standalone_child_title(guess.work_title, context.series_container)
 
         season_match = _SEASON_TOKEN.search(filename)
         episode_match = _EPISODE_TOKEN.search(filename)
@@ -496,7 +471,7 @@ class V4Parser:
         # C-002/C-004：单文件事实由 evidence_policy 统一仲裁；provider 与批量成员
         # 数量不再改变类别、标题或编号。
         tokens = tokenize_filename(evidence.relative_path)
-        directory = collect_nearest_semantic_directory_tokens(evidence.relative_path)
+        directory = collect_nearest_semantic_directory_tokens(context.path)
 
         # 中文命名的集号**优先**于 `_ABSOLUTE_TOKEN` 的括号/尾随数字形态。
         # 实测：`[Group] 121热斗！大型庆典(2)!!.mp4` 会被 `_ABSOLUTE_TOKEN` 的
@@ -537,6 +512,15 @@ class V4Parser:
         group_type = group_type_for(
             classification.content_class, numbering, classification.media_type
         )
+        unknown_filename_identity = ""
+        if classification.content_class == "unknown" and context.work_container:
+            filename_identity = _extract_release_movie_title(filename)
+            from app.media_v4.parsing.structure import normalized_title
+            if (filename_identity and len(filename_identity) >= 2
+                and normalized_title(filename_identity) != normalized_title(guess.work_title)
+                and not is_generic_container_name(filename_identity)):
+                # 是否与正片混放是批量事实；本层只保存候选，不拆未知文件的原边界。
+                unknown_filename_identity = filename_identity
         resolved_media_type = classification.media_type
         resolved_card_type = guess.card_type if classification.content_class != CONTENT_CLASS_MOVIE else guess.card_type
         is_auxiliary = classification.is_auxiliary
@@ -546,9 +530,15 @@ class V4Parser:
         )
         edition_tags = tuple(tag for pattern, tag in _EDITION_TOKENS if pattern.search(stem))
         release_match = _RELEASE_GROUP.search(stem)
-        structural_series_group = _structural_series_group(parse_relative, source)
+        structural_series_group = ""
+        if context.subwork_dir and context.directory_season is not None:
+            structural_series_group = _parse_work_title_and_year(context.work_container)[0]
         resolved_series_group = guess.series_group
         resolved_relation_type = guess.relation_type
+        if context.collections and context.subwork_dir in {"", context.work_container}:
+            resolved_series_group = _parse_work_title_and_year(context.collections[-1])[0]
+            resolved_relation_type = resolved_relation_type or "related"
+            resolved_card_type = "standalone"
         if structural_series_group and guess.card_type != "standalone":
             # 子季度可有独立本地标题（After Story / 第三季副标题），但作品归属
             # 必须服从路径已经明确声明的系列合集边界；电影/外传独立卡不吸收。
@@ -651,6 +641,11 @@ class V4Parser:
         ):
             resolved_series_group = title_decision.series_group
         decision_trace = (
+            DecisionTrace(field="structure_context", value=context.trace_value(),
+                          origin=ORIGIN_DIRECTORY, scope="local", rule_id="semantic_ancestor_context"),
+            *( (DecisionTrace(field="unknown_filename_identity", value=unknown_filename_identity,
+                              origin=ORIGIN_DIRECTORY, scope="local", rule_id="unmarked_independent_title_candidate"),)
+               if unknown_filename_identity else () ),
             *classification.traces,
             *title_decision.traces,
             *hint_decision.traces,

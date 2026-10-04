@@ -218,6 +218,9 @@ class V4LibraryProjection:
                     """
                 ).fetchall()
                 cards_list = []
+                from app.media_v4.projection.collections import collection_metadata, identity_title_work_ids
+                local_collections = collection_metadata(conn)
+                identity_title_ids = identity_title_work_ids(conn)
                 for row in rows:
                     try:
                         metadata = json.loads(row["scraped_metadata_json"] or "{}")
@@ -297,9 +300,14 @@ class V4LibraryProjection:
                     card_type = str(row["card_type"] or "")
                     metadata["show_type"] = show_type
                     metadata["card_type"] = card_type
+                    metadata.update(local_collections.get(str(row["work_id"]), {
+                        "collections": [], "collection_related_works": [],
+                    }))
                     cards_list.append({
                         "work_id": row["work_id"],
-                        "title": metadata.get("title") or row["title"],
+                        "title": (row["title"] or metadata.get("title")) if (
+                            metadata["collections"] or str(row["work_id"]) in identity_title_ids)
+                                 else metadata.get("title") or row["title"],
                         "year": metadata.get("year") or row["year"],
                         "media_type": row["media_type"],
                         "show_type": show_type,

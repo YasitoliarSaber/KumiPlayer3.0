@@ -35,6 +35,7 @@ from app.media_v4.domain.identity import (
 from app.media_v4.domain.models import (
     ParsedFacts,
     ResolutionIssue,
+    ResolvedCollection,
     ResolvedEpisode,
     ResolvedMediaGraph,
     ResolvedWork,
@@ -44,6 +45,7 @@ from app.media_v4.domain.models import (
 )
 from app.media_v4.generic_container import is_generic_container_title
 from app.media_v4.parsing.episode_titles import ensure_special_title_number
+from app.media_v4.parsing.structure import normalized_title, structure_decision
 from app.media_v4.resolution.candidates import strip_season_marker
 from app.media_v4.resolution.identity_contract import (
     SPECIAL_SEASON_NUMBER,
@@ -322,6 +324,12 @@ def _boundary_work_key(evidence: SourceEvidence, facts: ParsedFacts) -> str:
 
     if facts.card_type == "standalone":
         return ""
+    context = structure_decision(facts)
+    if context and context.get("title"):
+        title = _boundary_key_title(_strip_boundary_season_marker(str(context["title"])))
+        scoped = bool(context.get("season_scoped"))
+        year = "" if scoped else str(context.get("year") or facts.year_candidate or "")
+        return f"title:{title}:{year}:{_effective_media_type(facts)}"
     source = provider_to_source(evidence.provider)
     container = _extract_work_container(evidence.relative_path, source)
     if not container or is_generic_container_title(container):
@@ -362,6 +370,11 @@ def _work_key(facts: ParsedFacts, evidence: SourceEvidence | None = None) -> str
     # 高置信 Provider 身份可以把不同语言、不同目录的同一正片合并；但它
     # 不能跨越已显式标出的独立作品/外传边界。后者仍由本地结构键保持隔离，
     # 并在 revision 预览阶段校验是否与既有绑定冲突。
+    context = structure_decision(facts) or {}
+    if context.get("filename_identity"):
+        # 子目录重复合集名时，编号前的具体文件标题才是子作品身份。
+        # 同一范围内只忽略分隔符变体，不把它当成母系列或在线季度。
+        return f"title:{normalized_title(str(context['filename_identity']))}:{facts.year_candidate or ''}:{_effective_media_type(facts)}"
     if (
         facts.tmdb_hint_id
         and facts.tmdb_hint_type
@@ -513,6 +526,9 @@ def _resolved_entry_work_key(
 ) -> str:
     key = _work_key(facts, evidence)
     if facts.card_type == "standalone":
+        return key
+    if structure_decision(facts) and key:
+        # 新事实的作品边界只有共享结构决策一个来源，不能再由旧层级规则改键。
         return key
     media_type = _effective_media_type(facts)
     # 后续正片季会把完整目录名（例如 "Yuru Camp Season 2"）保留在
@@ -1073,6 +1089,9 @@ def _canonical_work_row(
         [facts.relation_type for _evidence, facts in members]
     )
     show_type, _show_conflict = select_canonical_value([facts.show_type for _evidence, facts in members])
+    if show_type.startswith(("anime_", "live_")):
+        # 展示分类服从最终 Work 类型；显式类型覆盖不改变原始 ParsedFacts。
+        show_type = show_type.split("_", 1)[0] + ("_movie" if media_type == "movie" else "_series")
     relation_media_type, _relation_media_conflict = select_canonical_value(
         [(facts.media_type or facts.group_type or "unknown").casefold() for _evidence, facts in members]
     )
@@ -1450,6 +1469,17 @@ def _build_relations(work_rows: OrderedDict[str, dict]) -> list[ResolvedWorkRela
         parent_key = _relation_work_key_from_row(row)
         if not parent_key or parent_key == key:
             continue
+        if parent_key not in work_rows:
+            # 新结构可把父作品保存为 title 键；关系必须引用同批已经解析的
+            # 唯一父项，而不是继续构造查不到的 series 键。年份重制有多个
+            # 候选时不猜，电影自身目录也不能被当成另一部 TV 父作品。
+            parent_type = parent_key.rsplit(":", 1)[-1]
+            candidates = [candidate_key for candidate_key, candidate in work_rows.items()
+                          if candidate_key != key
+                          and _boundary_key_title(candidate["title"]) == _boundary_key_title(row["series_group"])
+                          and candidate["media_type"] in ({"tv", "unknown"} if parent_type in {"tv", "unknown"} else {parent_type})]
+            if len(candidates) == 1:
+                parent_key = candidates[0]
         relations.append(
             ResolvedWorkRelation(
                 parent_work_key=parent_key,
@@ -1476,6 +1506,46 @@ class MediaResolver:
             for evidence, facts in entries
             if _is_admitted(facts)
         ]
+        directory_orders: dict[tuple[str, str], set[int]] = defaultdict(set)
+        for evidence, facts in admitted_raw:
+            ordering = (structure_decision(facts) or {}).get("ordering")
+            if ordering and str(ordering[1]).isdigit():
+                directory_orders[(evidence.root_id, ordering[0])].add(int(ordering[1]))
+        ordered_admitted = []
+        for evidence, facts in admitted_raw:
+            context = structure_decision(facts) or {}
+            ordering = context.get("ordering")
+            if ordering and "." in str(ordering[1]) and not ordering[3]:
+                integer = int(str(ordering[1]).split(".", 1)[0])
+                siblings = directory_orders[(evidence.root_id, ordering[0])]
+                if integer in siblings and integer + 1 in siblings:
+                    title, year = _parse_work_title_and_year(ordering[2])
+                    derived_context = {**context, "container": ordering[2], "title": title, "year": year,
+                                       "ordering_applied": True}
+                    derived_title = title if facts.work_title.startswith(str(ordering[1])) else facts.work_title
+                    facts = replace(facts, work_title=derived_title, decision_trace=tuple(
+                        replace(trace, value=derived_context) if trace.field == "structure_context" else trace
+                        for trace in facts.decision_trace))
+            ordered_admitted.append((evidence, facts))
+        admitted_raw = ordered_admitted
+        ordinary_boundaries = {
+            (evidence.root_id, str((structure_decision(facts) or {}).get("container") or ""))
+            for evidence, facts in admitted_raw if facts.content_class == "regular"
+        }
+        mixed_candidates = set()
+        contextual_admitted = []
+        for evidence, facts in admitted_raw:
+            candidate = next((trace.value for trace in facts.decision_trace
+                              if trace.field == "unknown_filename_identity"), "")
+            boundary = (evidence.root_id, str((structure_decision(facts) or {}).get("container") or ""))
+            weak_number = any(trace.field == "episode_number_candidate" for trace in facts.decision_trace)
+            original_title = next((trace.value for trace in facts.decision_trace if trace.field == "work_title"), facts.work_title)
+            if candidate and boundary in ordinary_boundaries and not weak_number and facts.work_title == original_title:
+                mixed_candidates.add(evidence.evidence_id)
+                facts = replace(facts, work_title=str(candidate), card_type="standalone",
+                                relation_type="related", needs_review=True)
+            contextual_admitted.append((evidence, facts))
+        admitted_raw = contextual_admitted
         # STEP-004：用同批正片证据裁决低上下文集号候选。裁决只产生 Resolver 局部
         # 的派生事实（replace 副本），绝不回写不可变 ParsedFacts；确认后写入的是
         # resolved_json，而不是改事实。
@@ -1493,6 +1563,9 @@ class MediaResolver:
         # 复用槽位，没传时由出生观察推导（两者都确定，重复预览结果一致）。
         source_file_ids = _source_file_ids(admitted, identity_context)
         issues: list[ResolutionIssue] = []
+        issues.extend(ResolutionIssue(code="independent_title_candidate", evidence_id=evidence_id,
+                     message="异名无编号文件与正片混放，已独立保留为未知作品候选；类型需要确认")
+                      for evidence_id in sorted(mixed_candidates))
         # 单文件解析只能看到当前路径；整批图谱则能看到同一目录边界中由
         # Season/Special 条目声明的主系列身份。只采用 relation_type=main
         # 的结构事实，外传/电影的父系列关系不能反向吞并当前作品。
@@ -1518,9 +1591,10 @@ class MediaResolver:
             group = _boundary_key_title(facts.series_group)
             if not group or is_generic_container_title(facts.series_group):
                 continue
-            container = _extract_work_container(
+            context = structure_decision(facts)
+            container = (str(context.get("container") or "") if context else _extract_work_container(
                 evidence.relative_path, provider_to_source(evidence.provider)
-            )
+            ))
             if not container:
                 continue
             child_title = _normalize_title(_parse_work_title_and_year(container)[0])
@@ -1657,10 +1731,36 @@ class MediaResolver:
             )
         _assert_member_outcome(admitted, episodes, work_assets)
         relations = _build_relations(work_rows)
+        collection_members: dict[tuple[str, tuple[str, ...]], set[str]] = defaultdict(set)
+        collection_titles: dict[tuple[str, tuple[str, ...]], str] = {}
+        for evidence, facts in admitted:
+            context = structure_decision(facts) or {}
+            chain: list[str] = []
+            for index, container in enumerate(context.get("collections", [])):
+                title = _parse_work_title_and_year(str(container))[0]
+                scopes = context.get("collection_scopes", [])
+                chain.append(scopes[index] if index < len(scopes) else _boundary_key_title(title))
+                identity = (evidence.root_id, tuple(chain))
+                collection_members[identity].add(entry_work_keys[evidence.evidence_id])
+                collection_titles[identity] = title
+        def collection_key(identity):
+            root, chain = identity
+            import hashlib
+            return "collection:" + hashlib.sha256((root + "\x1f" + "\x1f".join(chain)).encode("utf-8")).hexdigest()[:32]
+        collections = tuple(ResolvedCollection(
+            collection_key=collection_key(identity), preferred_title=collection_titles[identity],
+            root_id=identity[0], member_work_keys=tuple(sorted(members)),
+            parent_collection_key=collection_key((identity[0], identity[1][:-1])) if len(identity[1]) > 1 else "",
+        ) for identity, members in sorted(collection_members.items()))
+        # 合集不是缺失的父 Work，不生成指向假媒体身份的待解析关系。
+        collection_names = {_boundary_key_title(group.preferred_title) for group in collections}
+        relations = [relation for relation in relations
+                     if _work_identity_title(relation.parent_work_key) not in collection_names]
         return ResolvedMediaGraph(
             works=works,
             episodes=episodes,
             work_assets=work_assets,
             relations=tuple(relations),
             issues=tuple(issues),
+            collections=collections,
         )

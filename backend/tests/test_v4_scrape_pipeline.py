@@ -231,9 +231,10 @@ def test_retry_drops_stale_special_mapping_marked_by_metadata_provider():
     ]
 
 
-def test_scrape_process_clears_stale_special_mapping_without_touching_regular_mapping(tmp_path, monkeypatch):
-    """成功读到 Season 0 后，旧 SP 顺序映射必须从数据库撤下。"""
+def test_scrape_retry_preserves_local_special_mapping_and_only_requests_regular_season(tmp_path, monkeypatch):
+    """特别篇不进入在线范围；失败与重试都保留历史映射和本地事实。"""
 
+    from app.media_v4.jobs import metadata
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -276,20 +277,47 @@ def test_scrape_process_clears_stale_special_mapping_without_touching_regular_ma
             (special_id,),
         )
 
-    scrape.process(
-        job["job_id"],
-        lambda _target: {
-            **_ready_metadata(),
-            "episode_mappings": [{
-                "episode_id": regular_id,
-                "provider_season_number": 1,
-                "provider_episode_number": 1,
-                "provider_episode_id": "regular-id",
-            }],
-            "clear_episode_mapping_ids": [special_id],
-        },
-        mirror_root=_patch_scrape_env(tmp_path, monkeypatch),
-    )
+        original_facts = [tuple(row) for row in conn.execute("SELECT * FROM parsed_facts ORDER BY parsed_fact_id")]
+    requested = []
+    unavailable = True
+
+    class OfflineProvider:
+        def get_tv_season_episodes(self, _provider_id, season):
+            requested.append(season)
+            assert season != 0
+            if unavailable:
+                raise metadata.TMDBClientError("fixture unavailable")
+            return {"episodes": [{"id": "regular-id", "episode_number": 1,
+                                  "name": "Episode", "still_path": "/still.jpg"}]}
+
+        @staticmethod
+        def build_image_url(path, size):
+            return f"https://image.tmdb.org/t/p/{size}{path}"
+
+    def provider(target):
+        assert [episode["episode_id"] for episode in target["episodes"]] == [regular_id]
+        diagnostics = metadata._empty_mapping_diagnostics()
+        season_results = []
+        mappings = metadata._build_tv_episode_mappings(
+            OfflineProvider(), 42, target, work_detail={"seasons": [{"season_number": 1}]},
+            diagnostics=diagnostics, season_results=season_results,
+        )
+        return {**_ready_metadata(), "episode_mappings": mappings, "season_results": season_results,
+                "_mapping_diagnostics": diagnostics, "metadata_state": "source_unavailable" if unavailable else "ready",
+                "work_metadata_status": "ready", "retryable": unavailable}
+
+    mirror = _patch_scrape_env(tmp_path, monkeypatch)
+    scrape.process(job["job_id"], provider, mirror_root=mirror)
+    with database.connect() as conn:
+        first = json.loads(conn.execute("SELECT result_json FROM jobs WHERE job_id=?", (job["job_id"],)).fetchone()[0])
+        assert first["outcome"] == "unavailable"
+        assert first["retryable"] is True
+        assert conn.execute("SELECT provider_episode_id FROM episode_provider_mappings WHERE episode_id=?",
+                            (special_id,)).fetchone()[0] == "stale-special-id"
+        assert conn.execute("SELECT COUNT(*) FROM episode_provider_mappings WHERE episode_id=?", (regular_id,)).fetchone()[0] == 0
+    unavailable = False
+    retry = scrape.requeue_work("rev-stale-special", job["work_id"])
+    scrape.process(retry["job_id"], provider, mirror_root=mirror)
 
     with database.connect() as conn:
         regular_mapping = conn.execute(
@@ -297,12 +325,16 @@ def test_scrape_process_clears_stale_special_mapping_without_touching_regular_ma
             (regular_id,),
         ).fetchone()
         stale_mapping = conn.execute(
-            "SELECT 1 FROM episode_provider_mappings WHERE episode_id = ? AND provider = 'tmdb'",
+            "SELECT provider_episode_id FROM episode_provider_mappings WHERE episode_id = ? AND provider = 'tmdb'",
             (special_id,),
         ).fetchone()
+        assert [tuple(row) for row in conn.execute("SELECT * FROM parsed_facts ORDER BY parsed_fact_id")] == original_facts
 
     assert regular_mapping["provider_episode_id"] == "regular-id"
-    assert stale_mapping is None
+    assert stale_mapping["provider_episode_id"] == "stale-special-id"
+    assert requested == [1, 1]
+    binding = scrape.list_bindings("rev-stale-special")[0]
+    assert json.loads(binding["metadata_json"])["metadata_state"] == "ready"
 
 
 @pytest.mark.parametrize("retry_provider_id", ["42", "43"])

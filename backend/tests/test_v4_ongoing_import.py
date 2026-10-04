@@ -174,7 +174,7 @@ def test_v24_scope_migration_preserves_facts_and_rolls_back_on_validation_failur
     monkeypatch.setattr(database, "_validate_physical_schema", validate)
     database.initialize()
     with database.connect() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 25
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == database.CURRENT_SCHEMA_VERSION
         row = conn.execute("SELECT * FROM source_roots").fetchone()
         assert tuple(row)[:-1] == original
         assert row["content_scope"] == ""

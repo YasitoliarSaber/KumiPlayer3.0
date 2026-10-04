@@ -18,13 +18,45 @@ def parse(path):
 ])
 def test_explicit_attached_bonus_is_not_regular_episode(path):
     facts = parse(path)
-    if "OVA" in path:
+    if "OVA" in path or "[25 SP]" in path:
         assert facts.is_importable
         assert facts.content_class == "playable_special"
         assert facts.episode_candidate is None
+        assert facts.group_type == "special"
+        assert not facts.is_auxiliary
+        assert facts.special_number is None
     else:
         assert not facts.is_importable
         assert facts.content_class in {"auxiliary", "attached_special"}
+
+
+@pytest.mark.parametrize("marker", ["OP01", "ED01", "PV01", "Menu", "Trailer"])
+def test_sp_marker_never_overrides_auxiliary_video(marker):
+    facts = parse(f"命运石之门/第一季/[MAI] Steins;Gate [25 SP][{marker}].mkv")
+    assert not facts.is_importable
+    assert facts.is_auxiliary
+    assert facts.content_class == "auxiliary"
+
+
+def test_real_numbered_sp_stays_local_without_regular_or_provider_coordinates():
+    from pathlib import PurePosixPath
+
+    from app.media_v4.resolution.resolver import MediaResolver
+
+    path = "命运石之门/第一季/[MAI] Steins;Gate [25 SP][Ma10p_2160p].mkv"
+    evidence = to_source_evidence(SourceEntry(
+        root_id="r", scan_id="s", provider="quark", ingest_method="openlist_api",
+        relative_path=path, source_key=path,
+    ))
+    facts = V4Parser().parse(evidence)
+    assert facts.episode_title == PurePosixPath(path).stem
+    graph = MediaResolver().resolve([(evidence, facts)])
+    assert len(graph.episodes) == 1
+    episode = graph.episodes[0]
+    assert episode.season_kind == episode.episode_kind == "special"
+    assert episode.local_episode_number is None
+    assert episode.provider_season_number is None
+    assert episode.provider_episode_number is None
 
 
 def test_malformed_episode_bracket_does_not_drop_clear_episode_number():

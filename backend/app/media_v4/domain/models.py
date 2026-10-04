@@ -153,9 +153,21 @@ class ResolutionIssue:
 
 
 @dataclass(frozen=True, slots=True)
+class ResolvedCollection:
+    """目录声明的非媒体合集，不分配季度或在线媒体身份。"""
+
+    collection_key: str
+    preferred_title: str
+    root_id: str
+    member_work_keys: tuple[str, ...] = field(default_factory=tuple)
+    parent_collection_key: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class ResolvedMediaGraph:
     works: tuple[ResolvedWork, ...] = field(default_factory=tuple)
     episodes: tuple[ResolvedEpisode, ...] = field(default_factory=tuple)
     work_assets: tuple[ResolvedWorkAsset, ...] = field(default_factory=tuple)
     relations: tuple[ResolvedWorkRelation, ...] = field(default_factory=tuple)
     issues: tuple[ResolutionIssue, ...] = field(default_factory=tuple)
+    collections: tuple[ResolvedCollection, ...] = field(default_factory=tuple)

@@ -33,6 +33,7 @@ from app.media_v4.persistence.schema_v4 import (
     migrate_schema_v22_to_v23,
     migrate_schema_v23_to_v24,
     migrate_schema_v24_to_v25,
+    migrate_schema_v25_to_v26,
 )
 
 
@@ -93,6 +94,8 @@ class V4Database:
             "tree_scan_validation",
             "source_scan_requests",
             "work_relations",
+            "media_collections",
+            "revision_collection_members",
             "revision_work_candidates",
             "maintenance_operations",
             "maintenance_operation_items",
@@ -156,7 +159,7 @@ class V4Database:
         使用字面量；写回后立即读回校验，版本升级时若字面量未同步会立即失败。
         """
 
-        conn.execute("PRAGMA user_version = 25")
+        conn.execute("PRAGMA user_version = 26")
         written = int(conn.execute("PRAGMA user_version").fetchone()[0])
         if written != V4_SCHEMA_VERSION:
             raise RuntimeError(
@@ -208,6 +211,7 @@ class V4Database:
             22: migrate_schema_v22_to_v23,
             23: migrate_schema_v23_to_v24,
             24: migrate_schema_v24_to_v25,
+            25: migrate_schema_v25_to_v26,
         }
         with self.connect() as conn:
             version = int(conn.execute("PRAGMA user_version").fetchone()[0])

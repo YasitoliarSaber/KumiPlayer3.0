@@ -168,6 +168,75 @@ def _verified_season_offsets(conn, revision_id: str, work_id: str) -> dict:
     return found[0]
 
 
+def _provider_identity_scope(conn, target: dict, facts: list) -> dict:
+    """只消费确认成员与现有绑定，不重新识别或合并共享 Provider ID 的作品。"""
+    normalized_title = str(target.get("preferred_title") or "").strip().casefold()
+    groups = {
+        str(fact.series_group).strip()
+        for fact in facts
+        if fact.is_importable and not fact.special_candidate
+        and str(fact.group_type or "") != "special"
+        and str(fact.series_group or "").strip()
+        and str(fact.series_group).strip().casefold() != normalized_title
+        and (fact.relation_type or fact.card_type)
+    }
+    shared_ids = {
+        str(row["provider_id"])
+        for row in conn.execute(
+            """
+            SELECT DISTINCT other.provider_id, w.preferred_title FROM provider_bindings other
+            JOIN works w ON w.work_id = other.work_id AND w.status = 'active'
+            WHERE other.work_id != ? AND other.provider = 'tmdb' AND other.media_type = 'tv'
+            """,
+            (target["work_id"],),
+        ).fetchall()
+        if str(row["preferred_title"] or "").strip().casefold() not in {
+            normalized_title,
+            *(str(title).strip().casefold() for title in target.get("identity_titles") or []),
+        }
+    }
+    return {"confirmed_child": bool(groups), "series_groups": sorted(groups),
+            "shared_distinct_tv_ids": sorted(shared_ids)}
+
+
+def _consistent_season_mappings(conn, target: dict, result: dict, provider: str) -> dict:
+    """整季槽位只能表达一个在线季；跨季逐集对应保留，不让最后一条覆盖。"""
+    requested = list(result.get("season_mappings") or [])
+    if not requested:
+        return result
+    season_by_episode = {str(e["episode_id"]): str(e["season_id"]) for e in target["episodes"]}
+    claims: dict[str, set[int]] = {}
+    saved = {
+        str(row["episode_id"]): dict(row)
+        for row in conn.execute(
+            "SELECT e.episode_id, epm.provider_season_number FROM episodes e "
+            "JOIN episode_provider_mappings epm ON epm.episode_id=e.episode_id "
+            "WHERE e.work_id=? AND epm.provider=?", (target["work_id"], provider),
+        ).fetchall()
+    }
+    for mapping in result.get("episode_mappings") or []:
+        saved[str(mapping.get("episode_id") or "")] = mapping
+    for episode_id, mapping in saved.items():
+        season_id = season_by_episode.get(episode_id)
+        number = mapping.get("provider_season_number")
+        if season_id and isinstance(number, int) and number > 0:
+            claims.setdefault(season_id, set()).add(number)
+    signatures: dict[str, set[tuple]] = {}
+    for mapping in requested:
+        season_id = str(mapping.get("season_id") or "")
+        number = mapping.get("provider_season_number")
+        if isinstance(number, int) and number > 0:
+            claims.setdefault(season_id, set()).add(number)
+        signatures.setdefault(season_id, set()).add((number, str(mapping.get("provider_season_id") or "")))
+    conflicts = sorted(season_id for season_id in signatures
+                       if len(claims.get(season_id, set())) > 1 or len(signatures[season_id]) > 1)
+    if not conflicts:
+        return result
+    return {**result, "season_mappings": [m for m in requested if str(m.get("season_id") or "") not in conflicts],
+            "season_mapping_status": "partial", "season_mapping_conflicts": conflicts,
+            "metadata_warning": "部分本地季度包含多个在线季度，已保留逐集对应，整季对应未覆盖。"}
+
+
 def _artifact_status(result: dict, *, has_provider_identity: bool) -> str:
     """把产物执行结果归一化为 C-005 的 artifact_status。"""
 
@@ -556,6 +625,7 @@ class V4ScrapeService:
                 ),
                 facts,
             )[:8]
+            target["provider_identity_scope"] = _provider_identity_scope(conn, target, facts)
             # C-004：文件名提示与结构化提示矛盾时暂停自动 Provider 绑定（fetch 层不再搜索）。
             target["provider_hint_conflict"] = any(
                 "provider_hint_conflict" in tuple(getattr(fact, "reasons", ()) or ())
@@ -595,7 +665,15 @@ class V4ScrapeService:
                     SELECT e.episode_id, e.local_episode_number, e.absolute_episode_number,
                            e.special_number, e.episode_kind, e.display_title,
                            s.season_id, s.local_season_number, s.season_kind,
-                           spm.provider_season_number, epm.provider_episode_number
+                           CASE WHEN epm.episode_id IS NOT NULL THEN epm.provider_season_number
+                                ELSE spm.provider_season_number END AS provider_season_number,
+                           epm.provider_episode_number,
+                           CASE WHEN epm.episode_id IS NOT NULL THEN 'episode'
+                                WHEN spm.season_id IS NOT NULL THEN 'season'
+                                ELSE '' END AS provider_mapping_source,
+                           CASE WHEN epm.episode_id IS NOT NULL AND
+                                     (epm.provider_season_number IS NULL OR epm.provider_episode_number IS NULL)
+                                THEN 1 ELSE 0 END AS incomplete_provider_mapping
                     FROM episodes e
                     JOIN seasons s ON s.season_id = e.season_id
                     LEFT JOIN season_provider_mappings spm
@@ -747,6 +825,8 @@ class V4ScrapeService:
                 season_id = str(mapping.get("season_id") or "")
                 if season_id not in valid_season_ids:
                     raise ValueError("刮削结果包含不属于当前 revision 的 Season 映射")
+            with self.database.connect() as conn:
+                result = _consistent_season_mappings(conn, target, result, provider_name)
             if has_provider_identity and metadata_state in {
                 "source_unavailable", "waiting_metadata", "failed",
             }:

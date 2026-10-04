@@ -386,6 +386,12 @@ def work_identity_title_inputs(work: ResolvedWork, related: list[ParsedFacts]) -
 
     # 主标题不能被不同压制组/清晰度目录挤出有限的查询额度。
     append_title(work.preferred_title)
+    related = [facts for facts in related if not (
+        work.card_type == "standalone" and any(
+            trace.field == "unknown_filename_identity" and _normalize_title(str(trace.value)) == _normalize_title(work.preferred_title)
+            for trace in facts.decision_trace
+        ) and _normalize_title(facts.work_title) != _normalize_title(work.preferred_title)
+    )]
     for facts in related:
         append_title(facts.work_title)
     for facts in related:
@@ -932,6 +938,9 @@ def merge_graph(graph: ResolvedMediaGraph, merge_map: dict[str, str]) -> Resolve
         episodes=tuple(episodes_by_identity.values()),
         work_assets=tuple(work_assets_by_identity.values()),
         relations=tuple(relations_by_identity.values()),
+        collections=tuple(replace(collection, member_work_keys=tuple(sorted({
+            target(key) for key in collection.member_work_keys
+        }))) for collection in graph.collections),
     )
 
 

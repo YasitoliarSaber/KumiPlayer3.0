@@ -18,13 +18,15 @@ def _resolve(evidence):
     return MediaResolver().resolve(normalize_batch_parsed_facts(parsed))
 
 
-def _parent_key(graph, child_title: str) -> str:
+def _parent_identity(graph, child_title: str) -> tuple[str, str]:
     child = next(work for work in graph.works if work.preferred_title == child_title)
-    return next(
+    parent_key = next(
         relation.parent_work_key
         for relation in graph.relations
         if relation.child_work_key == child.work_key
     )
+    parent = next(work for work in graph.works if work.work_key == parent_key)
+    return parent.preferred_title, parent.media_type
 
 
 def _pan115_violet_evidence():
@@ -62,9 +64,16 @@ def test_pan115_tree_sample_links_standalone_movie_to_tv_series():
     evidence = _pan115_violet_evidence()
     graph = _resolve(evidence)
 
-    assert _parent_key(graph, "紫罗兰永恒花园 外传：永远与自动手记人偶") == (
-        "series:紫罗兰永恒花园:tv"
+    assert _parent_identity(graph, "紫罗兰永恒花园 外传：永远与自动手记人偶") == (
+        "紫罗兰永恒花园", "tv"
     )
+    special = next(item for item in evidence if "04.5(Extra Episode)" in item.relative_path)
+    from app.media_v4.parsing.parser import V4Parser
+    facts = V4Parser().parse(special)
+    assert facts.content_class == "playable_special" and facts.is_importable
+    main = next(work for work in graph.works if work.preferred_title == "紫罗兰永恒花园" and work.media_type == "tv")
+    assert special.evidence_id in main.source_evidence_ids
+    assert len(graph.works) == 3
 
 
 class _FakeOpenListClient:
@@ -148,6 +157,6 @@ def test_openlist_scans_keep_movie_parent_as_tv_series(mode: str):
         )
 
     assert {item.provider for item in evidence} == {"pan115"}
-    assert _parent_key(_resolve(evidence), "紫罗兰永恒花园 外传：永远与自动手记人偶") == (
-        "series:紫罗兰永恒花园:tv"
+    assert _parent_identity(_resolve(evidence), "紫罗兰永恒花园 外传：永远与自动手记人偶") == (
+        "紫罗兰永恒花园", "tv"
     )

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 
-V4_SCHEMA_VERSION = 25
+V4_SCHEMA_VERSION = 26
 
 
 def create_schema_v4(conn: sqlite3.Connection) -> None:
@@ -805,6 +805,26 @@ def create_schema_v4(conn: sqlite3.Connection) -> None:
     migrate_schema_v22_to_v23(conn)
     migrate_schema_v23_to_v24(conn)
     migrate_schema_v24_to_v25(conn)
+    migrate_schema_v25_to_v26(conn)
+
+
+def migrate_schema_v25_to_v26(conn: sqlite3.Connection) -> None:
+    """只追加非媒体合集和 confirmed 成员关系，不重写历史媒体事实。"""
+    conn.execute("""CREATE TABLE IF NOT EXISTS media_collections (
+        collection_id TEXT PRIMARY KEY,
+        collection_key TEXT NOT NULL UNIQUE,
+        preferred_title TEXT NOT NULL,
+        root_id TEXT NOT NULL REFERENCES source_roots(root_id),
+        parent_collection_id TEXT REFERENCES media_collections(collection_id),
+        created_at TEXT NOT NULL
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS revision_collection_members (
+        revision_id TEXT NOT NULL REFERENCES import_revisions(revision_id) ON DELETE CASCADE,
+        collection_id TEXT NOT NULL REFERENCES media_collections(collection_id) ON DELETE CASCADE,
+        work_id TEXT NOT NULL REFERENCES works(work_id) ON DELETE CASCADE,
+        PRIMARY KEY(revision_id, collection_id, work_id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_members_work ON revision_collection_members(work_id, collection_id)")
 
 
 def migrate_schema_v24_to_v25(conn: sqlite3.Connection) -> None:

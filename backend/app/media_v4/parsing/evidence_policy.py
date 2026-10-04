@@ -181,6 +181,19 @@ _TECHNICAL_PREFIX_RE = re.compile(
     r"\d{3,4}p|fps|repack|proper)"
 )
 
+# 保留 raw stem 的位置：分割 token 会拆散 DTS_5.1 / FLAC7.1 / 23.976fps。
+# 普通小数也不能拆成整数集号；是否为真正小数集仍由 fractional_episode_token 判定。
+_NUMBERING_EXCLUDED_SPAN_RE = re.compile(
+    r"(?i)(?:"
+    r"(?<![A-Za-z0-9])(?:dts(?:[ ._-]?hd)?(?:[ ._-]?ma)?|flac|aac|e?ac3|truehd|opus)"
+    r"[ ._-]*\d+\.\d+(?!\d)|"
+    r"(?<![A-Za-z0-9])(?:h\.?26[45][ ._-]*)?\d+(?:\.\d+)?fps(?![A-Za-z0-9])|"
+    r"(?<![A-Za-z0-9])(?:v|rev)\d+(?:\.\d+)*(?![A-Za-z0-9])|"
+    r"(?<![A-Za-z0-9])\d{3,4}[pi](?![A-Za-z0-9])|"
+    r"(?<!\d)\d+\.\d+(?![A-Za-z0-9])"
+    r")"
+)
+
 _MAX_RANGE_LENGTH = 1000
 
 
@@ -478,6 +491,7 @@ def _numbering_candidates(stem: str, tokens: FilenameTokens) -> tuple[NumberingC
             and len(prefix) >= 2
             and not prefix.isdigit()
             and not _TECHNICAL_PREFIX_RE.search(prefix)
+            and not _number_overlaps_excluded_span(text, suffix.span(2))
             and _candidate_number_is_plausible(number)
         ):
             candidates.append(
@@ -537,18 +551,28 @@ def _bare_number(tokens: FilenameTokens) -> int | None:
     """只在"完整编号位置"取裸编号：`[13]`、`- 13`、`part-13`。"""
 
     stem = tokens.stem
-    candidate: int | None = None
     for pattern in _BARE_NUMBER_RES:
-        match = pattern.search(stem)
-        if match is not None:
-            candidate = int(match.group(1))
-            break
-    if candidate is None:
-        return None
-    # 年份/分辨率/版本号不能进入编号字段。
-    if candidate > 1900 and candidate < 2100:
-        return None
-    return candidate
+        for match in _valid_bare_number_matches(stem, pattern):
+            return int(match.group(1))
+    return None
+
+
+def _number_overlaps_excluded_span(stem: str, number_span: tuple[int, int]) -> bool:
+    start, end = number_span
+    return any(
+        start < span.end() and span.start() < end
+        for span in _NUMBERING_EXCLUDED_SPAN_RE.finditer(stem)
+    )
+
+
+def _valid_bare_number_matches(stem: str, pattern: re.Pattern[str]) -> tuple[re.Match[str], ...]:
+    """技术区、小数内部、年份/分辨率不产生整数编号，也不截断作品标题。"""
+
+    return tuple(
+        match for match in pattern.finditer(stem)
+        if not _number_overlaps_excluded_span(stem, match.span(1))
+        and not 1900 < int(match.group(1)) < 2100
+    )
 
 
 # --- 分类（C-002） ----------------------------------------------------------
@@ -871,10 +895,12 @@ def _filename_title_head(tokens: FilenameTokens) -> str:
         _RANGE_RE,
         _ABS_MARKER_RE,
         _CJK_EPISODE_RE,
-        *_BARE_NUMBER_RES,
     ):
         match = pattern.search(stem)
         if match is not None:
+            cut = min(cut, match.start())
+    for pattern in _BARE_NUMBER_RES:
+        for match in _valid_bare_number_matches(stem, pattern):
             cut = min(cut, match.start())
     head = stem[:cut]
     head = re.sub(r"[\[【(（]\s*$", "", head).strip(" ._-·")

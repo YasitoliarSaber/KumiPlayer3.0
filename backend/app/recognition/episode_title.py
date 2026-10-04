@@ -21,6 +21,7 @@ def fractional_episode_token(stem: str) -> str:
     for pattern in (
         r"[\[【(]\s*(\d{1,3}\.\d+)\s*[\]】)]",
         r"(?:^|[\s_-])(\d{1,3}\.\d+)(?=$|\s*[-\[【])",
+        r"(?i)(?:^|[\s_-])(\d{1,3}\.\d+)\s*[(（]\s*(?:extra\s*episode|special(?:\s*episode)?|SP|OVA|OAD|特别篇|特別編)\s*[)）]",
     ):
         match = re.search(pattern, stem)
         if match and match[1] not in {"5.1", "7.1", "2.0"}:

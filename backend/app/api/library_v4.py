@@ -18,6 +18,7 @@ from app.media_v4.parsing.episode_titles import (
     is_generic_special_title,
     is_special_marker_only,
 )
+from app.media_v4.projection.collections import collection_metadata, related_works
 from app.media_v4.projection.library import V4LibraryProjection
 
 router = APIRouter(prefix="/api/library", tags=["library"])
@@ -121,7 +122,8 @@ def _card_payload(card: dict, override: dict | None = None) -> dict:
         "local_clearlogo_path": local_clearlogo,
         "clearlogo_path": metadata.get("clearlogo_url") or metadata.get("clearlogo_path") or local_clearlogo,
         "dir_path": "",
-        "related_works": metadata.get("related_works") or [],
+        "related_works": related_works(metadata),
+        "collections": metadata.get("collections") or [],
         "cast": metadata.get("cast") or [],
         "tags": metadata.get("tags") or [],
         "certification": metadata.get("certification") or "",
@@ -187,8 +189,14 @@ def get_library(compact: bool = False, source: str | None = None, include_all: b
     if source and source != "all":
         works = [work for work in works if source in work["sources"]]
     queue_library_artwork(works)
+    collections = {}
+    for work in works:
+        for collection in work.get("collections") or []:
+            item = collections.setdefault(collection["collection_id"], {**collection, "work_ids": []})
+            item["work_ids"].append(work["work_id"])
     return {
         "works": works,
+        "collections": list(collections.values()),
         "summary": {
             "work_count": len(works),
             "episode_count": sum(int(work["episode_count"]) for work in works),
@@ -321,6 +329,10 @@ def get_work_detail(work_id: str):
         retained_metadata = referenced_metadata(conn, work_id)
     if retained_metadata is not None:
         metadata = {**metadata, **retained_metadata}
+    with get_database().connect() as conn:
+        metadata.update(collection_metadata(conn).get(work_id, {
+            "collections": [], "collection_related_works": [],
+        }))
     episode_metadata = {
         str(item.get("episode_id")): item
         for item in metadata.get("episode_mappings") or []
@@ -475,7 +487,8 @@ def get_work_detail(work_id: str):
         "local_clearlogo_path": local_clearlogo,
         "clearlogo_path": metadata.get("clearlogo_url") or metadata.get("clearlogo_path") or local_clearlogo,
         "dir_path": "",
-        "related_works": metadata.get("related_works") or [],
+        "related_works": related_works(metadata),
+        "collections": metadata.get("collections") or [],
         "cast": metadata.get("cast") or [],
         "tags": metadata.get("tags") or [],
         "certification": metadata.get("certification") or "",

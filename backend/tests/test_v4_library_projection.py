@@ -218,6 +218,7 @@ def test_projection_uses_latest_scrape_metadata_and_real_sources(tmp_path, monke
 
     card = V4LibraryProjection(database).rebuild().cards[0]
     assert card["title"] == "Online Title"
+    assert card["metadata"]["title"] == "Online Title"
     assert card["metadata"]["original_title"] == "Original"
     assert card["metadata"]["sources"] == ["local"]
     assert card["metadata"]["metadata_state"] == "ready"
