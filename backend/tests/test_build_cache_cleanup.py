@@ -59,6 +59,8 @@ def test_locked_cache_reports_partial_failure_and_can_be_retried(tmp_path: Path)
         assert result.returncode != 0, result.stdout + result.stderr
         assert "Regenerable build and source caches removed." not in result.stdout
         assert "WARNING" in result.stdout
+        assert "Failure detail:" in result.stdout
+        assert "sentinel.txt" in result.stdout
         assert (root / "src-tauri/target/sentinel.txt").exists()
         assert not (root / "node_modules").exists()
         _assert_protected(root)

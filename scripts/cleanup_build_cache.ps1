@@ -46,6 +46,7 @@ function Remove-BuildCache {
 
     # Validate before deletion; a failed safety check must not become a cleanup warning.
     $target = Assert-WorkspacePath -Path $target
+    $firstFailure = $null
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         try {
             if (-not (Test-Path -LiteralPath $target)) { return }
@@ -59,12 +60,14 @@ function Remove-BuildCache {
             }
             return
         } catch {
+            if ($null -eq $firstFailure) { $firstFailure = $_ }
             # Antivirus/indexing may briefly hold a file. Never stop other processes.
             if ($attempt -lt 3) {
                 Start-Sleep -Milliseconds 200
             } else {
                 $failedTargets.Add($target)
                 Write-Warning "Build cache retained after 3 attempts: $target"
+                Write-Warning "Failure detail: $($firstFailure.Exception.Message) [$($firstFailure.FullyQualifiedErrorId)]"
             }
         }
     }
