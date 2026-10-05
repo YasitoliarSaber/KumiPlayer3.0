@@ -29,6 +29,7 @@ def list_source_cards(database: V4Database) -> list[dict]:
     """
 
     with database.connect() as conn:
+        # 重扫时先恢复来源卡入口；退役事实仍保留，旧 confirmed 成员不重新发布。
         roots = conn.execute(
             """
             SELECT * FROM source_roots
@@ -41,6 +42,12 @@ def list_source_cards(database: V4Database) -> list[dict]:
                       WHERE draft_revision.root_id = source_roots.root_id
                         AND draft_revision.status = 'draft'
                         AND julianday(draft_revision.created_at) > julianday(source_roots.retired_at)
+                  )
+                  OR EXISTS (
+                      SELECT 1
+                      FROM source_scans rescan
+                      WHERE rescan.root_id = source_roots.root_id
+                        AND julianday(rescan.started_at) > julianday(source_roots.retired_at)
                   )
               )
             ORDER BY updated_at DESC, root_id
@@ -469,14 +476,23 @@ def list_source_cards(database: V4Database) -> list[dict]:
         })
     # 退役来源不再贡献媒体墙作品，但最后一次文件回收失败时仍须留下一个明确的
     # 维护入口；否则用户看不到残留产物，也无从重试。此卡不报告旧作品数。
-    active_root_ids = {str(row["root_id"]) for row in roots}
+    cards_by_root = {card["root_id"]: card for card in cards}
     for root in retired_cleanup_rows:
         root_id = str(root["root_id"])
-        if root_id in active_root_ids:
-            continue
         revision_id = str(root["cleanup_revision_id"])
         cleanup_status = str(root["cleanup_status"])
         cleanup_active = cleanup_status in {"queued", "running"}
+        if root_id in cards_by_root:
+            # 新扫描与旧产物回收共用一张来源卡，回收状态不能覆盖新识别入口。
+            card = cards_by_root[root_id]
+            card["pending_cleanup"] = {"status": cleanup_status, "revision_id": revision_id}
+            card["deletion_retry_required"] = not cleanup_active
+            if revision_id != card["revision_id"]:
+                card["job_summary"]["total"] += 1
+                card["job_summary"][cleanup_status] += 1
+            if not cleanup_active:
+                card["available_actions"].append("retry_deletion")
+            continue
         cards.append({
             "root_id": root_id,
             "provider": str(root["provider"] or ""),

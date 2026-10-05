@@ -133,6 +133,8 @@ export interface V4SourceLibraryCard {
   last_error: string
   /** 最近一次按来源清理未完成；包括来源已退役但生成文件仍待回收。 */
   deletion_retry_required?: boolean
+  /** 重扫期间仍待处理的旧生成文件回收，与当前扫描/识别入口并存。 */
+  pending_cleanup?: { status: 'queued' | 'running' | 'failed' | 'cancelled'; revision_id: string } | null
   source_locator: string
   /** 面向来源卡的紧凑路径摘要；原始 locator 仍用于恢复来源配置。 */
   display_path?: string

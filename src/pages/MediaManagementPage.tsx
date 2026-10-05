@@ -358,8 +358,16 @@ export default function MediaManagementPage() {
   const sourceCardsRefreshInFlight = useRef(false)
   // 每次开始、取消或切换来源都会递增；旧请求即使晚返回，也不得覆盖新流程。
   const scanRunRef = useRef(0)
+  // 观察代次和取消意图分开：导航/查看卡片不等于明确放弃扫描。
+  const scanCancelRef = useRef(0)
   const pathPickerRequest = useRef(0)
-  useEffect(() => () => { pathPickerRequest.current += 1 }, [])
+  useEffect(() => {
+    return () => {
+      // 离开只结束页面观察；扫描属于后端，迟到回调不得抢导航或取消任务。
+      scanRunRef.current += 1
+      pathPickerRequest.current += 1
+    }
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -441,9 +449,9 @@ export default function MediaManagementPage() {
     void refreshSourceCards()
   }, [refreshSourceCards])
 
-  // `active_task` 是来源卡唯一的当前任务投影。job_summary 是诊断/历史汇总，
-  // 在任务收口和卡片刷新之间可能短暂滞后，不能再反向驱动轮询或禁用操作。
-  const hasActiveSourceJobs = sourceCards.some((card) => Boolean(card.active_task))
+  // 当前任务和仍在回收的旧产物驱动轮询；历史 job_summary 不驱动页面状态。
+  const hasActiveSourceJobs = sourceCards.some((card) => Boolean(card.active_task)
+    || card.pending_cleanup?.status === 'queued' || card.pending_cleanup?.status === 'running')
   useEffect(() => {
     if (!hasActiveSourceJobs) return
     let cancelled = false
@@ -620,11 +628,16 @@ export default function MediaManagementPage() {
     localStorage.removeItem(ACTIVE_REVISION_KEY)
   }
 
-  const abandonActiveScan = () => {
+  const detachActiveScan = () => {
     scanRunRef.current += 1
-    const activeScanId = scanTask?.scan_id
     setScanTask(null)
     setBusy('')
+  }
+
+  const abandonActiveScan = () => {
+    const activeScanId = scanTask?.scan_id
+    scanCancelRef.current += 1
+    detachActiveScan()
     if (activeScanId) {
       void mediaV4Api.cancelDurableScan(activeScanId).catch(() => undefined)
       void refreshSourceCards()
@@ -679,6 +692,7 @@ export default function MediaManagementPage() {
       return
     }
     const runId = ++scanRunRef.current
+    const cancelVersion = scanCancelRef.current
     const isCurrentRun = () => scanRunRef.current === runId
     setBusy('scan')
     setError('')
@@ -730,9 +744,9 @@ export default function MediaManagementPage() {
           source_display_name: metadata.source_display_name,
         })
         // 用户可能在创建请求返回前点击“重新开始”；此时要取消迟到的任务，
-        // 不能让旧扫描在后台无主运行，也不能把它的结果写回新流程。
+        // 离开页面则只脱离观察，持久任务仍可从来源卡继续查看。
         if (!isCurrentRun()) {
-          await mediaV4Api.cancelDurableScan(task.scan_id).catch(() => undefined)
+          if (scanCancelRef.current !== cancelVersion) await mediaV4Api.cancelDurableScan(task.scan_id).catch(() => undefined)
           return
         }
         setScanTask({
@@ -959,7 +973,8 @@ export default function MediaManagementPage() {
   })
 
   const resumeSourceCard = async (card: V4SourceLibraryCard) => {
-    abandonActiveScan()
+    // 查看卡片不是放弃任务：只停止旧观察，不能取消这张卡或另一张卡的扫描。
+    detachActiveScan()
     clearResultState()
     setSourceInputsFromCard(card)
     goManageView('import')
@@ -1457,7 +1472,9 @@ export default function MediaManagementPage() {
             const activeTask = card.active_task
             const active = Boolean(activeTask)
             const retiredCleanup = card.enabled === 0 && card.counts_scope === 'cleanup'
-            const deletionRetry = card.deletion_retry_required === true && !active
+            const pendingCleanup = card.pending_cleanup
+            const cleanupActive = pendingCleanup?.status === 'queued' || pendingCleanup?.status === 'running'
+            const deletionRetry = card.deletion_retry_required === true && !active && !pendingCleanup
             const executionTerminated = card.overall_status === 'cancelled' && card.phase === 'execute'
             const cancelledLabel = executionTerminated ? '任务已终止' : '扫描已取消'
             const stateLabel = deletionRetry ? '清理未完成'
@@ -1513,6 +1530,7 @@ export default function MediaManagementPage() {
                 )}
                 {card.attention_count > 0 && <span className="media-v4-source-card-attention">有 {card.attention_count} 个待处理事项</span>}
                 {(card.relation_pending_count ?? 0) > 0 && <span className="media-v4-source-card-notice">{card.relation_pending_count} 项关联信息待补全，不影响入库和播放</span>}
+                {pendingCleanup && <span className="media-v4-source-card-notice">{cleanupActive ? '正在清理上次生成文件' : '上次生成文件清理未完成'}</span>}
                 </div>
                 <div className="media-v4-source-card-actions" role="group" aria-label="导入与更新">
                   <Button className={`media-v4-source-card-action ${card.can_resume || deletionRetry ? 'primary' : 'secondary'}`} appearance={card.can_resume || deletionRetry ? 'primary' : 'secondary'} icon={resumeIcon} disabled={retiredCleanup && active} onClick={() => {
@@ -1523,11 +1541,17 @@ export default function MediaManagementPage() {
                       void loadSourceDeletionPreview(card)
                     } else void resumeSourceCard(card)
                   }}>{resumeLabel}</Button>
+                  {pendingCleanup && <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<Delete24Regular />} disabled={cleanupActive} onClick={() => {
+                    setSourceDeletionPreview(null)
+                    setSourceDeletionQueued(false)
+                    setSourceCardPendingDelete(card)
+                    void loadSourceDeletionPreview(card)
+                  }}>{cleanupActive ? '清理中' : '重试清理'}</Button>}
                   {!retiredCleanup && !deletionRetry && (activeTask?.can_cancel || activeTask?.status === 'cancelling'
                     ? <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<Dismiss24Regular />} disabled={activeTask?.status === 'cancelling'} onClick={() => void terminateSourceTask(card)}>{activeTask?.status === 'cancelling' ? '正在终止…' : '终止任务'}</Button>
                     : <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<ArrowSync24Regular />} disabled={active} onClick={() => prepareSourceUpdate(card)}>检查更新</Button>)}
                 </div>
-                {!active && !retiredCleanup && !deletionRetry && <div className="media-v4-source-card-actions media-v4-source-card-management" role="group" aria-label="来源卡管理">
+                {!active && !cleanupActive && !retiredCleanup && !deletionRetry && <div className="media-v4-source-card-actions media-v4-source-card-management" role="group" aria-label="来源卡管理">
                   {!active && <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<Edit24Regular />} aria-label={`重命名来源卡：${card.display_name}`} onClick={() => openSourceCardRename(card)}>重命名</Button>}
                   {!active && <Button className="media-v4-source-card-action secondary media-v4-source-card-action-danger" appearance="secondary" icon={<Delete24Regular />} aria-label={`删除来源卡：${card.display_name}`} onClick={() => setSourceCardPendingDelete(card)}>删除来源卡</Button>}
                 </div>}
