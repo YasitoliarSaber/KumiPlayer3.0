@@ -61,9 +61,10 @@ def _patch_database(tmp_path, monkeypatch):
 
 
 def _client(tmp_path, monkeypatch):
-    from app.api import library_v4, media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import library_v4, media_v4
 
     _patch_database(tmp_path, monkeypatch)
     application = FastAPI()
@@ -183,7 +184,22 @@ def _confirmed_work_with_revision(tmp_path, monkeypatch, *, work_title="Show", t
 
 
 
-def _patch_manual_scrape(monkeypatch, tmp_path, provider_id: str):
+def _with_episode_metadata(target, result):
+    """完整模拟 Provider 响应：身份、分集坐标、标题和缩略图都显式给出。"""
+    return {**result, "episode_mappings": [
+        {
+            "episode_id": episode["episode_id"],
+            "provider_episode_id": str(1000 + episode["local_episode_number"]),
+            "provider_season_number": episode["local_season_number"],
+            "provider_episode_number": episode["local_episode_number"],
+            "title": "Fixture Episode",
+            "still_url": "https://image.tmdb.org/t/p/w500/fixture-still.jpg",
+        }
+        for episode in target["episodes"]
+    ]}
+
+
+def _patch_manual_scrape(monkeypatch, tmp_path, provider_id: str, *, mode="remote"):
     """人工确认后的 scrape 使用已冻结 binding，不再搜索；返回完整 ready 元数据。"""
     from app.media_v4.jobs import completeness as completeness_module
     from app.media_v4.jobs import metadata_artifacts as artifacts_module
@@ -193,7 +209,7 @@ def _patch_manual_scrape(monkeypatch, tmp_path, provider_id: str):
             b.get("provider") == "tmdb" and str(b.get("provider_id")) == provider_id
             for b in (target.get("provider_bindings") or [])
         ), "scrape 必须消费已确认 binding，不得重新搜索"
-        return {
+        return _with_episode_metadata(target, {
             "provider": "tmdb",
             "provider_id": provider_id,
             "media_type": "tv",
@@ -201,11 +217,13 @@ def _patch_manual_scrape(monkeypatch, tmp_path, provider_id: str):
             "metadata_state": "ready",
             "poster_url": "https://image.tmdb.org/t/p/w780/p.jpg",
             "fanart_url": "https://image.tmdb.org/t/p/original/f.jpg",
-        }
+        })
 
     monkeypatch.setattr("app.media_v4.jobs.metadata.default_metadata_provider", fake_provider)
-    monkeypatch.setattr(artifacts_module, "load_config", lambda: _fake_artifacts_config("remote"))
-    monkeypatch.setattr(completeness_module, "load_config", lambda: _fake_artifacts_config("remote"))
+    monkeypatch.setattr(artifacts_module, "load_config", lambda: _fake_artifacts_config(mode))
+    monkeypatch.setattr(completeness_module, "load_config", lambda: _fake_artifacts_config(mode))
+    monkeypatch.setattr("app.core.paths.get_mirror_root", lambda: tmp_path / "mirror")
+    monkeypatch.setattr(artifacts_module, "_download_artwork", lambda *a, **k: "")
 
 def test_manual_confirm_requires_server_side_candidate_and_rejects_forgery(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
@@ -300,7 +318,7 @@ def _fake_artifacts_config(mode: str = "local"):
     )
 
 
-def _scrape_with_metadata(tmp_path, monkeypatch, *, provider_result: dict, mode: str = "local"):
+def _scrape_with_metadata(tmp_path, monkeypatch, *, provider_result: dict, mode: str = "local", complete_episodes=True):
     from app.media_v4.jobs import metadata_artifacts as artifacts_module
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.revisions.service import V4RevisionService
@@ -314,6 +332,7 @@ def _scrape_with_metadata(tmp_path, monkeypatch, *, provider_result: dict, mode:
     service.create_draft("rev-comp", [(evidence, facts)], candidate_search=lambda *a, **k: [])
     service.confirm("rev-comp")
     monkeypatch.setattr(artifacts_module, "load_config", lambda: _fake_artifacts_config(mode))
+    monkeypatch.setattr(artifacts_module, "_download_artwork", lambda *a, **k: "")
     from app.media_v4.jobs import completeness as completeness_module
 
     monkeypatch.setattr(completeness_module, "load_config", lambda: _fake_artifacts_config(mode))
@@ -321,7 +340,9 @@ def _scrape_with_metadata(tmp_path, monkeypatch, *, provider_result: dict, mode:
     job = next(
         item for item in service.list_jobs("rev-comp") if item["job_type"] == "scrape_work"
     )
-    scrape.process(job["job_id"], lambda _work: provider_result, mirror_root=tmp_path / "mirror")
+    scrape.process(job["job_id"],
+                   lambda target: _with_episode_metadata(target, provider_result) if complete_episodes else provider_result,
+                   mirror_root=tmp_path / "mirror")
     with database.connect() as conn:
         binding = conn.execute(
             "SELECT status, metadata_json FROM scrape_bindings WHERE work_id = ?",
@@ -370,6 +391,26 @@ def test_metadata_ready_with_complete_remote_artwork_and_episode_nfo(tmp_path, m
     assert binding["status"] == "confirmed"
     payload = json.loads(binding["metadata_json"])
     assert payload.get("metadata_state") == "ready"
+
+
+def test_provider_ready_without_episode_mapping_is_not_published(tmp_path, monkeypatch):
+    """Provider 的 ready 标记不能掩盖正片零映射，资料完整性门控必须实际执行。"""
+    import json
+
+    database, binding = _scrape_with_metadata(tmp_path, monkeypatch, mode="remote",
+                                           complete_episodes=False, provider_result={
+        "provider": "tmdb", "provider_id": "42", "media_type": "tv", "title": "Show",
+        "metadata_state": "ready",
+        "poster_url": "https://image.tmdb.org/t/p/w780/poster.jpg",
+        "fanart_url": "https://image.tmdb.org/t/p/original/fanart.jpg",
+    })
+    payload = json.loads(binding["metadata_json"])
+    assert binding["status"] == "failed"
+    assert payload["work_metadata_status"] == "ready"
+    assert payload["reason_code"] == "episode_mapping_incomplete"
+    assert payload["mapped_count"] == 0 and payload["total_count"] == 1
+    with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM metadata_snapshots").fetchone()[0] == 0
 
 
 # ---------------------------------------------------------------------------

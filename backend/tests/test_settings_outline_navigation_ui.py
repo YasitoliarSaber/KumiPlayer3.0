@@ -19,15 +19,16 @@ def test_connection_essentials_are_visible_and_misleading_options_are_hidden():
 
     - 常用连接配置含 API 读取访问令牌与测试 TMDB 连接；
     - 代理不再与 TMDB 混排（移到 support 的网络区块）；
-    - 设置页不出现 DeepSeek 与旧“连接高级设置”。
+    - 可选联网名称核对独立于 TMDB 常用连接配置；旧“连接高级设置”不回流。
     """
     page = (ROOT / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
 
     essentials_start = page.index('title="常用连接配置"')
+    recovery_start = page.index('title="联网名称核对（可选）" collapsible')
     advanced_start = page.index('title="高级参数" collapsible')
 
     assert essentials_start < advanced_start
-    essentials = page[essentials_start:advanced_start]
+    essentials = page[essentials_start:recovery_start]
     assert 'label="后端端口"' not in essentials
     assert 'label="API 读取访问令牌"' in essentials
     assert "TMDB_API_SETTINGS_URL" in essentials
@@ -42,7 +43,12 @@ def test_connection_essentials_are_visible_and_misleading_options_are_hidden():
     assert proxy_pos > advanced_start or proxy_pos > essentials_start
     assert 'label="网络代理"' not in page[essentials_start:network_start]
     assert 'title="连接高级设置"' not in page
-    assert "DeepSeek" not in page
+    assert "DeepSeek" not in essentials
+    recovery = page[recovery_start:advanced_start]
+    assert 'label="联网名称核对"' in recovery
+    assert 'label="Tavily 搜索密钥" secret' in recovery
+    assert 'label="DeepSeek 密钥" secret' in recovery
+    assert "关闭（默认）" in recovery
 
 
 def test_proxy_lives_in_its_own_network_section():

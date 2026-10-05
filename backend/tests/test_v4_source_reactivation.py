@@ -136,7 +136,13 @@ def test_cancelled_confirmed_import_is_exposed_as_a_terminated_task(tmp_path):
     assert card["overall_status"] == "cancelled"
     assert card["progress"]["message"] == "任务已终止"
     assert card["active_task"] is None
-    assert card["can_resume"] is True
+    # 已终止任务不冒充暂停；用户仍可从执行详情显式重试（tasks API 合同）。
+    assert card["can_resume"] is False
+    assert card["available_actions"] == ["inspect", "update"]
+    with database.connect() as conn:
+        assert {row["status"] for row in conn.execute(
+            "SELECT status FROM jobs WHERE revision_id = 'rev-cancelled'"
+        )} == {"cancelled"}
 
 
 def test_initialize_repairs_only_roots_reimported_after_retirement(tmp_path):

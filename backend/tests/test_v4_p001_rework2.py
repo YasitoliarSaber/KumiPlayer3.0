@@ -230,18 +230,9 @@ def test_manual_confirm_publishes_work_when_only_artwork_is_missing(tmp_path, mo
     candidate_id = searched.json()["candidates"][0]["candidate_id"]
 
 
-    def fake_provider(target):
-        return {
-            "provider": "tmdb",
-            "provider_id": "555",
-            "media_type": "tv",
-            "title": "Show",
-            "metadata_state": "ready",
-            "poster_url": "https://image.tmdb.org/t/p/w780/p.jpg",
-            "fanart_url": "https://image.tmdb.org/t/p/original/f.jpg",
-        }
+    from tests.test_v4_p001_rework import _patch_manual_scrape
 
-    monkeypatch.setattr("app.media_v4.jobs.metadata.default_metadata_provider", fake_provider)
+    _patch_manual_scrape(monkeypatch, tmp_path, "555", mode="local")
 
     confirmed = client.post("/api/v4/metadata/confirm", json={"work_id": work_id, "candidate_id": candidate_id})
     assert confirmed.status_code == 200, confirmed.text
@@ -298,12 +289,14 @@ def test_projection_rechecks_artifact_files_not_only_metadata_json(tmp_path, mon
     scrape = V4ScrapeService(database)
     job = next(item for item in service.list_jobs("rev-comp2") if item["job_type"] == "scrape_work")
     mirror_root = tmp_path / "mirror"
-    scrape.process(job["job_id"], lambda _w: {
+    from tests.test_v4_p001_rework import _with_episode_metadata
+
+    scrape.process(job["job_id"], lambda target: _with_episode_metadata(target, {
         "provider": "tmdb", "provider_id": "42", "media_type": "tv", "title": "Show",
         "metadata_state": "ready",
         "poster_url": "https://image.tmdb.org/t/p/w780/p.jpg",
         "fanart_url": "https://image.tmdb.org/t/p/original/f.jpg",
-    }, mirror_root=mirror_root)
+    }), mirror_root=mirror_root)
     with database.connect() as conn:
         binding = conn.execute(
             "SELECT status, metadata_json FROM scrape_bindings WHERE work_id = (SELECT work_id FROM works LIMIT 1)"
