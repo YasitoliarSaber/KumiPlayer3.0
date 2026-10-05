@@ -626,11 +626,16 @@ class V4ScrapeService:
                 facts,
             )[:8]
             target["provider_identity_scope"] = _provider_identity_scope(conn, target, facts)
-            # C-004：文件名提示与结构化提示矛盾时暂停自动 Provider 绑定（fetch 层不再搜索）。
+            # 单文件提示矛盾或同作品不同文件提示冲突时，fetch 层均暂停自动搜索。
+            hint_slots = {
+                (fact.tmdb_hint_type.casefold(), str(fact.tmdb_hint_id))
+                for fact in facts
+                if fact.tmdb_hint_type and fact.tmdb_hint_id
+            }
             target["provider_hint_conflict"] = any(
                 "provider_hint_conflict" in tuple(getattr(fact, "reasons", ()) or ())
                 for fact in facts
-            )
+            ) or len(hint_slots) > 1
             if not str(target.get("show_type") or "").strip():
                 import_families = {
                     str(row["import_family"] or "").strip().casefold()

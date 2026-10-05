@@ -2247,6 +2247,19 @@ class V4RevisionService:
                 # Provider identity is a mapping, never a replacement for the
                 # local Work identity.  Hints observed during parsing are
                 # attached here without changing local season/episode numbers.
+                hint_slots_by_work = {
+                    work.work_key: {
+                        (facts_by_evidence[eid].tmdb_hint_type.casefold(), str(facts_by_evidence[eid].tmdb_hint_id))
+                        for eid in work.source_evidence_ids
+                        if facts_by_evidence[eid].tmdb_hint_id and facts_by_evidence[eid].tmdb_hint_type
+                    }
+                    for work in graph.works
+                }
+                ambiguous_candidate_keys = {
+                    key for key, candidates in candidates_by_key.items()
+                    if len({(item.provider, item.media_type, item.provider_id) for item in candidates
+                            if item.confidence == "high" and item.status in {"confirmed", "proposed"}}) > 1
+                }
                 for evidence, facts in entries:
                     if not facts.tmdb_hint_id or not facts.tmdb_hint_type:
                         continue
@@ -2257,6 +2270,9 @@ class V4RevisionService:
                         "",
                     )
                     if not work_key:
+                        continue
+                    # 同一作品的别名/版本有冲突提示时只确认本地媒体，不任选在线身份。
+                    if len(hint_slots_by_work[work_key]) != 1 or work_key in ambiguous_candidate_keys:
                         continue
                     work_id = work_ids[work_key]
                     provider_id = str(facts.tmdb_hint_id)

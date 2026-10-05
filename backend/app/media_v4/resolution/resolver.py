@@ -380,6 +380,13 @@ def _work_key(facts: ParsedFacts, evidence: SourceEvidence | None = None) -> str
     if _structure_overridden(facts, include_numbering=False):
         # 人工事实优先于解析时缓存的目录身份，不把改名重新拉回原系列。
         return f"title:{_boundary_key_title(facts.work_title)}:{facts.year_candidate or ''}:{_effective_media_type(facts)}"
+    verified_release = next((trace.value for trace in facts.decision_trace
+                             if trace.field == "verified_release_identity" and isinstance(trace.value, dict)), None)
+    if verified_release and facts.content_class == "movie" and _effective_media_type(facts) == "movie":
+        # 正式发行身份与本地展示名分离：保留好标题，别名版本仍是同一部电影。
+        canonical_title = str(verified_release.get("canonical_title") or "")
+        if canonical_title:
+            return f"title:{_boundary_key_title(canonical_title)}:{facts.year_candidate or ''}:movie"
     if context.get("filename_identity"):
         # 子目录重复合集名时，编号前的具体文件标题才是子作品身份。
         # 同一范围内只忽略分隔符变体，不把它当成母系列或在线季度。

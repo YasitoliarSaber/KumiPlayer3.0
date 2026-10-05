@@ -36,6 +36,7 @@ from app.media_v4.parsing.evidence_policy import (
     parse_numbering,
     tokenize_filename,
 )
+from app.media_v4.parsing.release_identity import apply_verified_release
 from app.media_v4.parsing.structure import structure_context
 from app.media_v4.sources.adapters import provider_to_source
 from app.recognition.media import (
@@ -353,7 +354,7 @@ def _parse_sidecar_nfo(evidence: SourceEvidence) -> tuple[int | None, str, str, 
 class V4Parser:
     """从一个 SourceEvidence 生成一个不可变 ParsedFacts。"""
 
-    VERSION = "v4-parser-14"
+    VERSION = "v4-parser-15"
 
     @classmethod
     def _parsed_fact_id(cls, evidence: SourceEvidence) -> str:
@@ -687,7 +688,7 @@ class V4Parser:
                 for candidate in numbering.candidates
             ),
         )
-        return ParsedFacts(
+        parsed = ParsedFacts(
             parsed_fact_id=self._parsed_fact_id(evidence),
             evidence_id=evidence.evidence_id,
             parser_version=self.VERSION,
@@ -742,3 +743,4 @@ class V4Parser:
             decision_trace=decision_trace,
             numbering=numbering.numbering,
         )
+        return apply_verified_release(parsed, evidence, context.work_container)
