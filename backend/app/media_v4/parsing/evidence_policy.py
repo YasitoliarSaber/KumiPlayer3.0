@@ -153,7 +153,16 @@ _EPISODE_ONLY_RE = re.compile(r"(?i)(?<![A-Za-z0-9])E(?:P)?(\d{1,3})(?!\d)")
 _CJK_EPISODE_RE = re.compile(r"第\s*(\d{1,4})\s*[集话話]")
 _CJK_SEASON_RE = re.compile(r"第\s*(\d{1,2})\s*季")
 _ABS_MARKER_RE = re.compile(r"(?i)(?<![A-Za-z])(?:ABS|ABSOLUTE)(\d{1,4})(?!\d)")
+# 版本注解描述同一集的 Edition；只接受完整编号槽及已知注解，技术参数不取号。
+_ROMANIZED_MOVIE_FILE_RE = re.compile(r"(?i)(?<![A-Za-z])Gekij(?:ou|o|ō)ban(?![A-Za-z])")
+_NUMBERED_EDITION_RE = re.compile(
+    r"(?i)[\[【]\s*(\d{1,3})\s*(?:"
+    r"director(?:['’‘ʼ]s)?[ ._-]*cut"
+    r"|\(\s*on[ ._-]?air\s*(?:ver(?:sion)?\.?)?\s*\)"
+    r")\s*[\]】]"
+)
 _BARE_NUMBER_RES = (
+    _NUMBERED_EDITION_RE,
     # 完整编号位置的 [13] / 【13】 / (13)
     re.compile(r"[\[【(]\s*(\d{1,3})\s*[\]】)]"),
     # 单个缺失闭括号：第二个技术区开括号界定编号终点。
@@ -564,6 +573,12 @@ def _bare_number(tokens: FilenameTokens) -> int | None:
     return None
 
 
+def numbered_edition_token(tokens: FilenameTokens) -> str:
+    """保留完整带版本的集号槽，和编号取值共用同一词法规则。"""
+    matches = _valid_bare_number_matches(tokens.stem, _NUMBERED_EDITION_RE)
+    return matches[0].group(0) if matches else ""
+
+
 def _number_overlaps_excluded_span(stem: str, number_span: tuple[int, int]) -> bool:
     start, end = number_span
     return any(
@@ -681,6 +696,10 @@ def classify_content(
     selected_release = bool(release_form) or release_dir is not None
     numbered_sp = _NUMBERED_SP_RE.search(stem)
     sp_marker = _SP_MARKER_RE.search(stem)
+    # 片名中的罗马字剧场版标记不能吞掉明确的本地特别篇发行标记。
+    if not (fraction or zero or selected_release or sp_marker) and not movie_hit:
+        if _ROMANIZED_MOVIE_FILE_RE.search(stem):
+            movie_hit = _ROMANIZED_MOVIE_FILE_RE.pattern
     if (fraction or zero or selected_release or sp_marker) and not (
         movie_hit or movie_dir or provisional_movie or standalone_hit or standalone_dir
     ):

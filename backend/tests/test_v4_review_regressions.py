@@ -218,3 +218,84 @@ def test_movie_release_child_keeps_parent_title_year_and_series_relation():
     assert movie.year == 2017
     assert len(graph.works) == 2
     assert any(relation.child_work_key == movie.work_key for relation in graph.relations)
+
+
+@pytest.mark.parametrize("prefix", ["", "动画/4k 京阿尼合集/"])
+@pytest.mark.parametrize("marker", ["Gekijouban", "Gekijoban", "Gekijōban"])
+def test_romanized_movie_marker_wins_over_s2_directory_without_inventing_episode(prefix, marker):
+    graph, pairs = resolve([
+        "动画/4k 京阿尼合集/C 4k 吹响吧！上低音号/吹响吧! 上低音号 S2 ~誓言的终章~/"
+        f"[Ygm] {marker} Hibike! Euphonium Chikai no Finale [Ma10p_2160p][x265_flac7.1_DTS-HD_ass].mkv",
+        "动画/4k 京阿尼合集/C 4k 吹响吧！上低音号/吹响吧! 上低音号 S2 ~想要传达的旋律~/"
+        f"[Ygm] {marker} Hibike! Euphonium Todoketai Melody [Ma10p_2160p][x265_aac_flac_DTS5.1].mkv",
+    ], prefix=prefix)
+    assert all(facts.content_class == "movie" and facts.media_type == "movie" for _, facts in pairs)
+    assert all(facts.episode_candidate is None for _, facts in pairs)
+    assert len(graph.works) == len(graph.work_assets) == 2
+    assert not graph.episodes
+    assert not any(issue.code == "episode_number_unresolved" for issue in graph.issues)
+
+
+@pytest.mark.parametrize("number,label,edition", [
+    (21, "Director's Cut", "director-cut"),
+    (22, "Director’s Cut", "director-cut"),
+    (23, "Director‘s Cut", "director-cut"),
+    (24, "Directorʼs Cut", "director-cut"),
+    (21, "Director's  Cut", "director-cut"),
+    (21, "Director’s__Cut", "director-cut"),
+    (21, "Director---Cut", "director-cut"),
+    (6, "(On-Air)", "on-air"),
+])
+@pytest.mark.parametrize("prefix", ["", "动画/"])
+def test_annotated_episode_editions_keep_number_and_same_work_without_overwriting_base(prefix, number, label, edition):
+    token = f"[{number:02d}{'' if label.startswith('(') else ' '}{label}]"
+    graph, pairs = resolve([
+        f"动画/作品/Season 1/[Group] Series [{number:02d}][1080p][x265_FLAC7.1].mkv",
+        f"动画/作品/Season 1/[Group] Series {token}[1080p][x265_FLAC7.1].mkv",
+    ], prefix=prefix)
+    annotated = pairs[1][1]
+    assert annotated.content_class == "regular"
+    assert annotated.episode_candidate == number
+    assert annotated.episode_token_raw == token
+    assert annotated.edition_tags == (edition,)
+    assert len(graph.works) == 1
+    assert len(graph.episodes) == 2
+    assert {episode.local_episode_number for episode in graph.episodes} == {number}
+    assert len({episode.identity_key for episode in graph.episodes}) == 1
+    assert len({episode.edition_key for episode in graph.episodes}) == 2
+    assert not graph.issues
+
+
+@pytest.mark.parametrize("token", ["[DTS_5.1]", "[FLAC7.1]", "[2160p]", "[21 Unknown Cut]", "[06(Whatever)]"])
+def test_release_parameters_and_unknown_annotations_do_not_create_episode(token):
+    _, pairs = resolve([f"动画/作品/[Group] Unnumbered {token}.mkv"])
+    assert pairs[0][1].episode_candidate is None
+
+
+@pytest.mark.parametrize("suffix", ["SP01 Menu", "SP02 PV", "NCOP", "NCED"])
+def test_romanized_movie_name_cannot_override_auxiliary_exclusion(suffix):
+    graph, pairs = resolve([f"动画/作品/Gekijouban Series {suffix}.mkv"])
+    assert pairs[0][1].content_class == "auxiliary"
+    assert not graph.works
+
+
+@pytest.mark.parametrize("suffix", ["SP01", "OVA01", "OAD01"])
+def test_romanized_movie_title_keeps_explicit_local_special_playable(suffix):
+    graph, pairs = resolve([f"动画/作品/Season 2/Gekijouban Series {suffix}.mkv"])
+    assert pairs[0][1].content_class == "playable_special"
+    assert pairs[0][1].is_importable
+    assert len(graph.episodes) == 1
+    assert not graph.work_assets
+
+
+def test_unnumbered_same_name_release_and_nijiyon_s4_do_not_gain_guessed_coordinates():
+    graph, pairs = resolve([
+        "动画/赛马娘/巅峰之路/Uma Musume Pretty Derby - Road to the Top [01].mkv",
+        "动画/赛马娘/巅峰之路/Uma Musume Pretty Derby Road to the Top [x265_FLAC].mkv",
+        "动画/虹四格 S4/Nijiyon S4 [1080p].mkv",
+    ])
+    assert pairs[1][1].content_class == "unknown"
+    assert pairs[1][1].episode_candidate is None
+    assert pairs[2][1].season_candidate == 4
+    assert pairs[2][1].episode_candidate is None
+    assert any(issue.code == "episode_number_unresolved" for issue in graph.issues)

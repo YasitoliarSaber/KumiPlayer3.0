@@ -32,6 +32,7 @@ from app.media_v4.parsing.evidence_policy import (
     collect_nearest_semantic_directory_tokens,
     fractional_episode_token,
     group_type_for,
+    numbered_edition_token,
     parse_numbering,
     tokenize_filename,
 )
@@ -81,7 +82,7 @@ _QUALITY_TOKENS = re.compile(
 )
 _EDITION_TOKENS = (
     (re.compile(r"(?i)\(\s*on[ ._-]?air\s*(?:ver(?:sion)?\.?)?\s*\)"), "on-air"),
-    (re.compile(r"(?i)(?:director(?:'s)?[ ._-]?cut|导演剪辑版)"), "director-cut"),
+    (re.compile(r"(?i)(?:director(?:['’‘ʼ]s)?[ ._-]*cut|导演剪辑版)"), "director-cut"),
     (re.compile(r"(?i)(?:extended(?:[ ._-]?edition)?|加长版)"), "extended"),
     (re.compile(r"(?i)(?:remaster(?:ed)?|重制版)"), "remastered"),
     (re.compile(r"(?i)(?:theatrical(?:[ ._-]?cut)?|院线版)"), "theatrical"),
@@ -352,7 +353,7 @@ def _parse_sidecar_nfo(evidence: SourceEvidence) -> tuple[int | None, str, str, 
 class V4Parser:
     """从一个 SourceEvidence 生成一个不可变 ParsedFacts。"""
 
-    VERSION = "v4-parser-13"
+    VERSION = "v4-parser-14"
 
     @classmethod
     def _parsed_fact_id(cls, evidence: SourceEvidence) -> str:
@@ -497,6 +498,8 @@ class V4Parser:
         numbering = parse_numbering(
             tokens, directory, cjk_episode=cjk_episode, provisional_season=guess.season_number
         )
+        if not episode_token:
+            episode_token = numbered_edition_token(tokens)
         classification = classify_content(
             tokens,
             directory,
