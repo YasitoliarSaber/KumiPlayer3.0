@@ -1,5 +1,6 @@
 import { createContext } from 'react';
 import { api } from '../../api/client';
+import { recordScrollDiagnostic } from '../../utils/scrollDiagnostics';
 
 interface ImageEntry {
   path: string;
@@ -32,6 +33,7 @@ export class PosterImageLifecycle {
         else {
           image.removeAttribute('src');
           image.dataset.state = 'idle';
+          recordScrollDiagnostic('image-src-cleared', {});
         }
       }
     }, { root, rootMargin: `${Math.round(height * 1.25)}px 0px` });
@@ -58,6 +60,7 @@ export class PosterImageLifecycle {
   private activate(image: HTMLImageElement, entry: ImageEntry) {
     if (image.hasAttribute('src')) return;
     image.dataset.state = 'loading';
+    recordScrollDiagnostic('image-src-set', {});
     if (!entry.local || entry.ready) image.src = entry.url;
     else {
       // 新进入视野的冷图立即查询，不能等待旧轮询的静默间隔。

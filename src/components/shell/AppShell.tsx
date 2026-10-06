@@ -1,14 +1,54 @@
-import { type CSSProperties, type ReactNode } from 'react';
+import { type CSSProperties, type ReactNode, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import DesktopTitleBar from './DesktopTitleBar';
 import { SIDEBAR_WIDTHS, useUiStore } from '../../stores/ui';
+import { isScrollDiagnosticsEnabled, recordScrollDiagnostic } from '../../utils/scrollDiagnostics';
 
 interface AppShellProps {
   children: ReactNode;
 }
 
+/** 诊断采样的最小间隔：采样本身不能变成滚动热路径。 */
+const DIAGNOSTIC_SAMPLE_INTERVAL_MS = 100;
+
 export default function AppShell({ children }: AppShellProps) {
   const sidebarMode = useUiStore((state) => state.sidebarMode);
+
+  // 诊断采样（默认关闭）：只在显式开启后挂载被动监听，直接写内存环形缓冲，
+  // 不进入 React 状态、不逐次输出日志，也不改变原生滚动行为。
+  useEffect(() => {
+    if (!isScrollDiagnosticsEnabled()) return undefined;
+    const container = document.querySelector<HTMLElement>('main.app-main');
+    if (!container) return undefined;
+    let scrollEvents = 0;
+    let wheelEvents = 0;
+    let lastSampleAt = 0;
+    const sample = (kind: string, extra?: Record<string, number | boolean>) => {
+      const now = performance.now();
+      if (now - lastSampleAt < DIAGNOSTIC_SAMPLE_INTERVAL_MS) return;
+      lastSampleAt = now;
+      recordScrollDiagnostic(kind, {
+        scrollTop: Math.round(container.scrollTop),
+        scrollEvents,
+        wheelEvents,
+        ...extra,
+      });
+    };
+    const onScroll = () => {
+      scrollEvents += 1;
+      sample('scroll');
+    };
+    const onWheel = (event: WheelEvent) => {
+      wheelEvents += 1;
+      sample('wheel', { deltaY: Math.round(event.deltaY) });
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    container.addEventListener('wheel', onWheel, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      container.removeEventListener('wheel', onWheel);
+    };
+  }, []);
 
   return (
     <div

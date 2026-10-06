@@ -4,6 +4,7 @@ import { useLibraryStore } from '../../stores/library';
 import { cleanDisplayTitle } from '../../utils/title';
 import { buildAssetUrl, isRemoteAssetPath } from '../../api/assets';
 import { isScrollRecentlyActive } from '../../utils/scrollGesture';
+import { recordScrollDiagnostic } from '../../utils/scrollDiagnostics';
 import { preferredArtworkPath } from '../../utils/artwork';
 import DecodedImage, { type ImageState } from '../ui/DecodedImage';
 import PosterImage from './PosterImage';
@@ -55,7 +56,11 @@ function PosterCard({
     prewarmTimerRef.current = window.setTimeout(() => {
       prewarmTimerRef.current = null;
       if (isScrollRecentlyActive()) return;
-      void getWorkDetail(work.work_id).catch(() => undefined);
+      // 详情背景预热与缩略图加载是两条链路，诊断需要分开记录。
+      recordScrollDiagnostic('detail-prewarm-start', {});
+      void getWorkDetail(work.work_id)
+        .then(() => recordScrollDiagnostic('detail-prewarm-done', {}))
+        .catch(() => recordScrollDiagnostic('detail-prewarm-error', {}));
     }, 180);
   };
 

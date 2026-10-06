@@ -7,6 +7,7 @@ import type { WorkIndex, PlaybackHistoryItem } from '../api/types'
 import { mainEpisodeCount } from '../utils/workStats'
 import { isWorkInLibraryView } from '../utils/libraryCategories'
 import { buildAssetUrl } from '../api/assets'
+import { recordScrollDiagnostic } from '../utils/scrollDiagnostics'
 
 const LIBRARY_CACHE_KEY = 'kumiplayer-library-cache-v4'
 const LIBRARY_CACHE_MAX_AGE = 1000 * 60 * 60 * 24 * 7
@@ -35,7 +36,7 @@ interface LibraryState {
   selectedWork: () => WorkIndex | null
   librarySummary: () => { workCount: number; episodeCount: number }
 
-  loadLibrary: (options?: { force?: boolean }) => Promise<void>
+  loadLibrary: (options?: { force?: boolean }) => Promise<boolean>
   openWorkDetail: (workId: string) => Promise<void>
   closeWorkDetail: () => void
   refreshHistory: () => Promise<void>
@@ -201,8 +202,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   loadLibrary: async (options) => {
     const force = options?.force === true
-    if (get().loading && !force) return
+    if (get().loading && !force) return false
     const requestId = ++libraryLoadRequest
+    const diagnosticStartedAt = performance.now()
+    recordScrollDiagnostic('load-library-start', { force: force ? 1 : 0 })
 
     if (!force) {
       hydrateLibraryCache(set, get)
@@ -225,10 +228,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         error: null,
       })
       saveLibraryCache(works)
+      recordScrollDiagnostic('works-applied', { works: works.length })
+      recordScrollDiagnostic('library-cache-write', { works: works.length })
     })
     const historyRequest = playbackApi.getHistory(20).then((historyRes) => {
       if (requestId !== libraryLoadRequest) return
       set({ history: historyRes.items })
+      recordScrollDiagnostic('history-applied', { items: historyRes.items.length })
     }).catch(() => {
       // 播放历史是首页增强信息；失败时保留已有历史和可用媒体库内容。
       return undefined
@@ -237,12 +243,16 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     void historyRequest
     try {
       await libraryRequest
+      recordScrollDiagnostic('load-library-done', { ms: Math.round(performance.now() - diagnosticStartedAt) })
+      return requestId === libraryLoadRequest
     } catch (cause: unknown) {
-      if (requestId !== libraryLoadRequest) return
+      if (requestId !== libraryLoadRequest) return false
+      recordScrollDiagnostic('load-library-error', { ms: Math.round(performance.now() - diagnosticStartedAt) })
       set({
         error: cause instanceof Error ? cause.message : '加载失败',
         loading: false,
       })
+      return false
     }
   },
 

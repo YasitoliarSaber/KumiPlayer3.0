@@ -13,7 +13,8 @@ import CategoryPage from './pages/CategoryPage';
 import SearchPage from './pages/SearchPage';
 import LoadingState from './components/ui/loading-state';
 import { configApi, type PublicConfig } from './api/config';
-import { mediaV4Api } from './api/mediaV4';
+import { libraryApi } from './api/library';
+import { recordScrollDiagnostic } from './utils/scrollDiagnostics';
 import { FluentProvider } from '@fluentui/react-components';
 import { getKumiFluentTheme } from './design/fluentTheme';
 import { listenForTreeFileDrop } from './platform/fileDrop';
@@ -81,17 +82,27 @@ export default function App() {
     let disposed = false;
     let timer = 0;
     let lastDigest = '';
-    // P-006：全局刷新桥梁——轮询 V4 Projection generation/digest，新投影发布时
-    // 自动刷新媒体库；应用不可见时降低频率；同一 digest 不重复刷新；失败不清空旧库。
+    // P-006：全局刷新桥梁——轮询 V4 Projection digest，新投影发布时自动刷新媒体库；
+    // 应用不可见时降低频率；同一 digest 不重复刷新；失败不清空旧库。
+    // 这里只取轻量 digest 端点（不再每 5 秒传输并解析完整投影载荷）；
+    // 只有刷新成功才确认该 digest，失败保留旧快照并在下一轮重试，
+    // 避免“请求已失败但 digest 已确认”导致同 digest 更新被永久跳过。
     const check = async () => {
+      const startedAt = performance.now();
       try {
-        const snapshot = await mediaV4Api.library();
-        if (!disposed && snapshot.digest && snapshot.digest !== lastDigest) {
-          lastDigest = snapshot.digest;
-          void loadLibrary({ force: true });
+        const { digest } = await libraryApi.getDiagnostics();
+        const changed = Boolean(!disposed && digest && digest !== lastDigest);
+        recordScrollDiagnostic('library-check', {
+          ms: Math.round(performance.now() - startedAt),
+          changed,
+        });
+        if (changed) {
+          const refreshed = await loadLibrary({ force: true });
+          if (!disposed && refreshed) lastDigest = digest;
         }
       } catch {
-        // 网络失败保留现有媒体库快照。
+        recordScrollDiagnostic('library-check-error', { ms: Math.round(performance.now() - startedAt) });
+        // 网络失败保留现有媒体库快照；digest 未被确认，下一轮继续重试。
       }
       if (!disposed) {
         const delay = document.visibilityState === 'visible' ? 5000 : 30000;
