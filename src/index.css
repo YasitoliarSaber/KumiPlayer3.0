@@ -1499,8 +1499,7 @@
   border-radius: 6px;
 
   background: rgba(15, 19, 25, .72);
-  backdrop-filter: blur(6px) saturate(1.05);
-  -webkit-backdrop-filter: blur(6px) saturate(1.05);
+  /* 不做逐卡片实时背景模糊：.72 半透明底色 + 描边已足够，避免在作品墙上叠加合成开销。 */
 
   color: rgba(255, 255, 255, .92);
   font-size: 12px;
