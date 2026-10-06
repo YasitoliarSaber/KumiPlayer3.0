@@ -1,6 +1,5 @@
-import { useState } from 'react';
-import LibraryViewControls, { normalizeColumns } from '../components/library/LibraryViewControls';
 import VirtualizedPosterGrid from '../components/library/VirtualizedPosterGrid';
+import { normalizePosterColumns } from '../components/library/posterGridMetrics';
 import type { WorkIndex } from '../api/types';
 import { useLibraryStore } from '../stores/library';
 import { useUiStore } from '../stores/ui';
@@ -10,8 +9,9 @@ export default function FavoritesPage() {
   const works = useLibraryStore((state) => state.works);
   const loading = useLibraryStore((state) => state.loading);
   const error = useLibraryStore((state) => state.error);
-  const { goHome, source, posterSize } = useUiStore();
-  const [columnCapacity, setColumnCapacity] = useState<number>();
+  const goHome = useUiStore((state) => state.goHome);
+  const source = useUiStore((state) => state.source);
+  const posterSize = useUiStore((state) => state.posterSize);
 
   if (loading && works.length === 0) {
     return <PageState message="加载中..." />;
@@ -23,7 +23,7 @@ export default function FavoritesPage() {
 
   const sourceWorks = works.filter((work) => matchesSourceFilter(work, source));
   const favoriteWorks = selectFavoriteWorks(sourceWorks);
-  const columnsPerRow = normalizeColumns(posterSize);
+  const targetColumns = normalizePosterColumns(posterSize);
 
   return (
     <div className="recent-page favorites-page">
@@ -32,9 +32,6 @@ export default function FavoritesPage() {
           <h1>我的收藏</h1>
           <p>已收藏 {favoriteWorks.length} 部</p>
         </header>
-        <div className="category-toolbar library-view-toolbar" role="toolbar" aria-label="收藏视图工具">
-          <LibraryViewControls maxColumns={columnCapacity} />
-        </div>
       </div>
 
       {favoriteWorks.length === 0 ? (
@@ -48,9 +45,8 @@ export default function FavoritesPage() {
         <div className="category-grid-wrap favorites-grid-wrap">
           <VirtualizedPosterGrid
             works={favoriteWorks}
-            columns={columnsPerRow}
+            columns={targetColumns}
             recentLabel="已收藏"
-            onColumnCapacityChange={setColumnCapacity}
           />
         </div>
       )}

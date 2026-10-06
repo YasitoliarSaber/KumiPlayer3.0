@@ -31,6 +31,12 @@ export interface WorkSeasonSelection {
   seasonKey: string;
 }
 
+/** 作品墙布局：封面比例与目标列数必须一次提交，避免中间快照。 */
+export interface PosterWallLayout {
+  posterSize: number;
+  seriesCardImageMode: SeriesCardImageMode;
+}
+
 interface NavigationLocation {
   page: AppPage;
   activeCategory: LibraryView | null;
@@ -89,6 +95,7 @@ interface UiState {
   setSource: (source: SourceId) => void;
   setPosterSize: (size: number) => void;
   setSeriesCardImageMode: (mode: SeriesCardImageMode) => void;
+  setPosterWallLayout: (layout: PosterWallLayout) => void;
   setAppearanceMode: (mode: AppearanceMode) => void;
   setOngoingCategoryName: (name: string) => string;
   setActiveCategory: (category: LibraryView | null) => void;
@@ -227,6 +234,11 @@ export const useUiStore = create<UiState>()(
       setSource: (source) => set({ source }),
       setPosterSize: (size) => set({ posterSize: size }),
       setSeriesCardImageMode: (mode) => set({ seriesCardImageMode: mode }),
+      // 布局设置面板一次提交两个字段：订阅者不会观察到“比例已变、列数未变”的中间状态。
+      setPosterWallLayout: (layout) => set({
+        posterSize: layout.posterSize,
+        seriesCardImageMode: layout.seriesCardImageMode,
+      }),
       setAppearanceMode: (mode) => set({ appearanceMode: mode }),
       setOngoingCategoryName: (value) => {
         const ongoingCategoryName = normalizeOngoingCategoryName(value);

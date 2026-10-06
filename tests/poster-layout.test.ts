@@ -22,7 +22,9 @@ test('封面网格在滑块、窗口与跨屏尺寸变化后重新测量可用�
   assert.match(grid, /visualViewport\?\.addEventListener\('resize', requestMeasure\)/);
   assert.match(grid, /matchMedia\?\.\(`\(resolution: /);
   assert.match(grid, /observer = new ResizeObserver\(requestMeasure\)[\s\S]*?observer\.observe\(wrapRef\.current\)/);
-  assert.match(grid, /onColumnCapacityChange\?\.\(metrics\.columnCapacity\)/);
+  // 布局偏好由设置页保存，网格只负责按窗口容量测量实际列数，不再回传容量。
+  assert.doesNotMatch(grid, /onColumnCapacityChange/);
+  assert.match(grid, /setEffectiveColumns\(\(current\) => current === measuredColumns \? current : measuredColumns\)/);
 });
 
 test('海报墙的图片观察器预加载附近视口，网格不监听逐像素滚动', () => {

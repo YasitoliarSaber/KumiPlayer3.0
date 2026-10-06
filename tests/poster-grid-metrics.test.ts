@@ -1,6 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculatePosterGridMetrics } from '../src/components/library/posterGridMetrics.ts';
+import { calculatePosterGridMetrics, normalizePosterColumns } from '../src/components/library/posterGridMetrics.ts';
+
+test('封面大小偏好归一化保持既有像素值兼容语义', () => {
+  // 目标列数直接保留（4~8）。
+  assert.equal(normalizePosterColumns(3), 4);
+  assert.equal(normalizePosterColumns(4), 4);
+  assert.equal(normalizePosterColumns(5), 5);
+  assert.equal(normalizePosterColumns(6), 6);
+  assert.equal(normalizePosterColumns(7), 7);
+  assert.equal(normalizePosterColumns(8), 8);
+  // 旧像素值按既有分段映射，不能被动改成最近的预设。
+  assert.equal(normalizePosterColumns(169), 6);
+  assert.equal(normalizePosterColumns(170), 5);
+  assert.equal(normalizePosterColumns(180), 5);
+  assert.equal(normalizePosterColumns(210), 4);
+  assert.equal(normalizePosterColumns(240), 4);
+  // 非法与越界值回退到标准 6 列。
+  assert.equal(normalizePosterColumns(Number.NaN), 6);
+  assert.equal(normalizePosterColumns(0), 6);
+  assert.equal(normalizePosterColumns(-12), 6);
+  assert.equal(normalizePosterColumns(9), 6);
+});
 
 test('连续切换列数与容器宽度时始终得到有限且一致的封面网格尺寸', () => {
   const widths = [1960, 1280, 720, 1540, 930, 2048, 640];

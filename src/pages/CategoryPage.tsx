@@ -9,7 +9,7 @@ import { useDismissiblePopover } from '../hooks/useDismissiblePopover';
 import { mediaV4Api, type V4TrackingSource } from '../api/mediaV4';
 import { queueOngoingSourceAction } from '../components/media/ongoingSourceNavigation';
 import VirtualizedPosterGrid from '../components/library/VirtualizedPosterGrid';
-import LibraryViewControls, { normalizeColumns } from '../components/library/LibraryViewControls';
+import { normalizePosterColumns } from '../components/library/posterGridMetrics';
 import LoadingState from '../components/ui/loading-state';
 import { isWorkInLibraryView } from '../utils/libraryCategories';
 
@@ -45,7 +45,6 @@ export default function CategoryPage() {
   const goManageView = useUiStore((state) => state.goManageView);
   const posterSize = useUiStore((state) => state.posterSize);
   const [sortOpen, setSortOpen] = useState(false);
-  const [columnCapacity, setColumnCapacity] = useState<number>();
   const [scanTasks, setScanTasks] = useState<V4TrackingSource[]>([]);
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
@@ -186,7 +185,6 @@ export default function CategoryPage() {
             </div>
           )}
           <SortMenu value={sort} open={sortOpen} onOpenChange={setSortOpen} onChange={setSort} />
-          <LibraryViewControls maxColumns={columnCapacity} />
         </div>
       </div>
       {activeCategory === 'seasonal' && <>
@@ -209,7 +207,7 @@ export default function CategoryPage() {
       </>}
       {categoryWorks.length === 0 ? <CenteredMessage>这个筛选下还没有作品</CenteredMessage> : (
         <div className="category-grid-wrap">
-          <VirtualizedPosterGrid works={categoryWorks} columns={normalizeColumns(posterSize)} onColumnCapacityChange={setColumnCapacity} localArtworkOnly />
+          <VirtualizedPosterGrid works={categoryWorks} columns={normalizePosterColumns(posterSize)} localArtworkOnly />
         </div>
       )}
     </div>

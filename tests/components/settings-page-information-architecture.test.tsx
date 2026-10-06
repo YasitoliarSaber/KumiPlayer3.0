@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   testTmdb: vi.fn(),
   openMpvConfigDir: vi.fn(),
   setOngoingCategoryName: vi.fn((name: string) => name.trim() || '新番'),
+  setPosterWallLayout: vi.fn(),
 }));
 
 vi.mock('../../src/api/config', () => ({ configApi: api }));
@@ -57,6 +58,7 @@ vi.mock('../../src/stores/ui', () => ({
       ongoingCategoryName: '新番',
       setOngoingCategoryName: api.setOngoingCategoryName,
       setAppearanceMode: vi.fn(),
+      setPosterWallLayout: api.setPosterWallLayout,
       goPlayerTuning: vi.fn(),
     };
     return selector ? selector(state) : state;
@@ -74,6 +76,8 @@ const config = {
   external_mpv_path: '',
   mpv_anime4k_mode: 'off',
   mpv_anime4k_quality: 'balanced',
+  poster_size: 180,
+  series_card_image_mode: 'poster',
   openlist_configured: true,
   openlist_server_url: 'https://openlist.example.test',
   openlist_remote_root: '/',
@@ -229,8 +233,27 @@ describe('SettingsPage 信息架构', () => {
     expect(document.getElementById('settings-panel-scrape')).toHaveTextContent('网络代理');
   });
 
-  test('将外观放在账户之后，便于首次进入设置时快速调整主题', async () => {
+  test('作品墙布局归属外观分类，且不新增设置分类', async () => {
     render(<SettingsPage />);
+
+    const navigation = screen.getByRole('navigation', { name: '设置分类' });
+    await within(navigation).findByRole('button', { name: /外观/ });
+    expect(within(navigation).getAllByRole('button')).toHaveLength(6);
+
+    api.patchConfig.mockClear();
+    fireEvent.click(within(navigation).getByRole('button', { name: /外观/ }));
+    const appearance = document.getElementById('settings-panel-appearance')!;
+    expect(within(appearance).getByText('作品墙布局')).toBeVisible();
+    expect(within(appearance).getByText('应用主题')).toBeVisible();
+    // 默认 180 等价于目标 5 列，保留旧偏好而不强行改成预设。
+    expect(within(appearance).getByRole('combobox', { name: '封面比例' })).toHaveValue('poster');
+    expect(within(appearance).getByRole('combobox', { name: '封面大小' })).toHaveValue('5');
+    expect(within(appearance).getByRole('button', { name: '应用作品墙设置' })).toBeDisabled();
+    expect(within(appearance).getByRole('button', { name: '还原选择' })).toBeDisabled();
+    expect(api.patchConfig).not.toHaveBeenCalled();
+  });
+
+  test('将外观放在账户之后，便于首次进入设置时快速调整主题', async () => {    render(<SettingsPage />);
 
     const navigation = screen.getByRole('navigation', { name: '设置分类' });
     const labels = within(navigation)

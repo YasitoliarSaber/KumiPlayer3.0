@@ -8,11 +8,6 @@ vi.mock('../../src/components/library/VirtualizedPosterGrid', () => ({
   default: () => <div data-testid="poster-grid" />,
 }));
 
-vi.mock('../../src/components/library/LibraryViewControls', () => ({
-  default: () => <div data-testid="view-controls" />,
-  normalizeColumns: (size: number) => Math.max(4, Math.round(size / 180)),
-}));
-
 import CategoryPage from '../../src/pages/CategoryPage';
 
 function makeWork() {

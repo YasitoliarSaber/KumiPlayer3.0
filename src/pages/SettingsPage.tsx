@@ -29,6 +29,7 @@ import PlayerTuningPage from './PlayerTuningPage';
 import { openlistConnections, selectOpenlistConnection } from '../api/openlistConnections';
 import OpenListSourceRoutes from '../components/settings/OpenListSourceRoutes';
 import OngoingUpdateSettingsPanel from '../components/settings/OngoingUpdateSettingsPanel';
+import PosterWallSettingsPanel from '../components/settings/PosterWallSettingsPanel';
 import '../styles/settings-media-sources.css';
 import '../styles/settings-navigation.css';
 type SettingsTab = 'appearance' | 'sources' | 'openlist' | 'scrape' | 'player' | 'bangumi';
@@ -73,7 +74,10 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
     clearToken,
   } = useBangumiStore();
   const loadLibrary = useLibraryStore((state) => state.loadLibrary);
-  const { appearanceMode, setAppearanceMode, ongoingCategoryName = '新番', setOngoingCategoryName } = useUiStore();
+  const appearanceMode = useUiStore((state) => state.appearanceMode);
+  const setAppearanceMode = useUiStore((state) => state.setAppearanceMode);
+  const ongoingCategoryName = useUiStore((state) => state.ongoingCategoryName) || '新番';
+  const setOngoingCategoryName = useUiStore((state) => state.setOngoingCategoryName);
   const [activeSection, setActiveSection] = useState<SettingsTab>('bangumi');
   const [baseConfig, setConfig] = useState<PublicConfig | null>(null);
   const [selectedConnectionId, setSelectedConnectionId] = useState('legacy');
@@ -82,6 +86,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
   const selectedConnectionRef = useRef(selectedConnectionId);
   selectedConnectionRef.current = selectedConnectionId;
   const [configLoading, setConfigLoading] = useState(false);
+  const [configError, setConfigError] = useState('');
   const [mpvRuntime, setMpvRuntime] = useState<MpvRuntimeStatus | null>(null);
   const [operationMessage, setOperationMessage] = useState('');
   const [activeAction, setActiveAction] = useState<string | null>(null);
@@ -251,6 +256,9 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
     setConfigLoading(true);
     try {
       setConfig(await configApi.getConfig());
+      setConfigError('');
+    } catch (err) {
+      setConfigError((err as Error).message || '无法读取配置');
     } finally {
       setConfigLoading(false);
     }
@@ -273,6 +281,27 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
       report('配置已保存');
     } catch (err) {
       report(`保存失败：${(err as Error).message}`);
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  // 作品墙布局使用独立保存回调：不吞异常，先校验响应再发布配置，
+  // 避免父页面发布非法布局字段而子面板只能随后拒绝。
+  const savePosterWallConfig = async (
+    patch: Pick<PublicConfig, 'poster_size' | 'series_card_image_mode'>,
+  ): Promise<PublicConfig> => {
+    setConfigLoading(true);
+    try {
+      const updated = await configApi.patchConfig(patch);
+      if (
+        (updated.series_card_image_mode !== 'poster' && updated.series_card_image_mode !== 'fanart')
+        || !Number.isFinite(updated.poster_size) || updated.poster_size <= 0
+      ) {
+        throw new Error('保存结果无法确认，请重新进入设置核对');
+      }
+      setConfig(updated);
+      return updated;
     } finally {
       setConfigLoading(false);
     }
@@ -343,6 +372,24 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
           ))}
         </div>
       </SettingsSection>
+      {baseConfig ? (
+        <PosterWallSettingsPanel
+          config={baseConfig}
+          externalBusy={Boolean(configLoading || activeAction || connectionBusy)}
+          onSave={savePosterWallConfig}
+        />
+      ) : (
+        <SettingsSection title="作品墙布局">
+          {configError ? (
+            <div className="settings-config-row">
+              <span>{`无法读取配置：${configError}`}</span>
+              <Button appearance="secondary" onClick={() => void loadConfig()}>重新读取配置</Button>
+            </div>
+          ) : (
+            <div className="settings-config-row"><Spinner size="tiny" /><span>正在读取配置…</span></div>
+          )}
+        </SettingsSection>
+      )}
     </PanelStack>
   );
 

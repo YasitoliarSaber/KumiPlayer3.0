@@ -8,7 +8,6 @@ interface VirtualizedPosterGridProps {
   works: any[];
   columns: number;
   recentLabel?: string;
-  onColumnCapacityChange?: (capacity: number) => void;
   localArtworkOnly?: boolean;
 }
 
@@ -26,7 +25,6 @@ export default function VirtualizedPosterGrid({
   works,
   columns,
   recentLabel = '',
-  onColumnCapacityChange,
   localArtworkOnly = false,
 }: VirtualizedPosterGridProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -60,7 +58,6 @@ export default function VirtualizedPosterGrid({
         metaHeight,
       });
       const measuredColumns = metrics.effectiveColumns;
-      onColumnCapacityChange?.(metrics.columnCapacity);
       setEffectiveColumns((current) => current === measuredColumns ? current : measuredColumns);
       setColumnWidth(metrics.columnWidth);
       imageLifecycle.configure(scrollContainer, currentViewportHeight());
@@ -98,7 +95,7 @@ export default function VirtualizedPosterGrid({
       window.visualViewport?.removeEventListener('resize', requestMeasure);
       resolutionQuery?.removeEventListener('change', handleResolutionChange);
     };
-  }, [imageLifecycle, onColumnCapacityChange, requestedColumns, seriesCardImageMode, works.length]);
+  }, [imageLifecycle, requestedColumns, seriesCardImageMode, works.length]);
   // 分类页卡片走派生缩略图，降低本地 w780 原图的解码与内存开销
   const thumbnailWidth = columnWidth > 0 ? pickThumbnailWidth(columnWidth, seriesCardImageMode === 'fanart') : 0;
 

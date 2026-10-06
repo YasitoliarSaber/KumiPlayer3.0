@@ -1,0 +1,10 @@
+@layer components {
+  /* 作品墙布局面板的操作行：与字段同组，窄窗口自然换行，不覆盖共享控件内部。 */
+  .kp-poster-wall-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kp-space-s, 8px);
+    min-width: 0;
+  }
+}
