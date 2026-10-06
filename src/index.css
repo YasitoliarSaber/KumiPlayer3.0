@@ -1453,15 +1453,25 @@
   --poster-card-meta-height: 62px;
 }
 
-.category-grid {
+/* 行级虚拟化：外层只保留总高度，行由 virtualizer 绝对定位。 */
+.virtual-poster-rows {
+  position: relative;
+  width: 100%;
+}
+
+.virtual-poster-row {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: grid;
   width: 100%;
   grid-template-columns: repeat(var(--category-columns, 5), minmax(0, 1fr));
-  gap: var(--virtual-grid-gap);
   align-items: start;
+  /* 行距已由虚拟行距（rowHeight）提供，这里不再重复 row-gap，避免双重间距。 */
+  column-gap: var(--virtual-grid-gap);
 }
 
-.category-grid > .poster-card {
+.virtual-poster-row > .poster-card {
   min-width: 0;
 }
 
