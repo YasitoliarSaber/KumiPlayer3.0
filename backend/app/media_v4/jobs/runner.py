@@ -250,7 +250,10 @@ class V4JobRunner:
                 # 任务失败，executor 仍先安全等待已领取的同批任务退出。
                 results.extend(future.result() for future in futures)
 
-        self.schedule_recovery()
+        # 只有本轮确实执行了刮削批次时，才可能把新成功的 scrape 转成恢复
+        # 作业；空闲迭代不再重复扫描历史任务。
+        if scrape_job_ids:
+            self.schedule_recovery()
         with self.database.connect() as conn:
             recovery_job_ids = [str(row[0]) for row in conn.execute(
                 "SELECT job_id FROM jobs WHERE job_type='recover_work_aliases' AND status='queued' ORDER BY created_at,job_id",
@@ -260,8 +263,10 @@ class V4JobRunner:
                 job = conn.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
             if job and self._prerequisites_succeeded(dict(job)):
                 results.append(self.process_job(job_id, mirror_root=mirror_root))
-        # 每波最多十部；仍有待恢复作品时，下轮继续，投影不得越过未排程作品。
-        self.schedule_recovery()
+        # 每波最多十部；只有本轮确实存在待恢复作业时才需要补排下一波，
+        # 空闲迭代不再重复扫描历史任务。首次调度已在迭代开头完成。
+        if recovery_job_ids:
+            self.schedule_recovery()
 
         for job_id in deferred_job_ids:
             with self.database.connect() as conn:
@@ -277,6 +282,28 @@ class V4JobRunner:
             results.append(self.process_job(job_id, mirror_root=mirror_root))
         return results
 
+    # 恢复候选查询：先把可能阻断恢复的 revision 物化成集合，再按集合反连接。
+    # 原实现把取消/排队两个相关条件内联为主查询的 NOT EXISTS，历史 jobs
+    # 只增不减（本机 4082 条时单次约 76~103ms）；空闲轮询每轮调用三次会
+    # 长期占据一个逻辑核心。物化后同库单次约 10~13ms，候选行与顺序一致。
+    # 只取调度实际消费的四个字段，不再整行读取 jobs。
+    _RECOVERY_CANDIDATE_SQL = (
+        "WITH blocked_revisions AS MATERIALIZED ("
+        "SELECT DISTINCT p.revision_id FROM jobs p "
+        "WHERE (p.cancel_requested=1 AND p.job_type!='recover_work_aliases') "
+        "OR (p.job_type IN ('materialize_mirror','scrape_work') AND p.status IN ('queued','running'))) "
+        "SELECT j.revision_id,j.work_id,j.attempts,j.result_json "
+        "FROM jobs j JOIN import_revisions ir ON ir.revision_id=j.revision_id "
+        "JOIN source_roots sr ON sr.root_id=ir.root_id JOIN works w ON w.work_id=j.work_id "
+        "WHERE j.job_type='scrape_work' AND j.status='succeeded' AND ir.status='confirmed' "
+        "AND sr.retired_at='' AND w.status='active' "
+        "AND NOT EXISTS (SELECT 1 FROM blocked_revisions b WHERE b.revision_id=j.revision_id) "
+        "ORDER BY j.created_at,j.job_id"
+    )
+
+    # 每波恢复任务上限；达到上限后由下一次调度继续补排。
+    _MAX_PENDING_RECOVERY_JOBS = 10
+
     def schedule_recovery(self) -> int:
         """首轮全体收口后事务去重；取消/退役 revision 不产生新作业。"""
         if self.recovery_provider is None:
@@ -284,15 +311,15 @@ class V4JobRunner:
         created = 0
         with self.database.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            rows = conn.execute(
-                "SELECT j.* FROM jobs j JOIN import_revisions ir ON ir.revision_id=j.revision_id "
-                "JOIN source_roots sr ON sr.root_id=ir.root_id JOIN works w ON w.work_id=j.work_id "
-                "WHERE j.job_type='scrape_work' AND j.status='succeeded' AND ir.status='confirmed' "
-                "AND sr.retired_at='' AND w.status='active' AND NOT EXISTS ("
-                "SELECT 1 FROM jobs p WHERE p.revision_id=j.revision_id AND ((p.cancel_requested=1 AND p.job_type!='recover_work_aliases') "
-                "OR (p.job_type IN ('materialize_mirror','scrape_work') AND p.status IN ('queued','running')))) "
-                "ORDER BY j.created_at,j.job_id",
-            ).fetchall()
+            rows = conn.execute(self._RECOVERY_CANDIDATE_SQL).fetchall()
+            # 同一写事务内只有本函数插入恢复作业，也没有其它写入者（BEGIN
+            # IMMEDIATE 已持有写锁），因此活动计数读一次、插入时递增即可，
+            # 不必对每个候选行重复 COUNT。
+            active = 0
+            if rows:
+                active = int(conn.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE job_type='recover_work_aliases' AND status IN ('queued','running')",
+                ).fetchone()[0])
             for row in rows:
                 result = json.loads(row['result_json'] or '{}')
                 primary = str(result.get('reason_code') or result.get('refresh_reason_code')
@@ -303,8 +330,7 @@ class V4JobRunner:
                 key = f"recover_work_aliases:{row['revision_id']}:{row['work_id']}:{row['attempts']}"
                 if conn.execute("SELECT 1 FROM jobs WHERE idempotency_key=?", (key,)).fetchone():
                     continue
-                active = conn.execute("SELECT COUNT(*) FROM jobs WHERE job_type='recover_work_aliases' AND status IN ('queued','running')").fetchone()[0]
-                if active >= 10:
+                if active >= self._MAX_PENDING_RECOVERY_JOBS:
                     break
                 stamp = now()
                 conn.execute(
@@ -313,6 +339,7 @@ class V4JobRunner:
                     (str(uuid.uuid4()), row['revision_id'], row['work_id'], key, stamp, stamp),
                 )
                 created += 1
+                active += 1
         return created
 
     def _prerequisites_succeeded(self, job: dict) -> bool:
