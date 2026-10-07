@@ -5,12 +5,15 @@ import { useUiStore } from '../../stores/ui';
 import { calculatePosterGridMetrics } from './posterGridMetrics';
 import { PosterImageContext, PosterImageLifecycle } from './posterImageLifecycle';
 import { recordScrollDiagnostic, subscribeScrollDiagnostics } from '../../utils/scrollDiagnostics';
+import { startPosterPresentation } from './posterPresentation';
+import './VirtualizedPosterGrid.css';
 
 interface VirtualizedPosterGridProps {
   works: any[];
   columns: number;
   recentLabel?: string;
   localArtworkOnly?: boolean;
+  presentationKey?: string;
 }
 
 // 视口上下各预渲染的行数。第一版固定值：不做滚动速度预测与动态 overscan。
@@ -31,6 +34,7 @@ export default function VirtualizedPosterGrid({
   columns,
   recentLabel = '',
   localArtworkOnly = false,
+  presentationKey,
 }: VirtualizedPosterGridProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   // 真正的滚动容器是外层 .app-main：网格本身绝不能变成第二个滚动区域。
@@ -158,6 +162,11 @@ export default function VirtualizedPosterGrid({
   }, [rowHeight, rowVirtualizer]);
 
   const virtualRows = rowCount > 0 ? rowVirtualizer.getVirtualItems() : [];
+
+  useLayoutEffect(() => {
+    if (presentationKey === undefined || !wrapRef.current) return;
+    return startPosterPresentation(wrapRef.current);
+  }, [presentationKey]);
 
   useLayoutEffect(() => {
     if (focusedWorkId === null || focusedIndex === undefined) return;

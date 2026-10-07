@@ -1,0 +1,19 @@
+.virtual-poster-grid[data-presentation="preparing"] {
+  opacity: 0;
+  transition: none;
+}
+
+.virtual-poster-grid[data-presentation="ready"] {
+  opacity: 1;
+  transition: opacity 160ms ease-out;
+}
+
+:root[data-motion="reduced"] .virtual-poster-grid[data-presentation="ready"] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .virtual-poster-grid[data-presentation="ready"] {
+    transition: none;
+  }
+}

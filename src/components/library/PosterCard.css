@@ -17,4 +17,15 @@
 
 .poster-card .poster-managed-image[data-state="ready"] {
   opacity: 1;
+  transition: opacity 140ms ease-out;
+}
+
+:root[data-motion="reduced"] .poster-card .poster-managed-image[data-state="ready"] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poster-card .poster-managed-image[data-state="ready"] {
+    transition: none;
+  }
 }

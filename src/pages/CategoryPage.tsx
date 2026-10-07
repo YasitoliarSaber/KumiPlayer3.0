@@ -207,7 +207,7 @@ export default function CategoryPage() {
       </>}
       {categoryWorks.length === 0 ? <CenteredMessage>这个筛选下还没有作品</CenteredMessage> : (
         <div className="category-grid-wrap">
-          <VirtualizedPosterGrid works={categoryWorks} columns={normalizePosterColumns(posterSize)} localArtworkOnly />
+          <VirtualizedPosterGrid works={categoryWorks} columns={normalizePosterColumns(posterSize)} localArtworkOnly presentationKey={`${activeCategory}:${source}`} />
         </div>
       )}
     </div>

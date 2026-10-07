@@ -9,6 +9,8 @@ interface ImageEntry {
   local: boolean;
   active: boolean;
   ready: boolean;
+  version: number;
+  decodingVersion: number;
 }
 
 // 一个网格共用一个观察器和批量状态查询，滚动不进入 React 更新队列。
@@ -45,8 +47,8 @@ export class PosterImageLifecycle {
     for (const image of this.entries.keys()) this.observer.observe(image);
   }
 
-  register(image: HTMLImageElement, entry: Omit<ImageEntry, 'active' | 'ready'>) {
-    const record = { ...entry, active: false, ready: false };
+  register(image: HTMLImageElement, entry: Omit<ImageEntry, 'active' | 'ready' | 'version' | 'decodingVersion'>) {
+    const record = { ...entry, active: false, ready: false, version: 0, decodingVersion: -1 };
     this.entries.set(image, record);
     if (this.observer) this.observer.observe(image);
     else {
@@ -76,14 +78,47 @@ export class PosterImageLifecycle {
 
   private setSource(image: HTMLImageElement, url: string) {
     if (image.getAttribute('src') === url) return;
+    const entry = this.entries.get(image);
+    if (entry) entry.version += 1;
+    image.dataset.state = 'loading';
     image.src = url;
     recordScrollDiagnostic('image-src-set');
+    if (image.complete && image.naturalWidth > 0) void this.revealDecoded(image);
   }
 
   private clearSource(image: HTMLImageElement) {
+    const entry = this.entries.get(image);
+    if (entry) entry.version += 1;
     if (!image.hasAttribute('src')) return;
     image.removeAttribute('src');
     recordScrollDiagnostic('image-src-cleared');
+  }
+
+  async revealDecoded(image: HTMLImageElement): Promise<void> {
+    const entry = this.entries.get(image);
+    if (!entry || !entry.active || image.getAttribute('src') !== entry.url) return;
+    const version = entry.version;
+    if (entry.decodingVersion === version) return;
+    entry.decodingVersion = version;
+    try {
+      if (typeof image.decode === 'function') await image.decode();
+    } catch {
+      // load 已成功但部分 WebView 拒绝 decode；完整资源仍可显示，坏图保持占位。
+      if (image.naturalWidth === 0) {
+        if (this.entries.get(image) === entry && entry.version === version) image.dataset.state = 'error';
+        return;
+      }
+    }
+    // src 清除、重挂载与快速切换后，旧 decode 不得将新请求标记成 ready。
+    if (this.entries.get(image) === entry && entry.version === version && entry.active
+      && image.getAttribute('src') === entry.url) image.dataset.state = 'ready';
+  }
+
+  markError(image: HTMLImageElement): void {
+    const entry = this.entries.get(image);
+    if (!entry || !image.hasAttribute('src')) return;
+    entry.version += 1;
+    image.dataset.state = 'error';
   }
 
   private schedule(delay: number) {

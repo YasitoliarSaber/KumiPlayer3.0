@@ -13,6 +13,6 @@ export default function PosterImage({ path, width, src, alt, local }: {
     return lifecycle.register(image, { path, width, url: src, local });
   }, [lifecycle, path, width, src]);
   return <img ref={ref} alt={alt} className="poster-image poster-managed-image" decoding="async"
-    onLoad={(event) => { if (event.currentTarget.hasAttribute('src')) event.currentTarget.dataset.state = 'ready'; }}
-    onError={(event) => { if (event.currentTarget.hasAttribute('src')) event.currentTarget.dataset.state = 'error'; }} />;
+    onLoad={(event) => { void lifecycle?.revealDecoded(event.currentTarget); }}
+    onError={(event) => { lifecycle?.markError(event.currentTarget); }} />;
 }
