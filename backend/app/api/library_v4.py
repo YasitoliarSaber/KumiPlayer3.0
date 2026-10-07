@@ -374,7 +374,7 @@ def get_work_detail(work_id: str):
                     scraped_special_title_counts=scraped_special_title_counts,
                 ),
                 "original_filename": PurePosixPath(str(row["relative_path"] or "").replace("\\", "/")).name,
-                "plot": scraped_episode.get("plot") or "",
+                "plot": "",  # 兼容原响应字段，不再展示历史分集简介。
                 "runtime": scraped_episode.get("runtime"),
                 "thumb_path": (
                     scraped_episode.get("local_thumb_path")

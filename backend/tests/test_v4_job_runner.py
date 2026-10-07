@@ -231,6 +231,21 @@ def test_failed_scrape_blocks_projection_until_the_failed_job_is_retried(tmp_pat
     }
 
 
+def test_episode_nfo_omits_plot_but_work_nfo_keeps_overall_plot():
+    import xml.etree.ElementTree as ET
+
+    from app.media_v4.jobs.metadata_artifacts import _episode_nfo, _work_nfo
+
+    episode = ET.fromstring(_episode_nfo({"local_season_number": 1, "local_episode_number": 2,
+                                          "title": "Episode 2", "plot": "Episode plot", "runtime": 24}))
+    assert episode.find("plot") is None
+    assert episode.findtext("title") == "Episode 2"
+    assert episode.findtext("season") == "1" and episode.findtext("episode") == "2"
+    assert episode.findtext("runtime") == "24"
+    work = ET.fromstring(_work_nfo({"work_type": "series"}, {"title": "Show", "plot": "Work plot"}))
+    assert work.findtext("plot") == "Work plot"
+
+
 def test_special_episode_nfo_keeps_zero_season_number():
     from app.media_v4.jobs.metadata_artifacts import _episode_nfo
 

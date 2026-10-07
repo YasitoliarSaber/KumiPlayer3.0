@@ -266,6 +266,18 @@ def test_scrape_retry_preserves_local_special_mapping_and_only_requests_regular_
     scrape = V4ScrapeService(database)
     job = scrape.enqueue_for_revision("rev-stale-special")[0]
     with database.connect() as conn:
+        # 新准入合同排除特别篇；此测试显式构造旧库绑定，继续验证历史映射不被重试删除。
+        assert conn.execute("SELECT COUNT(*) FROM episodes WHERE episode_kind='special'").fetchone()[0] == 0
+        legacy_season = "legacy-special-season"
+        legacy_episode = "legacy-special-episode"
+        conn.execute("INSERT INTO seasons(season_id,work_id,local_season_number,season_kind) VALUES (?, ?, 0, 'special')",
+                     (legacy_season, job["work_id"]))
+        conn.execute("INSERT INTO episodes(episode_id,work_id,season_id,special_number,episode_kind,display_title) "
+                     "VALUES (?, ?, ?, 1, 'special', 'Mystery Camp')",
+                     (legacy_episode, job["work_id"], legacy_season))
+        conn.execute("INSERT INTO revision_bindings(binding_id,revision_id,evidence_id,work_id,season_id,episode_id) "
+                     "VALUES ('legacy-special-binding', 'rev-stale-special', ?, ?, ?, ?)",
+                     (special_evidence.evidence_id, job["work_id"], legacy_season, legacy_episode))
         episode_rows = conn.execute(
             "SELECT episode_id, episode_kind FROM episodes ORDER BY episode_id"
         ).fetchall()

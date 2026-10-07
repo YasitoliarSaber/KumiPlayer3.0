@@ -402,7 +402,6 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
                             {episode.provider_episode_id && <span>{detail.detail.work.provider === 'tmdb' ? 'TMDB' : '在线'} ID {episode.provider_episode_id}</span>}
                             {detailRuntimeLabel(episode.runtime) && <span>{detailRuntimeLabel(episode.runtime)}</span>}
                           </div>
-                          {episode.scraped_plot && <p className="media-v4-work-detail-episode-plot">{episode.scraped_plot}</p>}
                         </div>
                         <span className={`media-v4-work-detail-episode-state ${episode.mapped ? 'mapped' : 'unmapped'}`}>{episode.mapped ? '已映射' : '未映射'}</span>
                         {(episode.playback_locator_available ?? episode.playback_ready) && <span className="media-v4-work-detail-episode-playable">已生成播放路径</span>}

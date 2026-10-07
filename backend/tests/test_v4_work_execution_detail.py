@@ -14,9 +14,10 @@ from fastapi.testclient import TestClient
 
 
 def _client(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+
     from app.api import media_v4
     from app.media_v4.persistence.database import V4Database
-    from fastapi import FastAPI
 
     database = V4Database(tmp_path / "detail.db")
     database.initialize()
@@ -119,8 +120,8 @@ def _seed_confirmed_work(database, *, revision_id: str = "rev-detail", work_id: 
     return work_id
 
 
-def test_legacy_binding_status_cannot_hide_missing_episode_metadata(tmp_path, monkeypatch):
-    """缺状态且没有分集资料的历史 confirmed 绑定不能冒充完整刮削。"""
+def test_legacy_confirmed_binding_keeps_numbered_local_episodes_without_online_details(tmp_path, monkeypatch):
+    """已确认作品缺可选分集资料仍可用，不伪造在线映射。"""
 
     client, database = _client(tmp_path, monkeypatch)
     work_id = _seed_confirmed_work(database)
@@ -134,8 +135,10 @@ def test_legacy_binding_status_cannot_hide_missing_episode_metadata(tmp_path, mo
         f"/api/v4/revisions/rev-detail/works/{work_id}/execution-detail"
     ).json()
 
-    assert body["work"]["metadata_state"] == "failed"
-    assert body["work"]["metadata_reason_code"] == "episode_mapping_incomplete"
+    assert body["work"]["metadata_state"] == "confirmed"
+    assert body["work"]["metadata_recovery_action"] == "none"
+    assert {episode["episode_number"] for episode in body["episodes"]} == {1, 2}
+    assert all(not episode["mapped"] and not episode["provider_episode_id"] for episode in body["episodes"])
 
 
 def test_detail_prefers_metadata_state_over_binding_status(tmp_path, monkeypatch):
@@ -343,6 +346,15 @@ def test_detail_projects_one_recovery_policy_and_special_season_failure(tmp_path
 def test_completed_work_returns_work_level_and_episode_results(tmp_path, monkeypatch):
     client, database = _client(tmp_path, monkeypatch)
     work_id = _seed_confirmed_work(database)
+    with database.connect() as conn:
+        metadata = json.loads(conn.execute(
+            "SELECT metadata_json FROM scrape_bindings WHERE binding_id='sb-1'"
+        ).fetchone()[0])
+        metadata["plot"] = "Work plot"
+        for mapping in metadata["episode_mappings"]:
+            mapping["plot"] = "Saved episode plot"
+        saved_json = json.dumps(metadata, ensure_ascii=False)
+        conn.execute("UPDATE scrape_bindings SET metadata_json=? WHERE binding_id='sb-1'", (saved_json,))
 
     response = client.get(f"/api/v4/revisions/rev-detail/works/{work_id}/execution-detail")
 
@@ -373,9 +385,12 @@ def test_completed_work_returns_work_level_and_episode_results(tmp_path, monkeyp
         season_id = conn.execute("SELECT season_id FROM seasons WHERE work_id=?", (work_id,)).fetchone()[0]
     assert body["seasons"] == [{"season_id": season_id, "season_number": 1, "season_kind": "regular", "title": "", "episode_count": 2}]
     assert body["scrape"]["title"] == "Show"
+    assert body["scrape"]["plot"] == "Work plot"
     assert body["scrape"]["metadata_state"] == "ready"
     assert body["scrape"]["candidate_decision"] is None
     assert body["has_detail"] is True
+    with database.connect() as conn:
+        assert conn.execute("SELECT metadata_json FROM scrape_bindings WHERE binding_id='sb-1'").fetchone()[0] == saved_json
 
 
 def test_detail_only_returns_episodes_bound_to_requested_revision(tmp_path, monkeypatch):

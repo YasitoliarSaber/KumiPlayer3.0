@@ -3289,7 +3289,7 @@ class V4RevisionService:
                 "episode_number": int(row["local_episode_number"] or 0) if row["local_episode_number"] is not None else special_number,
                 "display_title": str(row["display_title"] or ""),
                 "scraped_title": str(mapping.get("title") or ""),
-                "scraped_plot": str(mapping.get("plot") or ""),
+                "scraped_plot": "",  # 保留响应兼容，分集简介不参与展示。
                 # 执行详情只能用本 revision 的 metadata 快照，不能把后续导入
                 # 写入的全局 episode_provider_mappings 反投影回来。
                 "provider_episode_number": _positive_detail_int(mapping.get("provider_episode_number")),

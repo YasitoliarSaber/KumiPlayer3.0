@@ -116,7 +116,6 @@ def _episode_nfo(episode: dict) -> bytes:
         _add(root, "season", season)
     if number:
         _add(root, "episode", number)
-    _add(root, "plot", episode.get("plot"))
     _add(root, "runtime", episode.get("runtime"))
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"

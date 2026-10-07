@@ -23,6 +23,7 @@ def test_default_metadata_provider_emits_logo_and_episode_stills(monkeypatch):
             return {
                 "name": "Show",
                 "original_name": "Original Show",
+                "overview": "Work plot",
                 "first_air_date": "2024-01-01",
                 "images": {
                     "posters": [{"file_path": "/poster.jpg"}],
@@ -81,16 +82,35 @@ def test_default_metadata_provider_emits_logo_and_episode_stills(monkeypatch):
     })
 
     assert result["clearlogo_url"] == "https://image.tmdb.org/t/p/original/logo.png"
+    assert result["plot"] == "Work plot"
     assert result["episode_mappings"] == [{
         "episode_id": "episode-1",
         "provider_season_number": 1,
         "provider_episode_number": 1,
         "provider_episode_id": "9001",
         "title": "Online Episode",
-        "plot": "Episode plot",
         "runtime": 24,
         "still_url": "https://image.tmdb.org/t/p/w500/still.jpg",
     }]
+
+
+def test_metadata_finalization_omits_episode_plot_without_mutating_provider_result():
+    from copy import deepcopy
+
+    from app.media_v4.jobs.metadata import finalize_metadata_statuses
+
+    mapping = {"episode_id": "e1", "provider_episode_id": "901", "title": "Episode",
+               "plot": "Episode plot", "still_url": "/still.jpg", "runtime": 24}
+    provided = {"provider": "tmdb", "provider_id": "42", "metadata_state": "ready",
+                "plot": "Work plot", "episode_mappings": [mapping]}
+    original = deepcopy(provided)
+    target = {"episodes": [{"episode_id": "e1", "local_season_number": 1,
+                            "local_episode_number": 1}]}
+    result = finalize_metadata_statuses(target, provided)
+    assert "plot" not in result["episode_mappings"][0]
+    assert result["episode_mappings"][0] == {key: value for key, value in mapping.items() if key != "plot"}
+    assert result["plot"] == "Work plot" and result["metadata_state"] == "ready"
+    assert provided == original
 
 
 def test_downloaded_clearlogo_keeps_safe_source_extension():
@@ -383,7 +403,6 @@ def test_regular_season_two_maps_to_provider_season_two_episode_one(monkeypatch)
         "provider_episode_number": 1,
         "provider_episode_id": "76001",
         "title": "第二季第一集",
-        "plot": "冬季篇开幕",
         "runtime": 24,
         "still_url": "https://image.tmdb.org/t/p/w500/s02e01.jpg",
     }]

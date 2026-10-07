@@ -715,7 +715,11 @@ def _finalize_metadata_result(target: dict, result: dict) -> dict:
     diagnostic_payload = finalized.pop("_mapping_diagnostics", None)
     diagnostics = diagnostic_payload if isinstance(diagnostic_payload, dict) else {}
     mapping_scope = bool(finalized.pop("_mapping_scope", True))
-    mappings = [item for item in finalized.get("episode_mappings") or [] if isinstance(item, dict)]
+    # 分集只保留识别与浏览信息；不采纳剧情简介，也不修改提供器或旧快照对象。
+    mappings = [{key: value for key, value in item.items() if key != "plot"}
+                for item in finalized.get("episode_mappings") or [] if isinstance(item, dict)]
+    if "episode_mappings" in finalized:
+        finalized["episode_mappings"] = mappings
     state = str(finalized.get("metadata_state") or "").strip()
     provider = str(finalized.get("provider") or "").strip()
     provider_id = str(finalized.get("provider_id") or "").strip()
@@ -1792,7 +1796,6 @@ def _build_tv_episode_mappings(
                 "provider_episode_number": provider_episode,
                 "provider_episode_id": str(remote.get("id") or ""),
                 "title": str(remote.get("name") or ""),
-                "plot": str(remote.get("overview") or ""),
                 "runtime": _positive_int(remote.get("runtime")),
                 # 详情页横向卡片至少需要 w500；w300 在高 DPI 下既模糊又会被前端再次改写。
                 "still_url": client.build_image_url(still, "w500") if still else "",

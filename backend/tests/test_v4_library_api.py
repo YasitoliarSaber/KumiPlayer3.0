@@ -131,6 +131,7 @@ def test_detail_projects_saved_scrape_metadata_without_rewriting_local_identity(
 
     body = client.get(f"/api/library/works/{work_id}").json()
     assert body["title"] == "在线标题"
+    assert body["plot"] == "完整简介"
     assert body["cast"][0]["name"] == "角色甲"
     assert body["certification"] == "PG-13"
     assert body["certification_country"] == "US"
@@ -140,7 +141,13 @@ def test_detail_projects_saved_scrape_metadata_without_rewriting_local_identity(
     assert body["episodes"][0]["episode_id"] == episode_id
     assert body["episodes"][0]["episode_number"] == 1
     assert body["episodes"][0]["title"] == "刮削后的单集标题"
+    assert body["episodes"][0]["plot"] == ""
     assert body["episodes"][0]["thumb_path"] == "D:/mirror/Show/Season 01/S01E01-thumb.jpg"
+    with database.connect() as conn:
+        saved = json.loads(conn.execute(
+            "SELECT metadata_json FROM scrape_bindings WHERE binding_id='binding-detail-metadata'"
+        ).fetchone()[0])
+    assert saved == metadata
 
 
 def test_watch_status_patch_preserves_omitted_fields_and_rescan_is_v4_projection(tmp_path, monkeypatch):
