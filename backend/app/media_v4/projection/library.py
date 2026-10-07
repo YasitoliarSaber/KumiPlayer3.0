@@ -24,7 +24,7 @@ class LibrarySnapshot:
 
 
 class V4LibraryProjection:
-    """投影只读 V4 图，发布过程在一个 SQLite 事务内完成。"""
+    """在读快照中构建投影，只在原子发布阶段持有写入锁。"""
 
     def __init__(self, database: V4Database):
         self.database = database
@@ -100,8 +100,15 @@ class V4LibraryProjection:
         generation_id = str(uuid.uuid4())
         now = _now()
         with self.database.connect() as conn:
-            conn.execute("BEGIN IMMEDIATE")
+            # 文件摘要检查可能很慢；WAL 读快照允许扫描、刮削心跳继续写入。
+            # data_version 必须在同一连接比较，并在取得发布锁之后复查。
+            data_version = conn.execute("PRAGMA data_version").fetchone()[0]
+            conn.execute("BEGIN")
             try:
+                previous_generation = conn.execute(
+                    "SELECT value FROM v4_meta WHERE key='current_library_generation'"
+                ).fetchone()
+                previous_generation_id = previous_generation[0] if previous_generation else None
                 rows = conn.execute(
                     f"""
                     WITH visible_bindings AS (
@@ -327,29 +334,37 @@ class V4LibraryProjection:
                 digest = hashlib.sha256(
                     json.dumps(cards, ensure_ascii=False, sort_keys=True).encode("utf-8")
                 ).hexdigest()
+                card_rows = [(
+                    generation_id, card["work_id"], card["title"], card["year"],
+                    card["media_type"], card["episode_count"], card["asset_count"],
+                    json.dumps(card["metadata"], ensure_ascii=False, sort_keys=True),
+                ) for card in cards]
+                conn.commit()
+                conn.execute("BEGIN IMMEDIATE")
+                changed_during_build = conn.execute("PRAGMA data_version").fetchone()[0] != data_version
+                current_generation = conn.execute(
+                    "SELECT value FROM v4_meta WHERE key='current_library_generation'"
+                ).fetchone()
+                current_generation_id = current_generation[0] if current_generation else None
+                if current_generation_id != previous_generation_id:
+                    # 另一个重建已经发布了更新的快照，不能用本次旧读快照覆盖。
+                    current_snapshot = self._read_current(conn)
+                    if current_snapshot is not None:
+                        conn.commit()
+                        return current_snapshot
                 conn.execute(
                     "INSERT INTO library_generations(generation_id, digest, created_at) VALUES (?, ?, ?)",
                     (generation_id, digest, now),
                 )
-                for card in cards:
-                    conn.execute(
-                        """
-                        INSERT INTO library_cards(
-                            generation_id, work_id, title, year, media_type,
-                            episode_count, asset_count, metadata_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            generation_id,
-                            card["work_id"],
-                            card["title"],
-                            card["year"],
-                            card["media_type"],
-                            card["episode_count"],
-                            card["asset_count"],
-                            json.dumps(card["metadata"], ensure_ascii=False, sort_keys=True),
-                        ),
-                    )
+                conn.executemany(
+                    """
+                    INSERT INTO library_cards(
+                        generation_id, work_id, title, year, media_type,
+                        episode_count, asset_count, metadata_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    card_rows,
+                )
                 conn.execute(
                     "UPDATE library_generations SET status = 'published', published_at = ? WHERE generation_id = ?",
                     (now, generation_id),
@@ -359,7 +374,14 @@ class V4LibraryProjection:
                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                     (generation_id,),
                 )
-                conn.execute("DELETE FROM v4_meta WHERE key = 'library_projection_dirty'")
+                if changed_during_build:
+                    # 发布的是完整但稍早的快照。保留刷新要求，不能吞掉并发事实更新。
+                    conn.execute(
+                        "INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_projection_dirty',?)",
+                        (now,),
+                    )
+                else:
+                    conn.execute("DELETE FROM v4_meta WHERE key = 'library_projection_dirty'")
                 conn.execute(
                     "INSERT INTO v4_meta(key,value) VALUES ('library_presentation_policy',?) "
                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (PRESENTATION_POLICY_VERSION,),

@@ -56,6 +56,8 @@ def _friendly_job_error(value: str) -> str:
     if not text:
         return ""
     lowered = text.casefold()
+    if "database is locked" in lowered or "database table is locked" in lowered:
+        return "媒体库正在写入，本次任务未完成，请稍后重试"
     if "unique constraint failed" in lowered or "integrityerror" in lowered:
         return "媒体身份与已有记录冲突，请检查识别结果后重试"
     if "no such table" in lowered or "no such column" in lowered:
@@ -281,6 +283,14 @@ def metadata_recovery_policy(metadata: dict | None, *, binding_status: str = "")
             reason = _friendly_metadata_reason(state, raw_reason, reason_code)
         action = "check_settings"
         return {"reason": reason, "action": action, "hint": _metadata_recovery_hint(action)}
+
+    if (state == "ready" and payload.get("identity_status") == "confirmed"
+            and payload.get("work_metadata_status") == "ready"
+            and payload.get("episode_coordinate_status") == "confirmed"
+            and reason_code in {"episode_mapping_incomplete", "episode_details_incomplete"}):
+        # 已有本地正片的身份和编号均确认：季度缺项仍是可选资料诊断，
+        # 不能被下面的旧 season_results 再次转成“需要处理”。
+        return {"reason": "", "action": "none", "hint": ""}
 
     if reason_code == "provider_resource_missing" and failure_stage == "work_detail":
         action = "choose_candidate"

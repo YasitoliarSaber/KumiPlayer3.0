@@ -141,6 +141,37 @@ def test_legacy_confirmed_binding_keeps_numbered_local_episodes_without_online_d
     assert all(not episode["mapped"] and not episode["provider_episode_id"] for episode in body["episodes"])
 
 
+@pytest.mark.parametrize('content_scope', ['ongoing', 'completed'])
+def test_legacy_partial_metadata_is_completed_in_progress_and_detail(tmp_path, monkeypatch, content_scope):
+    from app.media_v4.revisions.service import V4RevisionService
+
+    client, database = _client(tmp_path, monkeypatch)
+    work_id = _seed_confirmed_work(database)
+    with database.connect() as conn:
+        metadata = json.loads(conn.execute(
+            "SELECT metadata_json FROM scrape_bindings WHERE binding_id='sb-1'"
+        ).fetchone()[0])
+        metadata.update(metadata_state='failed', identity_status='confirmed', work_metadata_status='ready',
+                        reason_code='episode_mapping_incomplete', reason='正片尚未全部匹配在线分集资料',
+                        season_results=[{'local_season_number': 1, 'reason_code': 'provider_unavailable'}])
+        metadata['episode_mappings'] = metadata['episode_mappings'][:1]
+        serialized = json.dumps(metadata, ensure_ascii=False)
+        conn.execute("UPDATE scrape_bindings SET status='failed',metadata_json=? WHERE binding_id='sb-1'", (serialized,))
+        conn.execute('UPDATE source_roots SET content_scope=?', (content_scope,))
+
+    unit = V4RevisionService(database).get_execution_progress('rev-detail')['work_units'][0]
+    assert unit['overall_status'] == 'completed'
+    assert unit['metadata_recovery_action'] == 'none'
+    assert unit['metadata_reason'] == ''
+    body = client.get(f'/api/v4/revisions/rev-detail/works/{work_id}/execution-detail').json()
+    assert body['work']['metadata_state'] == 'ready'
+    assert body['work']['metadata_recovery_action'] == 'none'
+    assert {episode['episode_number'] for episode in body['episodes']} == {1, 2}
+    with database.connect() as conn:
+        row = conn.execute("SELECT status,metadata_json FROM scrape_bindings WHERE binding_id='sb-1'").fetchone()
+        assert tuple(row) == ('failed', serialized)
+
+
 def test_detail_prefers_metadata_state_over_binding_status(tmp_path, monkeypatch):
     """有明确状态时仍以 `metadata_json` 为准（订阅状态不能盖过资料状态）。"""
 

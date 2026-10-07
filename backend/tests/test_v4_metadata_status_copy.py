@@ -1,3 +1,5 @@
+import pytest
+
 from app.media_v4.revisions.service import metadata_recovery_policy
 
 
@@ -31,3 +33,34 @@ def test_authorization_error_is_not_hidden_by_confirmed_identity():
     })
     assert result["action"] == "check_settings"
     assert "授权" in result["reason"]
+
+
+@pytest.mark.parametrize('content_scope', ['ongoing', 'completed'])
+@pytest.mark.parametrize('season_code', ['episode_not_found', 'provider_unavailable'])
+def test_confirmed_local_coordinates_make_partial_episode_details_optional(content_scope, season_code):
+    from app.media_v4.jobs.metadata_quality import require_regular_episode_metadata
+
+    legacy = {
+        'metadata_state': 'failed', 'identity_status': 'confirmed', 'work_metadata_status': 'ready',
+        'provider': 'tmdb', 'provider_id': '42', 'reason_code': 'episode_mapping_incomplete',
+        'reason': '正片尚未全部匹配在线分集资料', 'content_scope': content_scope,
+        'episode_mappings': [],
+        'unmapped_reasons': [{'episode_id': 'e1', 'reason': 'provider_unavailable'}],
+        'season_results': [{'local_season_number': 1, 'reason_code': season_code, 'status': 'partial'}],
+    }
+    normalized = require_regular_episode_metadata([
+        {'episode_id': 'e1', 'local_season_number': 1, 'local_episode_number': 1},
+    ], legacy)
+    assert normalized['metadata_state'] == 'ready'
+    assert metadata_recovery_policy(normalized, binding_status='failed') == {
+        'reason': '', 'action': 'none', 'hint': '',
+    }
+    assert legacy['metadata_state'] == 'failed'
+
+
+def test_database_write_contention_has_a_specific_safe_error_message():
+    from app.media_v4.revisions.service import _friendly_job_error
+
+    message = _friendly_job_error('database is locked')
+    assert '媒体库正在写入' in message
+    assert '数据库' not in message
