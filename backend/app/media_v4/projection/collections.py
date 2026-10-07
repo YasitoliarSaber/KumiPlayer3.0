@@ -3,7 +3,7 @@
 from collections import defaultdict
 
 
-def identity_title_work_ids(conn) -> set[str]:
+def title_identity_guards(conn) -> tuple[set[str], set[str]]:
     """确认的父子关系或共享 TV 身份存在歧义时，保留本地作品区别。"""
     rows = conn.execute("""
         WITH active_works AS (
@@ -15,12 +15,12 @@ def identity_title_work_ids(conn) -> set[str]:
                 WHERE rb.work_id=w.work_id
             )
         )
-        SELECT wr.child_work_id AS work_id FROM work_relations wr
+        SELECT wr.child_work_id AS work_id, 'relation' AS reason FROM work_relations wr
         JOIN active_works child ON child.work_id=wr.child_work_id
         JOIN active_works parent ON parent.work_id=wr.parent_work_id
         WHERE wr.child_work_id != wr.parent_work_id
         UNION
-        SELECT local.work_id FROM provider_bindings pb
+        SELECT local.work_id, 'shared_tv' AS reason FROM provider_bindings pb
         JOIN active_works local ON local.work_id=pb.work_id
         JOIN provider_bindings other ON other.provider=pb.provider
             AND other.media_type=pb.media_type AND other.provider_id=pb.provider_id
@@ -29,7 +29,12 @@ def identity_title_work_ids(conn) -> set[str]:
         WHERE pb.media_type='tv' AND pb.provider_id != ''
           AND lower(trim(local.preferred_title)) != lower(trim(remote.preferred_title))
     """).fetchall()
-    return {str(row["work_id"]) for row in rows}
+    return ({str(row["work_id"]) for row in rows},
+            {str(row["work_id"]) for row in rows if row["reason"] == "shared_tv"})
+
+
+def identity_title_work_ids(conn) -> set[str]:
+    return title_identity_guards(conn)[0]
 
 
 def collection_metadata(conn) -> dict[str, dict]:

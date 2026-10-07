@@ -42,6 +42,84 @@ def test_ordinary_standalone_movie_keeps_online_canonical_title(tmp_path, parsed
     assert card["title"] == "Canonical Online Film"
 
 
+@pytest.mark.parametrize("scope", ["collection", "parent_child"])
+def test_verified_movie_title_is_stable_across_projection_detail_and_refresh(tmp_path, monkeypatch, scope):
+    from dataclasses import replace
+
+    from backend.tests.test_v4_library_projection import _entry
+
+    from app.api import library_v4
+
+    db = V4Database(tmp_path / "canonical-title.db")
+    db.initialize()
+    evidence, facts = _entry("movie-title")
+    movie = replace(facts, work_title="1 Tabidachi no Yoake", media_type="movie", group_type="movie",
+                    card_type="standalone", series_group="")
+    service = V4RevisionService(db)
+    service.create_draft("title", [(evidence, movie)])
+    service.confirm("title")
+    with db.connect() as conn:
+        work_id = conn.execute("SELECT work_id FROM works").fetchone()[0]
+        original = conn.execute("SELECT preferred_title FROM works WHERE work_id=?", (work_id,)).fetchone()[0]
+        if scope == "collection":
+            conn.execute("INSERT INTO media_collections(collection_id,collection_key,preferred_title,root_id,created_at) VALUES('films','films','电影合集','root-projection','now')")
+            conn.execute("INSERT INTO revision_collection_members(revision_id,collection_id,work_id) VALUES('title','films',?)", (work_id,))
+        else:
+            parent_evidence, parent_facts = _entry("parent-title")
+            parent_evidence = replace(parent_evidence, root_id="root-parent-title", scan_id="scan-parent-title")
+            service.create_draft("parent", [(parent_evidence, parent_facts)])
+            service.confirm("parent")
+            parent_id = conn.execute("SELECT work_id FROM works WHERE work_id != ?", (work_id,)).fetchone()[0]
+            conn.execute("INSERT INTO work_relations(relation_id,parent_work_id,child_work_id,relation_type) VALUES('movie-relation',?,?,'movie')", (parent_id, work_id))
+        metadata = {"title": "来自深渊：启程的拂晓", "provider": "tmdb", "provider_id": "526426",
+                    "media_type": "movie", "metadata_state": "ready"}
+        conn.execute("INSERT INTO scrape_bindings(binding_id,revision_id,work_id,provider,provider_id,metadata_json,status,created_at,updated_at) VALUES('scrape','title',?,'tmdb','526426',?,'ready','now','now')",
+                     (work_id, json.dumps(metadata, ensure_ascii=False)))
+    monkeypatch.setattr(library_v4, "get_database", lambda: db)
+    monkeypatch.setattr(library_v4, "queue_library_artwork", lambda _: None)
+    projection = V4LibraryProjection(db)
+    projected = next(card for card in projection.rebuild().cards if card["work_id"] == work_id)
+    assert projected["title"] == metadata["title"]
+    with db.connect() as conn:
+        conn.execute("UPDATE library_cards SET title=? WHERE work_id=?", (original, work_id))
+        conn.execute("UPDATE v4_meta SET value='regular-only-2' WHERE key='library_presentation_policy'")
+    # 已发布的旧投影也自动更新，不能只修复以后新建的媒体库。
+    assert next(card for card in projection.ensure_current().cards if card["work_id"] == work_id)["title"] == metadata["title"]
+    for _ in range(2):
+        listed = next(work for work in library_v4.get_library(include_all=True)["works"] if work["work_id"] == work_id)
+        detailed = library_v4.get_work_detail(work_id)
+        assert listed["title"] == detailed["title"] == metadata["title"]
+        projection.rebuild()
+    with db.connect() as conn:
+        assert conn.execute("SELECT preferred_title FROM works WHERE work_id=?", (work_id,)).fetchone()[0] == original
+        conn.execute("INSERT INTO work_overrides(work_id,override_json,created_at,updated_at) VALUES(?,?, 'now','now')", (work_id, json.dumps({"title": "我的中文名"})))
+    listed = next(work for work in library_v4.get_library(include_all=True)["works"] if work["work_id"] == work_id)
+    assert listed["title"] == library_v4.get_work_detail(work_id)["title"] == "我的中文名"
+
+
+def test_shared_tv_title_guard_is_identical_in_list_and_detail(tmp_path, monkeypatch):
+    from app.api import library_v4
+
+    db = V4Database(tmp_path / "shared-tv-title.db")
+    db.initialize()
+    _, pairs = resolve(["动画/来自深渊/来自深渊 S01E01.mkv",
+                        "动画/来自深渊 烈日的黄金乡/来自深渊 烈日的黄金乡 S01E01.mkv"])
+    service = V4RevisionService(db)
+    service.create_draft("shared", pairs)
+    service.confirm("shared")
+    metadata = {"title": "在线母系列", "provider": "tmdb", "provider_id": "42",
+                "media_type": "tv", "metadata_state": "ready"}
+    with db.connect() as conn:
+        conn.execute("INSERT INTO provider_bindings(work_id,provider,provider_id,media_type) SELECT work_id,'tmdb','42','tv' FROM works")
+        conn.execute("INSERT INTO scrape_bindings(binding_id,revision_id,work_id,provider,provider_id,metadata_json,status,created_at,updated_at) SELECT 'binding-'||work_id,'shared',work_id,'tmdb','42',?,'ready','now','now' FROM works", (json.dumps(metadata, ensure_ascii=False),))
+    monkeypatch.setattr(library_v4, "get_database", lambda: db)
+    monkeypatch.setattr(library_v4, "queue_library_artwork", lambda _: None)
+    listed = library_v4.get_library(include_all=True)["works"]
+    assert {work["title"] for work in listed} == {"来自深渊", "来自深渊 烈日的黄金乡"}
+    for work in listed:
+        assert library_v4.get_work_detail(work["work_id"])["title"] == work["title"]
+
+
 @pytest.mark.parametrize("scope", ["confirmed_parent", "shared_tv_identity"])
 def test_confirmed_child_identity_protects_title_without_collection(tmp_path, scope):
     db = V4Database(tmp_path / "child-title.db")

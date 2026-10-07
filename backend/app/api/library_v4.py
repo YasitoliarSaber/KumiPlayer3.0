@@ -18,8 +18,9 @@ from app.media_v4.parsing.episode_titles import (
     is_generic_special_title,
     is_special_marker_only,
 )
-from app.media_v4.projection.collections import collection_metadata, related_works
+from app.media_v4.projection.collections import collection_metadata, related_works, title_identity_guards
 from app.media_v4.projection.library import V4LibraryProjection
+from app.media_v4.projection.presentation import display_work_title, preserve_identity_title
 
 router = APIRouter(prefix="/api/library", tags=["library"])
 
@@ -79,15 +80,10 @@ def _card_payload(card: dict, override: dict | None = None) -> dict:
     if watch_status is None:
         watch_status = {"work_id": card["work_id"], "status": "", "note": "", "favorite": False, "updated_at": ""}
     # P-006：用户覆盖层（标题/图片）优先于刮削事实；不覆盖原始抓取数据。
-    # 第 3 步（施工规格）：在线标题只作**兜底**，不得覆盖本地作品身份。
-    # 实测：多个名字不同的本地作品被刮削到同一条系列条目（如"物语系列"下的
-    # 《化物语》《终物语》《续终物语》）时，卡片标题会全部变成在线系列名，
-    # 媒体库出现多张标题/海报/评分/季数完全相同的卡片。
-    _local_title = str(card.get("title") or "").strip()
-    display_title = (
-        str(override.get("title") or "").strip()
-        or _local_title
-        or str(metadata.get("title") or "").strip()
+    # 投影记录真正的身份保护原因；旧的未标记精简卡片仍按已投影标题兜底。
+    display_title = display_work_title(
+        card.get("title") or "", metadata,
+        preserve_identity=metadata.get("preserve_identity_title", True), override=override,
     )
     local_poster = str(override.get("local_poster_path") or "") or metadata.get("local_poster_path") or ""
     local_fanart = str(override.get("local_fanart_path") or "") or metadata.get("local_fanart_path") or ""
@@ -335,6 +331,11 @@ def get_work_detail(work_id: str):
         metadata.update(collection_metadata(conn).get(work_id, {
             "collections": [], "collection_related_works": [],
         }))
+        identity_ids, shared_tv_ids = title_identity_guards(conn)
+        metadata["preserve_identity_title"] = preserve_identity_title(
+            work_id, {"series": "tv", "movie": "movie"}.get(work["work_type"], "unknown"),
+            metadata, identity_ids, shared_tv_ids,
+        )
     episode_metadata = {
         str(item.get("episode_id")): item
         for item in metadata.get("episode_mappings") or []
@@ -458,7 +459,8 @@ def get_work_detail(work_id: str):
     watch_status = _watch_payload(dict(watch_row)) if watch_row else None
     sources = sorted({item["source"] for item in episode_payload}) or ["local"]
     override = _work_overrides_map([work_id]).get(work_id, {})
-    display_title = str(override.get("title") or "") or metadata.get("title") or work["preferred_title"]
+    display_title = display_work_title(work["preferred_title"], metadata,
+                                      preserve_identity=metadata["preserve_identity_title"], override=override)
     local_poster = str(override.get("local_poster_path") or "") or metadata.get("local_poster_path") or ""
     local_fanart = str(override.get("local_fanart_path") or "") or metadata.get("local_fanart_path") or ""
     local_clearlogo = str(override.get("local_clearlogo_path") or "") or metadata.get("local_clearlogo_path") or ""

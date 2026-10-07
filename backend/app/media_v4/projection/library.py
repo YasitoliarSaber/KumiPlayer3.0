@@ -9,7 +9,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app.media_v4.persistence.database import V4Database
-from app.media_v4.projection.presentation import PRESENTATION_POLICY_VERSION, VISIBLE_BINDING_SQL
+from app.media_v4.projection.presentation import (
+    PRESENTATION_POLICY_VERSION,
+    VISIBLE_BINDING_SQL,
+    display_work_title,
+    preserve_identity_title,
+)
 
 
 def _now() -> str:
@@ -229,9 +234,9 @@ class V4LibraryProjection:
                     """
                 ).fetchall()
                 cards_list = []
-                from app.media_v4.projection.collections import collection_metadata, identity_title_work_ids
+                from app.media_v4.projection.collections import collection_metadata, title_identity_guards
                 local_collections = collection_metadata(conn)
-                identity_title_ids = identity_title_work_ids(conn)
+                identity_title_ids, shared_tv_ids = title_identity_guards(conn)
                 for row in rows:
                     try:
                         metadata = json.loads(row["scraped_metadata_json"] or "{}")
@@ -314,11 +319,13 @@ class V4LibraryProjection:
                     metadata.update(local_collections.get(str(row["work_id"]), {
                         "collections": [], "collection_related_works": [],
                     }))
+                    metadata["preserve_identity_title"] = preserve_identity_title(
+                        str(row["work_id"]), row["media_type"], metadata, identity_title_ids, shared_tv_ids,
+                    )
                     cards_list.append({
                         "work_id": row["work_id"],
-                        "title": (row["title"] or metadata.get("title")) if (
-                            metadata["collections"] or str(row["work_id"]) in identity_title_ids)
-                                 else metadata.get("title") or row["title"],
+                        "title": display_work_title(row["title"], metadata,
+                                                    preserve_identity=metadata["preserve_identity_title"]),
                         "year": metadata.get("year") or row["year"],
                         "media_type": row["media_type"],
                         "show_type": show_type,
