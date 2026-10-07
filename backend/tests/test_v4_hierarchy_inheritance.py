@@ -34,8 +34,8 @@ def _parse_facts(relative_path: str, *, root_container: str = ""):
     return V4Parser().parse(_evidence(0, relative_path), root_container=root_container)
 
 
-def test_explicit_series_container_groups_seasons_and_specials_into_one_work():
-    """显式系列容器内正片和编号 SP 同属一个 Work，季集身份分别保存。"""
+def test_explicit_series_container_keeps_regular_seasons_and_excludes_specials():
+    """显式系列容器内正片仍属一个 Work，编号 SP 排除。"""
 
     special_path = "动画/CLANNAD.S1-S2+SP+OVA/SP/CLANNAD [SP01].mkv"
     graph = _resolve(
@@ -48,9 +48,10 @@ def test_explicit_series_container_groups_seasons_and_specials_into_one_work():
 
     assert len(graph.works) == 1
     assert graph.works[0].preferred_title == "CLANNAD"
-    assert {episode.local_season_number for episode in graph.episodes} == {0, 1, 2}
-    assert _parse_facts(special_path).is_importable is True
-    assert sum(episode.episode_kind == "special" for episode in graph.episodes) == 1
+    assert {episode.local_season_number for episode in graph.episodes} == {1, 2}
+    assert _parse_facts(special_path).is_importable is False
+    assert _parse_facts(special_path).content_class == "attached_special"
+    assert sum(episode.episode_kind == "special" for episode in graph.episodes) == 0
 
 
 def test_standalone_movie_inside_series_container_remains_independent_work():
@@ -210,7 +211,7 @@ def test_title_number_after_episode_token_never_expands_into_ghost_episodes():
 # 取消了 special 入库，特别篇不再进入 Work/Season/Episode/Asset 图，该契约已被取消。
 
 
-def test_category_prefix_preserves_work_container_year_and_special_membership():
+def test_category_prefix_preserves_work_container_year_and_excludes_specials():
     graph = _resolve(
         [
             "动画/B 86-不存在的战区.2021/86-不存在的战区-.S01E01.送葬者.mkv",
@@ -221,12 +222,12 @@ def test_category_prefix_preserves_work_container_year_and_special_membership():
     assert len(graph.works) == 1
     assert graph.works[0].preferred_title == "86-不存在的战区"
     assert graph.works[0].year == 2021
-    assert {episode.local_season_number for episode in graph.episodes} == {0, 1}
-    # 小数集号归特别篇，季度正片不变。
+    assert {episode.local_season_number for episode in graph.episodes} == {1}
+    # 小数集号特别篇排除，季度正片不变。
     assert _parse_facts(
         "动画/B 86-不存在的战区.2021/special/[MAI] EIGHTY SIX [11.5].mkv"
-    ).is_importable is True
-    assert sum(episode.episode_kind == "special" for episode in graph.episodes) == 1
+    ).is_importable is False
+    assert sum(episode.episode_kind == "special" for episode in graph.episodes) == 0
 
 
 def test_series_named_collection_is_a_shared_work_boundary():

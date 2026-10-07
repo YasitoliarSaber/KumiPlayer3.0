@@ -63,8 +63,24 @@ function WorkCard({
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [techOpen, setTechOpen] = useState(false)
   const [activeIssue, setActiveIssue] = useState<V4ReviewIssue | null>(null)
+  const reviewFiles = new Map<string, V4ReviewIssue[]>()
+  for (const issue of work.issues) {
+    const issues = reviewFiles.get(issue.evidence_id) ?? []
+    issues.push(issue)
+    reviewFiles.set(issue.evidence_id, issues)
+  }
+  const reviewItems = [...reviewFiles.values()].map((issues) => ({
+    issue: issues.find((issue) => identityIssueCodes.has(issue.code)) ?? issues[0],
+    issues,
+  }))
   const evidenceFor = (evidenceId: string) => evidenceEntries.find((entry) => entry.evidence_id === evidenceId)
   const activeEvidence = activeIssue ? evidenceFor(activeIssue.evidence_id) : undefined
+  const activeIssues = activeIssue ? reviewFiles.get(activeIssue.evidence_id) ?? [activeIssue] : []
+  const reviewFileLabel = (issue: V4ReviewIssue) => {
+    const evidence = evidenceFor(issue.evidence_id)
+    const path = evidence?.relative_path || evidence?.source_key || issue.relative_path || issue.file_name
+    return path?.split(/[\\/]/).pop() || `待核对文件 ${reviewItems.findIndex((item) => item.issue.evidence_id === issue.evidence_id) + 1}`
+  }
   const resolvedEpisode = activeIssue
     ? preview.episodes.find((episode) => episode.asset_evidence_ids.includes(activeIssue.evidence_id))
     : undefined
@@ -95,8 +111,8 @@ function WorkCard({
       {work.issues.length > 0 && (
         <div className="media-v4-work-review-action">
           <span>{work.issues.length} 项待核对</span>
-          <Button appearance="secondary" size="small" disabled={busy} onClick={() => setActiveIssue(work.issues[0])}>
-            {preview.status === 'confirmed' ? '查看处理方式' : identityIssueCodes.has(work.issues[0].code) ? '处理身份冲突' : '修正'}
+          <Button appearance="secondary" size="small" disabled={busy} onClick={() => setActiveIssue(reviewItems[0].issue)}>
+            {preview.status === 'confirmed' ? '查看处理方式' : identityIssueCodes.has(reviewItems[0].issue.code) ? '处理身份冲突' : '修正'}
           </Button>
         </div>
       )}
@@ -148,12 +164,10 @@ function WorkCard({
               </DialogTitle>
               <DialogContent>
                 <p className="media-v4-review-work-title">{work.title}</p>
-                {work.issues.length > 1 && (
+                {reviewItems.length > 1 && (
                   <div className="media-v4-review-file-list" role="group" aria-label="选择待核对条目">
-                    {work.issues.map((issue, index) => {
-                      const evidence = evidenceFor(issue.evidence_id)
-                      const filename = (evidence?.relative_path || evidence?.source_key || issue.evidence_id).split(/[\\/]/).pop()
-                      return <Button key={`${issue.code}-${issue.evidence_id}`} appearance="secondary" disabled={busy} aria-pressed={activeIssue === issue} onClick={() => setActiveIssue(issue)}>{index + 1}. {filename}</Button>
+                    {reviewItems.map(({ issue }, index) => {
+                      return <Button key={issue.evidence_id} appearance="secondary" disabled={busy} aria-pressed={activeIssue.evidence_id === issue.evidence_id} onClick={() => setActiveIssue(issue)}>{index + 1}. {reviewFileLabel(issue)}</Button>
                     })}
                   </div>
                 )}
@@ -163,15 +177,15 @@ function WorkCard({
                   </div>
                 ) : identityIssue ? (
                   <div className="media-v4-identity-help">
-                    <p>{activeIssue.message}</p>
+                    {[...new Set(activeIssues.map((issue) => issue.message))].map((message) => <p key={message}>{message}</p>)}
                     <p>修改单集标题或集号不能解决作品身份冲突。历史自动识别不代表绑定正确；已清理来源的旧绑定不会再用于新导入。</p>
                     <p>如果错误作品仍在媒体库中，可打开媒体库维护，选择对应来源、核对清理预览后再重新导入。此处不会直接删除任何内容；清理会影响该来源的媒体记录与受控生成物，请先检查范围。</p>
                   </div>
                 ) : (<>
                   <div className="media-v4-issue-evidence" role="note">
                     <strong>待修正文件</strong>
-                    <code title={activeEvidence?.relative_path || activeEvidence?.source_key}>{(activeEvidence?.relative_path || activeEvidence?.source_key || activeIssue.evidence_id).split(/[\\/]/).pop()}</code>
-                    <span>{activeIssue.message}</span>
+                    <code title={activeEvidence?.relative_path || activeEvidence?.source_key || activeIssue.relative_path}>{reviewFileLabel(activeIssue)}</code>
+                    {[...new Set(activeIssues.map((issue) => issue.message))].map((message) => <span key={message}>{message}</span>)}
                   </div>
                 <div className="media-v4-override-row media-v4-override-dialog-row">
                   <Field label="作品标题">

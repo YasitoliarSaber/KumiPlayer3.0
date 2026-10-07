@@ -9,7 +9,7 @@
 - 特别篇/附属内容只按**整段类别 token**或**明确的文件级标记**排除；
   ``OV A`` 这类发行形式、``SPY×FAMILY``、``Happy Ending``、``H264.50fps``
   都不构成排除依据。
-- 明确 OVA/OAD 与有边界的 SP（可带编号）归特别篇；电影、正片外传仍保持独立身份。
+- 明确 OVA/OAD、SP、小数集及第零集不准入；电影、正片外传仍保持独立身份。
 - 季/集/绝对编号各自记录来源；缺证据用 null + unknown，绝不用 0 兜底，
   也绝不取"当前最小集号"重排。
 """
@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.media_v4.domain.identity import (
     CLASSIFICATION_CONFLICT,
@@ -46,6 +46,11 @@ from app.media_v4.domain.identity import (
     ORIGIN_UNKNOWN,
     DecisionTrace,
     NumberingEvidence,
+)
+from app.recognition.episode_title import (
+    classification_title_prefix,
+    mask_technical_decimals,
+    normalize_integral_episode_number,
 )
 from app.recognition.episode_title import fractional_episode_token as _fractional_episode_token
 from app.recognition.media import _is_series_container
@@ -126,7 +131,7 @@ _ATTACHED_FILE_RES = (
     re.compile(r"\u5c0f\u5267\u573a|(?<![A-Za-z])\u77ed\u7bc7(?![A-Za-z])"),
 )
 
-#: 发行形式（不构成排除依据）：单独出现时保留可播放身份。
+#: 用户排除的特别篇发行形式，必须有词边界，不能误伤片名。
 _RELEASE_FORM_RE = re.compile(r"(?i)(?<![A-Za-z])(?:OVA|OAD)(?![A-Za-z])")
 _NUMBERED_SP_RE = re.compile(r"(?i)(?<![A-Za-z0-9])SP\s*\d+(?![A-Za-z0-9])")
 _SP_MARKER_RE = re.compile(r"(?i)(?<![A-Za-z0-9])SP(?:\s*\d+)?(?![A-Za-z0-9])")
@@ -372,7 +377,8 @@ def parse_numbering(
     手误形态），保证中文编号只有一份实现。
     """
 
-    stem = tokens.stem
+    stem = normalize_integral_episode_number(mask_technical_decimals(tokens.stem))
+    tokens = replace(tokens, stem=stem)
     season: int | None = None
     episode: int | None = None
     absolute: int | None = None
@@ -632,27 +638,26 @@ def classify_content(
         (token for token in directory if _segment_token(token.name) in _ATTACHED_DIR_TOKENS),
         None,
     )
-    movie_hit = next((p.pattern for p in _MOVIE_FILE_RES if p.search(stem)), "")
+    classification_prefix = classification_title_prefix(stem)
+    movie_hit = next((p.pattern for p in _MOVIE_FILE_RES if p.search(classification_prefix)), "")
     movie_dir = next(
         (token for token in directory if _segment_token(token.name) in _MOVIE_DIR_TOKENS),
         None,
     )
-    standalone_hit = _STANDALONE_FILE_RE.search(stem)
+    standalone_hit = _STANDALONE_FILE_RE.search(classification_prefix)
     standalone_dir = next(
         (token for token in directory if _segment_token(token.name) in _STANDALONE_DIR_TOKENS),
         None,
     )
     release_form = _RELEASE_FORM_RE.search(stem)
-    # [14(OVA)] 在明确的 TV 季度中声明附带发行编号；孤立 OVA、电影或
-    # 独立外传仍保留。发行形式本身不等于附属关系，不能无条件排除。
+    # 复合编号槽保存附属标记的证据；OVA/OAD 准入统一在下方排除。
     if (not attached_hit and _ANNOTATED_RELEASE_RE.search(stem)
             and numbering.season is not None
             and numbering.numbering.season_origin in {ORIGIN_EXPLICIT_FILENAME, ORIGIN_EXPLICIT_DIRECTORY}
             and not (movie_hit or movie_dir or provisional_movie or standalone_hit or standalone_dir)
             and not any(_RELEASE_FORM_RE.search(token.name) for token in directory)):
         attached_hit = _ANNOTATED_RELEASE_RE.pattern
-    # 单发 OVA/OAD 发行形式不构成附属声明；但若文件名里还带了别的附属标记
-    # （已在上面的 attached_hit 里），仍然按附属内容处理。
+    # 保留附属标记来源，普通正片不因合集容器带 OVA 字样被排除。
     modified_before_attached = bool(attached_hit) or attached_dir is not None
     has_numbering = numbering.episode is not None or numbering.absolute is not None
 
@@ -683,37 +688,35 @@ def classify_content(
             traces=tuple(traces),
         )
 
-    # 用户 2026-10-02 的有限准入：小数集、第零集、OVA/OAD、SP（可带编号）。
-    # 只认明确标记，不因泛称 Specials 目录或在线编号推断准入。
+    # 用户 2026-10-07 取消特别篇准入：分类先排除，不能借电影标记绕过。
     fraction = fractional_episode_token(tokens)
     zero = numbering.episode == 0
     release_dir = next(
         (token for token in directory if _segment_token(token.name) in {"ova", "ovas", "oad", "oads"}
          or (not _is_series_container(token.name)
-             and re.search(r"(?i)[\[【]\s*(?:OVA|OAD)\s*[\]】]", token.name))),
+             and (_RELEASE_FORM_RE.search(token.name) or _SP_MARKER_RE.search(token.name)))),
         None,
     )
     selected_release = bool(release_form) or release_dir is not None
-    numbered_sp = _NUMBERED_SP_RE.search(stem)
     sp_marker = _SP_MARKER_RE.search(stem)
     # 片名中的罗马字剧场版标记不能吞掉明确的本地特别篇发行标记。
     if not (fraction or zero or selected_release or sp_marker) and not movie_hit:
-        if _ROMANIZED_MOVIE_FILE_RE.search(stem):
+        if _ROMANIZED_MOVIE_FILE_RE.search(classification_prefix):
             movie_hit = _ROMANIZED_MOVIE_FILE_RE.pattern
-    if (fraction or zero or selected_release or sp_marker) and not (
-        movie_hit or movie_dir or provisional_movie or standalone_hit or standalone_dir
-    ):
+    if fraction or zero or selected_release or sp_marker:
         reason = (
             "fractional_episode" if fraction else "zero_episode" if zero
-            else "numbered_sp" if numbered_sp else "sp_marker" if sp_marker else "release_special"
+            else "sp_marker" if sp_marker else "release_special"
         )
         origin = ORIGIN_DIRECTORY if release_dir and not (fraction or zero or release_form or sp_marker) else ORIGIN_FILENAME
-        trace(CONTENT_CLASS_PLAYABLE_SPECIAL, origin, reason)
+        trace(CONTENT_CLASS_ATTACHED_SPECIAL, origin, reason)
         return ContentClassification(
-            content_class=CONTENT_CLASS_PLAYABLE_SPECIAL,
+            content_class=CONTENT_CLASS_ATTACHED_SPECIAL,
             classification_state=CLASSIFICATION_EXPLICIT,
             media_type=MEDIA_TYPE_TV,
-            reasons=("明确特别篇保留原名，归入特别篇分类",),
+            is_importable=False,
+            is_auxiliary=True,
+            reasons=("按用户规则排除特别篇（OVA/OAD/SP/小数集/第零集）",),
             traces=tuple(traces),
         )
 
@@ -767,7 +770,7 @@ def classify_content(
             traces=tuple(traces),
         )
 
-    # 4. 独立作品/外传：发行形式不排除，保留独立可播放身份。
+    # 4. 没有特别篇标记的独立作品/外传保持可播放身份。
     if standalone_hit or standalone_dir is not None:
         origin = ORIGIN_FILENAME if standalone_hit else ORIGIN_DIRECTORY
         reasons.append("独立作品/外传保留为独立可播放作品")

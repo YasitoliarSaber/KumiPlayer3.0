@@ -77,7 +77,8 @@ def test_existing_consistent_title_trace_preserves_season_and_special_decisions(
     assert facts.work_title == facts.series_group == "Show"
     assert facts.season_candidate == 2
     assert all(trace.value == "Show" for trace in facts.decision_trace if trace.field == "work_title")
-    assert facts.content_class == ("playable_special" if "OVA" in filename else "regular")
+    assert facts.content_class == ("attached_special" if "OVA" in filename else "regular")
+    assert facts.is_importable is ("OVA" not in filename)
 
 
 def test_season_subtitle_keeps_parent_series_identity() -> None:
@@ -97,7 +98,7 @@ def test_season_subtitle_keeps_parent_series_identity() -> None:
     assert all(trace.value == facts.work_title for trace in facts.decision_trace if trace.field == "work_title")
 
 
-def test_movie_identity_stays_independent_while_selected_special_belongs_to_series() -> None:
+def test_movie_identity_stays_independent_while_special_is_excluded() -> None:
     from app.media_v4.resolution.resolver import MediaResolver
 
     paths = [
@@ -120,7 +121,11 @@ def test_movie_identity_stays_independent_while_selected_special_belongs_to_seri
     movie = next(work for work in graph.works if work.media_type == "movie")
     assert series.preferred_title == "Show"
     assert movie.preferred_title == "Show The Movie"
-    assert set(series.source_evidence_ids) == {entries[0][0].evidence_id, entries[1][0].evidence_id}
+    assert set(series.source_evidence_ids) == {entries[0][0].evidence_id}
     assert set(movie.source_evidence_ids) == {entries[2][0].evidence_id}
-    special = next(episode for episode in graph.episodes if episode.season_kind == "special")
-    assert special.work_key == series.work_key
+    assert len(graph.episodes) == 1
+    assert graph.episodes[0].season_kind == "regular"
+    assert graph.episodes[0].work_key == series.work_key
+    assert entries[1][1].content_class == "attached_special"
+    assert entries[1][1].is_importable is False
+    assert all(entries[1][0].evidence_id not in work.source_evidence_ids for work in graph.works)

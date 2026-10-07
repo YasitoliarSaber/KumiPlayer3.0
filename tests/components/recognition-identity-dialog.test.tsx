@@ -25,6 +25,20 @@ test('身份冲突进入维护说明，不显示单集编辑，也不直接删�
   expect(actions.onApplyOverride).not.toHaveBeenCalled()
 })
 
+test('同一文件同时有编号提示和身份冲突时优先处理身份冲突', () => {
+  const issues = [
+    { code: 'episode_number_unresolved', evidence_id: 'ev', message: '集号未定', file_name: 'Show.mkv' },
+    { code: 'work_identity_conflict', evidence_id: 'ev', message: '作品身份冲突', file_name: 'Show.mkv' },
+  ]
+  const preview: V4Preview = { revision_id: 'rev', status: 'draft', works: [{ work_key: 'work', preferred_title: 'Show', media_type: 'unknown', year: null, source_evidence_ids: ['ev'] }], episodes: [], work_assets: [], issues }
+  render(<V4RecognitionSummary preview={preview} issues={issues} evidenceEntries={[]} overrideDrafts={{}} busy={false} onOverrideChange={vi.fn()} onApplyOverride={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: '处理身份冲突' }))
+  const dialog = screen.getByRole('dialog')
+  expect(within(dialog).getByText('集号未定')).toBeVisible()
+  expect(within(dialog).getByText('作品身份冲突')).toBeVisible()
+  expect(within(dialog).queryByRole('button', { name: '应用修正' })).not.toBeInTheDocument()
+})
+
 test('普通识别修正保持正常表单，弹窗有独立遮罩和实体居中表面', () => {
   setup('missing_episode_number')
   fireEvent.click(screen.getByRole('button', { name: '修正' }))

@@ -1,4 +1,4 @@
-"""特别篇按最新有限标记准入并保留原名；未覆盖的 S00 仍不入库。"""
+"""特别篇全部排除，解析事实仍保留原始标题，不分配入库编号。"""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def _client(tmp_path, monkeypatch):
     return TestClient(application), database
 
 
-def test_parser_keeps_lightly_cleaned_special_title_as_immutable_fact():
+def test_parser_keeps_excluded_special_original_title_as_immutable_fact():
     from app.media_v4.domain.models import SourceEvidence
     from app.media_v4.parsing.parser import V4Parser
 
@@ -71,7 +71,8 @@ def test_parser_keeps_lightly_cleaned_special_title_as_immutable_fact():
 
     assert facts.special_number is None
     assert facts.episode_title == "[VCB-Studio] Show - SP01 - 露营小剧场 [1080p][HEVC]"
-    assert facts.is_importable
+    assert facts.is_importable is False
+    assert facts.content_class == "attached_special"
 
 
 @pytest.mark.parametrize(
@@ -86,12 +87,12 @@ def test_parser_keeps_lightly_cleaned_special_title_as_immutable_fact():
         (
             "Re：从零开始的异世界生活",
             "Re：从零开始的异世界生活.S00E55.2024.2160P.BDRIP.mkv",
-            55,
-            "特别篇",
+            None,
+            "Re：从零开始的异世界生活.S00E55.2024.2160P.BDRIP",
         ),
     ],
 )
-def test_sample_special_names_keep_meaning_while_dropping_only_technical_suffixes(
+def test_sample_special_names_remain_original_facts_without_admission(
     parent,
     filename,
     expected_number,
@@ -114,6 +115,9 @@ def test_sample_special_names_keep_meaning_while_dropping_only_technical_suffixe
 
     assert facts.special_number == expected_number
     assert facts.episode_title == expected_title
+    assert facts.is_importable is False
+    assert facts.content_class == "attached_special"
+    assert facts.episode_candidate is None
 
 
 def test_specials_only_import_creates_no_work_episode_or_asset(tmp_path, monkeypatch):

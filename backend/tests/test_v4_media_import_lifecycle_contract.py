@@ -1,14 +1,15 @@
 """Real local scanner -> durable finalize -> confirm -> runner lifecycle, no success-row stubs."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import threading
-import base64
 from types import SimpleNamespace
 
-import pytest
 import httpx
+import pytest
+
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.playback.session import V4PlaybackManager
@@ -110,7 +111,8 @@ def test_scan_runner_rescan_append_failure_and_replacement(tmp_path, monkeypatch
     runner = V4JobRunner(database, metadata_provider=external_provider)
     runner.process_available(mirror_root=mirror)
     first = bindings(database, 'r1')
-    assert 'Show/Specials/Show.S01E03.mkv' not in first
+    excluded = {names[3], names[-1]}
+    assert excluded.isdisjoint(first)
     with database.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM source_evidence WHERE relative_path='Show/Specials/Show.S01E03.mkv'").fetchone()[0] == 1
         assert {r[0] for r in conn.execute("SELECT artifact_type FROM artifacts WHERE status='published'")} >= {'poster', 'fanart', 'nfo'}
@@ -126,8 +128,20 @@ def test_scan_runner_rescan_append_failure_and_replacement(tmp_path, monkeypatch
         return external_provider(target)
     V4JobRunner(database, metadata_provider=counting).process_available(mirror_root=mirror)
     second = bindings(database, 'r2')
+    assert excluded.isdisjoint(second)
+    with database.connect() as conn:
+        # 排除只影响准入；两次扫描的原始证据与解析事实仍然各自保留。
+        for name in excluded:
+            rows = conn.execute(
+                'SELECT evidence_id,scan_id FROM source_evidence WHERE relative_path=?', (name,)
+            ).fetchall()
+            assert len(rows) == 2
+            assert {row['scan_id'] for row in rows} == {'r1', 'r2'}
+            assert all(conn.execute(
+                'SELECT COUNT(*) FROM parsed_facts WHERE evidence_id=?', (row['evidence_id'],)
+            ).fetchone()[0] == 1 for row in rows)
     for name in names:
-        if '/Specials/' in name:
+        if name in excluded:
             continue
         assert first[name]['asset_id'] == second[name]['asset_id']
         assert first[name]['episode_id'] == second[name]['episode_id']

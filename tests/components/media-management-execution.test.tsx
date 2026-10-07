@@ -604,6 +604,27 @@ test('展开已完成作品后读取并显示作品信息、镜像结果与剧�
   expect(screen.getByText('已映射')).toBeVisible()
 })
 
+test('已确认作品的在线分集缺项显示补充提示，保留未映射事实且不显示全局红色错误', async () => {
+  const fetchWorkDetail = vi.fn().mockResolvedValue({
+    revision_id: 'rev-exec', work_id: 'w-gap',
+    work: { title: '资料待补充作品', media_type: 'tv', provider: 'tmdb', provider_id: '42', metadata_state: 'ready', metadata_reason_code: 'episode_mapping_incomplete', metadata_reason: '部分在线分集资料待补充' },
+    mirror: { status: 'succeeded', error: '', artifacts: [], artifact_count: 1 }, metadata_job_status: 'succeeded',
+    seasons: [{ season_number: 1, season_kind: 'regular', episode_count: 1, title: '' }],
+    episodes: [{ episode_id: 'ep-gap', season_number: 1, season_kind: 'regular', episode_number: 8, display_title: '第八集', scraped_title: '', mapped: false, file_name: 'Show.08.mkv', playback_ready: true }],
+    scrape: { title: '资料待补充作品', metadata_state: 'ready', metadata_reason_code: 'episode_mapping_incomplete', season_results: [{ local_season_number: 1, provider_season_number: 1, status: 'partial', reason_code: 'episode_mapping_incomplete', failure_stage: 'episode_mapping', retryable: false }] },
+    episode_total: 1, episodes_truncated: false, has_detail: true,
+  })
+  const { container } = renderProgressWithDetail([workUnit('w-gap', '资料待补充作品', 'completed', { metadata_state: 'ready', metadata_reason_code: 'episode_mapping_incomplete' })], { overall_status: 'completed' }, fetchWorkDetail)
+  fireEvent.click(screen.getByRole('button', { name: /资料待补充作品/ }))
+  await screen.findByText('作品信息')
+  expect(screen.queryAllByText('在线集数未完全匹配')).toHaveLength(0)
+  expect(screen.getAllByText('部分在线分集资料待补充').length).toBeGreaterThan(0)
+  expect(container.querySelector('.media-v4-job-error')).toBeNull()
+  expect(container.querySelector('.media-v4-work-detail-season-failures')).toBeNull()
+  expect(screen.getByText('未映射')).toBeVisible()
+  expect(screen.getByText('已生成播放路径')).toBeVisible()
+})
+
 test('详情读取失败可在同一展开面板内重新读取，空详情仍使用缓存', async () => {
   const fetchWorkDetail = vi.fn()
     .mockRejectedValueOnce(new Error('后端不可用'))

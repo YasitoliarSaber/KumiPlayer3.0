@@ -1,4 +1,4 @@
-"""零集、小数集号、OVA/OAD 与 SP 准入；原名不是在线编号。"""
+"""零集、小数集号、OVA/OAD 与 SP 全部排除；正片与电影边界保留。"""
 from pathlib import PurePosixPath
 
 import pytest
@@ -29,18 +29,14 @@ def pair(path):
     '作品甲/Season 1/作品甲 S01E01 [SP].mkv',
     '2.5次元的诱惑/Season 1/2.5次元的诱惑 [14.5].mkv',
 ])
-def test_selected_special_markers_need_no_explicit_regular_season(path):
+def test_special_markers_are_excluded_without_needing_regular_season(path):
     _, facts = pair(path)
-    assert facts.is_importable and not facts.is_auxiliary
-    assert facts.content_class == 'playable_special'
+    assert not facts.is_importable and facts.is_auxiliary
+    assert facts.content_class == 'attached_special'
     assert facts.group_type == 'special'
     assert facts.episode_title == PurePosixPath(path).stem
     graph = MediaResolver().resolve([pair(path)])
-    assert len(graph.episodes) == 1
-    episode = graph.episodes[0]
-    assert episode.season_kind == episode.episode_kind == 'special'
-    assert episode.provider_season_number is None
-    assert episode.provider_episode_number is None
+    assert not graph.works and not graph.episodes and not graph.work_assets
 
 
 @pytest.mark.parametrize('path', [
@@ -91,21 +87,18 @@ def test_selected_specials_do_not_claim_regular_episode_one():
              '作品甲/Season 1/作品甲 第8.5集.mkv']
     graph = MediaResolver().resolve([pair(path) for path in paths])
     assert len(graph.works) == 1
-    assert len(graph.episodes) == 8
-    assert sum(episode.season_kind == 'regular' for episode in graph.episodes) == 1
-    specials = [episode for episode in graph.episodes if episode.season_kind == 'special']
-    assert len({episode.special_number for episode in specials}) == 7
-    assert all(episode.provider_episode_number is None for episode in specials)
+    assert len(graph.episodes) == 1
+    assert graph.episodes[0].season_kind == 'regular'
+    assert graph.episodes[0].local_episode_number == 1
+    assert graph.episodes[0].asset_evidence_ids == (paths[0],)
 
 
 @pytest.mark.parametrize('name', ['作品甲 OVA.mkv', '作品甲 OAD01.mkv', '作品甲 SP01.mkv',
                                 '作品甲 [SP].mkv', '作品甲 SP.mkv', '作品甲 第0集.mkv'])
 def test_single_special_never_becomes_movie(name):
     graph = MediaResolver().resolve([pair('作品甲/' + name)])
-    assert len(graph.works) == 1
-    assert graph.works[0].media_type == 'tv'
-    assert len(graph.episodes) == 1
-    assert graph.episodes[0].season_kind == 'special'
+    assert not graph.works
+    assert not graph.episodes
     assert not graph.work_assets
 
 
@@ -131,7 +124,7 @@ def test_online_episode_mapping_never_requests_special_season():
 
 
 @pytest.mark.parametrize('with_regular', [False, True])
-def test_confirmed_specials_are_displayed_without_any_scrape_target(tmp_path, monkeypatch, with_regular):
+def test_excluded_specials_never_create_media_jobs_mirrors_or_cards(tmp_path, monkeypatch, with_regular):
     from app.api import library_v4
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
@@ -156,36 +149,43 @@ def test_confirmed_specials_are_displayed_without_any_scrape_target(tmp_path, mo
     runner = V4JobRunner(database, metadata_provider=provider)
     runner.process_available(mirror_root=tmp_path / 'mirror')
     assert len(received) == int(with_regular)
-    assert len(list((tmp_path / 'mirror').rglob('*.strm'))) == len(paths)
+    assert len(list((tmp_path / 'mirror').rglob('*.strm'))) == int(with_regular)
     assert not list((tmp_path / 'mirror').rglob('*.jpg'))
     assert not list((tmp_path / 'mirror').rglob('*.nfo'))
     with database.connect() as conn:
-        work_id = conn.execute('SELECT work_id FROM works').fetchone()[0]
+        work_row = conn.execute('SELECT work_id FROM works').fetchone()
         assert conn.execute('SELECT COUNT(*) FROM episode_provider_mappings').fetchone()[0] == 0
         from app.media_v4.persistence.metadata_lifecycle import current_episode_signatures
 
-        assert len(current_episode_signatures(conn, 'local-specials', work_id)) == int(with_regular)
-        if not with_regular:
-            assert not conn.execute("SELECT 1 FROM jobs WHERE job_type='recover_work_aliases'").fetchone()
+        assert conn.execute('SELECT COUNT(*) FROM assets').fetchone()[0] == int(with_regular)
+        if with_regular:
+            work_id = work_row[0]
+            assert len(current_episode_signatures(conn, 'local-specials', work_id)) == 1
+        else:
+            assert work_row is None
+            # 空媒体图仍通过一个维护投影作业发布，不产生任何作品媒体作业。
+            jobs = conn.execute('SELECT job_type, status FROM jobs').fetchall()
+            assert [(row[0], row[1]) for row in jobs] == [('refresh_projection', 'succeeded')]
     monkeypatch.setattr(library_v4, 'get_database', lambda: database)
-    detail = library_v4.get_work_detail(work_id)
-    assert len([row for row in detail['episodes'] if row['kind'] == 'special']) == 3
-    if not with_regular:
-        assert runner.projection.current().cards[0]['metadata']['metadata_state'] == 'not_required'
-        assert len(library_v4.get_library()['works']) == 1
-        assert service.get_execution_progress('local-specials')['overall_status'] == 'completed'
+    if with_regular:
+        detail = library_v4.get_work_detail(work_id)
+        assert len(detail['episodes']) == 1
+        assert detail['episodes'][0]['kind'] == 'regular'
+    else:
+        assert not runner.projection.current().cards
+    # 此处正片资料仍等待配置，不应提前发布空白作品卡。
+    assert not library_v4.get_library()['works']
 
 
 @pytest.mark.parametrize('name', ['作品甲 SP01.mkv', '作品甲 [SP].mkv'])
-def test_special_and_explicit_movie_keep_separate_work_identities(name):
+def test_excluded_special_does_not_create_an_extra_movie_or_tv_work(name):
     graph = MediaResolver().resolve([
         pair('作品甲/' + name),
         pair('作品甲/作品甲 Movie.mkv'),
     ])
-    assert len(graph.works) == 2
-    assert {work.media_type for work in graph.works} == {'movie', 'tv'}
-    assert len(graph.episodes) == 1
-    assert graph.episodes[0].episode_kind == 'special'
+    assert len(graph.works) == 1
+    assert graph.works[0].media_type == 'movie'
+    assert not graph.episodes
     assert len(graph.work_assets) == 1
 
 
@@ -225,7 +225,7 @@ def test_regular_scrape_snapshot_does_not_require_special_metadata(tmp_path, mon
     card = runner.projection.current().cards[0]
     assert card['metadata']['metadata_state'] == 'ready'
     assert card['metadata']['total_count'] == card['metadata']['mapped_count'] == 1
-    assert len(list((tmp_path / 'mirror').rglob('*.strm'))) == 2
+    assert len(list((tmp_path / 'mirror').rglob('*.strm'))) == 1
     assert len(list((tmp_path / 'mirror').rglob('*.nfo'))) == 2  # 作品与正片，特别篇没有 NFO。
     with database.connect() as conn:
         snapshot = select_applicable_snapshot(conn, 'mixed-ready', card['work_id'])

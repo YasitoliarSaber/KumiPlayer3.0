@@ -178,7 +178,7 @@ def _provider_identity_scope(conn, target: dict, facts: list) -> dict:
         and str(fact.group_type or "") != "special"
         and str(fact.series_group or "").strip()
         and str(fact.series_group).strip().casefold() != normalized_title
-        and (fact.relation_type or fact.card_type)
+        and (fact.card_type == 'standalone' or fact.relation_type in {'related', 'spin_off', 'sequel'})
     }
     shared_ids = {
         str(row["provider_id"])

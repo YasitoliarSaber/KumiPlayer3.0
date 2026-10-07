@@ -229,15 +229,17 @@ def _content_scope_map(work_ids: list[str]) -> dict[str, str]:
 
 @router.get("/works/{work_id}")
 def get_work_detail(work_id: str):
+    from app.media_v4.projection.presentation import VISIBLE_BINDING_SQL
+
     with get_database().connect() as conn:
         work = conn.execute(
-            """
+            f"""
             SELECT w.* FROM works w
             WHERE w.work_id = ? AND EXISTS (
                 SELECT 1 FROM revision_bindings rb
                 JOIN import_revisions ir ON ir.revision_id = rb.revision_id
                 JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
-                WHERE rb.work_id = w.work_id AND ir.status = 'confirmed'
+                WHERE rb.work_id = w.work_id AND ir.status = 'confirmed' AND {VISIBLE_BINDING_SQL}
             )
             """,
             (work_id,),
@@ -245,21 +247,21 @@ def get_work_detail(work_id: str):
         if work is None:
             raise HTTPException(status_code=404, detail=f"作品不存在: {work_id}")
         seasons = conn.execute(
-            """
+            f"""
             SELECT s.* FROM seasons s
             WHERE s.work_id = ? AND EXISTS (
                 SELECT 1 FROM revision_bindings rb
                 JOIN import_revisions ir ON ir.revision_id = rb.revision_id
                 JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
                 JOIN episodes e ON e.episode_id = rb.episode_id
-                WHERE e.season_id = s.season_id AND ir.status = 'confirmed'
+                WHERE e.season_id = s.season_id AND ir.status = 'confirmed' AND {VISIBLE_BINDING_SQL}
             )
             ORDER BY s.local_season_number IS NULL, s.local_season_number, s.season_id
             """,
             (work_id,),
         ).fetchall()
         episodes = conn.execute(
-            """
+            f"""
             SELECT DISTINCT e.*, s.local_season_number, s.season_kind, s.title AS season_title,
                    a.asset_id, a.root_id, se.playback_locator, se.source_locator,
                    a.availability_state, se.provider, se.relative_path
@@ -270,7 +272,7 @@ def get_work_detail(work_id: str):
             JOIN seasons s ON s.season_id = e.season_id
             JOIN assets a ON a.asset_id = rb.asset_id
             JOIN source_evidence se ON se.evidence_id = rb.evidence_id
-            WHERE e.work_id = ? AND ir.status = 'confirmed'
+            WHERE e.work_id = ? AND ir.status = 'confirmed' AND {VISIBLE_BINDING_SQL}
             ORDER BY s.local_season_number IS NULL, s.local_season_number,
                      e.local_episode_number IS NULL, e.local_episode_number, e.episode_id,
                      CASE WHEN a.availability_state = 'available' THEN 0 ELSE 1 END,

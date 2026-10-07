@@ -678,7 +678,7 @@ def _local_special_identity(
 
 
 #: 准入集合排除的类别（C-002）：附属内容与辅助视频不生成媒体实体。
-_ADMITTED_EXCLUDED_CONTENT_CLASSES = NON_IMPORTABLE_CONTENT_CLASSES
+_ADMITTED_EXCLUDED_CONTENT_CLASSES = NON_IMPORTABLE_CONTENT_CLASSES | {CONTENT_CLASS_PLAYABLE_SPECIAL}
 
 #: 单文件可展开的最大集合集数；与 evidence_policy 的同一上限一致（非法范围不扩张）。
 _MAX_EPISODE_RANGE = 1000
@@ -700,7 +700,7 @@ def _is_admitted(facts: ParsedFacts) -> bool:
     ``is_auxiliary`` 与明确声明的排除类别过滤。
     """
 
-    if not facts.is_importable or facts.is_auxiliary:
+    if not facts.is_importable or facts.is_auxiliary or facts.special_candidate or facts.group_type == "special":
         return False
     return facts.content_class not in _ADMITTED_EXCLUDED_CONTENT_CLASSES
 

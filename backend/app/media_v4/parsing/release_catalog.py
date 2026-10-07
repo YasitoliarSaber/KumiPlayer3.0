@@ -16,9 +16,16 @@ class VerifiedRelease:
     source_urls: tuple[str, ...]
     series_title: str = ""
     release_form: str = "theatrical_movie"
+    season_number: int | None = None
 
 
 VERIFIED_RELEASES = (
+    VerifiedRelease(
+        "made-in-abyss-golden-city", "来自深渊 烈日的黄金乡", 2022,
+        ("Made in Abyss Retsujitsu no Ougonkyou", "Made in Abyss The Golden City of the Scorching Sun",
+         "メイドインアビス 烈日の黄金郷", "來自深淵 烈日的黃金鄉"),
+        ("https://miabyss.com/2nd_package.html?cat=vol01",), "来自深渊", "tv_season", 2,
+    ),
     VerifiedRelease(
         "tamako-love-story", "玉子爱情故事", 2014,
         ("Tamako Love Story", "たまこラブストーリー"),

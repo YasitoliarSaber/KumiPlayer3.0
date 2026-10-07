@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app.media_v4.persistence.database import V4Database
+from app.media_v4.projection.presentation import PRESENTATION_POLICY_VERSION, VISIBLE_BINDING_SQL
 
 
 def _now() -> str:
@@ -85,12 +86,13 @@ class V4LibraryProjection:
             dirty = conn.execute(
                 "SELECT 1 FROM v4_meta WHERE key = 'library_projection_dirty'"
             ).fetchone()
+            policy = conn.execute("SELECT value FROM v4_meta WHERE key='library_presentation_policy'").fetchone()
         needs_episode_gate = snapshot is not None and any(
             card.get('media_type') == 'tv' and card.get('metadata', {}).get('metadata_state') == 'ready'
             and 'episode_metadata_status' not in card.get('metadata', {})
             for card in snapshot.cards
         )
-        if snapshot is None or dirty is not None or needs_episode_gate:
+        if snapshot is None or dirty is not None or needs_episode_gate or policy is None or policy[0] != PRESENTATION_POLICY_VERSION:
             return self.rebuild()
         return snapshot
 
@@ -101,8 +103,10 @@ class V4LibraryProjection:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 rows = conn.execute(
-                    """
-                    WITH scrape_rows AS (
+                    f"""
+                    WITH visible_bindings AS (
+                        SELECT rb.* FROM revision_bindings rb WHERE {VISIBLE_BINDING_SQL}
+                    ), scrape_rows AS (
                         SELECT
                             sb.work_id,
                             sb.revision_id,
@@ -139,13 +143,13 @@ class V4LibraryProjection:
                         latest_scrapes.revision_id AS revision_id,
                         CASE WHEN w.work_type != 'movie' THEN (
                             SELECT COUNT(DISTINCT rb.episode_id)
-                            FROM revision_bindings rb
+                            FROM visible_bindings rb
                             JOIN import_revisions ir ON ir.revision_id = rb.revision_id
                             JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
                             WHERE rb.work_id = w.work_id AND rb.episode_id IS NOT NULL
                               AND ir.status = 'confirmed'
                         ) ELSE CASE WHEN EXISTS (
-                            SELECT 1 FROM revision_bindings rb
+                            SELECT 1 FROM visible_bindings rb
                             JOIN import_revisions ir ON ir.revision_id = rb.revision_id
                             JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
                             WHERE rb.work_id = w.work_id AND rb.episode_id IS NULL
@@ -153,20 +157,20 @@ class V4LibraryProjection:
                         ) THEN 1 ELSE 0 END END AS episode_count,
                         (
                             SELECT COUNT(DISTINCT rb.asset_id)
-                            FROM revision_bindings rb
+                            FROM visible_bindings rb
                             JOIN import_revisions ir ON ir.revision_id = rb.revision_id
                             JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
                             WHERE rb.work_id = w.work_id AND rb.asset_id IS NOT NULL
                               AND ir.status = 'confirmed'
                         ) AS asset_count,
-                        COALESCE(latest_scrapes.metadata_json, '{}') AS scraped_metadata_json,
+                        COALESCE(latest_scrapes.metadata_json, '{{}}') AS scraped_metadata_json,
                         COALESCE(latest_scrapes.status, '') AS scrape_binding_status,
                         latest_confirmed.revision_id AS previous_ready_revision_id,
-                        COALESCE(latest_confirmed.metadata_json, '{}') AS previous_ready_metadata_json,
+                        COALESCE(latest_confirmed.metadata_json, '{{}}') AS previous_ready_metadata_json,
                         COALESCE((
                             SELECT GROUP_CONCAT(DISTINCT provider) FROM (
                                 SELECT se.provider
-                                FROM revision_bindings rb
+                                FROM visible_bindings rb
                                 JOIN import_revisions ir ON ir.revision_id = rb.revision_id
                             JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
                                 JOIN assets a ON a.asset_id = rb.asset_id
@@ -178,7 +182,7 @@ class V4LibraryProjection:
                             SELECT COUNT(DISTINCT s.local_season_number)
                             FROM seasons s
                             JOIN episodes e ON e.season_id = s.season_id
-                            JOIN revision_bindings rb ON rb.episode_id = e.episode_id
+                            JOIN visible_bindings rb ON rb.episode_id = e.episode_id
                             JOIN import_revisions ir ON ir.revision_id = rb.revision_id
                             JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
                             WHERE s.work_id = w.work_id AND ir.status = 'confirmed'
@@ -188,7 +192,7 @@ class V4LibraryProjection:
                             SELECT COUNT(DISTINCT s.local_season_number)
                             FROM seasons s
                             JOIN episodes e ON e.season_id = s.season_id
-                            JOIN revision_bindings rb ON rb.episode_id = e.episode_id
+                            JOIN visible_bindings rb ON rb.episode_id = e.episode_id
                             JOIN import_revisions ir ON ir.revision_id = rb.revision_id
                             JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
                             WHERE s.work_id = w.work_id AND ir.status = 'confirmed'
@@ -197,7 +201,7 @@ class V4LibraryProjection:
                         (
                             SELECT MAX(e.local_episode_number)
                             FROM episodes e
-                            JOIN revision_bindings rb ON rb.episode_id = e.episode_id
+                            JOIN visible_bindings rb ON rb.episode_id = e.episode_id
                             JOIN import_revisions ir ON ir.revision_id = rb.revision_id
                             JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
                             WHERE e.work_id = w.work_id AND ir.status = 'confirmed'
@@ -209,7 +213,7 @@ class V4LibraryProjection:
                     LEFT JOIN latest_confirmed
                       ON latest_confirmed.work_id = w.work_id
                     WHERE EXISTS (
-                        SELECT 1 FROM revision_bindings rb
+                        SELECT 1 FROM visible_bindings rb
                         JOIN import_revisions ir ON ir.revision_id = rb.revision_id
                             JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
                         WHERE rb.work_id = w.work_id AND ir.status = 'confirmed'
@@ -356,6 +360,10 @@ class V4LibraryProjection:
                     (generation_id,),
                 )
                 conn.execute("DELETE FROM v4_meta WHERE key = 'library_projection_dirty'")
+                conn.execute(
+                    "INSERT INTO v4_meta(key,value) VALUES ('library_presentation_policy',?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (PRESENTATION_POLICY_VERSION,),
+                )
                 conn.execute(
                     "DELETE FROM library_generations WHERE generation_id != ?",
                     (generation_id,),

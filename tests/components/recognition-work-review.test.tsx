@@ -12,7 +12,28 @@ test('同一作品只显示一个修正入口，文件与具体原因在修正�
   fireEvent.click(screen.getByRole('button', { name: '修正', exact: true }))
   const dialog = screen.getByRole('dialog')
   expect(within(dialog).getByText('具体问题1')).toBeVisible()
-  fireEvent.click(within(dialog).getByRole('button', { name: /ev3/ }))
+  fireEvent.click(within(dialog).getByRole('button', { name: /待核对文件 3/ }))
   expect(within(dialog).getByText('具体问题3')).toBeVisible()
   expect(within(dialog).queryByText('具体问题1')).not.toBeInTheDocument()
+})
+
+test('同一文件的多个问题合并为一个文件入口，并展示全部原因', () => {
+  const issues = [
+    { code: 'independent_title_candidate', evidence_id: 'ev1', message: '异名无编号文件与正片混放', file_name: 'RTTT Movie.mkv' },
+    { code: 'media_type_unresolved', evidence_id: 'ev1', message: '类型需要确认', file_name: 'RTTT Movie.mkv' },
+    { code: 'independent_title_candidate', evidence_id: 'ev2', message: '文件范围需要确认', file_name: 'RTTT Complete.mkv' },
+    { code: 'media_type_unresolved', evidence_id: 'ev2', message: '类型需要确认', file_name: 'RTTT Complete.mkv' },
+  ]
+  const preview: V4Preview = { revision_id: 'rev', status: 'draft', works: [{ work_key: 'work', preferred_title: 'RTTT', media_type: 'unknown', year: null, source_evidence_ids: ['ev1', 'ev2'] }], episodes: [], work_assets: [], issues }
+  render(<V4RecognitionSummary preview={preview} issues={issues} evidenceEntries={[]} overrideDrafts={{}} busy={false} onOverrideChange={vi.fn()} onApplyOverride={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: '修正', exact: true }))
+  const dialog = screen.getByRole('dialog')
+  const files = within(dialog).getByRole('group', { name: '选择待核对条目' })
+  expect(within(files).getAllByRole('button')).toHaveLength(2)
+  expect(within(dialog).getByText('异名无编号文件与正片混放')).toBeVisible()
+  expect(within(dialog).getByText('类型需要确认')).toBeVisible()
+  fireEvent.click(within(files).getByRole('button', { name: /RTTT Complete.mkv/ }))
+  expect(within(dialog).getByText('文件范围需要确认')).toBeVisible()
+  expect(within(dialog).getByText('类型需要确认')).toBeVisible()
+  expect(within(dialog).queryByText('异名无编号文件与正片混放')).not.toBeInTheDocument()
 })

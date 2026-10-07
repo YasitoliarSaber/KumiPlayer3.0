@@ -83,9 +83,7 @@ def select_applicable_snapshot(conn, revision_id: str, work_id: str) -> dict | N
             continue
         result = dict(row)
         result['metadata'] = json.loads(row['metadata_json'])
-        # 历史版本曾把正片缺项保存为 ready；不能继续复用这个伪成功结果。
-        if result['metadata'].get('reason_code') in {'episode_mapping_incomplete', 'episode_details_incomplete'}:
-            continue
+        # 按当前本地编号与真实冲突重新评估，不能仅凭分集资料缺项废弃可用作品资料。
         old_signatures = json.loads(row['episode_signatures_json'])
         current = current_episode_signatures(conn, revision_id, work_id)
         valid = {key for key, value in current.items() if old_signatures.get(key) == value}

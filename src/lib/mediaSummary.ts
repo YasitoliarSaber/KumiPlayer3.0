@@ -10,7 +10,7 @@ import type { V4ExecutionProgress, V4Preview, V4ResolvedEpisode, V4ReviewIssue }
 /** 全页面共用的作品口径；阶段 pill 的分子分母另为后台任务数。 */
 export function summarizeExecutionWorks(progress: V4ExecutionProgress) {
   const units = progress.work_units
-  const defectCodes = new Set(['episode_mapping_incomplete', 'special_episode_metadata_incomplete', 'artifact_incomplete'])
+  const defectCodes = new Set(['special_episode_metadata_incomplete', 'artifact_incomplete'])
   return {
     total: units.length,
     completed: units.filter((unit) => unit.overall_status === 'completed').length,

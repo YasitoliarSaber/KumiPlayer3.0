@@ -25,8 +25,8 @@ _METADATA_STATES = frozenset({"ready", "not_required", "waiting_metadata", "wait
 # --- C-005：Provider 编号映射与诚实状态 -------------------------------------
 #
 # 执行状态、作品资料、剧集映射、产物与刷新各自独立：没有映射到在线条目不等于
-# 远端服务故障。作品信息可保留，但正片映射、标题或在线缩略图缺项时，整体
-# metadata_state 不能标为 ready；特别篇的可选资料缺项单独处理。
+# 远端服务故障。已确认作品与本地正片编号可用时，分集条目、标题或在线缩略图
+# 缺项只记录资料覆盖诊断；真实身份与编号歧义仍保留待处理。
 
 IDENTITY_STATUS_CONFIRMED = "confirmed"
 IDENTITY_STATUS_UNRESOLVED = "unresolved"
@@ -1331,8 +1331,8 @@ def _fetch_provider_metadata(target: dict) -> dict:
                     )
                     if service_outage:
                         result.update({
-                            "metadata_state": "source_unavailable",
-                            "reason": "部分剧集资料暂不可用，已保留作品信息，可稍后重试",
+                            "metadata_state": "ready",
+                            "metadata_warning": "部分在线分集资料暂不可用，已保留作品信息与本地编号，可稍后重试",
                             "reason_code": "episode_mapping_incomplete",
                             "season_results": season_results,
                             "identity_status": "confirmed",
@@ -1340,6 +1340,7 @@ def _fetch_provider_metadata(target: dict) -> dict:
                             "episode_mapping_status": "partial",
                             "failure_stage": "season_detail",
                             "retryable": any(item.get("retryable") for item in season_results),
+                            "refresh_status": REFRESH_STATUS_PARTIAL,
                         })
                     else:
                         # 在线资料已获取，只是有集号没有对应条目或缺少编号依据：
@@ -1463,7 +1464,8 @@ def _provider_child_scope(target: dict, provider_id: int, work_detail: dict | No
             return True
     group = _normalize_title(target.get("series_group"))
     local = _normalize_title(target.get("preferred_title"))
-    related = bool(target.get("relation_type") or target.get("card_type"))
+    related = (target.get("card_type") == "standalone"
+               or target.get("relation_type") in {"related", "spin_off", "sequel"})
     remote_titles = {_normalize_title((work_detail or {}).get(key)) for key in ("name", "original_name")}
     return bool(group and local and group != local and related and group in remote_titles)
 
@@ -1488,6 +1490,8 @@ def _build_tv_episode_mappings(
     local_episodes = [item for item in target.get("episodes") or [] if _is_mappable_episode(item)]
     season_cache: dict[int, dict] = {}
     season_errors: dict[int, dict] = {}
+    episode_cache: dict[tuple[int, int], dict] = {}
+    episode_errors: dict[tuple[int, int], dict] = {}
     reported_seasons: set[int] = set()
     provider_regular_seasons = sorted({
         int(item["season_number"])
@@ -1734,6 +1738,44 @@ def _build_tv_episode_mappings(
                 _record_unmapped(diagnostics, episode, UNMAPPED_MISSING_LOCAL_NUMBER)
                 continue
             remote = remote_by_number.get(provider_episode) or {}
+            if not str(remote.get("id") or "").strip() and season is not None:
+                # 季列表可能缺条目，只补实际本地文件的已确定坐标，绝不猜季号或集号。
+                detail_fetch = getattr(client, 'get_tv_episode_detail', None)
+                coordinate = (provider_season, provider_episode)
+                if callable(detail_fetch) and coordinate not in episode_cache:
+                    try:
+                        detail = detail_fetch(provider_id, provider_season, provider_episode)
+                        episode_cache[coordinate] = detail if isinstance(detail, dict) else {}
+                    except TMDBClientError as exc:
+                        episode_cache[coordinate] = {}
+                        episode_errors[coordinate] = {
+                            'reason_code': _tmdb_reason_code(exc),
+                            'retryable': _tmdb_retryable(exc),
+                            'verified_missing': _tmdb_reason_code(exc) == 'provider_resource_missing',
+                        }
+                error = episode_errors.get(coordinate)
+                if error:
+                    _record_unmapped(diagnostics, episode, UNMAPPED_PROVIDER_RESOURCE_MISSING
+                                     if error['verified_missing'] else UNMAPPED_PROVIDER_UNAVAILABLE)
+                    if season_results is not None and provider_season not in reported_seasons:
+                        reported_seasons.add(provider_season)
+                        season_results.append({
+                            'season_id': str(episode.get('season_id') or ''),
+                            'local_season_number': _positive_int(episode.get('local_season_number')),
+                            'provider_season_number': provider_season,
+                            'status': 'provider_resource_missing' if error['verified_missing'] else 'source_unavailable',
+                            'reason_code': error['reason_code'], 'failure_stage': 'episode_detail',
+                            'retryable': error['retryable'],
+                        })
+                    continue
+                candidate = episode_cache.get(coordinate) or {}
+                if str(candidate.get('id') or '').strip():
+                    if (_positive_int(candidate.get('season_number')) != provider_season
+                            or _positive_int(candidate.get('episode_number')) != provider_episode):
+                        _record_unmapped(diagnostics, episode, UNMAPPED_NUMBERING_CONFLICT)
+                        _record_conflict(diagnostics, episode, UNMAPPED_NUMBERING_CONFLICT)
+                        continue
+                    remote = candidate
             if not str(remote.get("id") or "").strip():
                 # 没有远端 Episode ID 时不能把空映射写成"已映射"；保留本地剧集，
                 # 并记录真实原因（服务故障/该条目不存在），不伪装成完整刮削。

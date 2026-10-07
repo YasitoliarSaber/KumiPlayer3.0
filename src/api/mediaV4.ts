@@ -49,6 +49,9 @@ export interface V4ReviewIssue {
   code: string
   evidence_id: string
   message: string
+  /** 仅供复核展示，不参与身份判断；旧后端可能不返回。 */
+  file_name?: string
+  relative_path?: string
 }
 
 export interface V4ResolvedWorkAsset {

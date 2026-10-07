@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 
 import pytest
+
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.persistence.database import V4Database
@@ -76,8 +77,8 @@ def test_rescan_retains_success_and_unchanged_import_makes_no_request(tmp_path, 
         assert outcome['outcome'] == 'reused'
 
 
-def test_historical_ready_with_zero_mappings_is_not_reused_or_counted_complete(tmp_path, monkeypatch):
-    """历史伪成功快照不能再复用，实际补全后才重新就绪。"""
+def test_historical_numbered_local_members_keep_work_usable_without_online_mapping(tmp_path, monkeypatch):
+    """历史编号明确的本地正片可用，缺在线资料仍诚实保留零映射。"""
     from app.media_v4.persistence import metadata_lifecycle
     from app.media_v4.persistence.metadata_lifecycle import select_applicable_snapshot
     publish = metadata_lifecycle.publish_snapshot
@@ -100,24 +101,26 @@ def test_historical_ready_with_zero_mappings_is_not_reused_or_counted_complete(t
         cached.pop('episode_metadata_status', None)
         conn.execute('UPDATE library_cards SET metadata_json=?', (json.dumps(cached),))
         conn.execute("DELETE FROM v4_meta WHERE key='library_projection_dirty'")
-    assert V4LibraryProjection(database).ensure_current().cards[0]['metadata']['metadata_state'] == 'failed'
+    assert V4LibraryProjection(database).ensure_current().cards[0]['metadata']['metadata_state'] == 'ready'
+    assert V4LibraryProjection(database).ensure_current().cards[0]['metadata']['mapped_count'] == 0
     from app.api import library_v4
     monkeypatch.setattr(library_v4, 'get_database', lambda: database)
-    assert library_v4.get_library()['works'] == []
-    assert library_v4.get_library(include_all=True)['works'][0]['metadata_state'] == 'failed'
+    assert len(library_v4.get_library()['works']) == 1
+    assert library_v4.get_library(include_all=True)['works'][0]['metadata_state'] == 'ready'
     service = V4RevisionService(database)
     progress = service.get_execution_progress('r1')
-    assert progress['work_units'][0]['metadata_state'] == 'failed'
-    assert progress['overall_status'] == 'needs_attention'
+    assert progress['work_units'][0]['metadata_state'] == 'ready'
+    assert progress['overall_status'] != 'needs_attention'
     from app.media_v4.projection.source_libraries import _metadata_ready_count
-    assert _metadata_ready_count(progress) == 0
+    assert _metadata_ready_count(progress) == 1
     detail = service.get_work_execution_detail('r1', snapshot['work_id'])
     assert detail['work']['metadata_reason_code'] == 'episode_mapping_incomplete'
     confirm(database, 'r2')
     with database.connect() as conn:
-        assert select_applicable_snapshot(conn, 'r2', snapshot['work_id']) is None
+        retained = select_applicable_snapshot(conn, 'r2', snapshot['work_id'])
+        assert retained is not None and retained['covers_members'] is False
     card = V4LibraryProjection(database).ensure_current().cards[0]
-    assert card['metadata']['metadata_state'] != 'ready'
+    assert card['metadata']['metadata_state'] == 'ready'
     calls = []
 
     def fixed_provider(target):
@@ -271,6 +274,7 @@ def test_failed_generation_cannot_borrow_previous_generation_artifacts(tmp_path,
 def test_cleanup_resume_rechecks_source_root_protection(tmp_path, monkeypatch):
     """CHECK-008B: a failed deletion retry must honor newly protected source paths."""
     from pathlib import Path
+
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.maintenance.service import compute_delete_preview, confirm_delete_preview, resume_operation
     database, mirror = prepare(tmp_path, monkeypatch)
@@ -299,6 +303,7 @@ def test_cleanup_resume_rechecks_source_root_protection(tmp_path, monkeypatch):
 
 def test_retained_work_skips_remote_work_detail_request(monkeypatch):
     from types import SimpleNamespace
+
     from app.media_v4.jobs.metadata import default_metadata_provider
     class Client:
         def __init__(self, **kwargs):
@@ -363,6 +368,7 @@ def test_explicit_legacy_success_is_adopted_only_on_new_confirmation(tmp_path, m
 
 def test_shared_work_uses_current_members_and_successes_from_both_roots(tmp_path, monkeypatch):
     from dataclasses import replace
+
     from app.core.config import AppConfig
     from tests.test_v4_import_identity_roundtrip import _tree_entries
     config = AppConfig(artwork_storage_mode='remote')
@@ -390,6 +396,7 @@ def test_shared_work_uses_current_members_and_successes_from_both_roots(tmp_path
 
     # CHECK-008C：两个活动根对同Work并发刷新，各自发布到自己的revision引用。
     import threading
+
     from app.media_v4.jobs.scrape import V4ScrapeService
     scraper = V4ScrapeService(database)
     jobs = [scraper.requeue_work(revision, cards[0]['work_id']) for revision in ('first', 'other')]

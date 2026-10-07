@@ -2,9 +2,29 @@
 
 import re
 
+_TECHNICAL_DECIMAL_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9])(?:"
+    r"(?:dts(?:[ ._-]?hd)?(?:[ ._-]?ma)?(?::x)?|flac|aac|e?ac3|truehd|opus"
+    r"|ddp|dd\+|dolby[ ._-]+digital(?:[ ._-]+plus)?)[ ._-]*\d+\.\d+"
+    r"|(?:h\.?26[45][ ._-]*)?\d+(?:\.\d+)?fps"
+    r"|(?:v|rev)\d+(?:\.\d+)*)(?![A-Za-z0-9])"
+)
+
+
+def mask_technical_decimals(stem: str) -> str:
+    """遮罩声道、帧率和版本参数，保留编号及字符位置。"""
+    return _TECHNICAL_DECIMAL_RE.sub(lambda match: " " * len(match[0]), stem)
+
+
+def classification_title_prefix(stem: str) -> str:
+    """明确季集槽后是单集标题，不能拿其电影或外传词改作品类型。"""
+    marker = re.search(r"(?i)(?<![A-Za-z0-9])S\d{1,2}\s*E\d{1,3}(?!\d)", stem)
+    return stem[:marker.end()] if marker else stem
+
 
 def fractional_episode_token(stem: str) -> str:
     """只读集号位置；显式整集编号优先于作品名及技术区内的小数。"""
+    stem = mask_technical_decimals(stem)
     explicit = (
         r"(?i)(?<![A-Za-z0-9])(?:S\d{1,2}\s*)?EP?\s*(\d{1,3}\.\d+)(?![\d.A-Za-z])",
         r"第\s*(\d{1,3}\.\d+)\s*[集话話]",
@@ -24,10 +44,25 @@ def fractional_episode_token(stem: str) -> str:
         r"(?i)(?:^|[\s_-])(\d{1,3}\.\d+)\s*[(（]\s*(?:extra\s*episode|special(?:\s*episode)?|SP|OVA|OAD|特别篇|特別編)\s*[)）]",
     ):
         match = re.search(pattern, stem)
-        if match and match[1] not in {"5.1", "7.1", "2.0"}:
-            if int(match[1].partition(".")[2]) != 0:
-                return match[1]
+        if match and int(match[1].partition(".")[2]) != 0:
+            return match[1]
     return ""
+
+
+def normalize_integral_episode_number(stem: str) -> str:
+    """仅明确集号槽的零小数尾按整数读取，不能把片名或技术参数变成集号。"""
+    masked = mask_technical_decimals(stem)
+    for pattern in (
+        r"(?i)(?<![A-Za-z0-9])(?:S\d{1,2}\s*)?EP?\s*(\d{1,3}\.0+)(?![\d.A-Za-z])",
+        r"第\s*(\d{1,3}\.0+)\s*[集话話]",
+        r"[\[【(]\s*(\d{1,3}\.0+)\s*[\]】)]",
+        r"(?:^|\s-\s)(\d{1,3}\.0+)(?=$|\s*[-\[【])",
+    ):
+        match = re.search(pattern, masked)
+        if match:
+            start, end = match.span(1)
+            return stem[:start] + str(int(match[1].partition('.')[0])) + stem[end:]
+    return stem
 
 _TECH_TOKENS = {
     "bd", "bdrip", "bluray", "blu-ray", "web", "webdl", "webrip",

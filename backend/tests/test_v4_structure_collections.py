@@ -182,10 +182,11 @@ def test_v25_physical_fixture_migration_preserves_existing_confirmed_data(tmp_pa
 def test_independent_unknown_candidate_excludes_parent_from_identity_aliases(tmp_path):
     from app.media_v4.resolution.candidates import work_identity_title_inputs
     graph, pairs = resolve(["动画/玉子市场/玉子市场 S01E01.mkv",
-                            "动画/玉子市场/玉子爱情故事 [1080p].mkv"])
-    child = next(work for work in graph.works if work.preferred_title == "玉子爱情故事")
+                            "动画/玉子市场/尚未收录的爱情故事 [1080p].mkv"])
+    child = next(work for work in graph.works if work.preferred_title == "尚未收录的爱情故事")
     related = [facts for evidence, facts in pairs if evidence.evidence_id in child.source_evidence_ids]
-    assert work_identity_title_inputs(child, related) == ["玉子爱情故事"]
+    assert child.media_type == "unknown"
+    assert work_identity_title_inputs(child, related) == ["尚未收录的爱情故事"]
     db = V4Database(tmp_path / "candidate.db")
     db.initialize()
     service = V4RevisionService(db)
@@ -193,8 +194,10 @@ def test_independent_unknown_candidate_excludes_parent_from_identity_aliases(tmp
     evidence_id = child.source_evidence_ids[0]
     overridden = service.apply_override("candidate", evidence_id, {"media_type": "movie", "group_type": "movie"})
     movie = next(work for work in overridden.works if evidence_id in work.source_evidence_ids)
-    assert movie.preferred_title == "玉子爱情故事" and movie.show_type == "anime_movie"
+    assert movie.preferred_title == "尚未收录的爱情故事" and movie.show_type == "anime_movie"
     service.confirm("candidate")
     with db.connect() as conn:
-        aliases = conn.execute("SELECT a.normalized_title FROM work_aliases a JOIN works w ON w.work_id=a.work_id WHERE w.preferred_title='玉子爱情故事'").fetchall()
+        aliases = conn.execute("SELECT a.normalized_title FROM work_aliases a JOIN works w ON w.work_id=a.work_id WHERE w.preferred_title=?",
+                               (movie.preferred_title,)).fetchall()
+        assert aliases
         assert "玉子市场" not in {row[0] for row in aliases}

@@ -9,6 +9,7 @@ from pathlib import PurePosixPath
 from app.media_v4.domain.identity import (
     CLASSIFICATION_EXPLICIT,
     CONTENT_CLASS_MOVIE,
+    ORIGIN_EXPLICIT_DIRECTORY,
     ORIGIN_EXPLICIT_FILENAME,
     ORIGIN_PARSER_RULE,
     ORIGIN_UNKNOWN,
@@ -47,6 +48,9 @@ def match_verified_release(title: str, releases: tuple[VerifiedRelease, ...] = V
 
 def apply_verified_release(facts: ParsedFacts, evidence: SourceEvidence, work_container: str) -> ParsedFacts:
     """只生成当前解析的值对象；已保存的旧事实永远不经过此入口。"""
+    season_facts = _apply_verified_season(facts, evidence, work_container)
+    if season_facts is not facts:
+        return season_facts
     if (evidence.import_family.strip().casefold() != "anime"
             or not facts.is_importable or facts.is_auxiliary
             or facts.content_class not in {"unknown", "regular", "movie"}
@@ -118,3 +122,55 @@ def apply_verified_release(facts: ParsedFacts, evidence: SourceEvidence, work_co
         show_type=facts.show_type.split("_", 1)[0] + "_movie" if "_" in facts.show_type else facts.show_type,
         decision_trace=tuple(traces), reasons=(*facts.reasons, "完整标题匹配已核验的官方发行身份"),
     )
+
+
+def _apply_verified_season(facts: ParsedFacts, evidence: SourceEvidence, work_container: str) -> ParsedFacts:
+    if (evidence.import_family.strip().casefold() != "anime" or not facts.is_importable or facts.is_auxiliary
+            or facts.content_class != "regular" or facts.episode_candidate is None or facts.episode_candidate <= 0
+            or facts.episode_range or facts.special_candidate or facts.classification_state == "conflict"
+            or any(trace.rule_id == "hint_conflict" for trace in facts.decision_trace)):
+        return facts
+    filename = PurePosixPath(evidence.relative_path.replace("\\", "/")).name
+    title, _ = _parse_work_title_and_year(_extract_release_movie_title(filename))
+    release = match_verified_release(title)
+    if release is None or release.release_form != "tv_season" or release.season_number is None:
+        return facts
+    if ((facts.tmdb_hint_type and facts.tmdb_hint_type != "tv")
+            or (evidence.tmdb_hint_type and evidence.tmdb_hint_type != "tv")):
+        return facts
+    if (facts.numbering.season_origin in {ORIGIN_EXPLICIT_FILENAME, ORIGIN_EXPLICIT_DIRECTORY}
+            and facts.season_candidate != release.season_number):
+        return facts
+    local_years = {int(match.group()) for match in _YEAR.finditer(filename + " " + work_container)}
+    if local_years and local_years != {release.year}:
+        return facts
+    identity = {
+        "work_title": release.series_title, "series_group": release.series_title, "media_type": "tv",
+        "card_type": "main_series", "relation_type": "", "season_candidate": release.season_number,
+        "group_type": "season", "year_candidate": None,
+    }
+    traces = []
+    for trace in facts.decision_trace:
+        if trace.field == "structure_context" and isinstance(trace.value, dict):
+            traces.append(replace(trace, value={**trace.value, "title": release.series_title, "year": None,
+                "season_scoped": True, "directory_season": release.season_number, "parsed_identity": identity}))
+        elif trace.field in {"numbering", "work_title"}:
+            traces.append(replace(trace, field=trace.field + "_candidate"))
+        else:
+            traces.append(trace)
+    traces.extend((
+        DecisionTrace(field="verified_season_identity", origin=ORIGIN_PARSER_RULE, scope="file",
+            rule_id="verified_season_exact_title", value={"release_key": release.key, "title": release.title,
+                "year": release.year, "season": release.season_number, "source_urls": list(release.source_urls)}),
+        DecisionTrace(field="work_title", value=release.series_title, origin=ORIGIN_PARSER_RULE,
+                      scope="file", rule_id="verified_season_exact_title"),
+        DecisionTrace(field="numbering", value={"season": release.season_number,
+            "episode": facts.episode_candidate, "absolute": facts.absolute_episode_candidate,
+            "episode_origin": facts.numbering.episode_origin}, origin=ORIGIN_PARSER_RULE,
+            scope="local", rule_id="verified_season_exact_title"),
+    ))
+    return replace(facts, **identity, original_title=title, season_token_raw="",
+        numbering=replace(facts.numbering, season_origin=ORIGIN_PARSER_RULE,
+                          basis=(*facts.numbering.basis, "verified_season_exact_title")),
+        title_candidates=tuple(dict.fromkeys((release.series_title, release.title, title, *release.aliases))),
+        confidence="high", decision_trace=tuple(traces))

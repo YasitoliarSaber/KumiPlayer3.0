@@ -174,8 +174,15 @@ def test_conflicting_alias_provider_hints_do_not_freeze_arbitrary_binding(tmp_pa
 def test_verified_title_cannot_override_local_special_or_regular_numbering(suffix):
     graph, pairs = resolve([f"动画/作品/Season 1/Tamako Love Story {suffix}.mkv"])
     assert pairs[0][1].content_class != "movie"
-    assert pairs[0][1].is_importable
-    assert len(graph.episodes) == 1 and not graph.work_assets
+    if suffix in {"SP01", "OVA01", "OAD01", "[00]", "[04.5]"}:
+        assert not pairs[0][1].is_importable
+        assert pairs[0][1].content_class == "attached_special"
+        assert not graph.works and not graph.episodes
+    else:
+        assert pairs[0][1].is_importable
+        assert len(graph.episodes) == 1
+        assert graph.episodes[0].episode_kind == "regular"
+    assert not graph.work_assets
     assert not any(trace.field == "verified_release_identity" for trace in pairs[0][1].decision_trace)
 
 

@@ -58,19 +58,20 @@ def test_named_season_specials_do_not_create_year_specific_work():
         "动画/辉夜大小姐想让我告白/S3 辉夜大小姐想让我告白 (2022)/SP/辉夜 SP01.mkv",
     ])
     assert len(graph.works) == 1
-    assert len(graph.episodes) == 4
-    assert sum(episode.episode_kind != "regular" for episode in graph.episodes) == 2
+    assert len(graph.episodes) == 2
+    assert sum(episode.episode_kind != "regular" for episode in graph.episodes) == 0
+    assert {episode.local_season_number for episode in graph.episodes} == {1, 2}
 
 
-def test_remakes_keep_year_identity_and_special_only_sources_survive():
+def test_remakes_keep_year_identity_and_special_only_sources_are_excluded():
     graph, _ = resolve([
         "动画/同名作品 (2000)/同名作品 S01E01.mkv",
         "动画/同名作品 (2020)/同名作品 S01E01.mkv",
         "动画/独立特典来源/独立特典来源 OVA01.mkv",
     ])
-    assert len(graph.works) == 3
+    assert len(graph.works) == 2
     assert sorted(work.year for work in graph.works if work.preferred_title == "同名作品") == [2000, 2020]
-    assert any(work.preferred_title == "独立特典来源" for work in graph.works)
+    assert not any(work.preferred_title == "独立特典来源" for work in graph.works)
 
 
 def test_family_children_keep_own_identity_and_order_is_not_season():
@@ -89,10 +90,10 @@ def test_family_children_keep_own_identity_and_order_is_not_season():
 def test_unmarked_different_movie_candidate_is_not_absorbed_into_tv():
     graph, _ = resolve([
         "动画/玉子市场/玉子市场 S01E01.mkv",
-        "动画/玉子市场/玉子爱情故事 [1080p][DTS_5.1].mkv",
+        "动画/玉子市场/尚未收录的爱情故事 [1080p][DTS_5.1].mkv",
     ])
     assert len(graph.works) == 2
-    candidate = next(work for work in graph.works if work.preferred_title == "玉子爱情故事")
+    candidate = next(work for work in graph.works if work.preferred_title == "尚未收录的爱情故事")
     assert candidate.media_type == "unknown"
 
 

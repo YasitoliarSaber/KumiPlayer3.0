@@ -35,7 +35,7 @@ from app.media_v4.resolution.identity_contract import (
     strong_same_work,
 )
 from app.media_v4.resolution.identity_policy import historical_identity_conflict
-from app.media_v4.resolution.resolver import MediaResolver
+from app.media_v4.resolution.resolver import MediaResolver, _is_admitted
 from app.media_v4.resolution.title_norm import normalize_identity_title
 from app.media_v4.revisions.transport_reason import transport_failure_reason
 from app.media_v4.sources.file_identity import (
@@ -98,9 +98,11 @@ def _friendly_metadata_reason(status: str, value: str, reason_code: str = "") ->
     if normalized_code == "provider_rate_limited":
         return "在线资料请求过于频繁，请稍后重试。"
     if normalized_code == "episode_mapping_incomplete":
-        return "正片尚未全部匹配在线分集资料，请检查在线分季与集号对应关系。"
+        if status in {"ready", "confirmed"}:
+            return "部分本地视频尚无在线分集资料，已保留本地编号，可正常浏览与播放。"
+        return "已有视频的季号或集号尚待核对，请检查对应关系。"
     if normalized_code == "episode_details_incomplete":
-        return "正片分集资料缺少标题或在线缩略图，刮削尚未完成。"
+        return "部分在线分集标题或缩略图待补充，可正常浏览与播放。"
     if normalized_code == "artifact_incomplete":
         return "媒体资料已获取，但部分图片下载或发布失败。"
     if normalized_code == "mirror_root_missing":
@@ -1481,7 +1483,7 @@ class V4RevisionService:
         for evidence, facts in entries:
             # 排除项（特别篇/附属/元数据）本来就不进图，它们的去向是"被排除"，
             # 不是缺失去向；只有准入视频必须有可追踪的 Work/Episode/Asset。
-            if not facts.is_importable or facts.is_auxiliary:
+            if not _is_admitted(facts):
                 continue
             if evidence.entry_kind != "video":
                 continue

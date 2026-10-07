@@ -9,7 +9,7 @@ import re
 import uuid
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -222,8 +222,22 @@ def get_database() -> V4Database:
     return _database
 
 
-def _graph_to_dict(graph) -> dict:
+def _graph_to_dict(graph, *, database: V4Database | None = None, revision_id: str = "") -> dict:
     issues = [asdict(issue) for issue in graph.issues]
+    if issues and database is not None and revision_id:
+        issue_ids = {issue["evidence_id"] for issue in issues}
+        with database.connect() as conn:
+            paths = {
+                str(row["evidence_id"]): str(row["relative_path"])
+                for row in conn.execute(
+                    "SELECT se.evidence_id,se.relative_path FROM revision_evidence re "
+                    "JOIN source_evidence se ON se.evidence_id=re.evidence_id WHERE re.revision_id=?",
+                    (revision_id,),
+                ) if str(row["evidence_id"]) in issue_ids
+            }
+        for issue in issues:
+            path = paths.get(issue["evidence_id"], "").replace("\\", "/")
+            issue.update(relative_path=path, file_name=PurePosixPath(path).name if path else "")
     return {
         "works": [asdict(work) for work in graph.works],
         "episodes": [asdict(episode) for episode in graph.episodes],
@@ -931,7 +945,7 @@ def preview(request: PreviewRequest):
         return {
             "revision_id": request.revision_id,
             "status": "draft",
-            **_graph_to_dict(graph),
+            **_graph_to_dict(graph, database=database, revision_id=request.revision_id),
         }
     durable_evidence = _completed_scan_evidence(
         database,
@@ -1031,7 +1045,7 @@ def preview(request: PreviewRequest):
     return {
         "revision_id": request.revision_id,
         "status": "draft",
-        **_graph_to_dict(graph),
+        **_graph_to_dict(graph, database=database, revision_id=request.revision_id),
     }
 
 
@@ -1157,7 +1171,8 @@ def override_evidence(revision_id: str, evidence_id: str, request: OverrideReque
         raise HTTPException(status_code=404, detail="revision 或 evidence 不存在") from exc
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return {"revision_id": revision_id, "status": "draft", **_graph_to_dict(graph)}
+    return {"revision_id": revision_id, "status": "draft",
+            **_graph_to_dict(graph, database=get_database(), revision_id=revision_id)}
 
 
 @router.get("/imports/{revision_id}")

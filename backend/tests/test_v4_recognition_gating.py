@@ -33,28 +33,29 @@ def test_container_cleaning_strips_leading_quality_prefix():
 
 
 def test_review_flag_with_known_identity_is_only_a_hint():
-    """容器为空但身份可得（例如所选根目录直属的 SP01.mkv）不再阻断确认。"""
+    """容器为空但身份可得的未编号正片只提示，不再阻断确认。"""
 
     from app.media_v4.domain.models import ParsedFacts, SourceEvidence
     from app.media_v4.resolution.resolver import NON_BLOCKING_ISSUE_CODES, MediaResolver
 
     evidence = SourceEvidence(
-        evidence_id="ev-sp",
+        evidence_id="ev-review",
         scan_id="scan-b3",
         root_id="root-b3",
-        source_key="quark:/动画/Show/SP01.mkv",
-        relative_path="SP01.mkv",
+        source_key="quark:/动画/Show/Show.mkv",
+        relative_path="Show.mkv",
         entry_kind="video",
         provider="quark",
     )
     facts = ParsedFacts(
-        parsed_fact_id="facts-sp",
-        evidence_id="ev-sp",
+        parsed_fact_id="facts-review",
+        evidence_id="ev-review",
         parser_version="fixture",
         work_title="",
         title_candidates=("Show",),
         media_type="tv",
-        group_type="special",
+        group_type="season",
+        content_class="regular",
         series_group="Show",
         confidence="low",
         needs_review=True,
@@ -76,8 +77,8 @@ def test_review_flag_without_identity_still_blocks():
         evidence_id="ev-none",
         scan_id="scan-b3",
         root_id="root-b3",
-        source_key="quark:/动画/SP01.mkv",
-        relative_path="SP01.mkv",
+        source_key="quark:/动画/unknown.mkv",
+        relative_path="unknown.mkv",
         entry_kind="video",
         provider="quark",
     )
@@ -88,7 +89,8 @@ def test_review_flag_without_identity_still_blocks():
         work_title="",
         title_candidates=(),
         media_type="tv",
-        group_type="special",
+        group_type="season",
+        content_class="regular",
         series_group="",
         confidence="low",
         needs_review=True,

@@ -2112,13 +2112,13 @@ function providerDisplayLabel(provider?: string): string {
 function episodeSourceLabel(source: string, episode?: any) {
   const provider = providerDisplayLabel(episode?.provider_id);
   if (provider) return provider;
-  return ({ pan115: '115', baidu: '百度', local: '本地', openlist: 'OpenList 连接' } as Record<string, string>)[source] || source;
+  return ({ pan115: '115', baidu: '百度', local: '本地', openlist: 'OpenList 连接' } as Record<string, string>)[source] || providerDisplayLabel(source);
 }
 
 function workSourceLabel(source: string, work?: any) {
   const provider = providerDisplayLabel(work?.provider_id);
   if (provider) return provider;
-  return ({ pan115: '115 网盘', baidu: '百度网盘', local: '本地', openlist: 'OpenList 连接' } as Record<string, string>)[source] || source || '未知来源';
+  return ({ pan115: '115 网盘', baidu: '百度网盘', local: '本地', openlist: 'OpenList 连接' } as Record<string, string>)[source] || providerDisplayLabel(source) || '未知来源';
 }
 
 function normalizedWorkSources(work: any): string[] {

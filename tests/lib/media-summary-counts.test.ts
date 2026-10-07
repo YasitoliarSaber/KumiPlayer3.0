@@ -14,3 +14,8 @@ test('作品完成数与资料完整数分开计量，页面统一使用作品�
     total: 41, completed: 40, needsAttention: 1, metadataComplete: 34,
   })
 })
+
+test('已就绪作品的在线分集资料缺项仍计入就绪数量', () => {
+  const progress = { work_units: [{ overall_status: 'completed', metadata_state: 'ready', metadata_reason_code: 'episode_mapping_incomplete' }] } as unknown as V4ExecutionProgress
+  expect(summarizeExecutionWorks(progress)).toEqual({ total: 1, completed: 1, needsAttention: 0, metadataComplete: 1 })
+})

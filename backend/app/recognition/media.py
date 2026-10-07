@@ -9,7 +9,11 @@ PV/CM/Menu/Trailer/Eyecatch 等附属视频只保留播放结构，不进入 Spe
 import re
 from dataclasses import dataclass, field
 
-from app.recognition.episode_title import fractional_episode_token
+from app.recognition.episode_title import (
+    classification_title_prefix,
+    fractional_episode_token,
+    mask_technical_decimals,
+)
 
 # ============================================================
 # 关键词定义
@@ -785,7 +789,7 @@ def _check_standalone(filename: str, parent_dirs: list[str], work_container: str
     """
     # 比作品容器更深的目录（排除作品容器本身）
     deeper_dirs = [d for d in parent_dirs if d != work_container]
-    check_text = f"{filename} {' '.join(deeper_dirs)}"
+    check_text = f"{classification_title_prefix(filename)} {' '.join(deeper_dirs)}"
 
     for keyword, (media_type, relation_type) in _STANDALONE_KEYWORDS.items():
         if keyword.lower() in check_text.lower():
@@ -1650,6 +1654,8 @@ def _check_bare_episode(filename: str, parent_dirs: list[str]) -> MediaGuess | N
     if dot_idx > 0:
         stem = filename[:dot_idx]
 
+    # 裸编号入口也使用技术区遮罩，否则 AAC 5.1 会绕过共享小数判定。
+    stem = mask_technical_decimals(stem).rstrip()
     terminal_status = r"(?:\s+(?:END|FINAL|FIN|完|完结|終|终))?"
 
     # 模式 0: 纯数字文件名。真实本地库可能存在 8.mkv / 9.mkv 这类

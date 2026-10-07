@@ -128,14 +128,21 @@ def test_verified_rule_never_hides_missing_provider_fields(monkeypatch, missing)
     _, remote = install_client(monkeypatch, 24)
     remote[12][missing] = ''
     result = metadata.default_metadata_provider(target_for(123249, (12, 12)))
-    assert result['metadata_state'] == 'failed'
-    assert result['reason_code'] in {'episode_mapping_incomplete', 'episode_details_incomplete'}
+    assert result['metadata_state'] == 'ready'
+    assert result['episode_metadata_status'] == 'incomplete'
+    if missing == 'id':
+        assert result['episode_mapping_status'] == 'partial'
+        assert result['mapped_count'] == 23
+    else:
+        assert result['episode_mapping_status'] == 'complete'
+        assert result['missing_episode_title_count' if missing == 'name' else 'missing_episode_still_count'] == 1
 
 
 def test_real_provider_multiseason_layout_bypasses_continuous_rules(monkeypatch):
     requested, _ = install_client(monkeypatch, 24, seasons=(1, 2))
     result = metadata.default_metadata_provider(target_for(123249, (12, 12)))
-    assert result['metadata_state'] == 'failed'
+    assert result['metadata_state'] == 'ready'
+    assert result['episode_mapping_status'] == 'partial'
     assert requested == [1, 2]
     assert all(m['episode_id'].startswith('1-') for m in result['episode_mappings'])
 

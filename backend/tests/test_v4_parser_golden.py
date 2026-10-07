@@ -49,6 +49,8 @@ def test_parser_keeps_special_and_auxiliary_as_facts_without_destroying_episode_
 
     assert special.group_type == "special"
     assert special.special_candidate is True
+    assert special.content_class == "attached_special"
+    assert special.is_importable is False
     assert auxiliary.group_type in {"auxiliary", "ignored"}
     assert auxiliary.is_importable is False
 
@@ -136,6 +138,8 @@ def test_parser_preserves_full_compound_special_token():
     )
 
     assert facts.group_type == "special"
+    assert facts.content_class == "attached_special"
+    assert facts.is_importable is False
     assert facts.special_number is None
     assert facts.episode_token_raw == "SP01_13"
 

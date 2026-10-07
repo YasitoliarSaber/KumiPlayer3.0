@@ -144,12 +144,12 @@ def _assigned_evidence_ids(graph) -> set[str]:
 
 
 def _assert_specials_excluded(parsed, graph, *, marker: str = "") -> int:
-    """未被最新四类标记准入的特别篇仍排除，不混入正片。"""
+    """特别篇全部排除，不混入正片或生成媒体资产。"""
 
     matched = [
         (evidence, facts)
         for evidence, facts in parsed
-        if facts.group_type == "special" and facts.content_class != "playable_special"
+        if facts.group_type == "special"
         and marker in evidence.relative_path
     ]
     assert matched, f"样本中应存在可识别的特别篇（marker={marker!r}）"
@@ -215,11 +215,10 @@ def test_sample_corpus_keeps_main_series_spinoff_and_movie_identities_apart():
         assert movie.media_type == "movie"
         assert not [e for e in graph.episodes if e.work_key == movie.work_key]
     assert any(work.card_type == "standalone" and work.media_type == "movie" for work in graph.works)
-    # 有明确 OVA 标记的两条和一条小数集号准入；其余 82 条仍排除。
-    assert _assert_specials_excluded(parsed, graph) == 82
-    selected = {e.evidence_id for e, f in parsed if f.content_class == "playable_special"}
-    assert len(selected) == 3
-    assert selected <= _assigned_evidence_ids(graph)
+    # 原有 82 条和两条 OVA、一条小数集号共 85 条特别篇全部排除。
+    assert _assert_specials_excluded(parsed, graph) == 85
+    assert not any(f.content_class == "playable_special" for _e, f in parsed)
+    assert not any(episode.season_kind == "special" for episode in graph.episodes)
 
 
 # 已删除 test_sample_corpus_special_titles_stay_distinguishable_from_each_other：
@@ -233,11 +232,11 @@ def test_root_sample_excludes_production_extras_and_hyouka_ova_special():
     episodes = [episode for episode in graph.episodes if episode.work_key == hyouka.work_key]
 
     assert sum(episode.local_season_number == 1 for episode in episodes) == 22
-    # 11.5 是明确小数集，制作素材仍排除。
-    assert sum(episode.season_kind == "special" for episode in episodes) == 1
+    # 11.5 是明确小数集，与制作素材一起排除，22 集正片保持不变。
+    assert sum(episode.season_kind == "special" for episode in episodes) == 0
     selected = {e.evidence_id for e, f in parsed if "Hyouka [11.5]" in e.relative_path}
     assert len(selected) == 1
-    assert selected <= _assigned_evidence_ids(graph)
+    assert selected.isdisjoint(_assigned_evidence_ids(graph))
     assert not any(
         marker in episode.display_title.casefold()
         for episode in episodes
@@ -287,7 +286,7 @@ def test_root_sample_provider_identity_merge_has_no_phantom_200_episode_work():
 
     # 明确副标题季归回主作品后，刀剑神域四组正片合计 96 集；不能用旧的
     # 69 集上限逼迫正确的多季作品重新拆卡。逐季核对防止重复发布包叠加。
-    assert _work_season_counts(graph, "刀剑神域") == {0: 13, 1: 25, 2: 24, 3: 24, 4: 23}
+    assert _work_season_counts(graph, "刀剑神域") == {1: 25, 2: 24, 3: 24, 4: 23}
     assert episode_counts["刀剑神域"] == 96
     assert max(episode_counts.values()) == 96
     assert {title: count for title, count in episode_counts.items() if count > 100} == {}
@@ -308,7 +307,7 @@ def test_root_sample_kaguya_keeps_fourth_season_assets_without_special_episodes(
         season: sum(episode.local_season_number == season for episode in episodes)
         for season in (1, 2, 3, 4)
     } == {1: 12, 2: 12, 3: 13, 4: 2}
-    assert sum(episode.season_kind == "special" for episode in episodes) == 1
+    assert sum(episode.season_kind == "special" for episode in episodes) == 0
     season_four = [episode for episode in episodes if episode.local_season_number == 4]
     assert len(season_four) == 2
     # C-004：仅文件明确的 S04E01/E02 属于本地第四季；Provider 映射不能重写本地季号。
@@ -317,8 +316,7 @@ def test_root_sample_kaguya_keeps_fourth_season_assets_without_special_episodes(
     expected_four = {evidence.evidence_id for evidence, _facts in parsed
                      if "辉夜大小姐" in evidence.relative_path and ".S04E" in evidence.relative_path}
     assert {identity for episode in season_four for identity in episode.asset_evidence_ids} == expected_four
-    # C-002：单发 `[OVA]` 是发行形式而不是附属关系声明，不再反向排除；
-    # 它作为本地可播放内容入库，Provider 侧是否算特别篇由映射层决定。
+    # 用户当前规则：单发 OVA 也排除，不能以发行形式准入为特别篇卡片。
     ova_entries = [
         (evidence, facts)
         for evidence, facts in parsed
@@ -326,12 +324,16 @@ def test_root_sample_kaguya_keeps_fourth_season_assets_without_special_episodes(
     ]
     assert ova_entries, "样本中应存在该 OVA 条目"
     assert all(
-        facts.is_importable is True and facts.is_auxiliary is False
+        facts.is_importable is False and facts.is_auxiliary is True
+        and facts.content_class == "attached_special"
         for _evidence, facts in ova_entries
     )
-    # 小数特别篇准入，不改变第四季正片集号。
+    ova_ids = {evidence.evidence_id for evidence, _facts in ova_entries}
+    assert ova_ids.isdisjoint(_assigned_evidence_ids(plain_graph))
+    assert ova_ids.isdisjoint(_assigned_evidence_ids(graph))
+    # 小数特别篇排除，不改变第四季正片集号。
     selected = {e.evidence_id for e, f in parsed if "Hyouka [11.5]" in e.relative_path}
-    assert selected <= _assigned_evidence_ids(plain_graph)
+    assert selected.isdisjoint(_assigned_evidence_ids(plain_graph))
 
 
 def test_root_sample_lycoris_short_movies_do_not_create_extra_work_cards():

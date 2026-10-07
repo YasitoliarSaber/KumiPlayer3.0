@@ -87,6 +87,18 @@ test('按旧版沉浸式结构展示 V4 季度和剧集信息', async () => {
   expect(screen.getByText('启程')).toBeVisible();
 });
 
+test('夸克来源缺少 provider_id 时仍显示可读名称', async () => {
+  const quarkWork = {
+    ...work, source: 'quark', sources: ['quark'],
+    episodes: [{ ...work.episodes[0], source: 'quark' }],
+  };
+  useLibraryStore.setState({ works: [quarkWork as never], getWorkDetail: vi.fn().mockResolvedValue(quarkWork) });
+  render(<WorkDetailPage />);
+  await screen.findByText('启程');
+  expect(screen.queryByText('quark')).not.toBeInTheDocument();
+  expect(screen.getAllByText('夸克网盘').length).toBeGreaterThan(0);
+});
+
 test('季度缺少剧照时仍使用统一的横向剧集组件', async () => {
   const withoutThumbs = {
     ...work,

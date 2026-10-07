@@ -1,4 +1,4 @@
-"""明确小数集/第零集与季度内 OVA/OAD 的离线准入回归。"""
+"""小数集、零集与 OVA/OAD/SP 的排除回归，正片仍保持准入。"""
 from pathlib import PurePosixPath
 
 import pytest
@@ -21,9 +21,10 @@ def parse(path):
     "Show.S01E00.mkv", "Show - 00.mkv", "Show 第0集.mkv",
     "Show OVA01.mkv", "Show OAD02.mkv", "Show [14(OVA)].mkv", "Show OVA.mkv", "Show SP01.mkv", "Show [SP].mkv",
 ])
-def test_explicit_selected_special_is_playable_with_original_name(name):
+def test_explicit_special_is_excluded_with_original_name_retained_as_evidence(name):
     _, facts = parse(f"Show/Season 1/{name}")
-    assert facts.is_importable and not facts.is_auxiliary
+    assert not facts.is_importable and facts.is_auxiliary
+    assert facts.content_class == "attached_special"
     assert facts.group_type == "special"
     assert facts.episode_candidate is None
     assert facts.absolute_episode_candidate is None
@@ -49,7 +50,7 @@ def test_other_excluded_material_stays_excluded(path):
     assert not parse(path)[1].is_importable
 
 
-def test_selected_specials_confirm_materialize_and_return_original_titles(tmp_path, monkeypatch):
+def test_mixed_specials_confirm_materialize_only_regular_episodes(tmp_path, monkeypatch):
     from app.api import library_v4
     from app.media_v4.jobs.mirror import V4MirrorMaterializer
     from app.media_v4.persistence.database import V4Database
@@ -68,20 +69,18 @@ def test_selected_specials_confirm_materialize_and_return_original_titles(tmp_pa
     service = V4RevisionService(database)
     draft = service.create_draft("special-fixture", entries)
     assert len(draft.works) == 1
-    assert len(draft.episodes) == 13
-    specials = [e for e in draft.episodes if e.season_kind == "special"]
-    assert len(specials) == 11
-    assert len({e.special_number for e in specials}) == 11
-    assert all(e.provider_episode_number is None for e in specials)
+    assert len(draft.episodes) == 2
+    assert all(e.season_kind == "regular" for e in draft.episodes)
+    assert {eid for e in draft.episodes for eid in e.asset_evidence_ids} == set(paths[:2])
     service.confirm("special-fixture")
     with database.connect() as conn:
         work_id = conn.execute("SELECT work_id FROM works").fetchone()[0]
         job_id = conn.execute("SELECT job_id FROM jobs WHERE job_type='materialize_mirror'").fetchone()[0]
     result = V4MirrorMaterializer(database).process(job_id, tmp_path / "mirror")
     assert result.status == "succeeded"
-    assert len(list((tmp_path / "mirror").rglob("*.strm"))) == 13
+    assert len(list((tmp_path / "mirror").rglob("*.strm"))) == 2
     monkeypatch.setattr(library_v4, "get_database", lambda: database)
     detail = library_v4.get_work_detail(work_id)
-    special_rows = [e for e in detail["episodes"] if e["kind"] == "special"]
-    assert all(e["title"] for e in special_rows)
-    assert {e["original_filename"] for e in special_rows} == {PurePosixPath(p).name for p in paths[2:]}
+    assert len(detail["episodes"]) == 2
+    assert all(e["kind"] == "regular" for e in detail["episodes"])
+    assert {e["original_filename"] for e in detail["episodes"]} == {PurePosixPath(p).name for p in paths[:2]}

@@ -354,7 +354,7 @@ def _parse_sidecar_nfo(evidence: SourceEvidence) -> tuple[int | None, str, str, 
 class V4Parser:
     """从一个 SourceEvidence 生成一个不可变 ParsedFacts。"""
 
-    VERSION = "v4-parser-15"
+    VERSION = "v4-parser-16"
 
     @classmethod
     def _parsed_fact_id(cls, evidence: SourceEvidence) -> str:
@@ -441,8 +441,11 @@ class V4Parser:
             effective_root_container = ""
         if context.filename_identity:
             existing_title = context.filename_identity
+        from app.recognition.episode_title import normalize_integral_episode_number
+
+        numbering_filename = normalize_integral_episode_number(PurePosixPath(filename).stem) + PurePosixPath(filename).suffix
         guess = recognize_media(
-            filename,
+            numbering_filename,
             parse_relative,
             source=source,
             existing_work_title=existing_title,
@@ -583,9 +586,9 @@ class V4Parser:
                 series_group=resolved_series_group,
                 special_number=special_number,
             )
-        if classification.content_class == CONTENT_CLASS_PLAYABLE_SPECIAL:
+        if classification.content_class in {CONTENT_CLASS_PLAYABLE_SPECIAL, CONTENT_CLASS_ATTACHED_SPECIAL}:
             # 小数与零是发布内编号，不是 TMDB S00 集号；分配本地身份时保留原 token。
-            episode_token = fractional_episode_token(tokens) or episode_token or "0"
+            episode_token = fractional_episode_token(tokens) or episode_token or ("0" if numbering.episode == 0 else "")
             special_number = None
             numbering = replace(numbering, episode=None, absolute=None, episode_range=None, candidates=())
             episode_range = None
@@ -598,7 +601,7 @@ class V4Parser:
         # 只有编号的（`第002集.mp4`）显示「第 2 集」，避免整季都叫"未命名"。
         if not episode_title and cjk_episode is not None:
             episode_title = cjk_episode_title or f"第 {cjk_episode} 集"
-        if classification.content_class == CONTENT_CLASS_PLAYABLE_SPECIAL:
+        if classification.content_class in {CONTENT_CLASS_PLAYABLE_SPECIAL, CONTENT_CLASS_ATTACHED_SPECIAL}:
             episode_title = stem
         # 词法仲裁提供标题候选；成熟识别器保留多语展示名、正式括号与母系列边界。
         title_decision = arbitrate_title(

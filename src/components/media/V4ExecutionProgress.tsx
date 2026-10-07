@@ -105,7 +105,7 @@ function seasonFailureReason(result: SeasonResult): string {
     episode_not_found: '在线集数未匹配',
     invalid_response: '在线资料响应异常',
     source_unavailable: '在线资料服务暂不可用',
-    episode_mapping_incomplete: '在线集数未完全匹配',
+    episode_mapping_incomplete: '已有视频的集号尚待核对',
   }
   return labels[result.reason_code] ?? '在线资料需要处理'
 }
@@ -160,7 +160,7 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
   // 「部分剧集未匹配」不是“服务不可用”：说清楚真实原因，用户才不会去重试一个
   // 本来就不会变的网络问题（旧行为把这 20 部作品全写成“在线资料服务暂不可用”）。
   const metadataStateText = (state: string, reasonCode?: string) => {
-    if (reasonCode === 'episode_mapping_incomplete') return '在线集数未完全匹配'
+    if (reasonCode === 'episode_mapping_incomplete') return state === 'ready' ? '部分在线分集资料待补充' : '已有视频的集号尚待核对'
     if (reasonCode === 'special_episode_metadata_incomplete') return '部分特别篇缺少在线资料'
     if (reasonCode === 'artifact_incomplete') return '部分媒体图片未下载'
     return metadataStateLabels[state] ?? state
@@ -171,6 +171,7 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
   const detailSeasons = loadedDetail?.seasons ?? []
   const detailEpisodes = loadedDetail?.episodes ?? []
   const scrape = loadedDetail?.scrape
+  const optionalEpisodeGap = scrape?.metadata_state === 'ready' && scrape.metadata_reason_code === 'episode_mapping_incomplete'
   const optionalSpecialGap = scrape?.metadata_reason_code === 'special_episode_metadata_incomplete'
   const seasonFailures = Array.isArray(scrape?.season_results)
     ? scrape.season_results.filter((result) => Boolean(result.reason_code) && !(optionalSpecialGap))
@@ -278,7 +279,7 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
                   <span>{metadataStateText(detail.detail.work.metadata_state, detail.detail.work.metadata_reason_code)}</span>
                 </div>
                 {unit.overall_status !== 'needs_attention' && <>
-                {detail.detail.work.metadata_reason && <div className="media-v4-job-error" role="status">{detail.detail.work.metadata_reason}</div>}
+                {detail.detail.work.metadata_reason && <div className={detail.detail.work.metadata_state === 'ready' && detail.detail.work.metadata_reason_code === 'episode_mapping_incomplete' ? 'media-v4-work-progress-hint' : 'media-v4-job-error'} role="status">{detail.detail.work.metadata_reason}</div>}
                 {detail.detail.work.metadata_recovery_hint && <div className="media-v4-work-progress-hint">{detail.detail.work.metadata_recovery_hint}</div>}
                 {['retry_metadata', 'check_settings'].includes(detail.detail.work.metadata_recovery_action ?? '') && onRetryMetadata && (
                   <Button size="small" appearance="secondary" disabled={resolvingWorkId !== ''} onClick={() => onRetryMetadata(unit.work_id)}>
@@ -367,10 +368,10 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
                       </span>
                     ))}
                   </div>}
-                  {seasonFailures.length > 0 && <div className="media-v4-work-detail-season-failures" role="status">
+                  {seasonFailures.length > 0 && <div className={optionalEpisodeGap ? 'media-v4-work-progress-hint' : 'media-v4-work-detail-season-failures'} role="status">
                     {seasonFailures.map((result, index) => (
                       <span key={`${result.local_season_number ?? 'unknown'}:${result.reason_code}:${index}`}>
-                        {seasonFailureLabel(result)}：{seasonFailureReason(result)}
+                        {seasonFailureLabel(result)}：{optionalEpisodeGap && result.reason_code === 'episode_mapping_incomplete' ? '部分在线分集资料待补充' : seasonFailureReason(result)}
                       </span>
                     ))}
                   </div>}
