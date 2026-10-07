@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import VirtualizedPosterGrid from '../../src/components/library/VirtualizedPosterGrid';
 import { useUiStore } from '../../src/stores/ui';
 import { api } from '../../src/api/client';
-import { disableScrollDiagnostics, dumpScrollDiagnostics, enableScrollDiagnostics } from '../../src/utils/scrollDiagnostics';
+import { clearScrollDiagnostics, disableScrollDiagnostics, dumpScrollDiagnostics, enableScrollDiagnostics } from '../../src/utils/scrollDiagnostics';
 
 vi.mock('../../src/api/client', () => ({ API_BASE: '', api: { post: vi.fn() } }));
 
@@ -193,4 +193,63 @@ test('虚拟窗口变化写入低频诊断，可用真实 DOM 数量证明虚拟
   expect(latest.renderedCards).toBeLessThan(200);
   expect(latest.renderedRows).toBe(latest.lastRow! - latest.firstRow! + 1);
   expect(document.querySelectorAll('.poster-card')).toHaveLength(latest.renderedCards!);
+});
+
+test('开启或清空采样立即补记当前 DOM 窗口，不需要先滚动', () => {
+  render(<main className="app-main"><VirtualizedPosterGrid works={works(200)} columns={COLUMNS} /></main>);
+  enableScrollDiagnostics({ persist: false });
+  expect(dumpScrollDiagnostics().counts['virtual-window']).toBe(1);
+  clearScrollDiagnostics();
+  expect(dumpScrollDiagnostics().counts['virtual-window']).toBe(1);
+});
+
+test('聚焦卡片后滚动仍保留焦点，只额外固定一行且离开焦点后释放', () => {
+  render(<><button>外部按钮</button><main className="app-main"><VirtualizedPosterGrid works={works(200)} columns={COLUMNS} /></main></>);
+  const first = document.querySelector<HTMLButtonElement>('.poster-card')!;
+  act(() => first.focus());
+  scrollMainTo(30 * expectedRowHeight(COLUMNS));
+  expect(first.isConnected).toBe(true);
+  expect(document.activeElement).toBe(first);
+  expect(renderedRows()[0].index).toBe(0);
+  expect(renderedRows().length).toBeLessThanOrEqual(Math.ceil(VIEWPORT_HEIGHT / expectedRowHeight(COLUMNS)) + 2 * OVERSCAN_ROWS + 2);
+  act(() => document.querySelector<HTMLButtonElement>('button')!.focus());
+  expect(first.isConnected).toBe(false);
+});
+
+test('聚焦作品在列数变化后仍按同一作品恢复，Tab 可以跨越虚拟窗口间隙', () => {
+  const list = works(200);
+  const { rerender } = render(<main className="app-main"><VirtualizedPosterGrid works={list} columns={COLUMNS} /></main>);
+  act(() => document.querySelectorAll<HTMLButtonElement>('.poster-card')[3].focus());
+  rerender(<main className="app-main"><VirtualizedPosterGrid works={list} columns={2} /></main>);
+  expect(document.activeElement?.querySelector('.poster-card-title')?.textContent).toBe('作品3');
+  scrollMainTo(30 * expectedRowHeight(2));
+  act(() => fireEvent.keyDown(document.activeElement!, { key: 'Tab' }));
+  expect(document.activeElement?.querySelector('.poster-card-title')?.textContent).toBe('作品4');
+});
+
+test('列表前有标题偏移时，总高度与行位置仍正确，深处窗口不提前错位', () => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const top = this.classList.contains('virtual-poster-grid')
+      ? 220 - (this.closest('.app-main')?.scrollTop ?? 0) : 40;
+    return { width: VIEWPORT_WIDTH, top } as DOMRect;
+  });
+  render(<main className="app-main"><div style={{ height: 180 }}>分类标题与工具</div><VirtualizedPosterGrid works={works(200)} columns={COLUMNS} /></main>);
+  const rowHeight = expectedRowHeight(COLUMNS);
+  scrollMainTo(180 + 20 * rowHeight);
+  expect(renderedRows()[0].index).toBe(20 - OVERSCAN_ROWS);
+  expect(renderedRows()[0].top).toBeCloseTo((20 - OVERSCAN_ROWS) * rowHeight, 5);
+  expect(spacerHeight()).toBeCloseTo(50 * rowHeight - GRID_GAP, 5);
+});
+
+test('窗口宽度变化但列数不变时，也更新行位置和列表总高度', async () => {
+  render(<main className="app-main"><VirtualizedPosterGrid works={works(200)} columns={COLUMNS} /></main>);
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 800 });
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 800 });
+  fireEvent.resize(window);
+  await act(async () => { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); });
+  const height = (800 - GRID_GAP * 3) / 4 * 1.5 + META_HEIGHT + GRID_GAP;
+  expect(renderedRows()[0].height).toBeCloseTo(height, 5);
+  expect(spacerHeight()).toBeCloseTo(50 * height - GRID_GAP, 5);
+  scrollMainTo(20 * height);
+  expect(renderedRows()[0].top).toBeCloseTo((20 - OVERSCAN_ROWS) * height, 5);
 });

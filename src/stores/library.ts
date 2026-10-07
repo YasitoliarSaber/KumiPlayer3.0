@@ -8,6 +8,7 @@ import { mainEpisodeCount } from '../utils/workStats'
 import { isWorkInLibraryView } from '../utils/libraryCategories'
 import { buildAssetUrl } from '../api/assets'
 import { recordScrollDiagnostic } from '../utils/scrollDiagnostics'
+import { isScrollRecentlyActive } from '../utils/scrollGesture'
 
 const LIBRARY_CACHE_KEY = 'kumiplayer-library-cache-v4'
 const LIBRARY_CACHE_MAX_AGE = 1000 * 60 * 60 * 24 * 7
@@ -100,8 +101,12 @@ function decodeDetailArtwork(work: WorkIndex): Promise<void> {
 
   const image = new Image()
   image.decoding = 'async'
+  const startedAt = performance.now()
+  recordScrollDiagnostic('detail-artwork-start')
   image.src = url
-  const request = image.decode().catch(() => undefined)
+  const request = image.decode().catch(() => undefined).then(() => {
+    recordScrollDiagnostic('detail-artwork-done', { ms: Math.round(performance.now() - startedAt) })
+  })
   detailArtworkRequests.set(url, request)
   return request
 }
@@ -229,7 +234,6 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       })
       saveLibraryCache(works)
       recordScrollDiagnostic('works-applied', { works: works.length })
-      recordScrollDiagnostic('library-cache-write', { works: works.length })
     })
     const historyRequest = playbackApi.getHistory(20).then((historyRes) => {
       if (requestId !== libraryLoadRequest) return
@@ -315,7 +319,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   getWorkDetail: async (workId: string) => {
     const cached = detailCache.get(workId)
     if (cached) {
-      void decodeDetailArtwork(cached)
+      if (!isScrollRecentlyActive()) void decodeDetailArtwork(cached)
       return cached
     }
 
@@ -329,7 +333,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       const work = await request
       detailRequests.delete(workId)
       detailCache.set(workId, work)
-      void decodeDetailArtwork(work)
+      // 悬停请求可能在开始滚动后才返回；此时保留详情数据，跳过非必要的大背景解码。
+      // 点击导航仍由 waitForDetailArtwork 显式加载，不受这项预热退避影响。
+      if (!isScrollRecentlyActive()) void decodeDetailArtwork(work)
       return work
     } catch (e) {
       detailRequests.delete(workId)
@@ -386,34 +392,52 @@ function saveLibraryCache(works: WorkIndex[]) {
   const generation = ++libraryCacheGeneration
   if (typeof localStorage === 'undefined') return
   if (works.length === 0) {
-    localStorage.removeItem(LIBRARY_CACHE_KEY)
+    try { localStorage.removeItem(LIBRARY_CACHE_KEY) } catch { /* 缓存失败不影响媒体事实。 */ }
     return
   }
   if (works.length > LIBRARY_CACHE_MAX_WORKS) {
-    localStorage.removeItem(LIBRARY_CACHE_KEY)
+    try { localStorage.removeItem(LIBRARY_CACHE_KEY) } catch { /* 缓存失败不影响媒体事实。 */ }
     return
   }
-  try {
-    const payload: LibraryCachePayload = { savedAt: Date.now(), works }
-    const serialized = JSON.stringify(payload)
-    if (serialized.length > LIBRARY_CACHE_MAX_BYTES) {
-      localStorage.removeItem(LIBRARY_CACHE_KEY)
+  const write = () => {
+    if (generation !== libraryCacheGeneration) return
+    // idle timeout 不代表用户已经停止操作；缓存是可选加速，不应抢占正在滚动的主线程。
+    if (isScrollRecentlyActive()) {
+      globalThis.setTimeout(schedule, 200)
       return
     }
+    try {
+      const startedAt = performance.now()
+      const payload: LibraryCachePayload = { savedAt: Date.now(), works }
+      const serialized = JSON.stringify(payload)
+      recordScrollDiagnostic('library-cache-stringify', {
+        works: works.length, ms: Math.round(performance.now() - startedAt), chars: serialized.length,
+      })
+      if (serialized.length > LIBRARY_CACHE_MAX_BYTES) {
+        localStorage.removeItem(LIBRARY_CACHE_KEY)
+        recordScrollDiagnostic('library-cache-skipped', { works: works.length })
+        return
+      }
+      const writeStartedAt = performance.now()
+      localStorage.setItem(LIBRARY_CACHE_KEY, serialized)
+      recordScrollDiagnostic('library-cache-write', {
+        works: works.length, ms: Math.round(performance.now() - writeStartedAt),
+      })
+    } catch {
+      // 回调发生在原请求之后，必须在回调内捕获存储配额/权限异常。
+      recordScrollDiagnostic('library-cache-error')
+    }
+  }
+  const schedule = () => {
+    if (generation !== libraryCacheGeneration) return
     const idleWindow = window as Window & typeof globalThis & {
       requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
-    }
-    const write = () => {
-      if (generation === libraryCacheGeneration) {
-        localStorage.setItem(LIBRARY_CACHE_KEY, serialized)
-      }
     }
     if (idleWindow.requestIdleCallback) {
       idleWindow.requestIdleCallback(write, { timeout: 1000 })
     } else {
       globalThis.setTimeout(write, 0)
     }
-  } catch {
-    // ignore
   }
+  schedule()
 }

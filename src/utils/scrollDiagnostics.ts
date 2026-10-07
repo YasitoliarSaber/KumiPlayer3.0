@@ -10,7 +10,7 @@
  *   真实媒体路径或响应正文。
  * - 采样器自身开销需要测量，因此 dump 同时给出记录调用次数与缓冲占用。
  *
- * 开启方式（二选一，之后刷新页面）：
+ * 开启方式（二选一）：
  * - 控制台执行 `__kumiScrollDiagnostics.enable()`，或
  * - `localStorage.setItem('kumi:scroll-diagnostics', '1')` 后刷新。
  * 摘取结果：`__kumiScrollDiagnostics.dump()`。
@@ -56,6 +56,21 @@ let frameHandle = 0;
 let lastFrameAt = 0;
 let longTaskObserver: PerformanceObserver | null = null;
 let listenersAttached = false;
+const sessionListeners = new Set<() => void>();
+
+/** 开关与清空通知不经过 React；订阅者可立即挂载输入监听、补记当前窗口。 */
+export function subscribeScrollDiagnostics(listener: () => void): () => void {
+  sessionListeners.add(listener);
+  return () => { sessionListeners.delete(listener); };
+}
+
+function notifySessionListeners(): void {
+  for (const listener of sessionListeners) listener();
+}
+
+function resetFrameBaseline(): void {
+  lastFrameAt = timeOrigin();
+}
 
 function snapshotEvents(): ScrollDiagnosticEvent[] {
   if (buffered === 0) return [];
@@ -126,6 +141,9 @@ export function clearScrollDiagnostics(): void {
   overwritten = 0;
   recordCalls = 0;
   startedAt = timeOrigin();
+  resetFrameBaseline();
+  longTaskObserver?.takeRecords();
+  notifySessionListeners();
 }
 
 function attachListeners(): void {
@@ -136,7 +154,12 @@ function attachListeners(): void {
     try {
       longTaskObserver = new observerCtor((list) => {
         for (const entry of list.getEntries()) {
-          recordScrollDiagnostic('long-task', { ms: Math.round(entry.duration) });
+          // 不将上一次录制的延迟回调或后台任务混入当前前台时间线。
+          if (entry.startTime < startedAt || (hasWindow() && document.visibilityState !== 'visible')) continue;
+          recordScrollDiagnostic('long-task', {
+            ms: Math.round(entry.duration),
+            startMs: Math.round(entry.startTime - startedAt),
+          });
         }
       });
       longTaskObserver.observe({ entryTypes: ['longtask'] });
@@ -146,12 +169,13 @@ function attachListeners(): void {
   }
   if (!hasWindow() || typeof window.requestAnimationFrame !== 'function') return;
   lastFrameAt = timeOrigin();
+  document.addEventListener('visibilitychange', resetFrameBaseline);
   const frame = () => {
     if (!enabled) return;
     const now = timeOrigin();
     const delta = now - lastFrameAt;
     lastFrameAt = now;
-    if (delta >= FRAME_GAP_MS) {
+    if (document.visibilityState === 'visible' && delta >= FRAME_GAP_MS) {
       recordScrollDiagnostic('frame-gap', { ms: Math.round(delta) });
     }
     frameHandle = window.requestAnimationFrame(frame);
@@ -162,6 +186,7 @@ function attachListeners(): void {
 function detachListeners(): void {
   if (frameHandle && hasWindow()) window.cancelAnimationFrame(frameHandle);
   frameHandle = 0;
+  if (hasWindow()) document.removeEventListener('visibilitychange', resetFrameBaseline);
   longTaskObserver?.disconnect();
   longTaskObserver = null;
   listenersAttached = false;
@@ -180,6 +205,7 @@ export function disableScrollDiagnostics(options?: { persist?: boolean }): void 
   if (options?.persist !== false) writeStoredFlag(false);
   enabled = false;
   detachListeners();
+  notifySessionListeners();
 }
 
 export function dumpScrollDiagnostics(options?: { includeEvents?: boolean }): ScrollDiagnosticsDump {

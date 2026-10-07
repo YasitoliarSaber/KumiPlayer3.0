@@ -1,4 +1,6 @@
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { fireEvent } from '@testing-library/react';
+import { isScrollRecentlyActive, resetScrollGestureForTests } from '../../src/utils/scrollGesture';
 import type { WorkIndex } from '../../src/api/types';
 
 const { getLibrary, getWorkDetail, getHistory } = vi.hoisted(() => ({
@@ -52,6 +54,7 @@ function work(workId: string): WorkIndex {
 }
 
 beforeEach(() => {
+  resetScrollGestureForTests();
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     writable: true,
@@ -80,6 +83,65 @@ beforeEach(() => {
     detailLoading: false,
     detailError: null,
   });
+});
+afterEach(() => resetScrollGestureForTests());
+
+test('详情请求在滚动期间返回时，不再启动大背景解码；点击打开仍加载背景', async () => {
+  const decode = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode });
+  const response = deferred<WorkIndex>();
+  getWorkDetail.mockImplementationOnce(() => response.promise);
+  const pending = useLibraryStore.getState().getWorkDetail('delayed');
+  isScrollRecentlyActive();
+  fireEvent.scroll(window);
+  response.resolve({ ...work('delayed'), fanart_path: 'fixture-background.jpg' });
+  await pending;
+  expect(decode).not.toHaveBeenCalled();
+  await useLibraryStore.getState().openWorkDetail('delayed');
+  expect(decode).toHaveBeenCalledTimes(1);
+});
+
+test('媒体库缓存的序列化在空闲回调里进行，不占用响应应用的同步路径', async () => {
+  let idle!: IdleRequestCallback;
+  Object.defineProperty(window, 'requestIdleCallback', { configurable: true, value: (callback: IdleRequestCallback) => { idle = callback; return 1; } });
+  const toJSON = vi.fn(() => ({ ...work('cached') }));
+  getLibrary.mockResolvedValue({ works: [{ ...work('cached'), toJSON }] });
+  getHistory.mockResolvedValue({ items: [] });
+  await useLibraryStore.getState().loadLibrary();
+  expect(toJSON).not.toHaveBeenCalled();
+  idle({ didTimeout: false, timeRemaining: () => 50 });
+  expect(toJSON).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(localStorage.getItem('kumiplayer-library-cache-v4')!).works[0].work_id).toBe('cached');
+});
+
+test('空闲缓存写入触发存储配额异常时，不产生异步未捕获异常', async () => {
+  let idle!: IdleRequestCallback;
+  Object.defineProperty(window, 'requestIdleCallback', { configurable: true, value: (callback: IdleRequestCallback) => { idle = callback; return 1; } });
+  getLibrary.mockResolvedValue({ works: [work('cached')] });
+  getHistory.mockResolvedValue({ items: [] });
+  await useLibraryStore.getState().loadLibrary();
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => { throw new DOMException('quota', 'QuotaExceededError'); });
+  expect(() => idle({ didTimeout: true, timeRemaining: () => 0 })).not.toThrow();
+  expect(useLibraryStore.getState().loaded).toBe(true);
+});
+
+test('idle 超时期间仍在滚动时推迟缓存，停止后才序列化最新内容', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    const callbacks: IdleRequestCallback[] = [];
+    Object.defineProperty(window, 'requestIdleCallback', { configurable: true, value: (callback: IdleRequestCallback) => { callbacks.push(callback); return callbacks.length; } });
+    const toJSON = vi.fn(() => ({ ...work('quiet-cache') }));
+    getLibrary.mockResolvedValue({ works: [{ ...work('quiet-cache'), toJSON }] });
+    getHistory.mockResolvedValue({ items: [] });
+    await useLibraryStore.getState().loadLibrary();
+    isScrollRecentlyActive();
+    fireEvent.scroll(window);
+    callbacks[0]({ didTimeout: true, timeRemaining: () => 0 });
+    expect(toJSON).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(300);
+    callbacks[1]({ didTimeout: false, timeRemaining: () => 50 });
+    expect(toJSON).toHaveBeenCalledTimes(1);
+  } finally { vi.useRealTimers(); }
 });
 
 test('删除后的强制刷新不会被进行中的加载拦截，旧响应也不能恢复已删除卡片', async () => {

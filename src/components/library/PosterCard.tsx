@@ -98,6 +98,7 @@ function PosterCard({
 
   return (
     <button
+      data-work-id={work.work_id}
       onClick={handleClick}
       onPointerEnter={schedulePrewarm}
       onPointerLeave={cancelPrewarm}

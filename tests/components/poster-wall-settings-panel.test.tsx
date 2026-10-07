@@ -164,3 +164,15 @@ test('未应用就离开不会持久化布局', () => {
   expect(onSave).not.toHaveBeenCalled();
   expect(ui.setPosterWallLayout).not.toHaveBeenCalled();
 });
+
+test('服务端布局变化时仍显示旧列数草稿，还原后采用新的已保存值', () => {
+  const onSave = vi.fn();
+  const { rerender } = render(<PosterWallSettingsPanel config={base} onSave={onSave} />);
+  fireEvent.change(screen.getByRole('combobox', { name: '封面比例' }), { target: { value: 'fanart' } });
+  rerender(<PosterWallSettingsPanel config={{ poster_size: 6, series_card_image_mode: 'poster' }} onSave={onSave} />);
+  expect(screen.getByRole('combobox', { name: '封面大小' })).toHaveValue('5');
+  expect(screen.getByRole('combobox', { name: '封面比例' })).toHaveValue('fanart');
+  expect(onSave).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '还原选择' }));
+  expect(screen.getByRole('combobox', { name: '封面大小' })).toHaveValue('6');
+});

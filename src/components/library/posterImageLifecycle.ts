@@ -18,9 +18,15 @@ export class PosterImageLifecycle {
   private timer = 0;
   private request: AbortController | null = null;
   private disposed = false;
+  private root: HTMLElement | null = null;
+  private margin = -1;
 
   configure(root: HTMLElement | null, height: number) {
+    const margin = Math.round(height * 1.25);
+    if (!this.disposed && this.observer && this.root === root && this.margin === margin) return;
     this.disposed = false;
+    this.root = root;
+    this.margin = margin;
     this.observer?.disconnect();
     if (typeof IntersectionObserver === 'undefined') return;
     this.observer = new IntersectionObserver((changes) => {
@@ -31,12 +37,11 @@ export class PosterImageLifecycle {
         entry.active = change.isIntersecting;
         if (entry.active) this.activate(image, entry);
         else {
-          image.removeAttribute('src');
+          this.clearSource(image);
           image.dataset.state = 'idle';
-          recordScrollDiagnostic('image-src-cleared', {});
         }
       }
-    }, { root, rootMargin: `${Math.round(height * 1.25)}px 0px` });
+    }, { root, rootMargin: `${margin}px 0px` });
     for (const image of this.entries.keys()) this.observer.observe(image);
   }
 
@@ -53,21 +58,32 @@ export class PosterImageLifecycle {
     return () => {
       this.observer?.unobserve(image);
       this.entries.delete(image);
-      image.removeAttribute('src');
+      this.clearSource(image);
     };
   }
 
   private activate(image: HTMLImageElement, entry: ImageEntry) {
     if (image.hasAttribute('src')) return;
     image.dataset.state = 'loading';
-    recordScrollDiagnostic('image-src-set', {});
-    if (!entry.local || entry.ready) image.src = entry.url;
+    if (!entry.local || entry.ready) this.setSource(image, entry.url);
     else {
       // 新进入视野的冷图立即查询，不能等待旧轮询的静默间隔。
       window.clearTimeout(this.timer);
       this.timer = 0;
       this.schedule(0);
     }
+  }
+
+  private setSource(image: HTMLImageElement, url: string) {
+    if (image.getAttribute('src') === url) return;
+    image.src = url;
+    recordScrollDiagnostic('image-src-set');
+  }
+
+  private clearSource(image: HTMLImageElement) {
+    if (!image.hasAttribute('src')) return;
+    image.removeAttribute('src');
+    recordScrollDiagnostic('image-src-cleared');
   }
 
   private schedule(delay: number) {
@@ -98,7 +114,7 @@ export class PosterImageLifecycle {
           if (this.entries.get(image) !== entry) return;
           if (response.states[index] === 'ready') entry.ready = true;
           if (!entry.active) return;
-          if (entry.ready) image.src = entry.url;
+          if (entry.ready) this.setSource(image, entry.url);
           else if (response.states[index] === 'retry') image.dataset.state = 'retry';
           else if (response.states[index] === 'unavailable') image.dataset.state = 'error';
         });

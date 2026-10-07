@@ -81,10 +81,14 @@ export default function PosterWallSettingsPanel({ config, externalBusy = false, 
     const options = [...SIZE_PRESETS];
     if (!options.some((preset) => preset.value === effective.columns)) {
       options.push({ value: effective.columns, label: `当前设置（目标 ${effective.columns} 列）` });
-      options.sort((left, right) => left.value - right.value);
     }
+    // 外部刷新不能让仍保留的旧 5/7 列草稿失去 option，从而被原生 select 显示成首项。
+    if (!options.some((preset) => preset.value === draft.columns)) {
+      options.push({ value: draft.columns, label: `未应用选择（目标 ${draft.columns} 列）` });
+    }
+    options.sort((left, right) => left.value - right.value);
     return options;
-  }, [effective.columns]);
+  }, [draft.columns, effective.columns]);
 
   const changeDraft = (patch: Partial<PosterWallLayoutDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));

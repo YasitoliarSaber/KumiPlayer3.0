@@ -37,8 +37,13 @@ export default function App() {
   const setPosterSize = useUiStore((state) => state.setPosterSize);
   const goManageView = useUiStore((state) => state.goManageView);
   const loadLibrary = useLibraryStore((state) => state.loadLibrary);
-  const { restoreSession, verifySession } = useBangumiStore();
-  const { startHeartbeat, stopHeartbeat, startHealthPolling, stopHealthPolling } = useConnectionStore();
+  const restoreSession = useBangumiStore((state) => state.restoreSession);
+  const verifySession = useBangumiStore((state) => state.verifySession);
+  // App 只需要稳定动作；健康/账户状态由各自组件订阅，避免后台轮询重渲染整页。
+  const startHeartbeat = useConnectionStore((state) => state.startHeartbeat);
+  const stopHeartbeat = useConnectionStore((state) => state.stopHeartbeat);
+  const startHealthPolling = useConnectionStore((state) => state.startHealthPolling);
+  const stopHealthPolling = useConnectionStore((state) => state.stopHealthPolling);
   const queueDroppedTreePath = useMediaWorkflowStore((state) => state.queueDroppedTreePath);
   const fluentTheme = useMemo(() => getKumiFluentTheme(appearanceMode), [appearanceMode]);
   const [appConfig, setAppConfig] = useState<PublicConfig | null>(null);

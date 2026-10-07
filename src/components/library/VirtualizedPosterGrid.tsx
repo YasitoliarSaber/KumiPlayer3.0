@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
 import PosterCard from './PosterCard';
 import { useUiStore } from '../../stores/ui';
 import { calculatePosterGridMetrics } from './posterGridMetrics';
 import { PosterImageContext, PosterImageLifecycle } from './posterImageLifecycle';
-import { recordScrollDiagnostic } from '../../utils/scrollDiagnostics';
+import { recordScrollDiagnostic, subscribeScrollDiagnostics } from '../../utils/scrollDiagnostics';
 
 interface VirtualizedPosterGridProps {
   works: any[];
@@ -45,6 +45,20 @@ export default function VirtualizedPosterGrid({
   const [gridGap, setGridGap] = useState(0);
   // 作品墙顶部在滚动容器内容坐标中的位置（标题、数量、排序工具之后）。
   const [gridOffset, setGridOffset] = useState(0);
+  const [focusedWorkId, setFocusedWorkId] = useState<string | null>(null);
+  const pendingFocusRef = useRef<string | null>(null);
+  const workIndices = useMemo(() => new Map(works.map((work, index) => [String(work.work_id), index])), [works]);
+  const focusedIndex = focusedWorkId === null ? undefined : workIndices.get(focusedWorkId);
+  const focusedRow = focusedIndex === undefined ? -1 : Math.floor(focusedIndex / effectiveColumns);
+  const rangeExtractor = useCallback((range: Range) => {
+    const rows = defaultRangeExtractor(range);
+    // 焦点不能随虚拟窗口卸载；最多额外固定一行，离开作品墙后立即释放。
+    if (focusedRow >= 0 && focusedRow < range.count && !rows.includes(focusedRow)) {
+      rows.push(focusedRow);
+      rows.sort((left, right) => left - right);
+    }
+    return rows;
+  }, [focusedRow]);
 
   useLayoutEffect(() => {
     let measureFrame = 0;
@@ -127,6 +141,7 @@ export default function VirtualizedPosterGrid({
     getScrollElement: () => scrollElementRef.current,
     estimateSize: () => rowHeight,
     overscan: OVERSCAN_ROWS,
+    rangeExtractor,
     scrollMargin: gridOffset,
     // 挂载时滚动容器可能已经在别处（返回分类页恢复位置），必须按真实 scrollTop 起步。
     initialOffset: () => scrollElementRef.current?.scrollTop ?? 0,
@@ -144,6 +159,22 @@ export default function VirtualizedPosterGrid({
 
   const virtualRows = rowCount > 0 ? rowVirtualizer.getVirtualItems() : [];
 
+  useLayoutEffect(() => {
+    if (focusedWorkId === null || focusedIndex === undefined) return;
+    const element = wrapRef.current;
+    if (!element) return;
+    const card = [...element.querySelectorAll<HTMLButtonElement>('.poster-card')]
+      .find((node) => node.dataset.workId === focusedWorkId);
+    // 重排列数/排序会跨行重挂载节点，但应恢复同一作品，而不是把焦点退回 body。
+    if (card && (pendingFocusRef.current !== null || document.activeElement === document.body)) {
+      card.focus({ preventScroll: true });
+      if (pendingFocusRef.current !== null) {
+        pendingFocusRef.current = null;
+        rowVirtualizer.scrollToIndex(Math.floor(focusedIndex / effectiveColumns), { align: 'auto' });
+      }
+    }
+  }, [effectiveColumns, focusedIndex, focusedWorkId, rowVirtualizer, works]);
+
   // 总高度与旧的自然流栅格一致：行距已含一个 gap，末尾不再重复。
   const totalHeight = rowCount > 0 ? Math.max(0, rowVirtualizer.getTotalSize() - gridGap) : 0;
 
@@ -156,20 +187,20 @@ export default function VirtualizedPosterGrid({
   for (const row of virtualRows) {
     renderedCards += Math.max(0, Math.min(effectiveColumns, works.length - row.index * effectiveColumns));
   }
-  const virtualWindowRef = useRef('');
   // 仅当可视窗口真正变化时记录一条低频诊断（不逐帧、不写 React 状态）。
   useEffect(() => {
-    const signature = `${firstRow}:${lastRow}:${rowCount}:${effectiveColumns}`;
-    if (virtualWindowRef.current === signature) return;
-    virtualWindowRef.current = signature;
-    recordScrollDiagnostic('virtual-window', {
-      firstRow,
-      lastRow,
-      renderedRows: virtualRows.length,
-      renderedCards,
-      totalRows: rowCount,
-      totalWorks: works.length,
-    });
+    const recordWindow = () => {
+      recordScrollDiagnostic('virtual-window', {
+        firstRow,
+        lastRow,
+        renderedRows: virtualRows.length,
+        renderedCards,
+        totalRows: rowCount,
+        totalWorks: works.length,
+      });
+    };
+    recordWindow();
+    return subscribeScrollDiagnostics(recordWindow);
   }, [effectiveColumns, firstRow, lastRow, renderedCards, rowCount, virtualRows.length, works.length]);
 
   return (
@@ -177,6 +208,21 @@ export default function VirtualizedPosterGrid({
     <div
       ref={wrapRef}
       className="virtual-poster-grid"
+      onFocusCapture={(event) => {
+        const card = (event.target as HTMLElement).closest<HTMLElement>('.poster-card');
+        if (card?.dataset.workId) setFocusedWorkId(card.dataset.workId);
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusedWorkId(null);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey || focusedIndex === undefined) return;
+        const next = focusedIndex + (event.shiftKey ? -1 : 1);
+        if (next < 0 || next >= works.length) return; // 边界保留浏览器正常的出入焦点顺序。
+        event.preventDefault();
+        pendingFocusRef.current = String(works[next].work_id);
+        setFocusedWorkId(pendingFocusRef.current);
+      }}
       style={{
         ['--category-columns' as string]: effectiveColumns,
       }}
