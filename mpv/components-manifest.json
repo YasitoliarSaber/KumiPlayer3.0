@@ -142,8 +142,9 @@
       "notices": [
         "mpv/licenses/uosc_danmaku/LICENSE"
       ],
-      "distribution_notes": "api_server 改用官方代理 danmaku-api.152468.xyz（弹弹play 直连 403）；fallback_server 改用 dmku.hls.one（danmu.icu 域名已失守）；fetch_danmaku 无参数优先、format=json 回退（官方代理不接受 format=json）",
+      "distribution_notes": "基于主分支 VERSION=2.2.0 的固定副本（非 v2.2.0 稳定发行版）；api_server 改用官方代理 danmaku-api.152468.xyz（弹弹play 直连 403）；fallback_server 改用 dmku.hls.one（danmu.icu 域名已失守）；fetch_danmaku 无参数优先、format=json 回退（官方代理不接受 format=json）；2026-10-08 同步上游 main.lua 的切集修复：不再以 container-fps 判定是否自动加载弹幕",
       "configuration_sha256": {
+        "main.lua": "F14D2BC2DF857B965F8013BF48BAF92CD26E77FF554FC9C56F68FB244B1E8C78",
         "modules/options.lua": "B6A7EE58E32BF37AC3038537AAFF8A444216730D6B772C69E1FF7764AC38A3E0",
         "apis/dandanplay.lua": "1E5CE7A1A57D5F7A4709E47F5871B08B9CE5F67ACAC521A88CE3404EA8E02EA3"
       }

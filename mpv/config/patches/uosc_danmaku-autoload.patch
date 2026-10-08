@@ -1,0 +1,14 @@
+diff --git a/mpv/config/portable_config/scripts/uosc_danmaku/main.lua b/mpv/config/portable_config/scripts/uosc_danmaku/main.lua
+--- a/mpv/config/portable_config/scripts/uosc_danmaku/main.lua
++++ b/mpv/config/portable_config/scripts/uosc_danmaku/main.lua
+@@ -680,8 +680,8 @@ mp.register_event("file-loaded", function()
+     local dir = get_parent_directory(path)
+     local filename = mp.get_property('filename/no-ext')
+     local video = mp.get_property_native("current-tracks/video")
+-    local fps = mp.get_property_number("container-fps", 0)
+     local duration = mp.get_property_number("duration", 0)
+-    if not video or video["image"] or video["albumart"] or fps < 23 or duration < 60 then
++    -- 同步上游切集修复：容器帧率可能缺失或尚未就绪，不能据此跳过弹幕下载。
++    if not video or video["image"] or video["albumart"] or duration < 60 then
+         return
+     end

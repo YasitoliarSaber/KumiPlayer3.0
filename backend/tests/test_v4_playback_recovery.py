@@ -87,7 +87,7 @@ def test_scraped_episode_title_overrides_local_filename_title(tmp_path):
     )
 
     assert V4PlaybackManager._display_title(asset) == (
-        f"摇曳露营△ - S01E{int(asset['local_episode_number']):02d} 野外烹饪与湖畔的夜晚"
+        f"摇曳露营△ - S01E{int(asset['local_episode_number']):02d} - 野外烹饪与湖畔的夜晚"
     )
 
 

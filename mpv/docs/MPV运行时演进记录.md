@@ -358,3 +358,12 @@
 - **依据**：mpv v0.41.0 源码 `misc/language.c`（`mp_guess_lang_from_filename` 主标签限 2–3 字母、`mp_match_lang` 的 `INT_MAX-idx` 打分与 ISO639-2 归一化 `zh/zho → chi`）、`player/external_files.c`（外挂字幕 prio 与 exact/fuzzy/all 的挂载范围）、`player/loadfile.c`（`subs_matching_audio` / `subs_fallback` 的选轨判据）；`--sub-auto` / `--sub-file-paths` / `--slang` / `--subs-fallback` / `--subs-with-matching-audio` 官方手册。
 - **验证**：内置 mpv v0.41.0 真实探针——生产配置层（`--config-dir=portable_config` + `--include=kumiplayer/mpv.conf`）读回五项生效值；临时可替换层写入相反取值（`slang=ja,jpn`、`sub-auto=no`、`subs-fallback=no`）仍被自有层覆盖；8 组简繁对照全部选中简体；4 个子目录字幕全部加载。新增 `backend/tests/test_mpv_subtitle_policy.py`（5 项，含静态顺序契约与真实 MPV 覆盖验证），`backend/tests -k mpv` 全绿。**未做**真机播放肉眼确认，也未在用户实际媒体库上复现原始故障。
 - **未覆盖（已知限制）**：纯中文或下划线语言标记（`.简体.ass`、`.zh_cn.ass`）无法被 mpv 识别为语言码（主标签限 2–3 字母），若同目录简体用中文词命名而繁体用标准码，仍可能选中繁体（实测 `.简体+.tc`、`.zh_cn+.tc` 仍选 tc）；与视频名完全不同名的字幕（不含视频名）在 `sub-auto=fuzzy` 下不会被自动挂载。两者都需要重命名文件或后续自有 Lua 脚本兜底。
+
+
+## 2026-10-08（r26）：修复自动下一集弹幕被帧率条件跳过
+
+同步 uosc_danmaku 上游 main.lua 的修复：file-loaded 不再以 container-fps 判定是否加载弹幕。MPV 官方手册明确容器帧率可能不可靠，真实 MPV 的 Matroska 夹具在两集均缺少 container-fps 时，手动加载正常而自动切集未发起下载；删除门槛后下一集自动请求、解析并渲染成功。仍保留音频、图片和短视频过滤条件。未替换整个插件、未更换 API 或改动关联历史。标题由 KumiPlayer 拼接为「作品 - S01E16 - 集标题」。
+
+插件源码目录因含第三方默认凭据按仓库规则忽略；实际本地副本已修复，Git 保存不含凭据的补丁 config/patches/uosc_danmaku-autoload.patch 和 main.lua 哈希，重新取得旧副本后从仓库根运行 git apply mpv/config/patches/uosc_danmaku-autoload.patch（已修复的上游副本无需重复应用）。上游依据：https://github.com/Tony15246/uosc_danmaku/blob/main/main.lua；MPV 属性说明：https://mpv.io/manual/stable/#property-list。配置版本升级为 mpv-runtime-config-2026-10-08-r26。
+
+验证使用独立临时视频、历史和本地 HTTP 响应，未修改真实媒体及用户关联记录。公开代理用插件现有 User-Agent 实测第 16 话 HTTP 200、2779 条弹幕；通用 Python User-Agent 返回 403，测试代理连通性必须按插件实际请求方式判断。未对用户实际播放中的故障执行肉眼验证，未打包 EXE。

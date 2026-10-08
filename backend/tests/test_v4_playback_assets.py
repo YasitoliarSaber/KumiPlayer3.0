@@ -222,7 +222,7 @@ def test_playback_title_appends_local_episode_title_without_pseudo_names(tmp_pat
     manager = V4PlaybackManager(database, session_dir=tmp_path / "sessions")
     asset = manager._resolve_asset(row["work_id"], row["episode_id"], row["asset_id"])
 
-    assert V4PlaybackManager._display_title(asset) == "摇曳露营△ - S02E01 冬日的泉水"
+    assert V4PlaybackManager._display_title(asset) == "摇曳露营△ - S02E01 - 冬日的泉水"
 
     # 空集标题不追加伪标题（如 "第 1 集"/"特别篇"）。
     asset_without_title = dict(asset)
@@ -354,7 +354,7 @@ def test_playback_title_uses_a_confirmed_mapping_for_the_active_episode(tmp_path
         row["work_id"], row["episode_id"], ""
     )
 
-    assert V4PlaybackManager._display_title(asset) == "Show - S01E04 刮削后的完整集标题"
+    assert V4PlaybackManager._display_title(asset) == "Show - S01E04 - 刮削后的完整集标题"
 
 
 def test_default_asset_selection_prefers_available_local_then_higher_quality(tmp_path):

@@ -538,7 +538,7 @@ class V4PlaybackManager:
             if episode_title:
                 return f"{title} - {episode_title}"
             return f"{title} - 特别篇 {int(asset['special_number'] or 1)}"
-        suffix = f" {episode_title}" if episode_title else ""
+        suffix = f" - {episode_title}" if episode_title else ""
         if season is None or episode is None:
             number = f' - E{episode:02d}' if episode is not None else ''
             return f'{title}{number}{suffix}'
