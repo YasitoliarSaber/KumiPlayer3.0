@@ -76,6 +76,20 @@ function spacerHeight() {
   return Number.parseFloat(document.querySelector<HTMLElement>('.virtual-poster-rows')!.style.height);
 }
 
+test('普通及快速滚轮交给浏览器，不取消输入或为滚轮排动画帧', () => {
+  render(<main className="app-main"><VirtualizedPosterGrid works={works(32)} columns={COLUMNS} /></main>);
+  const main = document.querySelector<HTMLElement>('.app-main')!;
+  Object.defineProperty(main, 'scrollHeight', { configurable: true, value: 10000 });
+  const animate = vi.spyOn(window, 'requestAnimationFrame');
+  const card = document.querySelector('.poster-card')!;
+  for (const deltaY of [100, 120, 800, -100]) {
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY });
+    card.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(false);
+  }
+  expect(animate).not.toHaveBeenCalled();
+});
+
 test('大量作品只渲染可视窗口与 overscan 行，不再全量挂载卡片', () => {
   render(<main className="app-main"><VirtualizedPosterGrid works={works(200)} columns={COLUMNS} /></main>);
 
