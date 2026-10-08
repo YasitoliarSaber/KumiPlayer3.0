@@ -9,6 +9,15 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _remote_episode_artwork(monkeypatch):
+    from app.core.config import AppConfig
+
+    monkeypatch.setattr('app.media_v4.jobs.completeness.load_config', lambda: AppConfig(artwork_storage_mode='remote'))
+
 
 def _seed_revision(database, revision_id: str = "rev-progress", status: str = "confirmed") -> None:
     with database.connect() as conn:

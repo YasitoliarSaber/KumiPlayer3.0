@@ -17,7 +17,10 @@ def _client(tmp_path, monkeypatch):
     from fastapi import FastAPI
 
     from app.api import media_v4
+    from app.core.config import AppConfig
     from app.media_v4.persistence.database import V4Database
+
+    monkeypatch.setattr('app.media_v4.jobs.completeness.load_config', lambda: AppConfig(artwork_storage_mode='remote'))
 
     database = V4Database(tmp_path / "detail.db")
     database.initialize()
@@ -135,8 +138,9 @@ def test_legacy_confirmed_binding_keeps_numbered_local_episodes_without_online_d
         f"/api/v4/revisions/rev-detail/works/{work_id}/execution-detail"
     ).json()
 
-    assert body["work"]["metadata_state"] == "confirmed"
-    assert body["work"]["metadata_recovery_action"] == "none"
+    assert body["work"]["metadata_state"] == "failed"
+    assert body["work"]["metadata_reason_code"] == "episode_artwork_incomplete"
+    assert body["work"]["metadata_recovery_action"] == "retry_metadata"
     assert {episode["episode_number"] for episode in body["episodes"]} == {1, 2}
     assert all(not episode["mapped"] and not episode["provider_episode_id"] for episode in body["episodes"])
 
@@ -154,7 +158,7 @@ def test_legacy_partial_metadata_is_completed_in_progress_and_detail(tmp_path, m
         metadata.update(metadata_state='failed', identity_status='confirmed', work_metadata_status='ready',
                         reason_code='episode_mapping_incomplete', reason='正片尚未全部匹配在线分集资料',
                         season_results=[{'local_season_number': 1, 'reason_code': 'provider_unavailable'}])
-        metadata['episode_mappings'] = metadata['episode_mappings'][:1]
+        metadata['episode_mappings'][1]['provider_episode_id'] = ''
         serialized = json.dumps(metadata, ensure_ascii=False)
         conn.execute("UPDATE scrape_bindings SET status='failed',metadata_json=? WHERE binding_id='sb-1'", (serialized,))
         conn.execute('UPDATE source_roots SET content_scope=?', (content_scope,))

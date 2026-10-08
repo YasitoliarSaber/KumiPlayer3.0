@@ -1742,8 +1742,9 @@ def _build_tv_episode_mappings(
                 _record_unmapped(diagnostics, episode, UNMAPPED_MISSING_LOCAL_NUMBER)
                 continue
             remote = remote_by_number.get(provider_episode) or {}
-            if not str(remote.get("id") or "").strip() and season is not None:
-                # 季列表可能缺条目，只补实际本地文件的已确定坐标，绝不猜季号或集号。
+            needs_identity = not str(remote.get("id") or "").strip()
+            if (needs_identity or not remote.get('still_path')) and season is not None:
+                # 只补已有正片的已确定坐标；已匹配但缺图也读取同一分集的图片详情。
                 detail_fetch = getattr(client, 'get_tv_episode_detail', None)
                 coordinate = (provider_season, provider_episode)
                 if callable(detail_fetch) and coordinate not in episode_cache:
@@ -1759,8 +1760,9 @@ def _build_tv_episode_mappings(
                         }
                 error = episode_errors.get(coordinate)
                 if error:
-                    _record_unmapped(diagnostics, episode, UNMAPPED_PROVIDER_RESOURCE_MISSING
-                                     if error['verified_missing'] else UNMAPPED_PROVIDER_UNAVAILABLE)
+                    if needs_identity:
+                        _record_unmapped(diagnostics, episode, UNMAPPED_PROVIDER_RESOURCE_MISSING
+                                         if error['verified_missing'] else UNMAPPED_PROVIDER_UNAVAILABLE)
                     if season_results is not None and provider_season not in reported_seasons:
                         reported_seasons.add(provider_season)
                         season_results.append({
@@ -1771,15 +1773,17 @@ def _build_tv_episode_mappings(
                             'reason_code': error['reason_code'], 'failure_stage': 'episode_detail',
                             'retryable': error['retryable'],
                         })
-                    continue
+                    if needs_identity:
+                        continue
                 candidate = episode_cache.get(coordinate) or {}
                 if str(candidate.get('id') or '').strip():
                     if (_positive_int(candidate.get('season_number')) != provider_season
-                            or _positive_int(candidate.get('episode_number')) != provider_episode):
+                            or _positive_int(candidate.get('episode_number')) != provider_episode
+                            or (not needs_identity and str(candidate['id']) != str(remote['id']))):
                         _record_unmapped(diagnostics, episode, UNMAPPED_NUMBERING_CONFLICT)
                         _record_conflict(diagnostics, episode, UNMAPPED_NUMBERING_CONFLICT)
                         continue
-                    remote = candidate
+                    remote = {**remote, **candidate}
             if not str(remote.get("id") or "").strip():
                 # 没有远端 Episode ID 时不能把空映射写成"已映射"；保留本地剧集，
                 # 并记录真实原因（服务故障/该条目不存在），不伪装成完整刮削。
@@ -1790,6 +1794,10 @@ def _build_tv_episode_mappings(
                 )
                 continue
             still = str(remote.get("still_path") or "")
+            if not still and isinstance(remote.get('images'), dict):
+                select_still = getattr(client, 'select_best_still', None)
+                if callable(select_still):
+                    still = str(select_still(remote['images']) or '')
             mapping = {
                 "episode_id": str(episode["episode_id"]),
                 "provider_season_number": provider_season,

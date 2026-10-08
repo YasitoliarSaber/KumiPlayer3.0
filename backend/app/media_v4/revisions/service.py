@@ -105,6 +105,8 @@ def _friendly_metadata_reason(status: str, value: str, reason_code: str = "") ->
         return "已有视频的季号或集号尚待核对，请检查对应关系。"
     if normalized_code == "episode_details_incomplete":
         return "部分在线分集标题或缩略图待补充，可正常浏览与播放。"
+    if normalized_code == "episode_artwork_incomplete":
+        return "已有正片的缩略图尚未准备好，作品信息已保留，请重新获取分集图片。"
     if normalized_code == "artifact_incomplete":
         return "媒体资料已获取，但部分图片下载或发布失败。"
     if normalized_code == "mirror_root_missing":
@@ -283,6 +285,10 @@ def metadata_recovery_policy(metadata: dict | None, *, binding_status: str = "")
             reason = _friendly_metadata_reason(state, raw_reason, reason_code)
         action = "check_settings"
         return {"reason": reason, "action": action, "hint": _metadata_recovery_hint(action)}
+
+    if reason_code == "episode_artwork_incomplete":
+        return {"reason": _friendly_metadata_reason(state, raw_reason, reason_code),
+                "action": "retry_metadata", "hint": "补齐已有正片的缩略图后才能完成刮削，无需补齐在线全集或特别篇。"}
 
     if (state == "ready" and payload.get("identity_status") == "confirmed"
             and payload.get("work_metadata_status") == "ready"

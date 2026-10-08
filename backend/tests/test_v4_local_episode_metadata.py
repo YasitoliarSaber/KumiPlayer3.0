@@ -38,7 +38,8 @@ def test_old_optional_episode_gap_is_reassessed_without_hiding_true_conflict():
     episodes = [{'episode_id': 'e', 'local_season_number': 1, 'local_episode_number': 23}]
     old = {'metadata_state': 'failed', 'reason_code': 'episode_mapping_incomplete',
            'identity_status': 'confirmed', 'work_metadata_status': 'ready', 'provider_id': '42',
-           'episode_mappings': [], 'unmapped_reasons': [{'episode_id': 'e', 'reason': 'provider_episode_not_found'}]}
+           'episode_mappings': [{'episode_id': 'e', 'still_url': 'https://image.tmdb.org/t/p/w500/e.jpg'}],
+           'unmapped_reasons': [{'episode_id': 'e', 'reason': 'provider_episode_not_found'}]}
     assert require_regular_episode_metadata(episodes, old)['metadata_state'] == 'ready'
     assert old['metadata_state'] == 'failed'
     conflict = {**old, 'mapping_conflicts': [{'episode_id': 'e', 'reason': 'numbering_conflict'}]}
@@ -61,7 +62,7 @@ def test_partial_season_response_recovers_only_local_missing_coordinates(monkeyp
     def detail(_client, work, season, episode):
         requests.append((work, season, episode))
         return {'id': 1000 + episode, 'season_number': season,
-                'episode_number': episode, 'name': f'E{episode}', 'still_path': ''}
+                'episode_number': episode, 'name': f'E{episode}', 'still_path': '/episode.jpg'}
 
     monkeypatch.setattr(metadata_module.TMDBClient, 'get_tv_episode_detail', detail, raising=False)
     target = _target([_episode(f'e{i}', season=1, episode=i) for i in range(1, 14)])
@@ -70,7 +71,7 @@ def test_partial_season_response_recovers_only_local_missing_coordinates(monkeyp
     assert result['metadata_state'] == 'ready'
     assert result['episode_mapping_status'] == 'complete'
     assert requests == [(42, 1, i) for i in range(8, 14)]
-    assert result['missing_episode_still_count'] == 6
+    assert result['missing_episode_still_count'] == 0
     assert target == original
 
 
@@ -84,21 +85,22 @@ def test_single_episode_fallback_does_not_adopt_other_coordinates(monkeypatch):
     assert result['metadata_state'] != 'ready'
 
 
-def test_missing_online_entry_keeps_numbered_local_regular_usable(monkeypatch):
+def test_missing_online_entry_keeps_local_coordinates_but_needs_thumbnail(monkeypatch):
     _install_client(monkeypatch, seasons={1: [1]})
     result = metadata_module.default_metadata_provider(
         _target([_episode('e1', season=1, episode=1), _episode('e8', season=1, episode=8)]))
-    assert result['metadata_state'] == 'ready'
+    assert result['metadata_state'] == 'failed'
     assert result['episode_mapping_status'] == 'partial'
     assert result['unmapped_episode_ids'] == ['e8']
-    assert result['reason_code'] == 'episode_mapping_incomplete'
+    assert result['reason_code'] == 'episode_artwork_incomplete'
+    assert result['episode_coordinate_status'] == 'confirmed'
 
 
 def test_season_data_outage_keeps_confirmed_work_and_local_coordinates_usable(monkeypatch):
     _install_client(monkeypatch, season_errors={1: TMDBClientError('fixture season unavailable')})
     result = metadata_module.default_metadata_provider(
         _target([_episode('e1', season=1, episode=1)]))
-    assert result['metadata_state'] == 'ready'
+    assert result['metadata_state'] == 'failed'
     assert result['identity_status'] == 'confirmed'
     assert result['episode_mapping_status'] == 'unmapped'
     assert result['unmapped_episode_ids'] == ['e1']
@@ -113,7 +115,7 @@ def test_single_episode_fallback_outage_remains_honest_and_retryable(monkeypatch
     monkeypatch.setattr(metadata_module.TMDBClient, 'get_tv_episode_detail', unavailable, raising=False)
     result = metadata_module.default_metadata_provider(
         _target([_episode('e8', season=1, episode=8)]))
-    assert result['metadata_state'] == 'ready'
+    assert result['metadata_state'] == 'failed'
     assert result['unmapped_reason_codes'] == ['provider_unavailable']
     assert result['retryable'] is True
 
@@ -153,7 +155,7 @@ def test_missing_episode_display_details_do_not_discard_reusable_work_snapshot(t
     def no_display_details(target):
         metadata = complete_provider(target)
         for item in metadata['episode_mappings']:
-            item.update(title='', still_url='')
+            item.update(title='')
         return metadata
 
     monkeypatch.setattr(lifecycle_tests, 'provider', no_display_details)

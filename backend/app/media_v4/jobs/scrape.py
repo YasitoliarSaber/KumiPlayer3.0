@@ -903,7 +903,16 @@ class V4ScrapeService:
                     # 未完成物化，仍按失败处理，避免把不可播放的作品当成功发布。
                     from app.media_v4.jobs.completeness import artwork_only_reasons
 
-                    if artwork_only_reasons(reasons):
+                    if any('正片缩略图' in reason for reason in reasons):
+                        result = {
+                            **result, 'metadata_state': 'failed',
+                            'reason_code': 'episode_artwork_incomplete',
+                            'reason': '；'.join(reasons), 'artifact_state': 'incomplete',
+                            'completeness': reasons, 'failure_stage': 'episode_artwork',
+                            'retryable': True, 'episode_artwork_status': 'incomplete',
+                        }
+                        ready = False
+                    elif artwork_only_reasons(reasons):
                         result = {
                             **result,
                             # 显式原因码：资料已就绪、只是本地图片有问题。没有它，

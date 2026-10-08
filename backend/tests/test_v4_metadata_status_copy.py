@@ -44,7 +44,7 @@ def test_confirmed_local_coordinates_make_partial_episode_details_optional(conte
         'metadata_state': 'failed', 'identity_status': 'confirmed', 'work_metadata_status': 'ready',
         'provider': 'tmdb', 'provider_id': '42', 'reason_code': 'episode_mapping_incomplete',
         'reason': '正片尚未全部匹配在线分集资料', 'content_scope': content_scope,
-        'episode_mappings': [],
+        'episode_mappings': [{'episode_id': 'e1', 'still_url': 'https://image.tmdb.org/t/p/w500/e1.jpg'}],
         'unmapped_reasons': [{'episode_id': 'e1', 'reason': 'provider_unavailable'}],
         'season_results': [{'local_season_number': 1, 'reason_code': season_code, 'status': 'partial'}],
     }

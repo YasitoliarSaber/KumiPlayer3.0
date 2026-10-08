@@ -393,12 +393,8 @@ def test_retry_keeps_successful_details_only_for_same_identity(tmp_path, retry_p
         assert detail["episodes"][0]["scraped_title"] == ""
 
 
-def test_missing_artwork_keeps_metadata_ready_and_marks_artifacts_degraded(tmp_path, monkeypatch):
-    """资料齐全但图片产物缺失时：资料保持 ready，只把产物标成 degraded。
-
-    这是 B1-2 的核心解耦：图片属于展示产物，缺图不能让作品变成“媒体信息失败”，
-    否则它既会显示错误文案，也会从媒体墙消失。
-    """
+def test_missing_episode_artwork_keeps_work_information_but_is_not_completed(tmp_path, monkeypatch):
+    """作品资料保留，缺少正片缩略图时不能宣布刮削完成。"""
 
     from types import SimpleNamespace
 
@@ -432,10 +428,9 @@ def test_missing_artwork_keeps_metadata_ready_and_marks_artifacts_degraded(tmp_p
     )
 
     detail = revisions.get_work_execution_detail("rev-artifact", job["work_id"])
-    assert detail["work"]["metadata_state"] == "ready"
-    assert detail["work"]["artifact_state"] == "degraded"
-    assert any("海报" in reason for reason in detail["work"]["artifact_reasons"])
-    assert detail["scrape"]["artifact_state"] == "degraded"
+    assert detail["work"]["metadata_state"] == "failed"
+    assert detail["work"]["metadata_reason_code"] == "episode_artwork_incomplete"
+    assert detail["work"]["metadata_recovery_action"] == "retry_metadata"
     with database.connect() as conn:
         binding_status = str(conn.execute(
             "SELECT status FROM scrape_bindings WHERE revision_id = 'rev-artifact' AND work_id = ?",
@@ -445,13 +440,13 @@ def test_missing_artwork_keeps_metadata_ready_and_marks_artifacts_degraded(tmp_p
             "SELECT metadata_json FROM scrape_bindings WHERE revision_id = 'rev-artifact' AND work_id = ?",
             (job["work_id"],),
         ).fetchone()[0]))
-    assert binding_status == "confirmed"
-    assert stored["metadata_state"] == "ready"
-    assert stored["artifact_state"] == "degraded"
+    assert binding_status == "failed"
+    assert stored["metadata_state"] == "failed"
+    assert stored["artifact_state"] == "incomplete"
 
 
-def test_legacy_artwork_only_failure_reads_as_ready_without_rewriting_data(tmp_path, monkeypatch):
-    """历史“只缺图片”的 failed 记录按只读归一显示，且绝不改写真实数据。"""
+def test_legacy_missing_local_thumbnail_is_not_ready_without_rewriting_data(tmp_path, monkeypatch):
+    """历史缺少本地正片图片不能归一为完成，原记录仍只读保留。"""
 
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -487,7 +482,8 @@ def test_legacy_artwork_only_failure_reads_as_ready_without_rewriting_data(tmp_p
         )
 
     detail = revisions.get_work_execution_detail("rev-legacy", work_id)
-    assert detail["work"]["metadata_state"] == "ready"
+    assert detail["work"]["metadata_state"] == "failed"
+    assert detail["work"]["metadata_reason_code"] == "episode_artwork_incomplete"
     assert detail["work"]["artifact_state"] == "degraded"
     assert detail["work"]["artifact_reasons"] == ["海报下载或发布失败"]
     # 只读归一：数据库里的历史失败记录保持原样。

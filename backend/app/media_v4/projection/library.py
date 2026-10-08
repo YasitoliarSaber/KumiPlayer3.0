@@ -94,7 +94,8 @@ class V4LibraryProjection:
             policy = conn.execute("SELECT value FROM v4_meta WHERE key='library_presentation_policy'").fetchone()
         needs_episode_gate = snapshot is not None and any(
             card.get('media_type') == 'tv' and card.get('metadata', {}).get('metadata_state') == 'ready'
-            and 'episode_metadata_status' not in card.get('metadata', {})
+            and ('episode_metadata_status' not in card.get('metadata', {})
+                 or 'episode_artwork_status' not in card.get('metadata', {}))
             for card in snapshot.cards
         )
         if snapshot is None or dirty is not None or needs_episode_gate or policy is None or policy[0] != PRESENTATION_POLICY_VERSION:

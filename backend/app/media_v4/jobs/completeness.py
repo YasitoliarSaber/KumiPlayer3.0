@@ -64,6 +64,21 @@ def assess_metadata_completeness(
 ) -> tuple[bool, list[str]]:
     reasons: list[str] = []
 
+    from app.media_v4.jobs.metadata_quality import missing_episode_artwork
+    with database.connect() as conn:
+        episodes = [dict(row) for row in conn.execute(
+            'SELECT DISTINCT e.episode_id,e.episode_kind,s.season_kind FROM revision_bindings rb '
+            'JOIN episodes e ON e.episode_id=rb.episode_id JOIN seasons s ON s.season_id=e.season_id '
+            'WHERE rb.revision_id=? AND rb.work_id=?', (revision_id, work_id),
+        )]
+        thumbs = [dict(row) for row in conn.execute(
+            "SELECT artifact_type,status,target_path,digest FROM artifacts WHERE work_id=? AND artifact_type='episode_thumb'",
+            (work_id,),
+        )]
+    missing_thumbs = missing_episode_artwork(episodes, metadata, thumbs, load_config().artwork_storage_mode)
+    if missing_thumbs:
+        reasons.append(f'缺少或损坏 {missing_thumbs} 个正片缩略图')
+
     provider = str(metadata.get("provider") or "")
     provider_id = str(metadata.get("provider_id") or "")
     if provider in {"", "local"} or not provider_id:

@@ -86,7 +86,10 @@ def test_historical_numbered_local_members_keep_work_usable_without_online_mappi
 
     def publish_historical(conn, **kwargs):
         bad.update(kwargs['metadata'])
-        bad.update(episode_mappings=[], reason_code='episode_mapping_incomplete',
+        # 历史分集 ID 缺失，但这些正片已经有真实缩略图来源。
+        for mapping in bad['episode_mappings']:
+            mapping['provider_episode_id'] = ''
+        bad.update(reason_code='episode_mapping_incomplete',
                    episode_mapping_status='unmapped', mapped_count=0, total_count=1)
         return publish(conn, **{**kwargs, 'metadata': bad})
 
@@ -118,7 +121,7 @@ def test_historical_numbered_local_members_keep_work_usable_without_online_mappi
     confirm(database, 'r2')
     with database.connect() as conn:
         retained = select_applicable_snapshot(conn, 'r2', snapshot['work_id'])
-        assert retained is not None and retained['covers_members'] is False
+        assert retained is not None and retained['covers_members'] is True
     card = V4LibraryProjection(database).ensure_current().cards[0]
     assert card['metadata']['metadata_state'] == 'ready'
     calls = []
@@ -128,7 +131,7 @@ def test_historical_numbered_local_members_keep_work_usable_without_online_mappi
         return provider(target)
 
     V4JobRunner(database, metadata_provider=fixed_provider).process_available(mirror_root=mirror)
-    assert calls == [snapshot['work_id']]
+    assert calls == [], '已有正片缩略图完备时，不为缺少在线分集 ID 强制重抓资料'
     assert V4LibraryProjection(database).ensure_current().cards[0]['metadata']['metadata_state'] == 'ready'
 
 

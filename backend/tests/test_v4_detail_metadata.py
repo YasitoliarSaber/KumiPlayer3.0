@@ -229,7 +229,8 @@ def test_regular_season_fetch_failure_prevents_false_ready_metadata(monkeypatch)
         }],
     })
 
-    assert result["metadata_state"] == "ready"
+    assert result["metadata_state"] == "failed"
+    assert result["reason_code"] == "episode_artwork_incomplete"
     assert result["episode_mapping_status"] == "unmapped"
 
 
@@ -281,9 +282,9 @@ def test_partial_season_failure_keeps_work_metadata_and_retry_details(monkeypatc
 
     assert result["provider"] == "tmdb"
     assert result["provider_id"] == "42"
-    assert result["metadata_state"] == "ready"
+    assert result["metadata_state"] == "failed"
     assert result["episode_mapping_status"] == "partial"
-    assert result["reason_code"] == "episode_mapping_incomplete"
+    assert result["reason_code"] == "episode_artwork_incomplete"
     assert result["title"] == "Show"
     assert [item["episode_id"] for item in result["episode_mappings"]] == ["s1e1"]
     assert result["season_results"] == [{

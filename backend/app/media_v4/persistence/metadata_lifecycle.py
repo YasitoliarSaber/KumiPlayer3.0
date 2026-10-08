@@ -255,7 +255,7 @@ def referenced_metadata(conn, work_id: str, revision_id: str | None = None) -> d
                 if key in current and signatures.get(key) == current[key]:
                     combined.setdefault(key, mapping)
         mappings = list(combined.values())
-    mapped = {str(m['episode_id']) for m in mappings}
+    mapped = {str(m['episode_id']) for m in mappings if str(m.get('provider_episode_id') or '').strip()}
     total = len(current)
     metadata.update(episode_mappings=mappings, mapped_count=len(mapped), total_count=total,
                     unmapped_episode_ids=sorted(set(current) - mapped),
