@@ -21,13 +21,14 @@ export function SettingsSection({ title, headingId, description, children }: {
 }
 
 /** Field 上下文把标签与帮助文字关联到内部单个 Fluent 控件。 */
-export function SettingsField({ label, description, action, children }: {
+export function SettingsField({ label, description, action, orientation, children }: {
   label: string;
   description?: ReactNode;
   action?: ReactNode;
+  orientation?: 'horizontal' | 'vertical';
   children: ReactNode;
 }) {
-  return <Field className="kp-settings-field" label={label} hint={description === undefined ? undefined : { children: description }}>
+  return <Field className="kp-settings-field" orientation={orientation} label={label} hint={description === undefined ? undefined : { children: description }}>
     <div className={`kp-settings-field-controls${action ? ' kp-settings-field-controls--action' : ''}`}>
       {children}
       {action && <span className="kp-settings-field-action">{action}</span>}

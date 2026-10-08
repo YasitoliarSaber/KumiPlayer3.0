@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Select } from '@fluentui/react-components';
+import { useEffect, useRef, useState } from 'react';
+import { Button, Dropdown, Option } from '@fluentui/react-components';
 import type { PublicConfig } from '../../api/config';
 import { useUiStore, type SeriesCardImageMode } from '../../stores/ui';
 import { normalizePosterColumns } from '../library/posterGridMetrics';
@@ -14,11 +14,7 @@ interface PosterWallLayoutDraft {
 }
 
 /** 用户可选的目标列数预设；实际列数仍受窗口容量限制。 */
-const SIZE_PRESETS: Array<{ value: number; label: string }> = [
-  { value: 4, label: '大封面（目标 4 列）' },
-  { value: 6, label: '标准（目标 6 列）' },
-  { value: 8, label: '紧凑（目标 8 列）' },
-];
+const SIZE_PRESETS = [5, 6, 7, 8, 9];
 
 const INVALID_RESPONSE_MESSAGE = '保存结果无法确认，请重新进入设置核对';
 
@@ -77,19 +73,6 @@ export default function PosterWallSettingsPanel({ config, externalBusy = false, 
     setDraft((current) => (dirtyRef.current ? current : { columns: serverColumns, mode: serverMode }));
   }, [serverColumns, serverMode]);
 
-  const sizeOptions = useMemo(() => {
-    const options = [...SIZE_PRESETS];
-    if (!options.some((preset) => preset.value === effective.columns)) {
-      options.push({ value: effective.columns, label: `当前设置（目标 ${effective.columns} 列）` });
-    }
-    // 外部刷新不能让仍保留的旧 5/7 列草稿失去 option，从而被原生 select 显示成首项。
-    if (!options.some((preset) => preset.value === draft.columns)) {
-      options.push({ value: draft.columns, label: `未应用选择（目标 ${draft.columns} 列）` });
-    }
-    options.sort((left, right) => left.value - right.value);
-    return options;
-  }, [draft.columns, effective.columns]);
-
   const changeDraft = (patch: Partial<PosterWallLayoutDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
     // 选择新值后不再展示上一次的成功信息，避免误读为已生效。
@@ -140,38 +123,48 @@ export default function PosterWallSettingsPanel({ config, externalBusy = false, 
   };
 
   return (
-    <SettingsSection
-      title="作品墙布局"
-      description="调整分类、收藏与搜索的作品墙；封面比例也用于首页分类预览。窗口较窄时会自动减少列数。点击应用后，返回作品列表即可看到新布局。"
-    >
-      <div className="kp-settings-form">
-        <SettingsField label="封面比例" description="竖版封面按 2:3 显示；横向海报按 16:9 显示。">
-          <Select
-            value={draft.mode}
+    <SettingsSection title="作品墙布局">
+      <div className="kp-settings-form kp-poster-wall-form">
+        <SettingsField label="封面比例" orientation="horizontal">
+          <Dropdown
+            appearance="outline"
+            style={{ minWidth: 0, width: '100%' }}
+            value={draft.mode === 'fanart' ? '横向海报' : '竖版封面'}
+            selectedOptions={[draft.mode]}
             disabled={busy}
-            onChange={(_, data) => changeDraft({ mode: data.value as SeriesCardImageMode })}
+            onOptionSelect={(_, data) => {
+              if (data.optionValue === 'poster' || data.optionValue === 'fanart') {
+                changeDraft({ mode: data.optionValue });
+              }
+            }}
           >
-            <option value="poster">竖版封面</option>
-            <option value="fanart">横向海报</option>
-          </Select>
+            <Option value="poster">竖版封面</Option>
+            <Option value="fanart">横向海报</Option>
+          </Dropdown>
         </SettingsField>
-        <SettingsField label="封面大小" description={`目标每行 ${draft.columns} 列；窗口较窄时会自动减少，重新拉宽后恢复该目标。`}>
-          <Select
-            value={String(draft.columns)}
+        <SettingsField label="封面大小" orientation="horizontal">
+          <Dropdown
+            appearance="outline"
+            style={{ minWidth: 0, width: '100%' }}
+            value={`${draft.columns} 列`}
+            selectedOptions={[String(draft.columns)]}
             disabled={busy}
-            onChange={(_, data) => changeDraft({ columns: Number(data.value) })}
+            onOptionSelect={(_, data) => {
+              const columns = Number(data.optionValue);
+              if (SIZE_PRESETS.includes(columns)) changeDraft({ columns });
+            }}
           >
-            {sizeOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+            {SIZE_PRESETS.map((columns) => (
+              <Option key={columns} value={String(columns)}>{`${columns} 列`}</Option>
             ))}
-          </Select>
+          </Dropdown>
         </SettingsField>
         <div className="kp-poster-wall-actions">
           <Button appearance="primary" disabled={busy || !dirty} onClick={() => void handleApply()}>
-            {saving ? '正在保存…' : '应用作品墙设置'}
+            {saving ? '正在保存…' : '应用'}
           </Button>
           <Button appearance="secondary" disabled={busy || !dirty} onClick={handleReset}>
-            还原选择
+            还原
           </Button>
         </div>
         {saving && <SettingsFeedback busy>正在保存作品墙设置…</SettingsFeedback>}

@@ -1,20 +1,19 @@
 export type PosterGridImageMode = 'poster' | 'fanart';
 
 /** 作品墙目标列数的偏好范围：作为布局偏好上下界，与内部 availableColumns 无关。 */
-const MIN_POSTER_COLUMNS = 4;
-const MAX_POSTER_COLUMNS = 8;
+const MIN_POSTER_COLUMNS = 5;
+const MAX_POSTER_COLUMNS = 9;
 
 /**
  * 把持久化的封面大小偏好归一化为目标列数。
  *
- * 兼容既有像素值语义：3/4/5/6/7/8 视为目标列数；210 及以上对应 4 列、
- * 170~209 对应 5 列、其余回退到 6 列。该映射与迁移前的工具栏滑块一致。
+ * 5~9 直接作为目标列数；旧 3/4 列与 170 及以上的像素偏好归入 5 列，
+ * 其余回退到 6 列。窄窗口容量由 calculatePosterGridMetrics 单独处理。
  */
 export function normalizePosterColumns(value: number) {
   if (Number.isFinite(value) && value > 0 && value <= MAX_POSTER_COLUMNS) {
     return Math.max(MIN_POSTER_COLUMNS, Math.min(MAX_POSTER_COLUMNS, Math.round(value)));
   }
-  if (value >= 210) return 4;
   if (value >= 170) return 5;
   return 6;
 }

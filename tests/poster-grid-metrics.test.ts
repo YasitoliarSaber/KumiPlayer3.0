@@ -2,25 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculatePosterGridMetrics, normalizePosterColumns } from '../src/components/library/posterGridMetrics.ts';
 
-test('封面大小偏好归一化保持既有像素值兼容语义', () => {
-  // 目标列数直接保留（4~8）。
-  assert.equal(normalizePosterColumns(3), 4);
-  assert.equal(normalizePosterColumns(4), 4);
+test('封面列数支持 5 到 9，旧大封面偏好归入 5 列', () => {
+  assert.equal(normalizePosterColumns(3), 5);
+  assert.equal(normalizePosterColumns(4), 5);
   assert.equal(normalizePosterColumns(5), 5);
   assert.equal(normalizePosterColumns(6), 6);
   assert.equal(normalizePosterColumns(7), 7);
   assert.equal(normalizePosterColumns(8), 8);
-  // 旧像素值按既有分段映射，不能被动改成最近的预设。
+  assert.equal(normalizePosterColumns(9), 9);
+  // 旧像素值继续兼容，但已取消的 4 列合并到 5 列。
   assert.equal(normalizePosterColumns(169), 6);
   assert.equal(normalizePosterColumns(170), 5);
   assert.equal(normalizePosterColumns(180), 5);
-  assert.equal(normalizePosterColumns(210), 4);
-  assert.equal(normalizePosterColumns(240), 4);
+  assert.equal(normalizePosterColumns(210), 5);
+  assert.equal(normalizePosterColumns(240), 5);
   // 非法与越界值回退到标准 6 列。
   assert.equal(normalizePosterColumns(Number.NaN), 6);
   assert.equal(normalizePosterColumns(0), 6);
   assert.equal(normalizePosterColumns(-12), 6);
-  assert.equal(normalizePosterColumns(9), 6);
+  assert.equal(normalizePosterColumns(10), 6);
 });
 
 test('连续切换列数与容器宽度时始终得到有限且一致的封面网格尺寸', () => {
@@ -88,4 +88,11 @@ test('窄窗口同时返回滑块可用列数上限且不覆盖宽屏偏好', ()
   assert.equal(preferredEightColumns.effectiveColumns, 5);
   assert.equal(selectedFiveColumns.columnCapacity, 5);
   assert.equal(selectedFiveColumns.effectiveColumns, 5);
+});
+
+test('9 列偏好在宽窗口生效，缩窄再拉宽后恢复', () => {
+  const input = { gap: 20, requestedColumns: normalizePosterColumns(9), imageMode: 'poster' as const, metaHeight: 62 };
+  assert.equal(calculatePosterGridMetrics({ ...input, width: 1600 }).effectiveColumns, 9);
+  assert.equal(calculatePosterGridMetrics({ ...input, width: 650 }).effectiveColumns, 4);
+  assert.equal(calculatePosterGridMetrics({ ...input, width: 1600 }).effectiveColumns, 9);
 });

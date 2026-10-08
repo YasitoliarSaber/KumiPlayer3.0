@@ -4,6 +4,7 @@ import { useUiStore } from '../stores/ui';
 import { matchesSourceFilter } from '../utils/sourceFilter';
 import VirtualizedPosterGrid from '../components/library/VirtualizedPosterGrid';
 import LoadingState from '../components/ui/loading-state';
+import { normalizePosterColumns } from '../components/library/posterGridMetrics';
 
 export default function SearchPage() {
   const works = useLibraryStore((state) => state.works);
@@ -12,7 +13,7 @@ export default function SearchPage() {
   const error = useLibraryStore((state) => state.error);
   const { query, source, posterSize } = useUiStore();
   const keyword = query.trim().toLowerCase();
-  const columnsPerRow = normalizeColumns(posterSize);
+  const columnsPerRow = normalizePosterColumns(posterSize);
 
   const results = useMemo(() => {
     if (!keyword) return [];
@@ -59,14 +60,6 @@ export default function SearchPage() {
       )}
     </div>
   );
-}
-
-function normalizeColumns(value: number) {
-  if (value >= 3 && value <= 8) return Math.round(value);
-  if (value >= 240) return 3;
-  if (value >= 210) return 4;
-  if (value >= 170) return 5;
-  return 6;
 }
 
 function CenteredMessage({ children }: { children: string }) {

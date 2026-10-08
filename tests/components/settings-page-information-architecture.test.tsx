@@ -246,10 +246,10 @@ describe('SettingsPage 信息架构', () => {
     expect(within(appearance).getByText('作品墙布局')).toBeVisible();
     expect(within(appearance).getByText('应用主题')).toBeVisible();
     // 默认 180 等价于目标 5 列，保留旧偏好而不强行改成预设。
-    expect(within(appearance).getByRole('combobox', { name: '封面比例' })).toHaveValue('poster');
-    expect(within(appearance).getByRole('combobox', { name: '封面大小' })).toHaveValue('5');
-    expect(within(appearance).getByRole('button', { name: '应用作品墙设置' })).toBeDisabled();
-    expect(within(appearance).getByRole('button', { name: '还原选择' })).toBeDisabled();
+    expect(within(appearance).getByRole('combobox', { name: '封面比例' })).toHaveTextContent('竖版封面');
+    expect(within(appearance).getByRole('combobox', { name: '封面大小' })).toHaveTextContent('5 列');
+    expect(within(appearance).getByRole('button', { name: '应用', exact: true })).toBeDisabled();
+    expect(within(appearance).getByRole('button', { name: '还原', exact: true })).toBeDisabled();
     expect(api.patchConfig).not.toHaveBeenCalled();
   });
 
