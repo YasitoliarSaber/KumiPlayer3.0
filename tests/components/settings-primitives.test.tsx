@@ -1,5 +1,5 @@
 import { Input, Select } from '@fluentui/react-components';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { SettingsFeedback, SettingsField, SettingsSection } from '../../src/components/ui/SettingsPrimitives';
 
@@ -32,4 +32,18 @@ test('普通反馈温和通知，错误反馈立即通知，长消息保留完�
   rerender(<SettingsFeedback intent="error">{message}</SettingsFeedback>);
   expect(screen.getByRole('alert')).toHaveTextContent(message);
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
+test('可折叠设置分组保持标题关联，关闭时保留输入草稿', () => {
+  render(<SettingsSection title="高级设置" collapsible className="fixture-section">
+    <SettingsField label="草稿"><Input defaultValue="尚未保存" /></SettingsField>
+  </SettingsSection>);
+  const group = screen.getByText('高级设置').closest('details')!;
+  expect(group).toHaveClass('kp-settings-section', 'fixture-section');
+  fireEvent.click(screen.getByText('高级设置'));
+  const input = screen.getByRole('textbox', { name: '草稿' });
+  fireEvent.change(input, { target: { value: '保留修改' } });
+  fireEvent.click(screen.getByText('高级设置'));
+  fireEvent.click(screen.getByText('高级设置'));
+  expect(screen.getByRole('textbox', { name: '草稿' })).toHaveValue('保留修改');
 });

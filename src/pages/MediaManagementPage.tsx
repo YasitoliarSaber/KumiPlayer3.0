@@ -234,8 +234,8 @@ function ProviderPicker({ value, onChange }: {
   return (
     <div className="media-v4-provider-picker" role="group" aria-label="内容来源">
       {PROVIDER_OPTIONS.map((option) => (
-        <button
-          type="button"
+        <Button
+          appearance="secondary"
           className={value === option.value ? 'selected' : ''}
           aria-label={option.label}
           aria-pressed={value === option.value}
@@ -245,7 +245,7 @@ function ProviderPicker({ value, onChange }: {
           <span className={`media-v4-provider-mark provider-${option.value}`} aria-hidden="true"><MediaProviderIcon provider={option.value} /></span>
           <span><strong>{option.label}</strong></span>
           {value === option.value && <CheckmarkCircle24Filled aria-hidden="true" />}
-        </button>
+        </Button>
       ))}
     </div>
   )
@@ -1446,7 +1446,7 @@ export default function MediaManagementPage() {
           {pageMode === 'overview' ? (
             <>
               <div className="media-v4-header-secondary-actions">
-                <Button className="media-v4-header-secondary-button media-v4-header-command" appearance="outline" icon={<ShieldCheckmark24Regular />} onClick={() => goManageView('maintenance')}>媒体库维护</Button>
+                <Button className="media-v4-header-secondary-button media-v4-header-command" appearance="secondary" icon={<ShieldCheckmark24Regular />} onClick={() => goManageView('maintenance')}>媒体库维护</Button>
               </div>
               <div className="media-v4-header-primary-actions">
                 <Button className="media-primary-command media-v4-header-command" appearance="primary" icon={<Add24Regular />} onClick={startNewImport}>导入媒体</Button>
@@ -1454,7 +1454,7 @@ export default function MediaManagementPage() {
             </>
           ) : (
             <div className="media-v4-header-secondary-actions">
-              <Button className="media-v4-header-back-button media-v4-header-secondary-button" appearance="outline" icon={<ArrowLeft24Regular />} onClick={() => goManageView('overview')}>返回媒体管理</Button>
+              <Button className="media-v4-header-back-button media-v4-header-secondary-button" appearance="secondary" icon={<ArrowLeft24Regular />} onClick={() => goManageView('overview')}>返回媒体管理</Button>
             </div>
           )}
           {pageMode === 'import' && showReset && <div className="media-v4-header-primary-actions"><Button className="media-v4-new-import" appearance="subtle" icon={<ArrowReset24Regular />} onClick={startNewImport}>重新开始</Button></div>}
@@ -1497,14 +1497,15 @@ export default function MediaManagementPage() {
                           ? `上次导入完成于 ${new Date(card.import_completed_at).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}`
                           : '上次导入已处理完毕'
             const resumeLabel = deletionRetry ? '重试清理' : retiredCleanup ? '清理中' : activeTask ? '查看进度' : card.scan?.status === 'paused' ? '继续扫描' : card.overall_status === 'cancelled' ? (executionTerminated ? '查看执行结果' : '重新扫描') : card.overall_status === 'needs_attention' && card.phase === 'scan' ? '重新扫描' : card.phase === 'review' ? '查看识别结果' : card.can_resume ? '查看进度' : '查看上次导入'
+            const resumeAppearance = deletionRetry || (card.can_resume && (card.overall_status ?? 'completed') !== 'completed') ? 'primary' : 'secondary'
             const resumeIcon = deletionRetry ? <Delete24Regular /> : activeTask?.kind === 'scan' || card.phase === 'review' ? <DocumentText24Regular /> : <Database24Regular />
-            return <article className={`media-v4-library-source-card ${active ? 'active' : 'settled'}`} key={card.root_id}>
+            return <article className={`media-v4-library-source-card ${active ? 'active' : 'settled'}`} key={card.root_id} aria-labelledby={`source-card-${card.root_id}`}>
               <div className="media-v4-source-card-identity">
                 <div className="media-v4-source-card-heading">
-                <div className="media-v4-library-source-card-top"><MediaProviderIcon provider={providerVisualFor(card.provider)} size={20} /><span className="media-v4-source-card-provider-label">{providerLabel(card.provider)}</span><span className="media-v4-source-card-method-label">{sourceMethodLabel(card)}</span></div>
-                <span className={`media-v4-source-card-state media-v4-source-card-state-${card.overall_status ?? 'completed'}`}>{stateLabel}</span>
+                  <h3 id={`source-card-${card.root_id}`} title={card.display_name}>{card.display_name}</h3>
+                  <span className={`media-v4-source-card-state media-v4-source-card-state-${card.overall_status ?? 'completed'}`}>{stateLabel}</span>
                 </div>
-                <strong title={card.display_name}>{card.display_name}</strong>
+                <div className="media-v4-library-source-card-top"><MediaProviderIcon provider={providerVisualFor(card.provider)} size={20} /><span className="media-v4-source-card-provider-label">{providerLabel(card.provider)}</span><span className="media-v4-source-card-method-label">{sourceMethodLabel(card)}</span></div>
                 {(card.tree_file_path || card.source_locator || card.display_path) && <span className="media-v4-source-card-locator" title={card.tree_file_path || card.source_locator || card.display_path}>{card.tree_file_path || card.source_locator || card.display_path}</span>}
                 {card.last_error && card.overall_status === 'needs_attention' && <span className="media-v4-source-card-error" role="alert">{card.last_error}</span>}
               </div>
@@ -1533,7 +1534,7 @@ export default function MediaManagementPage() {
                 {pendingCleanup && <span className="media-v4-source-card-notice">{cleanupActive ? '正在清理上次生成文件' : '上次生成文件清理未完成'}</span>}
                 </div>
                 <div className="media-v4-source-card-actions" role="group" aria-label="导入与更新">
-                  <Button className={`media-v4-source-card-action ${card.can_resume || deletionRetry ? 'primary' : 'secondary'}`} appearance={card.can_resume || deletionRetry ? 'primary' : 'secondary'} icon={resumeIcon} disabled={retiredCleanup && active} onClick={() => {
+                  <Button className={`media-v4-source-card-action ${resumeAppearance}`} appearance={resumeAppearance} icon={resumeIcon} disabled={retiredCleanup && active} onClick={() => {
                     if (deletionRetry) {
                       setSourceDeletionPreview(null)
                       setSourceDeletionQueued(false)
@@ -1624,11 +1625,11 @@ export default function MediaManagementPage() {
             const Icon = option.icon
             const selected = kind === option.kind
             return (
-              <button type="button" className={selected ? 'selected' : ''} aria-label={option.label} aria-pressed={selected} onClick={() => selectSourceKind(option.kind)} key={option.kind}>
+              <Button appearance="secondary" className={selected ? 'selected' : ''} aria-label={option.label} aria-pressed={selected} onClick={() => selectSourceKind(option.kind)} key={option.kind}>
                 <span className="media-v4-source-icon" aria-hidden="true"><Icon /></span>
                 <span><strong>{option.label}</strong></span>
                 <span className="media-v4-source-check" aria-hidden="true">{selected && <CheckmarkCircle24Filled />}</span>
-              </button>
+              </Button>
             )
           })}
         </div>

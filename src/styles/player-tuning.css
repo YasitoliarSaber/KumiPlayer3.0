@@ -19,11 +19,6 @@
   .player-tuning-page--compact .player-tuning-help-details summary:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 4px; }
   .player-tuning-page--compact .player-tuning-help { margin: 12px 0 0; padding-left: 20px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
   .player-tuning-page--compact .player-tuning-actions { display: flex; justify-content: flex-end; margin: 0; padding: 0; }
-  /* 保留显式主操作的主题兜底，仅作用于本页保存按钮。 */
-  .player-tuning-actions .fui-Button {
-    background-color: var(--colorBrandBackground, var(--accent-strong)) !important;
-    color: var(--colorNeutralForegroundOnBrand, #ffffff) !important;
-  }
   @media (max-width: 640px) {
     .player-tuning-page--compact { padding: 16px 12px 28px; }
     .player-tuning-page--compact .player-tuning-fields { grid-template-columns: 1fr; }

@@ -5,7 +5,7 @@
 // - 右键菜单只临时改变当前视频，下一视频恢复本页面设置的永久默认。
 
 import { useEffect, useId, useState } from 'react';
-import { Button, Input, Radio, RadioGroup, Select, Spinner } from '@fluentui/react-components';
+import { Button, Dropdown, Input, Option, Radio, RadioGroup, Spinner } from '@fluentui/react-components';
 import { ArrowLeft, CheckCircle2, FolderOpen } from 'lucide-react';
 import { configApi, type PublicConfig, type MpvValidationResult, type MpvRuntimeStatus } from '../api/config';
 import { pickFile } from '../platform/folderPicker';
@@ -236,14 +236,16 @@ export default function PlayerTuningPage({ embedded = false, initialConfig, runt
       <SettingsSection title="Anime4K 默认效果" description="默认关闭。开启后可在播放中比较效果，右键菜单的调整仅影响当前视频。">
           <div className="player-tuning-fields">
             <SettingsField label="模式">
-              <Select value={mode} disabled={busy} onChange={(_, data) => { clearFeedback(); setMode(data.value as Anime4kMode); }}>
-                {MODE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </Select>
+              <Dropdown value={MODE_OPTIONS.find(item => item.value === mode)?.label || ''} selectedOptions={[mode]} disabled={busy}
+                onOptionSelect={(_, data) => { if (data.optionValue) { clearFeedback(); setMode(data.optionValue as Anime4kMode); } }}>
+                {MODE_OPTIONS.map((item) => <Option key={item.value} value={item.value}>{item.label}</Option>)}
+              </Dropdown>
             </SettingsField>
             <SettingsField label="质量">
-              <Select value={quality} disabled={busy || mode === 'off'} onChange={(_, data) => { clearFeedback(); setQuality(data.value as Anime4kQuality); }}>
-                {QUALITY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </Select>
+              <Dropdown value={QUALITY_OPTIONS.find(item => item.value === quality)?.label || ''} selectedOptions={[quality]} disabled={busy || mode === 'off'}
+                onOptionSelect={(_, data) => { if (data.optionValue) { clearFeedback(); setQuality(data.optionValue as Anime4kQuality); } }}>
+                {QUALITY_OPTIONS.map((item) => <Option key={item.value} value={item.value}>{item.label}</Option>)}
+              </Dropdown>
             </SettingsField>
           </div>
         <details className="player-tuning-help-details">

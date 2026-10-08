@@ -278,7 +278,7 @@ test('后台任务阻止清理时不再伪装成可点击的危险按钮，并�
   expect(screen.queryByText(/refresh_projection/)).not.toBeInTheDocument()
 
   const css = readFileSync(join(__dirname, '../../src/index.css'), 'utf-8')
-  expect(css).toMatch(/media-v4-maintenance-danger-button\.fui-Button:disabled[^{]*\{[^}]*background:[^;]*--control-bg/s)
+  expect(css).not.toMatch(/media-v4-maintenance-danger-button\.fui-Button:disabled/)
 
   fireEvent.click(screen.getByRole('button', { name: '重新检查清理条件' }))
   await waitFor(() => expect(api.maintenancePreview).toHaveBeenCalledTimes(2))
@@ -360,9 +360,8 @@ test('来源卡使用紧凑的响应式任务卡布局', async () => {
   expect(scale).not.toBeNull()
   // jsdom 不计算实际尺寸，因此锁定 CSS 结构合同本身。
   const css = readFileSync(join(__dirname, '../../src/index.css'), 'utf-8')
-  // 09-15 的「修正来源待处理统计与卡片布局」把来源卡定为紧凑纵向卡片：
-  // 锁定该契约，并反向断言不得再强制正方形（否则会静默回退到旧设计）。
-  expect(css).toContain('grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 380px));')
+  // 紧凑卡片继续使用纵向布局，列宽分配剩余空间，不再固定上限制造空白。
+  expect(css).toContain('grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));')
   expect(css).toMatch(/\.media-v4-library-source-card\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s)
   expect(css).toMatch(/\.media-v4-library-source-card\s*\{[^}]*align-content:\s*start/s)
   expect(css).not.toMatch(/\.media-v4-library-source-card\s*\{[^}]*aspect-ratio:\s*1\s*\/\s*1/s)

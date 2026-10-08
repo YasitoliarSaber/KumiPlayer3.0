@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button } from '@fluentui/react-components';
+import { Button, Checkbox, Input } from '@fluentui/react-components';
 import { CheckCircle, Eye, EyeOff, Info, X, XCircle } from 'lucide-react';
 import { openlistApi, type OpenListConfigPayload, type OpenListTestConnectionPayload, type OpenListTestResult, type OpenListTelemetrySummary } from '../../api/openlist';
 import type { PublicConfig } from '../../api/config';
 import FolderPathInput from './FolderPathInput';
+import { SettingsField } from '../ui/SettingsPrimitives';
 
 /**
  * OpenList 连接设置面板（OL-4：Settings IA）。
@@ -320,14 +321,12 @@ export default function OpenListSettingsPanel({
 
       {editorOpen && (
         <fieldset className="sources-openlist-editor" disabled={busy} aria-label="连接设置">
-          {draft.name !== undefined && <label className="settings-config-row">
-            <span>连接名称</span>
-            <input value={draft.name} maxLength={80} onChange={(event) => handleDraftChange('name', event.target.value)} className="settings-input" autoComplete="off" />
-          </label>}
-          <label className="settings-config-row">
-            <span>OpenList 地址</span>
-            <input type="url" value={draft.server_url} onChange={(event) => handleDraftChange('server_url', event.target.value)} className="settings-input" placeholder="http://localhost:5244" autoComplete="url" />
-          </label>
+          {draft.name !== undefined && <SettingsField label="连接名称" className="settings-config-row">
+            <Input value={draft.name} maxLength={80} disabled={busy} onChange={(_, data) => handleDraftChange('name', data.value)} autoComplete="off" />
+          </SettingsField>}
+          <SettingsField label="OpenList 地址" className="settings-config-row">
+            <Input type="url" value={draft.server_url} disabled={busy} onChange={(_, data) => handleDraftChange('server_url', data.value)} placeholder="http://localhost:5244" autoComplete="url" />
+          </SettingsField>
           <div className="sources-credentials-block">
             {saved ? (
               <div className="sources-credentials-status">
@@ -337,17 +336,14 @@ export default function OpenListSettingsPanel({
               <div className="sources-credentials-status">尚未保存登录信息</div>
             )}
             <div className="settings-field-list">
-              <label className="settings-config-row">
-                <span>用户名</span>
-                <input type="text" value={draft.username} onChange={(event) => handleDraftChange('username', event.target.value)} className="settings-input" placeholder={saved ? (config.openlist_username_masked || '已保存用户名') : 'OpenList 用户名'} autoComplete="username" />
-              </label>
-              <label className="settings-config-row">
-                <span>密码</span>
-                <span className="sources-password-input">
-                  <input type={showNewPassword ? 'text' : 'password'} value={draft.password} onChange={(event) => handleDraftChange('password', event.target.value)} className="settings-input" placeholder={saved ? '••••••••（已保存，输入后更新）' : 'OpenList 密码'} autoComplete="current-password" />
-                  <button type="button" aria-label={showNewPassword ? '隐藏本次输入密码' : '显示本次输入密码'} title={showNewPassword ? '隐藏本次输入密码' : '显示本次输入密码'} onClick={() => setShowNewPassword((value) => !value)}>{showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
-                </span>
-              </label>
+              <SettingsField label="用户名" className="settings-config-row">
+                <Input type="text" value={draft.username} disabled={busy} onChange={(_, data) => handleDraftChange('username', data.value)} placeholder={saved ? (config.openlist_username_masked || '已保存用户名') : 'OpenList 用户名'} autoComplete="username" />
+              </SettingsField>
+              <SettingsField label="密码" className="settings-config-row">
+                <Input type={showNewPassword ? 'text' : 'password'} value={draft.password} disabled={busy} onChange={(_, data) => handleDraftChange('password', data.value)} placeholder={saved ? '••••••••（已保存，输入后更新）' : 'OpenList 密码'} autoComplete="current-password"
+                  contentAfter={<Button type="button" appearance="subtle" size="small" disabled={busy} aria-label={showNewPassword ? '隐藏本次输入密码' : '显示本次输入密码'} title={showNewPassword ? '隐藏本次输入密码' : '显示本次输入密码'} onClick={() => setShowNewPassword((value) => !value)} icon={showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />} />}
+                />
+              </SettingsField>
               <div className="sources-credentials-status">已保存的密码不会回传到界面；更换登录信息时，请同时填写用户名和密码。</div>
             </div>
             {skipVerificationOffered && (
@@ -360,18 +356,16 @@ export default function OpenListSettingsPanel({
             )}
           </div>
 
-          <div className="settings-config-row">
-            <span>本地挂载位置</span>
+          <SettingsField label="本地挂载位置" className="settings-config-row">
             <FolderPathInput label="本地挂载位置" value={draft.mount_root} disabled={busy} onChange={value => handleDraftChange('mount_root', value)} placeholder="例如 K:\\" />
-          </div>
+          </SettingsField>
           <p className="sources-route-hint">选择当前连接在资源管理器中的挂载根目录，与远端根目录对应。每个连接独立保存，可使用不同盘符；目录树导入使用「媒体来源」中的网盘挂载位置。</p>
           <details className="sources-advanced">
             <summary>远端目录与 WebDAV{draft.remote_root !== '/' ? ' · 自定义目录' : ''}</summary>
             <div className="sources-advanced-body">
-              <label className="settings-config-row">
-                <span>远端根目录</span>
-                <input type="text" value={draft.remote_root} onChange={(event) => handleDraftChange('remote_root', event.target.value)} className="settings-input" placeholder="/" />
-              </label>
+              <SettingsField label="远端根目录" className="settings-config-row">
+                <Input type="text" value={draft.remote_root} disabled={busy} onChange={(_, data) => handleDraftChange('remote_root', data.value)} placeholder="/" />
+              </SettingsField>
               <p className="sources-route-hint">远端根目录默认使用 /，应与上方挂载位置对应。</p>
               <div className="sources-webdav-hint"><span>WebDAV：</span><code>{webdav || '填写服务地址后自动生成'}</code></div>
             </div>
@@ -380,23 +374,19 @@ export default function OpenListSettingsPanel({
           <details className="sources-advanced">
             <summary>高级设置</summary>
             <div className="sources-advanced-body">
-              <label className="settings-config-row">
-                <span>目录浏览缓存（分钟）</span>
-                <input type="number" min={1} max={43200} value={draft.cache_ttl} onChange={(event) => handleDraftChange('cache_ttl', event.target.value)} className="settings-input" placeholder="1440" />
-              </label>
-              <label className="settings-config-row">
-                <span>提前加载子目录（上限 50）</span>
-                <input type="number" min={0} max={50} value={draft.prefetch_limit} onChange={(event) => handleDraftChange('prefetch_limit', event.target.value)} className="settings-input" placeholder="12" />
-              </label>
+              <SettingsField label="目录浏览缓存（分钟）" className="settings-config-row">
+                <Input type="number" min={1} max={43200} value={draft.cache_ttl} disabled={busy} onChange={(_, data) => handleDraftChange('cache_ttl', data.value)} placeholder="1440" />
+              </SettingsField>
+              <SettingsField label="提前加载子目录（上限 50）" className="settings-config-row">
+                <Input type="number" min={0} max={50} value={draft.prefetch_limit} disabled={busy} onChange={(_, data) => handleDraftChange('prefetch_limit', data.value)} placeholder="12" />
+              </SettingsField>
               {telemetry && <p className="sources-route-hint">今天的请求：共 {telemetry.total} 次（读取目录 {telemetry.fs_list} 次、登录 {telemetry.login} 次）。仅统计 KumiPlayer 向 OpenList 发出的请求。</p>}
             </div>
           </details>
 
           {isNonLoopbackHttp(draft.server_url) && (
-            <label className="settings-risk-confirm">
-              <input type="checkbox" checked={allowOpenlistHttp} onChange={(event) => setAllowOpenlistHttp(event.target.checked)} />
-              该地址是本地/局域网 HTTP，密码将以明文传输；勾选表示已知晓风险
-            </label>
+            <Checkbox className="settings-risk-confirm" checked={allowOpenlistHttp} disabled={busy} onChange={(_, data) => setAllowOpenlistHttp(data.checked === true)}
+              label="该地址是本地/局域网 HTTP，密码将以明文传输；勾选表示已知晓风险" />
           )}
 
         </fieldset>
@@ -405,14 +395,15 @@ export default function OpenListSettingsPanel({
             <p role={noticeKind === 'error' ? 'alert' : 'status'} className={`settings-openlist-notice${noticeKind !== 'info' ? ` ${noticeKind}` : ''}`}>
               {noticeKind === 'success' ? <CheckCircle size={14} /> : noticeKind === 'error' ? <XCircle size={14} /> : <Info size={14} />}
               <span>{notice}</span>
-              <button
+              <Button
                 type="button"
+                appearance="subtle"
+                size="small"
                 className="settings-openlist-notice-dismiss"
                 aria-label="关闭提示"
                 onClick={() => onNotice?.('', 'info')}
-              >
-                <X size={12} />
-              </button>
+                icon={<X size={12} />}
+              />
             </p>
           )}
     </div>

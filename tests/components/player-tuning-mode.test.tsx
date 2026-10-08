@@ -129,7 +129,7 @@ test('配置加载失败后重试恢复已有设置', async () => {
   config.getConfig.mockRejectedValueOnce(new Error('暂时离线')).mockResolvedValueOnce(baseConfig({ mpv_anime4k_mode: 'b' }))
   render(<PlayerTuningPage />)
   fireEvent.click(await screen.findByRole('button', { name: '重新读取' }))
-  await waitFor(() => expect(screen.getByRole('combobox', { name: '模式' })).toHaveValue('b'))
+  await waitFor(() => expect(screen.getByRole('combobox', { name: '模式' })).toHaveTextContent('Anime4K Mode B'))
   expect(screen.getByRole('button', { name: '保存默认设置' })).toBeEnabled()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })

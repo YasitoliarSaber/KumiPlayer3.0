@@ -54,17 +54,19 @@ function renderRoutes(props: Partial<Parameters<typeof OpenListSourceRoutes>[0]>
 
 describe('OpenListSourceRoutes', () => {
   test('直接选择网盘类型，无需先展开编辑', () => {
-    const { onUpdateDraft } = renderRoutes();
-    fireEvent.change(screen.getByRole('combobox', { name: '115网盘的网盘类型' }), { target: { value: 'baidu' } });
+    const { onUpdateDraft, onSave } = renderRoutes();
+    fireEvent.click(screen.getByRole('combobox', { name: '115网盘的网盘类型' }));
+    fireEvent.click(screen.getByRole('option', { name: '百度网盘' }));
     expect(onUpdateDraft).toHaveBeenCalledWith('/115网盘', { provider_id: 'baidu' });
+    expect(onSave).not.toHaveBeenCalled();
   });
   test('紧凑卡片渲染：名称 / 远端目录 / 内容提供商 / 推导路径', () => {
     renderRoutes();
     expect(screen.getByText('115网盘')).toBeTruthy();
     expect(screen.getByText('/115网盘')).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: '115网盘的网盘类型' })).toHaveValue('pan115');
+    expect(screen.getByRole('combobox', { name: '115网盘的网盘类型' })).toHaveTextContent('115 网盘');
     expect(screen.queryByText('K:\\115网盘')).toBeNull();
-    expect(screen.getByRole('combobox', { name: '夸克网盘的网盘类型' })).toHaveValue('quark');
+    expect(screen.getByRole('combobox', { name: '夸克网盘的网盘类型' })).toHaveTextContent('夸克网盘');
     expect(screen.getByText('/夸克网盘')).toBeTruthy();
   });
 
@@ -93,7 +95,8 @@ describe('OpenListSourceRoutes', () => {
     const { onUpdateDraft } = renderRoutes();
     fireEvent.click(screen.getAllByText('编辑')[0]);
     const select = screen.getAllByRole('combobox')[0];
-    fireEvent.change(select, { target: { value: 'baidu' } });
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole('option', { name: '百度网盘' }));
     expect(onUpdateDraft).toHaveBeenCalledWith('/115网盘', { provider_id: 'baidu' });
   });
 

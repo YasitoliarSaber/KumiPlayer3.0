@@ -81,7 +81,7 @@ describe('PlayerTuningPage', () => {
     expect(await screen.findByText('已打开 MPV 配置文件夹')).toBeTruthy();
   });
 
-  it('使用原生选择器切换 Anime4K，关闭时禁用质量而保留已选质量', async () => {
+  it('使用 Fluent 下拉选择 Anime4K，关闭时禁用质量并保留草稿直到保存', async () => {
     (configApi.getConfig as ReturnType<typeof vi.fn>).mockResolvedValue({
       mpv_anime4k_mode: 'off',
       mpv_anime4k_quality: 'balanced',
@@ -91,12 +91,24 @@ describe('PlayerTuningPage', () => {
     await screen.findByText('关闭');
     const mode = screen.getByRole('combobox', { name: '模式' });
     const quality = screen.getByRole('combobox', { name: '质量' });
-    expect(mode.tagName).toBe('SELECT');
     expect(quality).toBeDisabled();
-    fireEvent.change(mode, { target: { value: 'a' } });
+    (configApi.patchConfig as ReturnType<typeof vi.fn>).mockClear();
+    fireEvent.click(mode);
+    fireEvent.click(screen.getByRole('option', { name: 'Anime4K Mode A', exact: true }));
+    expect(mode).toHaveTextContent('Anime4K Mode A');
     expect(quality).toBeEnabled();
-    expect(quality).toHaveValue('balanced');
+    expect(quality).toHaveTextContent('均衡');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    fireEvent.click(quality);
+    fireEvent.click(screen.getByRole('option', { name: '高质量', exact: true }));
+    fireEvent.click(mode);
+    fireEvent.click(screen.getByRole('option', { name: '关闭', exact: true }));
+    expect(quality).toBeDisabled();
+    expect(quality).toHaveTextContent('高质量');
+    expect(configApi.patchConfig).not.toHaveBeenCalled();
+    (configApi.patchConfig as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    fireEvent.click(screen.getByRole('button', { name: '保存默认设置' }));
+    await waitFor(() => expect(configApi.patchConfig).toHaveBeenCalledWith(expect.objectContaining({ mpv_anime4k_mode: 'off', mpv_anime4k_quality: 'high' })));
   });
 });
 

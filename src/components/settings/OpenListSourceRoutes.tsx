@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Button, Select } from '@fluentui/react-components';
+import { Button, Checkbox, Dropdown, Input, Option } from '@fluentui/react-components';
+import { SettingsField } from '../ui/SettingsPrimitives';
 import { type OpenListDiscoverItem, type OpenListRouteItem } from '../../api/openlist';
 import type { OpenListRoute, ProviderId } from '../../api/types';
 
@@ -128,13 +129,14 @@ export default function OpenListSourceRoutes({
               return (
                 <div key={route.remote_prefix} className="sources-route-card">
                   <div className="sources-route-card-main">
-                    <label className="sources-route-card-name" title="不作为媒体来源时取消勾选（仍可浏览）">
-                      <input type="checkbox" checked={route.enabled} disabled={isBusy} onChange={(event) => handleUpdate(route.remote_prefix, { enabled: event.target.checked })} />
-                      <span><strong>{route.label || route.remote_prefix}</strong><small>{route.remote_prefix}</small></span>
-                    </label>
-                    <Select aria-label={`${route.label || route.remote_prefix}的网盘类型`} value={route.provider_id} disabled={isBusy} onChange={(event) => handleUpdate(route.remote_prefix, { provider_id: event.target.value as ProviderId })}>
-                      {ROUTE_PROVIDER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </Select>
+                    <Checkbox className="sources-route-card-name" title="不作为媒体来源时取消勾选（仍可浏览）" checked={route.enabled} disabled={isBusy}
+                      onChange={(_, data) => handleUpdate(route.remote_prefix, { enabled: data.checked === true })}
+                      label={<span className="sources-route-card-copy"><strong>{route.label || route.remote_prefix}</strong><small>{route.remote_prefix}</small></span>} />
+                    <Dropdown aria-label={`${route.label || route.remote_prefix}的网盘类型`} value={ROUTE_PROVIDER_OPTIONS.find(option => option.value === route.provider_id)?.label || route.provider_id}
+                      selectedOptions={[route.provider_id]} disabled={isBusy} style={{ minWidth: 0 }}
+                      onOptionSelect={(_, data) => { if (data.optionValue) handleUpdate(route.remote_prefix, { provider_id: data.optionValue as ProviderId }); }}>
+                      {ROUTE_PROVIDER_OPTIONS.map((option) => <Option key={option.value} value={option.value}>{option.label}</Option>)}
+                    </Dropdown>
                     <Button appearance="subtle" size="small" aria-expanded={isExpanded} onClick={() => toggleEdit(route.remote_prefix)}>
                       {isExpanded ? '收起' : '编辑'}
                     </Button>
@@ -146,10 +148,9 @@ export default function OpenListSourceRoutes({
                   )}
                   {isExpanded && (
                     <div className="sources-route-card-edit">
-                      <label className="settings-config-row">
-                        <span>显示名称</span>
-                        <input type="text" value={route.label} disabled={isBusy} onChange={(event) => handleUpdate(route.remote_prefix, { label: event.target.value })} className="settings-input" />
-                      </label>
+                      <SettingsField label="显示名称" className="settings-config-row">
+                        <Input type="text" value={route.label} disabled={isBusy} onChange={(_, data) => handleUpdate(route.remote_prefix, { label: data.value })} />
+                      </SettingsField>
                       <div className="settings-config-row settings-openlist-derived">
                         <span>本地播放路径</span>
                         <output>{localPath || '填写挂载位置后自动推导'}</output>

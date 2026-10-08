@@ -1,5 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, Select, Spinner } from '@fluentui/react-components';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Button, Dropdown, Input, Option, Spinner, Switch } from '@fluentui/react-components';
 import {
   Database,
   ExternalLink,
@@ -22,6 +22,7 @@ import type { TaskRecord } from '../api/types';
 import { useUiStore, type AppearanceMode } from '../stores/ui';
 import { BANGUMI_ACCESS_TOKEN_URL, getTmdbCredentialError, TMDB_API_SETTINGS_URL } from '../config/credentials';
 import DecodedImage from '../components/ui/DecodedImage';
+import { SettingsField, SettingsSection } from '../components/ui/SettingsPrimitives';
 import OpenListSettingsPanel, { type OpenListDraft } from '../components/settings/OpenListSettingsPanel';
 import OpenListConnectionPicker from '../components/settings/OpenListConnectionPicker';
 import FolderPathInput from '../components/settings/FolderPathInput';
@@ -362,13 +363,13 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
             { id: 'cinema', name: '深邃影院', colors: ['#090b0f', '#151920', '#a9c1e1'] },
             { id: 'mica', name: '纯白', colors: ['#ffffff', '#ffffff', '#586570'] },
           ] as Array<{ id: AppearanceMode; name: string; colors: string[] }>).map((theme) => (
-            <button key={theme.id} className={`appearance-card ${appearanceMode === theme.id ? 'active' : ''}`} onClick={() => setAppearanceMode(theme.id)}>
+            <Button key={theme.id} appearance="secondary" className={`appearance-card ${appearanceMode === theme.id ? 'active' : ''}`} aria-pressed={appearanceMode === theme.id} onClick={() => setAppearanceMode(theme.id)}>
               <span className="appearance-preview">
                 {theme.colors.map((color, index) => <i key={`${theme.id}-${index}`} style={{ background: color }} />)}
               </span>
               <strong>{theme.name}</strong>
               <span className="appearance-state">{appearanceMode === theme.id ? '正在使用' : '切换主题'}</span>
-            </button>
+            </Button>
           ))}
         </div>
       </SettingsSection>
@@ -747,19 +748,13 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
       </SettingsSection>
 
       {(!hasStoredCredential || authStatus === 'reauth_required') && bangumiSessionStatus !== 'checking' && (
-        <details className="settings-section settings-token-login" open={authStatus === 'reauth_required'}>
-          <summary className="settings-section-head">
-            <span className="settings-token-title"><KeyRound size={17} /><span><strong>个人访问令牌登录</strong><small>Bangumi Access Token</small></span></span>
-            <span className="settings-collapse-hint">展开</span>
-          </summary>
-          <div className="settings-collapsible-body">
+        <SettingsSection title="个人访问令牌登录" className="settings-token-login" collapsible open={authStatus === 'reauth_required'}>
             <div className="settings-inline">
-              <input type="password" aria-label="Bangumi 个人访问令牌" value={bangumiToken} onChange={(event) => setBangumiToken(event.target.value)} className="settings-input min-w-0 flex-1" placeholder="粘贴 Bangumi 个人访问令牌" autoComplete="off" />
+              <Input type="password" aria-label="Bangumi 个人访问令牌" value={bangumiToken} onChange={(_, data) => setBangumiToken(data.value)} className="min-w-0 flex-1" placeholder="粘贴 Bangumi 个人访问令牌" autoComplete="off" />
               <PrimaryButton onClick={loginBangumi} busy={bangumiLoading} disabled={!bangumiToken.trim()}>{authStatus === 'reauth_required' ? '更新登录信息' : '验证并登录'}</PrimaryButton>
             </div>
             <div className="settings-note">令牌只保存在本机安全存储中，提交前会先通过 Bangumi 当前用户接口验证；授权失效时更新 Token 不会丢失已保存的账户资料。</div>
-          </div>
-        </details>
+        </SettingsSection>
       )}
 
     </PanelStack>
@@ -777,7 +772,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
 
   return (
     <div className="settings-shell settings-shell-settings settings-focused">
-      <main className="settings-content fade-in-soft">
+      <main className="settings-content">
         {(configLoading || activeAction) && (
           <div className="settings-loading" role="status">
             <Spinner size="tiny" />
@@ -810,18 +805,19 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
             {sectionTabs.map((tab) => {
               const Icon = tab.icon;
               return (
-                <button
+                <Button
                   key={tab.key}
                   id={`settings-tab-${tab.key}`}
                   aria-controls={sectionId(tab.key)}
                   type="button"
+                  appearance={activeSection === tab.key ? 'secondary' : 'subtle'}
                   onClick={() => selectSection(tab.key)}
                   className={`settings-outline-link ${activeSection === tab.key ? 'is-active' : ''}`}
                   aria-current={activeSection === tab.key ? 'location' : undefined}
                 >
                   <span className="settings-outline-icon"><Icon size={17} strokeWidth={1.8} /></span>
                   <span className="settings-outline-copy"><strong>{tab.label}</strong></span>
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -844,83 +840,43 @@ function SectionIntro({ title, description = '' }: { title: string; description?
   );
 }
 
-function SettingsSection({ title, action, children, collapsible = false, className = '' }: { title?: string; action?: ReactNode; children: ReactNode; collapsible?: boolean; className?: string }) {
-  const cls = className ? ` ${className}` : '';
-  if (collapsible) {
-    return (
-      <details className={`settings-section settings-collapsible${cls}`}>
-        <summary className="settings-section-head">
-          <h3>{title}</h3>
-          <span className="settings-collapse-hint">展开</span>
-        </summary>
-        <div className="settings-collapsible-body">{children}</div>
-      </details>
-    );
-  }
-  return (
-    <section className={`settings-section${cls}`}>
-      {title != null && (
-        <div className="settings-section-head">
-          <h3>{title}</h3>
-          {action}
-        </div>
-      )}
-      {children}
-    </section>
-  );
-}
-
 function ConfigRow({ label, value, onSave, secret = false, placeholder = '', folder = false }: { label: string; value: string; onSave: (value: string) => void; secret?: boolean; placeholder?: string; folder?: boolean }) {
-  const inputId = useId();
   const initialDraft = secret ? '' : value || '';
   const [draft, setDraft] = useState(initialDraft);
   useEffect(() => setDraft(secret ? '' : value || ''), [secret, value]);
   const resolvedPlaceholder = secret && value ? '已配置；粘贴新凭据可替换' : placeholder;
   return (
-    <div className="settings-config-row settings-config-row--with-action">
-      <label htmlFor={inputId}>{label}</label>
-      {folder ? <FolderPathInput inputId={inputId} label={label} value={draft} onChange={setDraft} placeholder={placeholder} /> : <input id={inputId} type={secret ? 'password' : 'text'} value={draft} onChange={(event) => setDraft(event.target.value)} className="settings-input" placeholder={resolvedPlaceholder} autoComplete={secret ? 'off' : undefined} />}
-      <GhostButton onClick={() => { onSave(draft); if (secret) setDraft(''); }} disabled={secret && !draft.trim()}>保存</GhostButton>
-    </div>
+    <SettingsField label={label} className="settings-config-row settings-config-row--with-action" action={<GhostButton onClick={() => { onSave(draft); if (secret) setDraft(''); }} disabled={secret && !draft.trim()}>保存</GhostButton>}>
+      {folder ? <FolderPathInput label={label} value={draft} onChange={setDraft} placeholder={placeholder} /> : <Input type={secret ? 'password' : 'text'} value={draft} onChange={(_, data) => setDraft(data.value)} placeholder={resolvedPlaceholder} autoComplete={secret ? 'off' : undefined} />}
+    </SettingsField>
   );
 }
 
 function NumberRow({ label, value, onSave }: { label: string; value: number; onSave: (value: number) => void }) {
-  const inputId = useId();
   const [draft, setDraft] = useState(String(value ?? 0));
   useEffect(() => setDraft(String(value ?? 0)), [value]);
   return (
-    <div className="settings-config-row settings-config-row--with-action">
-      <label htmlFor={inputId}>{label}</label>
-      <input id={inputId} type="number" value={draft} onChange={(event) => setDraft(event.target.value)} className="settings-input" />
-      <GhostButton onClick={() => onSave(Number(draft) || 0)}>保存</GhostButton>
-    </div>
+    <SettingsField label={label} className="settings-config-row settings-config-row--with-action" action={<GhostButton onClick={() => onSave(Number(draft) || 0)}>保存</GhostButton>}>
+      <Input type="number" value={draft} onChange={(_, data) => setDraft(data.value)} />
+    </SettingsField>
   );
 }
 
 function SelectRow({ label, value, options, onSave }: { label: string; value: string; options: Array<{ value: string; label: string }>; onSave: (value: string) => void }) {
-  const inputId = useId();
   const [draft, setDraft] = useState(value || '');
   useEffect(() => setDraft(value || ''), [value]);
   return (
-    <div className="settings-config-row settings-config-row--with-action">
-      <label htmlFor={inputId}>{label}</label>
-      <Select id={inputId} value={draft} onChange={(_, data) => setDraft(data.value)} className="settings-select-control">
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </Select>
-      <GhostButton onClick={() => onSave(draft)}>保存</GhostButton>
-    </div>
+    <SettingsField label={label} className="settings-config-row settings-config-row--with-action" action={<GhostButton onClick={() => onSave(draft)}>保存</GhostButton>}>
+      <Dropdown value={options.find((option) => option.value === draft)?.label || draft} selectedOptions={[draft]} onOptionSelect={(_, data) => setDraft(data.optionValue || '')}>
+        {options.map((option) => <Option key={option.value} value={option.value}>{option.label}</Option>)}
+      </Dropdown>
+    </SettingsField>
   );
 }
 
 function ToggleRow({ label, active, onChange }: { label: string; active: boolean; onChange: () => void }) {
   return (
-    <div className="settings-toggle-row">
-      <span>{label}</span>
-      <button role="switch" aria-checked={Boolean(active)} onClick={onChange} className={`settings-switch ${active ? 'on' : ''}`} aria-label={label}>
-        <span />
-      </button>
-    </div>
+    <Switch label={label} labelPosition="before" checked={Boolean(active)} onChange={onChange} className="settings-toggle-row" />
   );
 }
 

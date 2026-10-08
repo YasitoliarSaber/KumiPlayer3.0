@@ -20,7 +20,8 @@
     background: var(--kp-settings-surface);
   }
 
-  .kp-settings-section-heading { display: grid; gap: var(--kp-space-xs, 4px); }
+  .kp-settings-section-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--kp-space-m, 12px); min-width: 0; }
+  .kp-settings-section-heading-copy { display: grid; gap: var(--kp-space-xs, 4px); min-width: 0; }
   .kp-settings-section-heading h3 {
     margin: 0;
     font-size: var(--kp-font-size-400, 16px);
@@ -34,12 +35,21 @@
     line-height: var(--kp-line-height-300, 20px);
     overflow-wrap: anywhere;
   }
+  .kp-settings-section--collapsible > summary { list-style: none; cursor: pointer; }
+  .kp-settings-section--collapsible > summary::-webkit-details-marker { display: none; }
+  .kp-settings-section--collapsible > summary:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 4px; border-radius: var(--kp-radius-m, 4px); }
+  .kp-settings-section-chevron { flex-shrink: 0; }
+  .kp-settings-section--collapsible[open] > summary .kp-settings-section-chevron { transform: rotate(180deg); }
+  .kp-settings-section-body { display: grid; gap: var(--kp-settings-gap); padding-top: var(--kp-settings-gap); min-width: 0; }
 
   .kp-settings-field { min-width: 0; }
-  .kp-settings-field-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--kp-space-s, 8px); }
+  .kp-settings-field-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--kp-space-s, 8px); min-width: 0; }
   .kp-settings-field-controls--action { grid-template-columns: minmax(0, 1fr) auto; }
   .kp-settings-field-controls > .fui-Input,
-  .kp-settings-field-controls > .fui-Select { min-width: 0; width: 100%; }
+  .kp-settings-field-controls > .fui-Select,
+  .kp-settings-field-controls > .fui-Dropdown { min-width: 0; width: 100%; }
+  /* Fluent 的无层默认最小宽为 250px；只解开尺寸约束，不改控件表面与状态。 */
+  .kp-settings-field-controls > .fui-Dropdown { min-width: 0 !important; }
   .kp-settings-field-action { display: flex; align-items: flex-start; }
   .kp-settings-feedback { min-width: 0; overflow-wrap: anywhere; }
   .kp-settings-feedback .fui-MessageBarBody { min-width: 0; }

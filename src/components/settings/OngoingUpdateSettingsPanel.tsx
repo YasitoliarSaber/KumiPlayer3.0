@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Input, Select, Switch } from '@fluentui/react-components';
+import { Button, Dropdown, Input, Option, Switch } from '@fluentui/react-components';
 import type { PublicConfig } from '../../api/config';
 import { SettingsFeedback, SettingsField } from '../ui/SettingsPrimitives';
 
@@ -77,10 +77,10 @@ export default function OngoingUpdateSettingsPanel({ config, onSave, externalBus
       <Switch label="启动时更新新番" checked={config.ongoing_update_on_startup ?? false} disabled={disabled}
         onChange={(_, data) => void save({ ongoing_update_on_startup: data.checked })} />
     <SettingsField label="新番更新间隔" description="仅更新导入时选择“新番”的来源；纯 TXT 来源需要选择新导出的清单，刷新与识别结果在新番分类查看。">
-      <Select value={String(interval)} disabled={disabled}
-        onChange={(_, data) => void save({ ongoing_update_interval_minutes: Number(data.value) })}>
-        {options.map(option => <option value={option.value} key={option.value}>{option.label}</option>)}
-      </Select>
+      <Dropdown value={options.find(option => option.value === interval)?.label || ''} selectedOptions={[String(interval)]} disabled={disabled}
+        onOptionSelect={(_, data) => { if (data.optionValue !== undefined) void save({ ongoing_update_interval_minutes: Number(data.optionValue) }); }}>
+        {options.map(option => <Option value={String(option.value)} key={option.value}>{option.label}</Option>)}
+      </Dropdown>
     </SettingsField>
     {saving && <SettingsFeedback busy>正在保存新番更新设置…</SettingsFeedback>}
     {notice && <SettingsFeedback intent={failed ? 'error' : 'success'}>{notice}</SettingsFeedback>}

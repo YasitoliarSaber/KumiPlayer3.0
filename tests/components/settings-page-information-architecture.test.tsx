@@ -125,14 +125,15 @@ describe('SettingsPage 信息架构', () => {
     const startup = screen.getByRole('switch', { name: '启动时更新新番' });
     const interval = screen.getByRole('combobox', { name: '新番更新间隔' });
     expect(startup).not.toBeChecked();
-    expect(interval).toHaveValue('0');
+    expect(interval).toHaveTextContent('关闭');
     api.patchConfig.mockClear();
     fireEvent.click(startup);
     await waitFor(() => expect(api.patchConfig).toHaveBeenCalledWith({ ongoing_update_on_startup: true }));
     await waitFor(() => expect(startup).toBeChecked());
-    fireEvent.change(interval, { target: { value: '60' } });
+    fireEvent.click(interval);
+    fireEvent.click(screen.getByRole('option', { name: '每小时' }));
     await waitFor(() => expect(api.patchConfig).toHaveBeenCalledWith({ ongoing_update_interval_minutes: 60 }));
-    await waitFor(() => expect(interval).toHaveValue('60'));
+    await waitFor(() => expect(interval).toHaveTextContent('每小时'));
     expect(startup).toBeChecked();
     expect(screen.getByText(/纯 TXT 来源需要选择新导出的清单/)).toBeVisible();
     expect(document.getElementById('settings-panel-sources')).toContainElement(startup);
@@ -156,11 +157,11 @@ describe('SettingsPage 信息架构', () => {
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '元数据与图片' }));
     fireEvent.click(screen.getByText('联网名称核对（可选）'));
-    expect(screen.getByRole('combobox', { name: '联网名称核对' })).toHaveValue('off');
+    expect(screen.getByRole('combobox', { name: '联网名称核对' })).toHaveTextContent('关闭（默认）');
     expect(screen.getByLabelText('Tavily 搜索密钥')).toHaveValue('');
     expect(screen.getByLabelText('DeepSeek 密钥')).toHaveValue('');
     fireEvent.change(screen.getByLabelText('Tavily 搜索密钥'), { target: { value: 'fixture-search' } });
-    fireEvent.click(within(screen.getByLabelText('Tavily 搜索密钥').parentElement!).getByRole('button', { name: '保存' }));
+    fireEvent.click(within(screen.getByLabelText('Tavily 搜索密钥').closest('.settings-config-row')!).getByRole('button', { name: '保存' }));
     expect(api.patchConfig).toHaveBeenCalledWith({ websearch_api_key: 'fixture-search' });
     expect(screen.getByText(/只发送作品名称与年份/)).toBeVisible();
   });
@@ -262,6 +263,27 @@ describe('SettingsPage 信息架构', () => {
 
     expect(labels.findIndex((label) => label.includes('账户与同步'))).toBeLessThan(labels.findIndex((label) => label.includes('外观')));
     expect(labels.findIndex((label) => label.includes('外观'))).toBeLessThan(labels.findIndex((label) => label.includes('媒体来源')));
+  });
+
+  test('图片策略下拉选择只改草稿，切换分类后保存仍只修改对应字段', async () => {
+    api.getConfig.mockResolvedValue({ ...config, artwork_storage_mode: 'local' });
+    render(<SettingsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '元数据与图片' }));
+    const dropdown = screen.getByRole('combobox', { name: '图片策略' });
+    expect(dropdown).toHaveTextContent('优先使用本地图片');
+    api.patchConfig.mockClear();
+    fireEvent.click(dropdown);
+    fireEvent.click(screen.getByRole('option', { name: '本地优先，缺失时联网' }));
+    expect(dropdown).toHaveTextContent('本地优先，缺失时联网');
+    expect(api.patchConfig).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '外观', exact: true }));
+    expect(screen.getByRole('button', { name: /雾蓝云母/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /深邃影院/ })).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByRole('button', { name: '元数据与图片' }));
+    const restored = screen.getByRole('combobox', { name: '图片策略' });
+    expect(restored).toHaveTextContent('本地优先，缺失时联网');
+    fireEvent.click(within(restored.closest('.settings-config-row')!).getByRole('button', { name: '保存' }));
+    expect(api.patchConfig).toHaveBeenCalledWith({ artwork_storage_mode: 'auto' });
   });
 
   test('隐藏构建与赞助信息，并将播放器状态收敛为用户可理解的结果', async () => {

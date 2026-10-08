@@ -147,20 +147,7 @@
 
 .settings-openlist-notice-dismiss {
   margin-left: 6px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  opacity: 0.5;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-.settings-openlist-notice-dismiss:hover {
-  opacity: 0.9;
+  flex-shrink: 0;
 }
 
 .sources-credentials-block {
@@ -172,43 +159,6 @@
 .sources-credentials-status {
   font-size: 12.5px;
   color: var(--settings-muted, #8a93a2);
-}
-
-.sources-password-input {
-  position: relative;
-  display: block;
-  min-width: 0;
-}
-
-.sources-password-input .settings-input {
-  width: 100%;
-  padding-right: 40px;
-}
-
-.sources-password-input > button {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  transform: translateY(-50%);
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--settings-muted, #8a93a2);
-  cursor: pointer;
-}
-
-.sources-password-input > button:hover {
-  background: rgba(128, 128, 128, 0.12);
-  color: var(--settings-text, inherit);
-}
-
-.sources-password-input > button:focus-visible {
-  outline: 2px solid var(--accent-strong, #4ca5ff);
-  outline-offset: 1px;
 }
 
 /* ---------- 高级设置（默认折叠） ---------- */

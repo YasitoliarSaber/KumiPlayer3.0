@@ -7,6 +7,14 @@ const maintenance = readFileSync(new URL('../src/components/media/LibraryMainten
 const execution = readFileSync(new URL('../src/components/media/V4ExecutionProgress.tsx', import.meta.url), 'utf8')
 const styles = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
 const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const foundation = readFileSync(new URL('../src/styles/foundation.css', import.meta.url), 'utf8')
+
+test('媒体管理的设计变量必须在共享基础层定义，避免内边距与字号静默失效', () => {
+  const mediaStyles = styles.slice(styles.indexOf('/* V4 导入页：'), styles.indexOf('/* 用户反馈（§14 / §14.7）'))
+  const defined = new Set([...foundation.matchAll(/(--kp-[\w-]+)\s*:/g)].map(match => match[1]))
+  const referenced = new Set([...mediaStyles.matchAll(/var\((--kp-[\w-]+)\)/g)].map(match => match[1]))
+  assert.deepEqual([...referenced].filter(token => !defined.has(token)), [])
+})
 
 test('新导入入口始终从来源选择开始，历史执行只由来源卡打开', () => {
   assert.match(page, /onClick=\{startNewImport\}>导入媒体<\/Button>/)
@@ -16,7 +24,7 @@ test('新导入入口始终从来源选择开始，历史执行只由来源卡�
 
 test('来源卡只携带来源摘要与标准操作按钮，不渲染作品预览', () => {
   assert.doesNotMatch(page, /card\.work_previews/)
-  assert.match(page, /media-v4-source-card-action \$\{card\.can_resume \|\| deletionRetry \? 'primary' : 'secondary'\}/)
+  assert.match(page, /media-v4-source-card-action \$\{resumeAppearance\}/)
   assert.match(page, /className="media-v4-source-card-action secondary" appearance="secondary"[^\n]*>检查更新<\/Button>/)
 })
 
@@ -28,11 +36,17 @@ test('来源卡通过来源根承载扫描与草稿恢复，不展示游离草�
 })
 
 test('来源卡为紧凑响应式卡片网格，不强制正方形并保留小窗口单列回退', () => {
-  // 09-15 起的既定设计：紧凑纵向卡片（无 aspect-ratio 方形约束）。
-  assert.match(styles, /\.media-v4-source-library-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*330px\),\s*380px\)\)/s)
+  // 卡片等宽分配剩余空间，避免固定宽度上限留下大片空白。
+  assert.match(styles, /\.media-v4-source-library-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*320px\),\s*1fr\)\)/s)
   assert.match(styles, /\.media-v4-library-source-card\s*\{[^}]*align-content:\s*start/s)
   assert.doesNotMatch(styles, /\.media-v4-library-source-card\s*\{[^}]*aspect-ratio:\s*1\s*\/\s*1/s)
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]{0,400}?\.media-v4-source-library-grid\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/s)
+})
+
+test('媒体管理的主次操作由 Fluent 外观与主题管理，不重绘禁用和焦点状态', () => {
+  assert.doesNotMatch(styles, /\.media-flow-page \.media-primary-command\.fui-Button:(?:hover|active|focus-visible|disabled)/)
+  assert.doesNotMatch(styles, /\.media-v4-library-source-card \.media-v4-source-card-actions \.fui-Button:(?:focus-visible|disabled)/)
+  assert.doesNotMatch(styles, /\.media-v4-source-card-dialog-danger\.fui-Button\s*\{/)
 })
 
 test('来源卡仅显示当前人话任务并提供直接终止入口', () => {
