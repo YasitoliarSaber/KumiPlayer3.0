@@ -28,6 +28,7 @@ from app.api.tracking_v4 import router as tracking_router
 from app.core.api_security import ApiSessionMiddleware
 from app.media_v4.assets.preparation import thumbnail_preparer
 from app.media_v4.jobs.runner import V4JobRunner
+from app.media_v4.projection.refresh import ProjectionRefreshScheduler
 from app.media_v4.runtime import initialize_runtime
 
 
@@ -43,18 +44,34 @@ async def lifespan(app: FastAPI):
 
     async def run_v4_jobs() -> None:
         runner = V4JobRunner(database)
+        delay = 0.25
         while not stop_jobs.is_set():
             try:
-                await asyncio.to_thread(runner.process_available)
+                results = await asyncio.to_thread(runner.process_available)
+                delay = 0.25 if results else min(2, delay * 2)
             except Exception:
                 # 单个任务会在自己的 handler 中记录失败；worker 继续消费后续任务。
                 pass
             try:
-                await asyncio.wait_for(stop_jobs.wait(), timeout=0.25)
+                await asyncio.wait_for(stop_jobs.wait(), timeout=delay)
             except TimeoutError:
                 continue
 
     job_worker = asyncio.create_task(run_v4_jobs())
+
+    async def refresh_library() -> None:
+        scheduler = ProjectionRefreshScheduler(database)
+        while not stop_jobs.is_set():
+            try:
+                await asyncio.to_thread(scheduler.tick)
+            except Exception:
+                logging.getLogger(__name__).warning('媒体库后台刷新未成功，将自动重试', exc_info=True)
+            try:
+                await asyncio.wait_for(stop_jobs.wait(), timeout=1)
+            except TimeoutError:
+                continue
+
+    projection_worker = asyncio.create_task(refresh_library())
     # 来源扫描 worker：启动时先回收失联行，再串行领取 queued 扫描；
     # 退出时在安全边界收口，不遗留 daemon 孤儿线程。
     source_scan_worker = get_source_scan_runner(database)
@@ -83,6 +100,7 @@ async def lifespan(app: FastAPI):
     finally:
         stop_jobs.set()
         await job_worker
+        await projection_worker
         await ongoing_worker
         await asyncio.to_thread(thumbnail_preparer.stop)
         source_scan_worker.stop()

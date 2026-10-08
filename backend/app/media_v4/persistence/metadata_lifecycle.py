@@ -50,11 +50,12 @@ def snapshot_artifacts(conn, snapshot_id: str) -> list[dict]:
 
 
 def artifacts_valid(rows: list[dict]) -> bool:
+    from app.media_v4.persistence.artifact_validation import artifact_matches
+
     if not rows or not any(row['role'] == 'work_metadata' for row in rows):
         return False
     try:
-        return all(row['status'] == 'published' and Path(row['target_path']).is_file()
-                   and hashlib.sha256(Path(row['target_path']).read_bytes()).hexdigest() == row['digest']
+        return all(row['status'] == 'published' and artifact_matches(row['target_path'], row['digest'])
                    for row in rows)
     except OSError:
         return False

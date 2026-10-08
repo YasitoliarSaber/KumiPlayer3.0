@@ -90,6 +90,10 @@ def test_library_list_cards_include_watch_status_and_latest_episode(tmp_path, mo
             (json.dumps({"status": "watching", "favorite": True}, ensure_ascii=False),),
         )
 
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    V4LibraryProjection(database).rebuild()  # 读取仅消费已发布代次。
+
     application = FastAPI()
     application.include_router(library_v4.router)
     application.include_router(media_v4.router)

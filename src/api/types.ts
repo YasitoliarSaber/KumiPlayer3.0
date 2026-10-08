@@ -69,7 +69,7 @@ export interface WorkIndex {
   work_id: string
   title: string
   original_title: string
-  title_provenance?: 'manual' | 'nfo' | 'online'
+  title_provenance?: 'manual' | 'nfo' | 'online' | 'local'
   year: number | null
   rating: number
   plot: string

@@ -498,6 +498,9 @@ def test_preview_confirm_and_library_use_revision_work_and_job_identities(tmp_pa
     confirmed_evidence = media_v4._confirmed_source_evidence("root-api")
     assert [item.relative_path for item in confirmed_evidence] == ["Show/Show.S01E01.mkv"]
 
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    V4LibraryProjection(media_v4.get_database()).rebuild()  # 测试应用无后台生命周期。
     library = client.get("/api/v4/library")
     assert library.status_code == 200, library.text
     assert library.json()["cards"][0]["title"] == "Show"

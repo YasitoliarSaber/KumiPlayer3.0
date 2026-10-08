@@ -114,6 +114,7 @@ def test_shared_tv_title_guard_is_identical_in_list_and_detail(tmp_path, monkeyp
         conn.execute("INSERT INTO scrape_bindings(binding_id,revision_id,work_id,provider,provider_id,metadata_json,status,created_at,updated_at) SELECT 'binding-'||work_id,'shared',work_id,'tmdb','42',?,'ready','now','now' FROM works", (json.dumps(metadata, ensure_ascii=False),))
     monkeypatch.setattr(library_v4, "get_database", lambda: db)
     monkeypatch.setattr(library_v4, "queue_library_artwork", lambda _: None)
+    V4LibraryProjection(db).rebuild()  # 先由后台发布，再核对只读列表与详情的一致性。
     listed = library_v4.get_library(include_all=True)["works"]
     assert {work["title"] for work in listed} == {"来自深渊", "来自深渊 烈日的黄金乡"}
     for work in listed:

@@ -10,7 +10,7 @@ from pathlib import PurePosixPath
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.api.assets import queue_library_artwork
+from app.api.assets import queue_library_artwork as queue_library_artwork
 from app.api.media_v4 import get_database
 from app.media_v4.parsing.episode_titles import (
     clean_special_episode_title,
@@ -93,7 +93,8 @@ def _card_payload(card: dict, override: dict | None = None) -> dict:
         "title": display_title,
         "original_title": metadata.get("original_title") or card["title"],
         "year": card["year"],
-        "title_provenance": "online" if metadata.get("provider") not in {None, "", "local"} else "local",
+        "title_provenance": "manual" if str(override.get('title') or '').strip() else (
+            "online" if metadata.get("provider") not in {None, "", "local"} else "local"),
         "rating": metadata.get("rating") or 0,
         "plot": metadata.get("plot") or "",
         "genres": metadata.get("genres") or [],
@@ -130,10 +131,12 @@ def _card_payload(card: dict, override: dict | None = None) -> dict:
     }
 
 
-def _library_snapshot():
+def _library_snapshot(*, compact: bool = False):
     database = get_database()
     projection = V4LibraryProjection(database)
-    return projection.ensure_current()
+    from app.media_v4.projection.library import LibrarySnapshot
+
+    return projection.current(compact=compact) or LibrarySnapshot('', '', ())
 
 
 def _work_overrides_map(work_ids: list[str]) -> dict[str, dict]:
@@ -143,12 +146,7 @@ def _work_overrides_map(work_ids: list[str]) -> dict[str, dict]:
         return {}
     import json as _json
 
-    with get_database().connect() as conn:
-        placeholders = ",".join("?" for _ in work_ids)
-        rows = conn.execute(
-            "SELECT work_id, override_json FROM work_overrides WHERE work_id IN (" + placeholders + ")",
-            work_ids,
-        ).fetchall()
+    rows = _rows_for_work_ids('SELECT work_id,override_json FROM work_overrides WHERE work_id IN (', work_ids)
     result: dict[str, dict] = {}
     for row in rows:
         try:
@@ -158,10 +156,22 @@ def _work_overrides_map(work_ids: list[str]) -> dict[str, dict]:
     return result
 
 
+def _rows_for_work_ids(sql: str, work_ids: list[str]) -> list:
+    """有界参数批次，避免大库碰到 SQLite 连接的变量上限。"""
+    import sqlite3
+
+    rows = []
+    with get_database().connect() as conn:
+        size = max(1, min(500, conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER)))
+        for offset in range(0, len(work_ids), size):
+            batch = work_ids[offset:offset + size]
+            rows.extend(conn.execute(sql + ','.join('?' for _ in batch) + ')', batch).fetchall())
+    return rows
+
+
 @router.get("")
 def get_library(compact: bool = False, source: str | None = None, include_all: bool = False):
-    del compact
-    snapshot = _library_snapshot()
+    snapshot = _library_snapshot(compact=compact)
     work_ids = [card["work_id"] for card in snapshot.cards]
     watch_map = _watch_status_map(work_ids)
     override_map = _work_overrides_map(work_ids)
@@ -173,6 +183,9 @@ def get_library(compact: bool = False, source: str | None = None, include_all: b
             # 单作品删除：从活动媒体库排除（不可变快照保留审计事实）。
             continue
         payload = _card_payload(card, override)
+        if compact:
+            for key in ('cast', 'studios', 'tags', 'certification', 'certification_country'):
+                payload.pop(key, None)
         if card["work_id"] in scope_map:
             payload["content_scope"] = scope_map[card["work_id"]]
         payload["watch_status"] = watch_map.get(card["work_id"], {
@@ -184,8 +197,7 @@ def get_library(compact: bool = False, source: str | None = None, include_all: b
         works = [work for work in works if work.get("metadata_state") in {"ready", "not_required"}]
     if source and source != "all":
         works = [work for work in works if source in work["sources"]]
-    queue_library_artwork(works)
-    collections = {}
+    collections: dict[str, dict] = {}
     for work in works:
         for collection in work.get("collections") or []:
             item = collections.setdefault(collection["collection_id"], {**collection, "work_ids": []})
@@ -206,16 +218,14 @@ def get_library(compact: bool = False, source: str | None = None, include_all: b
 def _content_scope_map(work_ids: list[str]) -> dict[str, str]:
     if not work_ids:
         return {}
-    placeholders = ",".join("?" for _ in work_ids)
-    with get_database().connect() as conn:
-        rows = conn.execute(
+    rows = _rows_for_work_ids(
             "SELECT DISTINCT rb.work_id,sr.content_scope FROM revision_bindings rb "
             "JOIN import_revisions ir ON ir.revision_id=rb.revision_id "
             "JOIN source_roots sr ON sr.root_id=ir.root_id "
             "WHERE ir.status='confirmed' AND sr.retired_at='' "
-            "AND sr.content_scope IN ('completed','ongoing') AND rb.work_id IN (" + placeholders + ")",
+            "AND sr.content_scope IN ('completed','ongoing') AND rb.work_id IN (",
             work_ids,
-        ).fetchall()
+    )
     result: dict[str, str] = {}
     for row in rows:
         if result.get(row["work_id"]) != "ongoing":
@@ -469,7 +479,8 @@ def get_work_detail(work_id: str):
         "title": display_title,
         "original_title": metadata.get("original_title") or work["original_title"] or work["preferred_title"],
         "year": metadata.get("year") or work["year"],
-        "title_provenance": "online" if metadata.get("provider") not in {None, "", "local"} else "local",
+        "title_provenance": "manual" if str(override.get('title') or '').strip() else (
+            "online" if metadata.get("provider") not in {None, "", "local"} else "local"),
         "rating": metadata.get("rating") or 0,
         "plot": metadata.get("plot") or "",
         "genres": metadata.get("genres") or [],
@@ -531,12 +542,10 @@ def _watch_status_map(work_ids: list[str]) -> dict[str, dict]:
 
     if not work_ids:
         return {}
-    with get_database().connect() as conn:
-        placeholders = ",".join("?" for _ in work_ids)
-        rows = conn.execute(
-            "SELECT work_id, metadata_json, updated_at FROM tracking_states WHERE work_id IN (" + placeholders + ")",
-            work_ids,
-        ).fetchall()
+    rows = _rows_for_work_ids(
+        "SELECT work_id,metadata_json,updated_at FROM tracking_states WHERE provider='local' AND work_id IN (",
+        work_ids,
+    )
     result: dict[str, dict] = {}
     for row in rows:
         result[str(row["work_id"])] = _watch_payload(dict(row))
@@ -545,8 +554,9 @@ def _watch_status_map(work_ids: list[str]) -> dict[str, dict]:
 
 @router.get("/diagnostics")
 def diagnostics():
-    snapshot = _library_snapshot()
-    return {"ok": True, "digest": snapshot.digest, "summary": {"work_count": len(snapshot.cards)}}
+    summary = V4LibraryProjection(get_database()).summary()
+    return {"ok": True, "digest": summary['digest'], "summary": {"work_count": summary['work_count']},
+            "updating": summary['updating']}
 
 
 @router.get("/watch-status")

@@ -68,10 +68,10 @@ def _missing_episode_artwork(metadata: dict, count: int) -> dict:
 
 def missing_episode_artwork(episodes: list[dict], metadata: dict, artifacts: list[dict], mode: str) -> int:
     """本地图片必须有登记产物、存在且摘要匹配；远端模式检查可信图片地址。"""
-    import hashlib
     from pathlib import Path
 
     from app.media_v4.jobs.completeness import _valid_remote_artwork_url
+    from app.media_v4.persistence.artifact_validation import artifact_matches
 
     mappings = {str(item.get('episode_id')): item for item in metadata.get('episode_mappings') or []
                 if isinstance(item, dict)}
@@ -88,8 +88,7 @@ def missing_episode_artwork(episodes: list[dict], metadata: dict, artifacts: lis
             path = str(mapping.get('local_thumb_path') or '')
             row = published.get(path)
             try:
-                valid = bool(row and Path(path).is_file() and Path(path).stat().st_size > 0
-                             and hashlib.sha256(Path(path).read_bytes()).hexdigest() == row['digest'])
+                valid = bool(row and Path(path).stat().st_size > 0 and artifact_matches(path, row['digest']))
             except OSError:
                 valid = False
         missing += not valid

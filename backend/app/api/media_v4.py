@@ -1853,6 +1853,9 @@ def set_work_title(work_id: str, request: WorkTitleRequest):
             """,
             (work_id, _json.dumps(payload, ensure_ascii=False), now, now),
         )
+        from app.media_v4.projection.library import bump_display_version
+
+        bump_display_version(conn)
     return {"work_id": work_id, "title": request.title.strip()}
 
 
@@ -1861,7 +1864,13 @@ def restore_work_title(work_id: str):
     """恢复默认标题：清除用户覆盖。"""
 
     with get_database().connect() as conn:
-        conn.execute("DELETE FROM work_overrides WHERE work_id = ?", (work_id,))
+        conn.execute(
+            "UPDATE work_overrides SET override_json=json_remove(override_json,'$.title'),updated_at=? "
+            "WHERE work_id=? AND json_valid(override_json)", (_now_iso(), work_id),
+        )
+        from app.media_v4.projection.library import bump_display_version
+
+        bump_display_version(conn)
     return {"work_id": work_id, "restored": True}
 
 
@@ -1909,6 +1918,9 @@ async def upload_work_artwork(work_id: str, request: ArtworkUploadRequest):
             """,
             (work_id, json.dumps(payload, ensure_ascii=False), now, now),
         )
+        from app.media_v4.projection.library import bump_display_version
+
+        bump_display_version(conn)
     return {"path": str(target)}
 
 
@@ -1933,6 +1945,9 @@ def restore_work_artwork(work_id: str, kind: str):
                 "UPDATE work_overrides SET override_json = ?, updated_at = ? WHERE work_id = ?",
                 (json.dumps(payload, ensure_ascii=False), _now_iso(), work_id),
             )
+            from app.media_v4.projection.library import bump_display_version
+
+            bump_display_version(conn)
             if mirror_root is not None and old_path:
                 try:
                     path = _Path(old_path).resolve(strict=False)
@@ -2161,7 +2176,9 @@ def library_delete_resume(request: MaintenanceResumeRequest):
 @router.get("/library")
 def library():
     projection = V4LibraryProjection(get_database())
-    snapshot = projection.ensure_current()
+    from app.media_v4.projection.library import LibrarySnapshot
+
+    snapshot = projection.current() or LibrarySnapshot('', '', ())
     return {
         "generation_id": snapshot.generation_id,
         "digest": snapshot.digest,

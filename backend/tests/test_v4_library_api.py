@@ -250,6 +250,9 @@ def test_library_sources_come_from_each_evidence_not_the_first_root_entry(tmp_pa
 
     assert client.post("/api/v4/imports/preview", json=payload).status_code == 200
     assert client.post("/api/v4/imports/rev-mixed-provider/confirm").status_code == 200
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    V4LibraryProjection(_database).rebuild()  # 测试应用未启动 lifespan，显式模拟后台发布。
     # 正式媒体墙只发布 ready 作品；未刮削的作品通过 include_all 进入维护视图。
     response = client.get("/api/library")
     assert response.status_code == 200

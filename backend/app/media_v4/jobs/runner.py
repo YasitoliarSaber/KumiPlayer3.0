@@ -310,6 +310,21 @@ class V4JobRunner:
             return 0
         created = 0
         with self.database.connect() as conn:
+            # 空闲或所有候选已处理时不占写锁；锁内仍重新检查防止重复调度。
+            candidates = conn.execute(self._RECOVERY_CANDIDATE_SQL).fetchall()
+            needs_recovery = False
+            for candidate in candidates:
+                result = json.loads(candidate['result_json'] or '{}')
+                reason = str(result.get('reason_code') or result.get('refresh_reason_code')
+                             or next(iter(result.get('reason_codes') or []), ''))
+                key = f"recover_work_aliases:{candidate['revision_id']}:{candidate['work_id']}:{candidate['attempts']}"
+                if reason in NAME_REASONS | RETRY_REASONS and not conn.execute(
+                    'SELECT 1 FROM jobs WHERE idempotency_key=?', (key,),
+                ).fetchone():
+                    needs_recovery = True
+                    break
+            if not needs_recovery:
+                return 0
             conn.execute("BEGIN IMMEDIATE")
             rows = conn.execute(self._RECOVERY_CANDIDATE_SQL).fetchall()
             # 同一写事务内只有本函数插入恢复作业，也没有其它写入者（BEGIN

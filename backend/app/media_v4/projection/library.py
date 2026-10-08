@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -15,6 +16,25 @@ from app.media_v4.projection.presentation import (
     display_work_title,
     preserve_identity_title,
 )
+
+# 同一进程只允许一个构建发布；读请求不获取此锁。RLock 保留嵌套维护调用。
+_BUILD_LOCK = threading.RLock()
+COMPACT_METADATA_FIELDS = (
+    'provider', 'original_title', 'rating', 'plot', 'genres', 'sources', 'show_type', 'card_type',
+    'regular_season_count', 'special_season_count', 'latest_episode_number', 'poster_url', 'fanart_url', 'clearlogo_url',
+    'local_poster_path', 'local_fanart_path', 'local_clearlogo_path', 'clearlogo_path',
+    'metadata_state', 'preserve_identity_title', 'title', 'related_works', 'collection_related_works', 'collections',
+)
+
+
+def bump_display_version(conn) -> None:
+    """与覆盖/观看写入同事务通知展示变化，不要求重新物化媒体投影。"""
+    conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_display_version',?)",
+                 (str(uuid.uuid4()),))
+
+
+def display_digest(digest: str, version: str) -> str:
+    return hashlib.sha256(f'{digest}:{version}'.encode()).hexdigest() if digest else ''
 
 
 def _now() -> str:
@@ -34,7 +54,7 @@ class V4LibraryProjection:
     def __init__(self, database: V4Database):
         self.database = database
 
-    def current(self) -> LibrarySnapshot | None:
+    def current(self, *, compact: bool = False) -> LibrarySnapshot | None:
         """读取已发布 generation；没有 generation 时返回空。
 
         三条 SELECT 必须在**同一个读事务**里完成：并发 rebuild 的收尾会
@@ -48,7 +68,7 @@ class V4LibraryProjection:
         with self.database.connect() as conn:
             conn.execute("BEGIN")
             try:
-                snapshot = self._read_current(conn)
+                snapshot = self._read_current(conn, compact=True) if compact else self._read_current(conn)
             except Exception:
                 conn.execute("ROLLBACK")
                 raise
@@ -56,7 +76,7 @@ class V4LibraryProjection:
         return snapshot
 
     @staticmethod
-    def _read_current(conn) -> LibrarySnapshot | None:
+    def _read_current(conn, *, compact: bool = False) -> LibrarySnapshot | None:
         """在同一读事务内读取 generation 与它的 cards。"""
 
         generation_id_row = conn.execute(
@@ -71,17 +91,55 @@ class V4LibraryProjection:
         ).fetchone()
         if generation is None:
             return None
+        metadata_column = 'metadata_json'
+        if compact:
+            # 在 SQLite 中裁剪字段，Python 不创建演员、逐集映射等详情对象。
+            fields = ','.join(f"'{key}',json_extract(metadata_json,'$.{key}')" for key in COMPACT_METADATA_FIELDS)
+            metadata_column = f"CASE WHEN json_valid(metadata_json) THEN json_patch('{{}}',json_object({fields})) ELSE '{{}}' END AS metadata_json"
         cards = tuple(
             V4LibraryProjection._decode_card(dict(row))
             for row in conn.execute(
-                """
-                SELECT work_id, title, year, media_type, episode_count, asset_count, metadata_json
+                f"""
+                SELECT work_id, title, year, media_type, episode_count, asset_count, {metadata_column}
                 FROM library_cards WHERE generation_id = ? ORDER BY title COLLATE NOCASE, work_id
                 """,
                 (generation_id,),
             ).fetchall()
         )
         return LibrarySnapshot(generation_id, str(generation["digest"]), cards)
+
+    def summary(self) -> dict:
+        """只读已发布代次和持久计数，复杂度不随作品数增长。"""
+        with self.database.connect() as conn:
+            row = conn.execute("""
+                SELECT g.generation_id,g.digest,s.value AS summary,
+                       COALESCE(v.value,'') AS display_version,
+                       EXISTS(SELECT 1 FROM v4_meta WHERE key='library_projection_dirty') AS dirty
+                FROM v4_meta m JOIN library_generations g ON g.generation_id=m.value AND g.status='published'
+                LEFT JOIN v4_meta s ON s.key='library_published_summary'
+                LEFT JOIN v4_meta v ON v.key='library_display_version'
+                WHERE m.key='current_library_generation'
+            """).fetchone()
+        if row is None:
+            return {'digest': '', 'generation_id': '', 'work_count': 0, 'updating': True}
+        try:
+            summary = json.loads(row['summary'] or '{}')
+        except (ValueError, TypeError):
+            summary = {}
+        valid = summary.get('generation_id') == row['generation_id']
+        return {'digest': display_digest(row['digest'], row['display_version']),
+                'generation_id': row['generation_id'], 'work_count': summary.get('work_count', 0) if valid else 0,
+                'updating': bool(row['dirty']) or not valid}
+
+    def refresh_if_needed(self) -> LibrarySnapshot | None:
+        """构建锁内复核，合并并发后台调度，避免等待后又构建同一代次。"""
+        with _BUILD_LOCK:
+            summary = self.summary()
+            with self.database.connect() as conn:
+                policy = conn.execute("SELECT value FROM v4_meta WHERE key='library_presentation_policy'").fetchone()
+            if not summary['updating'] and policy is not None and policy[0] == PRESENTATION_POLICY_VERSION:
+                return None
+            return self.rebuild()
 
     def ensure_current(self) -> LibrarySnapshot:
         """读取最新投影；权威事实有变化时按需原子重建。"""
@@ -103,6 +161,12 @@ class V4LibraryProjection:
         return snapshot
 
     def rebuild(self) -> LibrarySnapshot:
+        from app.media_v4.persistence.artifact_validation import validation_scope
+
+        with _BUILD_LOCK, validation_scope():
+            return self._rebuild()
+
+    def _rebuild(self) -> LibrarySnapshot:
         generation_id = str(uuid.uuid4())
         now = _now()
         with self.database.connect() as conn:
@@ -250,6 +314,7 @@ class V4LibraryProjection:
                     special_season_count = int(row["special_season_count"] or 0)
                     metadata["regular_season_count"] = regular_season_count
                     metadata["special_season_count"] = special_season_count
+                    metadata['latest_episode_number'] = row['latest_episode_number']
                     # 元数据状态：只有 confirmed + ready 才是正式可发布；
                     # 等待类状态保持非 ready，不得冒充成功（P-001 7.3.E）。
                     binding_status = str(row["scrape_binding_status"] or "")
@@ -312,7 +377,8 @@ class V4LibraryProjection:
                     if retained_metadata is not None:
                         metadata = {**metadata, **retained_metadata}
                     from app.media_v4.jobs.metadata_quality import current_episode_metadata
-                    metadata = current_episode_metadata(conn, None, str(row['work_id']), metadata)
+                    if retained_metadata is None:
+                        metadata = current_episode_metadata(conn, None, str(row['work_id']), metadata)
                     show_type = str(row["show_type"] or "")
                     card_type = str(row["card_type"] or "")
                     metadata["show_type"] = show_type
@@ -382,6 +448,13 @@ class V4LibraryProjection:
                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                     (generation_id,),
                 )
+                hidden = {row['work_id'] for row in conn.execute(
+                    "SELECT work_id FROM work_overrides WHERE json_valid(override_json) "
+                    "AND json_extract(override_json,'$.hidden')=1")}
+                visible_count = sum(card['work_id'] not in hidden and card['metadata'].get('metadata_state')
+                                    in {'ready', 'not_required'} for card in cards)
+                conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_published_summary',?)",
+                             (json.dumps({'generation_id': generation_id, 'work_count': visible_count}),))
                 if changed_during_build:
                     # 发布的是完整但稍早的快照。保留刷新要求，不能吞掉并发事实更新。
                     conn.execute(
@@ -450,6 +523,7 @@ class V4LibraryProjection:
     def _decode_card(card: dict) -> dict:
         try:
             card["metadata"] = json.loads(card.pop("metadata_json") or "{}")
+            card['latest_episode_number'] = card['metadata'].get('latest_episode_number')
         except (TypeError, ValueError):
             card.pop("metadata_json", None)
             card["metadata"] = {}

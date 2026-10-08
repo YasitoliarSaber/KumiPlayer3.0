@@ -509,6 +509,13 @@ class SourceScanRunner:
         self._discard_cancelled_deferred_scans()
         stamp = _now()
         with self.database.connect() as conn:
+            # 无可领取扫描时只读返回，避免每次空闲轮询取得 SQLite 写锁。
+            if conn.execute(
+                "SELECT 1 FROM source_scans s LEFT JOIN source_scan_requests r ON r.scan_id=s.scan_id "
+                "WHERE s.status='queued' AND (COALESCE(r.resume_after,'')<=? OR s.cancel_requested=1) LIMIT 1",
+                (stamp,),
+            ).fetchone() is None:
+                return None
             conn.execute("BEGIN IMMEDIATE")
             try:
                 row = conn.execute(
