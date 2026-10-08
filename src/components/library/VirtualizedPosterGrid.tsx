@@ -6,6 +6,7 @@ import { calculatePosterGridMetrics } from './posterGridMetrics';
 import { PosterImageContext, PosterImageLifecycle } from './posterImageLifecycle';
 import { recordScrollDiagnostic, subscribeScrollDiagnostics } from '../../utils/scrollDiagnostics';
 import { startPosterPresentation } from './posterPresentation';
+import { attachPosterWheelSmoothing } from '../../utils/posterWheelSmoothing';
 import './VirtualizedPosterGrid.css';
 
 interface VirtualizedPosterGridProps {
@@ -137,6 +138,12 @@ export default function VirtualizedPosterGrid({
     };
   }, [imageLifecycle, requestedColumns, seriesCardImageMode, works.length]);
 
+  useEffect(() => {
+    const main = scrollElementRef.current;
+    const wall = wrapRef.current;
+    if (main && wall) return attachPosterWheelSmoothing(main, wall);
+  }, [presentationKey, works]);
+
   // 规则网格只做行虚拟化：行内仍由 CSS Grid 排布 effectiveColumns 张卡片。
   const rowCount = rowHeight > 0 ? Math.ceil(works.length / effectiveColumns) : 0;
 
@@ -234,6 +241,7 @@ export default function VirtualizedPosterGrid({
       }}
       style={{
         ['--category-columns' as string]: effectiveColumns,
+        ['--poster-card-width' as string]: `${columnWidth}px`,
       }}
     >
       <div className="virtual-poster-rows" style={{ height: `${totalHeight}px` }}>

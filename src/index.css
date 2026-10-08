@@ -1480,8 +1480,8 @@
    因此不设 hover/focus 态与 pointer 事件；评分语义由卡片按钮承载。 */
 .rating-badge {
   position: absolute;
-  top: 7px;
-  left: 7px;
+  top: clamp(7px, calc(var(--poster-card-width, 0px) * .035), 12px);
+  left: clamp(7px, calc(var(--poster-card-width, 0px) * .035), 12px);
   right: auto;
   bottom: auto;
   z-index: 2;
@@ -1491,18 +1491,18 @@
   align-items: center;
   justify-content: center;
 
-  min-width: 30px;
-  height: 22px;
-  padding: 0 6px;
+  min-width: clamp(30px, calc(var(--poster-card-width, 0px) * .15), 48px);
+  height: clamp(22px, calc(var(--poster-card-width, 0px) * .116), 34px);
+  padding: 0 clamp(6px, calc(var(--poster-card-width, 0px) * .032), 10px);
 
   border: 1px solid rgba(255, 255, 255, .12);
-  border-radius: 6px;
+  border-radius: clamp(6px, calc(var(--poster-card-width, 0px) * .035), 10px);
 
   background: rgba(15, 19, 25, .72);
   /* 不做逐卡片实时背景模糊：.72 半透明底色 + 描边已足够，避免在作品墙上叠加合成开销。 */
 
   color: rgba(255, 255, 255, .92);
-  font-size: 12px;
+  font-size: clamp(12px, calc(var(--poster-card-width, 0px) * .064), 21px);
   font-weight: 650;
   line-height: 1;
   font-variant-numeric: tabular-nums;
