@@ -21,8 +21,25 @@ def test_unknown_detail_and_playback_title_do_not_claim_movie_or_special(tmp_pat
     service.confirm('u1')
     with database.connect() as conn:
         binding = dict(conn.execute('SELECT * FROM revision_bindings LIMIT 1').fetchone())
+        assert conn.execute(
+            "SELECT 1 FROM library_details WHERE work_id=?", (binding['work_id'],)
+        ).fetchone() is None
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    V4LibraryProjection(database).rebuild()
     monkeypatch.setattr(library_v4, 'get_database', lambda: database)
+    with database.connect() as conn:
+        generation_before = conn.execute(
+            "SELECT value FROM v4_meta WHERE key='current_library_generation'"
+        ).fetchone()['value']
     detail = library_v4.get_work_detail(binding['work_id'])
+    # 详情 GET 只读已发布投影，不隐式重建或推进 generation。
+    assert library_v4.get_work_detail(binding['work_id']) == detail
+    with database.connect() as conn:
+        generation_after = conn.execute(
+            "SELECT value FROM v4_meta WHERE key='current_library_generation'"
+        ).fetchone()['value']
+    assert generation_after == generation_before
     assert detail['media_type'] == 'unknown'
     assert all(s['season_number'] is None and s['label'] == '未分季' for s in detail['seasons'])
     assert len(detail['episodes']) == 2
@@ -80,10 +97,11 @@ def test_asset_generation_keys_are_independent_uuids(tmp_path):
 ])
 def test_all_media_kinds_keep_progress_without_replaying_history(tmp_path, monkeypatch, name, kind):
     """CHECK-009A: real scan/confirm and manager resolution, per-Asset progress."""
-    from tests.test_v4_media_import_lifecycle_contract import setup, scan, write_video, bindings
     from app.media_v4.playback.session import V4PlaybackManager
     from app.media_v4.playback.store import V4PlaybackStore
-    database, source, _mirror = setup(tmp_path, monkeypatch)
+
+    from tests.test_v4_media_import_lifecycle_contract import bindings, scan, setup, write_video
+    database, source = setup(tmp_path, monkeypatch)
     write_video(source, name)
     if kind == 'series':
         write_video(source, name.replace('1080p', '2160p'))

@@ -129,25 +129,60 @@ class V4PlaybackManager:
         threading.Thread(target=self._monitor, args=(process, session), daemon=True).start()
         return dict(session)
 
-    def stop(self) -> dict:
+    def stop(self, timeout: float = 2.25) -> dict:
+        """Checkpoint the last observed IPC sample, then stop MPV within a budget."""
+
+        deadline = time.monotonic() + max(0.0, timeout)
         with self._lock:
             process = self._process
             session = self._session
         if process is None:
             return {"status": "idle"}
-        if session and session.get("ipc_server"):
-            send_mpv_quit(session["ipc_server"], timeout=1.0)
+
+        if session:
+            # Use the monitor's most recent complete IPC sample before asking MPV
+            # to quit. Checkpointing runs on a daemon helper so a busy SQLite
+            # database cannot extend desktop shutdown beyond its process budget.
+            checkpoint = dict(session)
+            checkpoint["playlist"] = list(session.get("playlist") or [])
+            checkpoint_worker = threading.Thread(
+                target=self._force_checkpoint,
+                args=(checkpoint,),
+                name="playback-shutdown-checkpoint",
+                daemon=True,
+            )
+            checkpoint_worker.start()
+            checkpoint_worker.join(timeout=min(0.5, max(0.0, deadline - time.monotonic())))
+            remaining = max(0.0, deadline - time.monotonic())
+            if remaining and session.get("ipc_server"):
+                send_mpv_quit(session["ipc_server"], timeout=min(0.5, remaining))
+
+        exited = False
         try:
-            process.wait(timeout=3)
+            remaining = max(0.0, deadline - time.monotonic())
+            if remaining:
+                process.wait(timeout=remaining)
+                exited = True
         except Exception:
             try:
                 process.terminate()
-                process.wait(timeout=3)
+                remaining = max(0.0, deadline - time.monotonic())
+                if remaining:
+                    process.wait(timeout=remaining)
+                    exited = True
             except Exception:
-                try:
-                    process.kill()
-                except OSError:
-                    pass
+                pass
+        if not exited:
+            try:
+                process.kill()
+            except OSError:
+                pass
+            try:
+                remaining = max(0.0, deadline - time.monotonic())
+                if remaining:
+                    process.wait(timeout=remaining)
+            except Exception:
+                pass
         with self._lock:
             if self._process is process:
                 self._process = None

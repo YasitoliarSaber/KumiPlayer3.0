@@ -1,10 +1,10 @@
 """确认、资料和展示在没有镜像、NFO 或图片时仍走同一 SQLite 执行链。"""
 
-from backend.tests.test_v4_import_metadata_lifecycle import confirm, provider
-
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.library import V4LibraryProjection
+
+from backend.tests.test_v4_import_metadata_lifecycle import confirm, provider
 
 
 def _ready_database(tmp_path):
@@ -74,7 +74,7 @@ def test_browsing_reads_published_detail_without_rebuilding_or_checking_files(tm
     monkeypatch.setattr(V4LibraryProjection, 'rebuild', forbid)
     monkeypatch.setattr('pathlib.Path.is_file', forbid)
     assert library_v4.get_work_detail(work_id) == before
-    assert library_v4.get_library(compact=True)['works'][0]['work_id'] == work_id
+    assert library_v4.get_library()['works'][0]['work_id'] == work_id
 
 
 def test_partial_projection_preserves_generation_and_unaffected_detail(tmp_path, monkeypatch):
@@ -144,12 +144,11 @@ def test_import_confirm_rejects_missing_or_remote_final_path(tmp_path, monkeypat
     from dataclasses import replace
 
     import pytest
-    from fastapi import HTTPException
-
     from app.api import media_v4
     from app.media_v4.parsing.parser import V4Parser
     from app.media_v4.revisions.service import V4RevisionService
     from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
+    from fastapi import HTTPException
 
     database = V4Database(tmp_path / 'paths.db')
     database.initialize()
@@ -238,11 +237,10 @@ def test_manual_cover_api_keeps_old_display_until_ready_and_preserves_original(t
     import base64
     import io
 
-    from PIL import Image
-
     from app.api import media_v4
     from app.media_v4.assets.catalog import get_work_artwork
     from app.media_v4.assets.service import ArtworkService
+    from PIL import Image
 
     database, work_id = _ready_database(tmp_path)
     monkeypatch.setattr(media_v4, 'get_database', lambda: database)

@@ -7,7 +7,9 @@
 
 import os
 import shutil
+import sqlite3
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -23,28 +25,16 @@ for _path in (_PROJECT_ROOT, _PROJECT_ROOT / "backend"):
         sys.path.insert(0, _path_text)
 
 
-def _close_db_connections_inside(target: Path) -> None:
-    """关闭数据库文件位于 target 内的全部 SQLite 连接（跨线程）。
-
-    ``get_connection()`` 是 threading.local：``close_connection()`` 只能关闭
-    调用线程自己的连接；TestClient 的 portal 工作线程持有的连接会让
-    Windows 下 rmtree 报 WinError 32。gc 扫描按文件路径归属判定，
-    只关 target 内的连接，不影响其他测试的独立数据库。
-    """
-    import gc
-    import sqlite3
-
-    resolved = str(target.resolve())
-    for obj in gc.get_objects():
-        if not isinstance(obj, sqlite3.Connection):
+def _close_db_connections_inside(target: Path, connections: list) -> None:
+    """只关闭明确登记且所属线程已退出的测试连接，避免跨线程 SQLite 探测。"""
+    resolved = target.absolute()
+    current = threading.current_thread()
+    for db_path, connection, owner in connections:
+        if not db_path.is_relative_to(resolved) or (owner is not current and owner.is_alive()):
             continue
         try:
-            row = obj.execute("PRAGMA database_list").fetchone()
-            db_file = row[2] if row else ""
-            if db_file and str(Path(db_file).resolve()).startswith(resolved + os.sep):
-                obj.close()
-        except Exception:
-            # 已关闭或异常连接：跳过即可
+            connection.close()
+        except sqlite3.Error:
             pass
 
 
@@ -94,6 +84,17 @@ def isolate_runtime_data(tmp_path, monkeypatch, request):
         monkeypatch.setattr(request.module, "_TEST_DIR", test_data_dir / "_test_local", raising=False)
 
     original_rmtree = shutil.rmtree
+    from app.media_v4.persistence.database import V4Database
+
+    connections: list[tuple[Path, sqlite3.Connection, threading.Thread]] = []
+    original_open = V4Database.open_connection
+
+    def tracked_open(database):
+        connection = original_open(database)
+        connections.append((database.path.absolute(), connection, threading.current_thread()))
+        return connection
+
+    monkeypatch.setattr(V4Database, 'open_connection', tracked_open)
 
     def guarded_rmtree(path, *args, **kwargs):
         target = Path(path)
@@ -112,8 +113,10 @@ def isolate_runtime_data(tmp_path, monkeypatch, request):
                 target / "kumiplayer.db-shm",
             )
         )
-        # 关闭其他线程（TestClient portal 等）持有的 target 内 SQLite 连接
-        _close_db_connections_inside(target)
+        # 临时 TXT 复制目录没有数据库，不得遍历并触碰其他线程的 SQLite
+        # 连接；在 Windows 下探测正在使用的连接可能导致原生访问冲突。
+        if db_inside:
+            _close_db_connections_inside(target, connections)
         result = original_rmtree(path, *args, **kwargs)
         if db_inside:
             from app.api import media_v4
@@ -149,6 +152,9 @@ def isolate_runtime_data(tmp_path, monkeypatch, request):
     try:
         yield
     finally:
+        from app.media_v4.sources.source_scan_runner import reset_source_scan_runner
+
+        reset_source_scan_runner()
         try:
             from app.api import media_v4
             from app.media_v4.runtime import get_database as get_v4_database
@@ -157,6 +163,7 @@ def isolate_runtime_data(tmp_path, monkeypatch, request):
             media_v4._database = None
         except Exception:
             pass
+        _close_db_connections_inside(tmp_path, connections)
         try:
             from app.media_v4.sources import health as source_health
 

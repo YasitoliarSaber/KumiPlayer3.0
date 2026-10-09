@@ -36,7 +36,7 @@ def bump_display_version(conn, work_id: str = '', *, kind: str = 'work_upsert') 
     record_change(conn, kind if work_id else 'reset', work_id)
 
 
-def mark_projection_dirty(conn, work_ids=None) -> None:
+def mark_projection_dirty(conn, work_ids=None) -> str:
     """同事实事务记录受影响作品；无法确定范围的维护操作显式要求全量。"""
     stamp = str(uuid.uuid4())
     conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_projection_dirty',?)", (stamp,))
@@ -64,6 +64,29 @@ def mark_projection_dirty(conn, work_ids=None) -> None:
             ''', (*batch, *batch, *batch, *batch)))
         conn.executemany('INSERT OR REPLACE INTO v4_meta(key,value) VALUES (?,?)',
                          [('library_dirty_work:' + str(work_id), stamp) for work_id in affected])
+    return stamp
+
+
+def request_projection_refresh(database: V4Database, work_ids=None) -> str:
+    """Persist projection dirtiness and enqueue the existing refresh job when possible."""
+    stamp = str(uuid.uuid4())
+    now = _now()
+    with database.connect() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        stamp = mark_projection_dirty(conn, work_ids)
+        revision = conn.execute(
+            "SELECT ir.revision_id FROM import_revisions ir "
+            "WHERE ir.status='confirmed' ORDER BY ir.confirmed_at DESC, ir.created_at DESC, ir.revision_id DESC LIMIT 1"
+        ).fetchone()
+        job_id = ''
+        if revision is not None:
+            job_id = str(uuid.uuid4())
+            conn.execute(
+                "INSERT INTO jobs(job_id,job_type,revision_id,work_id,idempotency_key,status,created_at,updated_at) "
+                "VALUES (?,'refresh_projection',?,'',?,'queued',?,?)",
+                (job_id, revision['revision_id'], f'refresh_projection:maintenance:{stamp}', now, now),
+            )
+    return job_id or f'projection:{stamp}'
 
 
 def display_digest(digest: str, version: str) -> str:
@@ -88,22 +111,20 @@ class V4LibraryProjection:
     def __init__(self, database: V4Database):
         self.database = database
 
-    def current(self, *, compact: bool = False, work_ids: tuple[str, ...] | None = None) -> LibrarySnapshot | None:
+    def current(self, *, work_ids: tuple[str, ...] | None = None) -> LibrarySnapshot | None:
         """读取已发布 generation；没有 generation 时返回空。
 
         三条 SELECT 必须在**同一个读事务**里完成：并发 rebuild 的收尾会
         `DELETE FROM library_generations WHERE generation_id != ?`，而 library_cards
         是 `ON DELETE CASCADE`。没有读事务时（sqlite3 默认 autocommit，SELECT 各自
         看一次最新提交），若 rebuild 在"读到 generation"与"读 cards"之间提交，
-        cards 查询会返回空集，于是媒体墙在一切正常的情况下瞬间清空——而脏标记已被
-        对方清掉，`ensure_current()` 也不会补重建。WAL 下读事务会稳定持有快照。
+        cards 查询会返回空集，于是媒体墙在一切正常的情况下瞬间清空。WAL 下读事务会稳定持有快照。
         """
 
         with self.database.connect() as conn:
             conn.execute("BEGIN")
             try:
-                snapshot = self._read_current(conn, compact=compact, work_ids=work_ids) if work_ids is not None else (
-                    self._read_current(conn, compact=True) if compact else self._read_current(conn))
+                snapshot = self._read_current(conn, work_ids=work_ids)
             except Exception:
                 conn.execute("ROLLBACK")
                 raise
@@ -111,7 +132,9 @@ class V4LibraryProjection:
         return snapshot
 
     @staticmethod
-    def _read_current(conn, *, compact: bool = False, work_ids: tuple[str, ...] | None = None) -> LibrarySnapshot | None:
+    def _read_current(
+        conn, *, work_ids: tuple[str, ...] | None = None, for_publication: bool = False,
+    ) -> LibrarySnapshot | None:
         """在同一读事务内读取 generation 与它的 cards。"""
 
         generation_id_row = conn.execute(
@@ -126,11 +149,11 @@ class V4LibraryProjection:
         ).fetchone()
         if generation is None:
             return None
-        metadata_column = 'metadata_json'
-        if compact:
-            # 在 SQLite 中裁剪字段，Python 不创建演员、逐集映射等详情对象。
-            fields = ','.join(f"'{key}',json_extract(metadata_json,'$.{key}')" for key in COMPACT_METADATA_FIELDS)
-            metadata_column = f"CASE WHEN json_valid(metadata_json) THEN json_patch('{{}}',json_object({fields})) ELSE '{{}}' END AS metadata_json"
+        fields = ','.join(f"'{key}',json_extract(metadata_json,'$.{key}')" for key in COMPACT_METADATA_FIELDS)
+        metadata_column = f"CASE WHEN json_valid(metadata_json) THEN json_patch('{{}}',json_object({fields})) ELSE '{{}}' END AS metadata_json"
+        if for_publication:
+            # 发布时比较同一份持久内容；公开读取始终保持精简卡片。
+            metadata_column = 'metadata_json'
         scope = '' if work_ids is None else ' AND work_id IN (' + ','.join('?' for _ in work_ids) + ')'
         cards = tuple(
             V4LibraryProjection._decode_card(dict(row))
@@ -184,25 +207,6 @@ class V4LibraryProjection:
             scope = dirty_ids if dirty_ids and not full and policy and policy[0] == PRESENTATION_POLICY_VERSION else None
             return self._rebuild(work_ids=scope)
 
-    def ensure_current(self) -> LibrarySnapshot:
-        """读取最新投影；权威事实有变化时按需原子重建。"""
-
-        snapshot = self.current()
-        with self.database.connect() as conn:
-            dirty = conn.execute(
-                "SELECT 1 FROM v4_meta WHERE key = 'library_projection_dirty'"
-            ).fetchone()
-            policy = conn.execute("SELECT value FROM v4_meta WHERE key='library_presentation_policy'").fetchone()
-        needs_episode_gate = snapshot is not None and any(
-            card.get('media_type') == 'tv' and card.get('metadata', {}).get('metadata_state') == 'ready'
-            and ('episode_metadata_status' not in card.get('metadata', {})
-                 or 'episode_artwork_status' not in card.get('metadata', {}))
-            for card in snapshot.cards
-        )
-        if snapshot is None or dirty is not None or needs_episode_gate or policy is None or policy[0] != PRESENTATION_POLICY_VERSION:
-            return self.rebuild()
-        return snapshot
-
     def rebuild(self) -> LibrarySnapshot:
         from app.media_v4.persistence.artifact_validation import validation_scope
 
@@ -225,6 +229,7 @@ class V4LibraryProjection:
                 if work_ids is not None and previous_generation_id is None:
                     work_ids = None
                 if work_ids is not None:
+                    assert previous_generation_id is not None
                     generation_id = previous_generation_id
                 scope_sql = '' if work_ids is None else ' AND w.work_id IN (' + ','.join('?' for _ in work_ids) + ')'
                 rows = conn.execute(
@@ -465,8 +470,13 @@ class V4LibraryProjection:
                     if current_snapshot is not None:
                         conn.commit()
                         return current_snapshot
-                previous_cards = {card['work_id']: card for card in (
-                    self._read_current(conn, work_ids=work_ids).cards if current_generation_id else ())}
+                current_snapshot = (
+                    self._read_current(conn, work_ids=work_ids, for_publication=True)
+                    if current_generation_id else None
+                )
+                previous_cards = {
+                    card['work_id']: card for card in (current_snapshot.cards if current_snapshot else ())
+                }
                 detail_scope = '' if work_ids is None else ' AND work_id IN (' + ','.join('?' for _ in work_ids) + ')'
                 previous_details = {row['work_id']: row['detail_json'] for row in conn.execute(
                     'SELECT work_id,detail_json FROM library_details WHERE generation_id=?' + detail_scope,

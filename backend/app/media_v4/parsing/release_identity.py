@@ -5,6 +5,7 @@ import unicodedata
 from dataclasses import replace
 from functools import lru_cache
 from pathlib import PurePosixPath
+from typing import Any
 
 from app.media_v4.domain.identity import (
     CLASSIFICATION_EXPLICIT,
@@ -76,7 +77,7 @@ def apply_verified_release(facts: ParsedFacts, evidence: SourceEvidence, work_co
     display_release = match_verified_release(_DISPLAY_FORM.sub("", facts.work_title))
     display_title = (facts.work_title if facts.content_class == CONTENT_CLASS_MOVIE
                      and display_release is not None and display_release.key == release.key else release.title)
-    identity = {
+    identity: dict[str, Any] = {
         "work_title": display_title, "series_group": release.series_title,
         "media_type": "movie", "card_type": "standalone", "relation_type": "related",
         "season_candidate": None, "group_type": "movie", "year_candidate": release.year,
@@ -144,7 +145,7 @@ def _apply_verified_season(facts: ParsedFacts, evidence: SourceEvidence, work_co
     local_years = {int(match.group()) for match in _YEAR.finditer(filename + " " + work_container)}
     if local_years and local_years != {release.year}:
         return facts
-    identity = {
+    identity: dict[str, Any] = {
         "work_title": release.series_title, "series_group": release.series_title, "media_type": "tv",
         "card_type": "main_series", "relation_type": "", "season_candidate": release.season_number,
         "group_type": "season", "year_candidate": None,

@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.resolution import resolver as R
@@ -347,12 +346,12 @@ def test_plain_structural_season_directory_does_not_hide_year():
 
 
 def test_standalone_movie_keeps_separate_boundary():
-    """独立 OVA/电影（`card_type=standalone`）不继承主系列边界，仍是独立作品。"""
+    """独立电影（`card_type=standalone`）不继承主系列边界，仍是独立作品。"""
 
     entries = _parse(
         [
             "X 4k 小魔女学园/小魔女学园/[Ygm] Little Witch Academia [10][Ma10p_2160p][x265_flac_ass].mkv",
-            "X 4k 小魔女学园/OVA 小魔女学园 2013/"
+            "X 4k 小魔女学园/小魔女学园 Movie 2013/"
             "[Ygm] Little Witch Academia 2013 [Ma10p_2160p][x265_flac_ass].mkv",
         ]
     )
@@ -360,7 +359,7 @@ def test_standalone_movie_keeps_separate_boundary():
 
     assert {work.work_key for work in graph.works} == {
         "title:小魔女学园::tv",
-        "title:小魔女学园:2013:movie",
+        "title:小魔女学园 movie:2013:movie",
     }
 
 

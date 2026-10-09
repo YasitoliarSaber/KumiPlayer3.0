@@ -2,11 +2,10 @@
 
 
 import pytest
-from fastapi.testclient import TestClient
-
-from app.api.assets import _validate_remote_asset_url
 from app.core.config import invalidate_config_cache
+from app.core.url_guard import validate_remote_asset_url
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -21,7 +20,6 @@ def mirror_dir(tmp_path, monkeypatch):
     """使用临时 mirror 目录"""
     mirror = tmp_path / "mirror"
     mirror.mkdir()
-    monkeypatch.setattr("app.api.assets.get_mirror_root", lambda: pytest.fail("retired GET must not inspect files"))
     return mirror
 
 
@@ -129,7 +127,7 @@ class TestRetiredGetAsset:
     "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/example.jpg",
 ])
 def test_remote_image_proxy_accepts_only_known_cdn_paths(url):
-    _validate_remote_asset_url(url)
+    validate_remote_asset_url(url)
 
 
 @pytest.mark.parametrize("url", [
@@ -140,4 +138,4 @@ def test_remote_image_proxy_accepts_only_known_cdn_paths(url):
 ])
 def test_remote_image_proxy_rejects_untrusted_targets(url):
     with pytest.raises(ValueError):
-        _validate_remote_asset_url(url)
+            validate_remote_asset_url(url)

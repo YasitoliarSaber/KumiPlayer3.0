@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -22,6 +24,7 @@ def _client(tmp_path, monkeypatch):
 
 
 def _entry(revision_id: str = "rev-library") -> dict:
+    fixture_root = Path.cwd() / "backend" / "tests" / "media-fixtures"
     return {
         "revision_id": revision_id,
         "root_id": "root-library",
@@ -32,17 +35,23 @@ def _entry(revision_id: str = "rev-library") -> dict:
                 "ingest_method": "local_scan",
                 "relative_path": "Show/Show.S01E01.mkv",
                 "source_locator": "local://show/Show.S01E01.mkv",
-                "playback_locator": "local://show/Show.S01E01.mkv",
+                "playback_locator": str(fixture_root / "Show.S01E01.mkv"),
             },
             {
                 "provider": "local",
                 "ingest_method": "local_scan",
                 "relative_path": "Show/Show.S01E01.2160p.mkv",
                 "source_locator": "local://show/Show.S01E01.2160p.mkv",
-                "playback_locator": "local://show/Show.S01E01.2160p.mkv",
+                "playback_locator": str(fixture_root / "Show.S01E01.2160p.mkv"),
             },
         ],
     }
+
+
+def _publish(database):
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    V4LibraryProjection(database).rebuild()
 
 
 def _work_id_for_root(conn, root_id: str) -> str:
@@ -67,6 +76,7 @@ def test_detail_deduplicates_episode_rows_but_exposes_all_assets(tmp_path, monke
     client, database = _client(tmp_path, monkeypatch)
     assert client.post("/api/v4/imports/preview", json=_entry()).status_code == 200
     assert client.post("/api/v4/imports/rev-library/confirm").status_code == 200
+    _publish(database)
     with database.connect() as conn:
         work_id = conn.execute("SELECT work_id FROM works LIMIT 1").fetchone()["work_id"]
 
@@ -129,20 +139,21 @@ def test_detail_projects_saved_scrape_metadata_without_rewriting_local_identity(
         )
         conn.commit()
 
+    _publish(database)
     body = client.get(f"/api/library/works/{work_id}").json()
     assert body["title"] == "在线标题"
     assert body["plot"] == "完整简介"
     assert body["cast"][0]["name"] == "角色甲"
     assert body["certification"] == "PG-13"
     assert body["certification_country"] == "US"
-    assert body["clearlogo_path"] == "/logo.png"
-    assert body["local_clearlogo_path"] == "D:/mirror/Show/clearlogo.png"
+    assert body["clearlogo_path"] == ""
+    assert body["local_clearlogo_path"] == ""
     assert body["tags"] == ["热血"]
     assert body["episodes"][0]["episode_id"] == episode_id
     assert body["episodes"][0]["episode_number"] == 1
     assert body["episodes"][0]["title"] == "刮削后的单集标题"
     assert body["episodes"][0]["plot"] == ""
-    assert body["episodes"][0]["thumb_path"] == "D:/mirror/Show/Season 01/S01E01-thumb.jpg"
+    assert body["episodes"][0]["thumb_path"] == ""
     with database.connect() as conn:
         saved = json.loads(conn.execute(
             "SELECT metadata_json FROM scrape_bindings WHERE binding_id='binding-detail-metadata'"
@@ -170,8 +181,162 @@ def test_watch_status_patch_preserves_omitted_fields_and_rescan_is_v4_projection
 
     rescan = client.post("/api/library/rescan")
     assert rescan.status_code == 200
-    assert rescan.json()["status"] == "succeeded"
-    assert rescan.json()["task_id"].startswith("projection:")
+    assert rescan.json()["status"] == "accepted"
+    with database.connect() as conn:
+        assert conn.execute(
+            "SELECT 1 FROM jobs WHERE job_id=? AND job_type='refresh_projection' AND status='queued'",
+            (rescan.json()["task_id"],),
+        ).fetchone()
+        assert conn.execute("SELECT 1 FROM v4_meta WHERE key='library_projection_full_dirty'").fetchone()
+
+
+def test_library_get_reports_unpublished_generation_without_rebuilding(tmp_path, monkeypatch):
+    client, database = _client(tmp_path, monkeypatch)
+    from app.media_v4.projection.library import V4LibraryProjection
+    rebuild = V4LibraryProjection.rebuild
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("GET must only read the published projection")
+
+    monkeypatch.setattr(V4LibraryProjection, "rebuild", forbidden)
+    response = client.get("/api/library")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["works"] == []
+    assert body["generation_id"] == ""
+    assert body["updating"] is True
+    assert body["summary"] == {"work_count": 0, "episode_count": 0}
+    with database.connect() as conn:
+        assert conn.execute("SELECT 1 FROM v4_meta WHERE key='current_library_generation'").fetchone() is None
+
+    monkeypatch.setattr(V4LibraryProjection, "rebuild", rebuild)
+    _publish(database)
+    from app.media_v4.projection.library import mark_projection_dirty
+
+    with database.connect() as conn:
+        mark_projection_dirty(conn)
+    published_response = client.get("/api/library")
+    assert published_response.status_code == 200
+    published_body = published_response.json()
+    assert published_body["generation_id"]
+    assert published_body["works"] == []
+    assert published_body["updating"] is True
+    changes = client.get("/api/library/changes?after=0")
+    assert changes.status_code == 200
+    assert changes.json()["generation_id"] == published_body["generation_id"]
+    assert changes.json()["updating"] is True
+
+
+def test_library_rescan_marks_dirty_and_queues_existing_projection_job(tmp_path, monkeypatch):
+    client, database = _client(tmp_path, monkeypatch)
+    assert client.post("/api/v4/imports/preview", json=_entry("rev-rescan-queued")).status_code == 200
+    assert client.post("/api/v4/imports/rev-rescan-queued/confirm").status_code == 200
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("rescan request must not rebuild synchronously")
+
+    monkeypatch.setattr(V4LibraryProjection, "rebuild", forbidden)
+    response = client.post("/api/library/rescan")
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
+    with database.connect() as conn:
+        job = conn.execute("SELECT job_type,status FROM jobs WHERE job_id=?", (response.json()["task_id"],)).fetchone()
+        assert tuple(job) == ("refresh_projection", "queued")
+        assert conn.execute("SELECT 1 FROM v4_meta WHERE key='library_projection_full_dirty'").fetchone()
+
+
+def test_empty_library_rescan_persists_dirty_request_without_revision(tmp_path, monkeypatch):
+    client, database = _client(tmp_path, monkeypatch)
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    rebuild = V4LibraryProjection.rebuild
+    monkeypatch.setattr(V4LibraryProjection, "rebuild", lambda *_args, **_kwargs: pytest.fail("must be asynchronous"))
+    response = client.post("/api/library/rescan")
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
+    assert response.json()["task_id"].startswith("projection:")
+    with database.connect() as conn:
+        assert conn.execute("SELECT 1 FROM v4_meta WHERE key='library_projection_full_dirty'").fetchone()
+        assert conn.execute("SELECT 1 FROM jobs WHERE job_type='refresh_projection'").fetchone() is None
+    monkeypatch.setattr(V4LibraryProjection, "rebuild", rebuild)
+
+
+def test_library_cards_use_one_deduplicated_related_image_lookup(tmp_path, monkeypatch):
+    client, database = _client(tmp_path, monkeypatch)
+    from app.api import library_v4
+    from app.media_v4.assets import catalog
+    from app.media_v4.projection.library import LibrarySnapshot, V4LibraryProjection
+
+    metadata = {"related_works": [
+        {"work_id": "related-a", "title": "A", "poster_path": "/a.jpg"},
+        {"work_id": "related-b", "title": "B", "poster_path": "/b.jpg"},
+        {"work_id": "related-c", "title": "C", "poster_path": "/a.jpg"},
+    ]}
+    snapshot = LibrarySnapshot("generation-test", "digest-test", ({
+        "work_id": "work-test", "title": "Show", "year": 2024, "media_type": "tv",
+        "episode_count": 1, "asset_count": 1, "metadata": metadata,
+    },), 3)
+    monkeypatch.setattr(library_v4, "_library_snapshot", lambda **_kwargs: snapshot)
+    monkeypatch.setattr(V4LibraryProjection, "summary", lambda self: {
+        "generation_id": "generation-test", "digest": "digest-test", "work_count": 1, "updating": False,
+    })
+    monkeypatch.setattr(catalog, "get_work_artwork_many", lambda _conn, _ids: {})
+
+    calls = []
+
+    def batch_lookup(_conn, sources, width=384):
+        calls.append((sources, width))
+        return {source: f"local:{source}" for source in sources}
+
+    monkeypatch.setattr(catalog, "get_metadata_images_many", batch_lookup)
+    response = client.get("/api/library")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["updating"] is False
+    assert body["generation_id"]
+    assert len(calls) == 1
+    assert set(calls[0][0]) == {"/a.jpg", "/b.jpg"}
+    assert [item["poster_path"] for item in body["works"][0]["related_works"]] == ["local:/a.jpg", "local:/b.jpg", "local:/a.jpg"]
+    assert "studios" not in body["works"][0] and "tags" not in body["works"][0]
+
+
+def test_detail_batches_cast_and_related_image_lookups(tmp_path, monkeypatch):
+    _, database = _client(tmp_path, monkeypatch)
+    from app.api import library_v4
+    from app.media_v4.assets import catalog
+
+    calls = []
+
+    def batch_lookup(_conn, sources, width=384):
+        calls.append((sources, width))
+        return {source: f"local:{source}" for source in sources}
+
+    monkeypatch.setattr(catalog, "get_work_artwork", lambda _conn, _work_id: {})
+    monkeypatch.setattr(catalog, "get_episode_artwork_many", lambda _conn, _episode_ids: {})
+    monkeypatch.setattr(catalog, "get_metadata_images_many", batch_lookup)
+    payload = {
+        "work_id": "work-test",
+        "cast": [
+            {"profile_path": "/person-a.jpg"},
+            {"profile_url": "/person-b.jpg"},
+            {"profile_path": "/person-a.jpg"},
+        ],
+        "related_works": [
+            {"poster_path": "/related-a.jpg"},
+            {"poster_url": "/related-b.jpg"},
+            {"poster_path": "/related-a.jpg"},
+        ],
+        "episodes": [],
+        "seasons": [],
+    }
+    with database.connect() as conn:
+        library_v4._published_artwork_payload(conn, payload)
+
+    assert len(calls) == 1
+    assert set(calls[0][0]) == {"/person-a.jpg", "/person-b.jpg", "/related-a.jpg", "/related-b.jpg"}
+    assert [person["profile_path"] for person in payload["cast"]] == ["local:/person-a.jpg", "local:/person-b.jpg", "local:/person-a.jpg"]
+    assert [related["poster_path"] for related in payload["related_works"]] == ["local:/related-a.jpg", "local:/related-b.jpg", "local:/related-a.jpg"]
 
 
 def test_detail_only_exposes_latest_confirmed_revision_for_same_root(tmp_path, monkeypatch):
@@ -186,10 +351,11 @@ def test_detail_only_exposes_latest_confirmed_revision_for_same_root(tmp_path, m
         "ingest_method": "local_scan",
         "relative_path": "Show/Show.S01E02.mkv",
         "source_locator": "local://show/Show.S01E02.mkv",
-        "playback_locator": "local://show/Show.S01E02.mkv",
+        "playback_locator": str(Path.cwd() / "backend" / "tests" / "media-fixtures" / "Show.S01E02.mkv"),
     }]
     assert client.post("/api/v4/imports/preview", json=second).status_code == 200
     assert client.post("/api/v4/imports/rev-new/confirm").status_code == 200
+    _publish(database)
 
     with database.connect() as conn:
         work_id = conn.execute("SELECT work_id FROM works LIMIT 1").fetchone()["work_id"]
@@ -220,6 +386,7 @@ def test_detail_excludes_assets_from_retired_source_roots(tmp_path, monkeypatch)
     active["entries"] = [active["entries"][1]]
     assert client.post("/api/v4/imports/preview", json=active).status_code == 200
     assert client.post("/api/v4/imports/rev-active-root/confirm").status_code == 200
+    _publish(database)
 
     with database.connect() as conn:
         active_work_id = _work_id_for_root(conn, "root-active")
@@ -232,6 +399,7 @@ def test_detail_excludes_assets_from_retired_source_roots(tmp_path, monkeypatch)
             "WHERE root_id = 'root-retired'"
         )
         conn.commit()
+    _publish(database)
 
     detail = client.get(f"/api/library/works/{active_work_id}")
     assert detail.status_code == 200
@@ -250,17 +418,13 @@ def test_library_sources_come_from_each_evidence_not_the_first_root_entry(tmp_pa
 
     assert client.post("/api/v4/imports/preview", json=payload).status_code == 200
     assert client.post("/api/v4/imports/rev-mixed-provider/confirm").status_code == 200
-    from app.media_v4.projection.library import V4LibraryProjection
-
-    V4LibraryProjection(_database).rebuild()  # 测试应用未启动 lifespan，显式模拟后台发布。
-    # 正式媒体墙只发布 ready 作品；未刮削的作品通过 include_all 进入维护视图。
+    _publish(_database)  # 测试应用未启动 lifespan，显式模拟后台发布。
+    # 已确认作品先发布轻量卡片，资料等待不会将其从媒体库隐藏。
     response = client.get("/api/library")
     assert response.status_code == 200
-    assert response.json()["works"] == []
-    maintenance = client.get("/api/library?include_all=true")
-    assert maintenance.status_code == 200
-    assert maintenance.json()["works"][0]["sources"] == ["local", "pan115"]
-    assert maintenance.json()["works"][0]["metadata_state"] == "waiting_metadata"
+    assert len(response.json()["works"]) == 1
+    assert response.json()["works"][0]["metadata_state"] == "waiting_metadata"
+    assert response.json()["works"][0]["sources"] == ["local", "pan115"]
 
 
 def test_empty_scan_can_confirm_source_removal_and_publish_empty_library(tmp_path, monkeypatch):
@@ -280,6 +444,7 @@ def test_empty_scan_can_confirm_source_removal_and_publish_empty_library(tmp_pat
     assert preview.status_code == 200
     assert preview.json()["works"] == []
     assert client.post("/api/v4/imports/rev-empty/confirm").status_code == 200
+    _publish(database)
 
     with database.connect() as conn:
         projection_job = conn.execute(

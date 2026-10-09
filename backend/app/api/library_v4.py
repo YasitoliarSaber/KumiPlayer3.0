@@ -27,7 +27,7 @@ class WatchStatusRequest(BaseModel):
 
 
 def _published_artwork_payload(conn, payload: dict) -> None:
-    from app.media_v4.assets.catalog import get_episode_artwork_many, get_metadata_image, get_work_artwork
+    from app.media_v4.assets.catalog import get_episode_artwork_many, get_work_artwork
 
     payload['artwork'] = get_work_artwork(conn, str(payload['work_id']))
     for role in ('poster', 'fanart', 'clearlogo'):
@@ -44,10 +44,19 @@ def _published_artwork_payload(conn, payload: dict) -> None:
     for season in payload.get('seasons') or []:
         season['episodes'] = [episode_map[episode['episode_id']] for episode in season.get('episodes') or []
                               if episode['episode_id'] in episode_map]
-    for person in payload.get('cast') or []:
-        person['profile_path'] = get_metadata_image(conn, person.get('profile_path') or person.get('profile_url') or '') or ''
-    for related in payload.get('related_works') or []:
-        related['poster_path'] = get_metadata_image(conn, related.get('poster_path') or related.get('poster_url') or '') or ''
+    from app.media_v4.assets.catalog import get_metadata_images_many
+
+    people = payload.get('cast') or []
+    related_works_payload = payload.get('related_works') or []
+    image_sources = list(dict.fromkeys(
+        [str(person.get('profile_path') or person.get('profile_url') or '') for person in people]
+        + [str(related.get('poster_path') or related.get('poster_url') or '') for related in related_works_payload]
+    ))
+    images = get_metadata_images_many(conn, [source for source in image_sources if source])
+    for person in people:
+        person['profile_path'] = images.get(person.get('profile_path') or person.get('profile_url') or '', '')
+    for related in related_works_payload:
+        related['poster_path'] = images.get(related.get('poster_path') or related.get('poster_url') or '', '')
         related['local_poster_path'] = related['poster_path']
 
 
@@ -118,12 +127,12 @@ def _card_payload(card: dict, override: dict | None = None) -> dict:
     }
 
 
-def _library_snapshot(*, compact: bool = False, work_ids: tuple[str, ...] | None = None):
+def _library_snapshot(*, work_ids: tuple[str, ...] | None = None):
     database = get_database()
     projection = V4LibraryProjection(database)
     from app.media_v4.projection.library import LibrarySnapshot
 
-    return projection.current(compact=compact, work_ids=work_ids) or LibrarySnapshot('', '', ())
+    return projection.current(work_ids=work_ids) or LibrarySnapshot('', '', ())
 
 
 def _work_overrides_map(work_ids: list[str]) -> dict[str, dict]:
@@ -157,21 +166,24 @@ def _rows_for_work_ids(sql: str, work_ids: list[str]) -> list:
 
 
 @router.get("")
-def get_library(compact: bool = False, source: str | None = None, include_all: bool = False,
-                work_ids: str | None = None):
+def get_library(source: str | None = None, work_ids: str | None = None):
     selected = tuple(dict.fromkeys(filter(None, (work_ids or '').split(',')))) if work_ids is not None else None
     if selected is not None and len(selected) > 128:
         raise HTTPException(status_code=400, detail='一次最多读取 128 个作品')
-    snapshot = _library_snapshot(compact=True, work_ids=selected)
-    work_ids = [card["work_id"] for card in snapshot.cards]
-    watch_map = _watch_status_map(work_ids)
-    override_map = _work_overrides_map(work_ids)
-    from app.media_v4.assets.catalog import get_metadata_image, get_work_artwork_many
+    snapshot = _library_snapshot(work_ids=selected)
+    publication = V4LibraryProjection(get_database()).summary()
+    card_work_ids = [card["work_id"] for card in snapshot.cards]
+    watch_map = _watch_status_map(card_work_ids)
+    override_map = _work_overrides_map(card_work_ids)
+    from app.media_v4.assets.catalog import get_metadata_images_many, get_work_artwork_many
     with get_database().connect() as conn:
-        artwork_map = get_work_artwork_many(conn, work_ids)
-        related_images = {item.get('poster_path') or item.get('poster_url') or '': get_metadata_image(
-            conn, item.get('poster_path') or item.get('poster_url') or '') for card in snapshot.cards
-            for item in related_works(card.get('metadata') or {})}
+        artwork_map = get_work_artwork_many(conn, card_work_ids)
+        related_sources = list(dict.fromkeys(
+            str(item.get('poster_path') or item.get('poster_url') or '')
+            for card in snapshot.cards for item in related_works(card.get('metadata') or {})
+            if item.get('poster_path') or item.get('poster_url')
+        ))
+        related_images = get_metadata_images_many(conn, related_sources)
     works = []
     for card in snapshot.cards:
         override = override_map.get(card["work_id"], {})
@@ -185,9 +197,8 @@ def get_library(compact: bool = False, source: str | None = None, include_all: b
             published = variants.get('384') or next(iter(variants.values()), '')
             payload[f'{role}_path'] = published
             payload[f'local_{role}_path'] = published
-        if compact:
-            for key in ('cast', 'studios', 'tags', 'certification', 'certification_country'):
-                payload.pop(key, None)
+        for key in ('cast', 'studios', 'tags', 'certification', 'certification_country'):
+            payload.pop(key, None)
         payload['content_scope'] = card.get('metadata', {}).get('content_scope', '')
         for related in payload.get('related_works') or []:
             related['poster_path'] = related_images.get(related.get('poster_path') or related.get('poster_url') or '') or ''
@@ -213,7 +224,8 @@ def get_library(compact: bool = False, source: str | None = None, include_all: b
             "episode_count": sum(int(work["episode_count"]) for work in works),
         },
         "generated_at": snapshot.generation_id,
-        "needs_rescan": False,
+        "generation_id": snapshot.generation_id,
+        "updating": publication['updating'] or publication['generation_id'] != snapshot.generation_id,
         "digest": snapshot.digest,
     }
 
@@ -226,14 +238,18 @@ def get_changes(after: int = 0, limit: int = 128):
     try:
         with get_database().connect() as conn:
             conn.execute('BEGIN')
-            return read_changes(conn, after, limit)
+            changes = read_changes(conn, after, limit)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    publication = V4LibraryProjection(get_database()).summary()
+    changes['generation_id'] = publication['generation_id']
+    changes['updating'] = publication['updating']
+    return changes
 
 
 @router.get('/cards')
 def get_cards(work_ids: str):
-    return {'works': get_library(compact=True, work_ids=work_ids)['works']}
+    return {'works': get_library(work_ids=work_ids)['works']}
 
 
 @router.get("/works/{work_id}")
@@ -348,5 +364,7 @@ def patch_watch_status(work_id: str, request: WatchStatusRequest):
 
 @router.post("/rescan")
 def rescan_library():
-    snapshot = V4LibraryProjection(get_database()).rebuild()
-    return {"task_id": f"projection:{snapshot.generation_id}", "status": "succeeded"}
+    from app.media_v4.projection.library import request_projection_refresh
+
+    task_id = request_projection_refresh(get_database())
+    return {"task_id": task_id, "status": "accepted"}

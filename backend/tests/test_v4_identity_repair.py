@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
-
 from app.media_v4.domain.models import ParsedFacts, ResolvedWork, SourceEvidence
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.persistence.repositories import V4Repository
@@ -49,6 +49,8 @@ def _entry(
         relative_path=relative_path,
         entry_kind="video",
         provider="local",
+        source_locator=str(Path.cwd() / "_test-only" / relative_path),
+        playback_locator=str(Path.cwd() / "_test-only" / relative_path),
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-{evidence_id}",

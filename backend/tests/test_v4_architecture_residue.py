@@ -25,11 +25,9 @@ def test_main_registers_v4_media_routes_without_legacy_execution_routers():
 
 def test_v4_execution_modules_do_not_reparse_or_write_legacy_plan_state():
     root = Path(__file__).resolve().parents[1] / "app" / "media_v4"
-    mirror = (root / "jobs" / "mirror.py").read_text(encoding="utf-8")
+    assert not (root / "jobs" / "mirror.py").exists()
     scrape = (root / "jobs" / "scrape.py").read_text(encoding="utf-8")
-    assert "recognize_media" not in mirror
     assert "recognize_media" not in scrape
-    assert "plan_recognizer" not in mirror
     assert "plan_recognizer" not in scrape
 
 

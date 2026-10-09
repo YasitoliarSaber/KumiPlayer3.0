@@ -2,7 +2,6 @@
 from dataclasses import replace
 
 import pytest
-
 from app.media_v4.domain.models import SourceEvidence
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.resolution.resolver import MediaResolver
@@ -12,7 +11,7 @@ def pair(path):
     evidence = SourceEvidence(
         evidence_id=path, scan_id="exclusion", root_id="exclusion",
         source_key=path, relative_path=path, entry_kind="video", provider="quark",
-        playback_locator="fixture://" + path,
+        playback_locator="C:/KumiTest/special-exclusion/" + path,
     )
     return evidence, V4Parser().parse(evidence)
 
@@ -87,7 +86,7 @@ def test_existing_special_members_disappear_from_projection_and_detail_without_d
             for table in ("parsed_facts", "import_revisions", "episodes", "assets", "revision_bindings")
         }
         conn.commit()
-    snapshot = projection.ensure_current()
+    snapshot = projection.rebuild()
     monkeypatch.setattr(library_v4, "get_database", lambda: database)
     if only_special:
         from fastapi import HTTPException

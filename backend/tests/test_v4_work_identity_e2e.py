@@ -10,6 +10,7 @@ detail API 全链，证明身份分隔在最终详情层成立：
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from fastapi import FastAPI
@@ -73,10 +74,36 @@ def _metadata_for(provider_id: str, title: str, marker: str, *, media_type: str 
     }
 
 
+def _publish_artwork(conn, work_id: str, marker: str) -> dict[str, str]:
+    """用已发布索引验证作品隔离，详情 GET 不下载或检查真实图片。"""
+    urls = {}
+    for role, width in (("fanart", 768), ("clearlogo", 384)):
+        resource_id = hashlib.sha256(f"{marker}-{role}".encode()).hexdigest()
+        digest = hashlib.sha256(f"{marker}-{role}-contents".encode()).hexdigest()
+        conn.execute(
+            "INSERT INTO artwork_resources(resource_id,content_digest,state,created_at) VALUES (?,?,'ready','now')",
+            (resource_id, digest),
+        )
+        conn.execute(
+            "INSERT INTO artwork_variants(content_digest,recipe_version,width,relative_path,"
+            "pixel_width,pixel_height,byte_size,etag) VALUES (?,'webp-v1',?,?,?,100,12,?)",
+            (digest, width, f"{digest}/{width}.webp", width, digest),
+        )
+        conn.execute(
+            "INSERT INTO artwork_bindings(subject_type,subject_id,work_id,role,candidate_id,published_id) "
+            "VALUES ('work',?,?,?,?,?)",
+            (work_id, work_id, role, resource_id, resource_id),
+        )
+        urls[role] = f"/api/assets/artwork/{resource_id}/{digest}-webp-v1/{width}"
+    return urls
+
+
 def test_detail_layer_keeps_main_series_spinoff_and_movie_identities_separate(
     tmp_path, monkeypatch
 ):
     client, database = _client(tmp_path, monkeypatch)
+    from app.media_v4.persistence.metadata_lifecycle import publish_snapshot
+    from app.media_v4.projection.library import V4LibraryProjection
 
     assert client.post("/api/v4/imports/preview", json=_preview_payload()).status_code == 200
     assert client.post("/api/v4/imports/rev-identity-e2e/confirm").status_code == 200
@@ -110,6 +137,14 @@ def test_detail_layer_keeps_main_series_spinoff_and_movie_identities_separate(
                     json.dumps(metadata, ensure_ascii=False),
                 ),
             )
+            publish_snapshot(
+                conn, revision_id="rev-identity-e2e", work_id=works[title],
+                snapshot_id=f"snapshot-e2e-{index}", metadata=metadata, artifact_ids=[],
+            )
+        images = {
+            title: _publish_artwork(conn, works[title], marker)
+            for title, marker in ((MAIN_TITLE, "main"), (SPINOFF_TITLE, "heya"), (MOVIE_TITLE, "movie"))
+        }
         # 主系列第二季的 episode/season 本地编号
         season_rows = conn.execute(
             """
@@ -123,6 +158,7 @@ def test_detail_layer_keeps_main_series_spinoff_and_movie_identities_separate(
         season_map = {int(row["season"]): int(row["episodes"] or 0) for row in season_rows}
 
     assert season_map == {1: 2, 2: 1}, f"主系列季结构错误: {season_map}"
+    V4LibraryProjection(database).rebuild()
 
     main_detail = client.get(f"/api/library/works/{works[MAIN_TITLE]}").json()
     spinoff_detail = client.get(f"/api/library/works/{works[SPINOFF_TITLE]}").json()
@@ -130,11 +166,12 @@ def test_detail_layer_keeps_main_series_spinoff_and_movie_identities_separate(
 
     # 主系列详情：标题/图档只来自主系列自己的 binding。
     assert main_detail["title"] == MAIN_TITLE
-    assert main_detail["fanart_path"].endswith("main-fanart.jpg")
-    assert main_detail["clearlogo_path"] == "/main-logo.png"
+    assert main_detail["fanart_path"] == images[MAIN_TITLE]["fanart"]
+    assert main_detail["clearlogo_path"] == images[MAIN_TITLE]["clearlogo"]
     serialized_main = json.dumps(main_detail, ensure_ascii=False)
     assert SPINOFF_TITLE not in serialized_main, "主系列详情泄漏了外传身份"
-    assert "heya-fanart" not in serialized_main and "movie-fanart" not in serialized_main
+    assert images[SPINOFF_TITLE]["fanart"] not in serialized_main
+    assert images[MOVIE_TITLE]["fanart"] not in serialized_main
 
     # 主系列季结构：S1 + S2 都在主 Work 下，第二季集号为本地 S02 编号。
     season_numbers = {
@@ -151,8 +188,8 @@ def test_detail_layer_keeps_main_series_spinoff_and_movie_identities_separate(
 
     # 外传详情：独立身份，不携带主系列的季或图档。
     assert spinoff_detail["title"] == SPINOFF_TITLE
-    assert spinoff_detail["fanart_path"].endswith("heya-fanart.jpg")
-    assert spinoff_detail["clearlogo_path"] == "/heya-logo.png"
+    assert spinoff_detail["fanart_path"] == images[SPINOFF_TITLE]["fanart"]
+    assert spinoff_detail["clearlogo_path"] == images[SPINOFF_TITLE]["clearlogo"]
     assert not [
         episode for episode in spinoff_detail.get("episodes", [])
         if int(episode.get("season_number") or 0) == 2
@@ -161,6 +198,7 @@ def test_detail_layer_keeps_main_series_spinoff_and_movie_identities_separate(
     # 电影详情：standalone，独立 binding。
     assert movie_detail["media_type"] == "movie"
     assert movie_detail["title"] == MOVIE_TITLE
-    assert movie_detail["fanart_path"].endswith("movie-fanart.jpg")
+    assert movie_detail["fanart_path"] == images[MOVIE_TITLE]["fanart"]
     serialized_movie = json.dumps(movie_detail, ensure_ascii=False)
-    assert "main-fanart" not in serialized_movie and "heya-fanart" not in serialized_movie
+    assert images[MAIN_TITLE]["fanart"] not in serialized_movie
+    assert images[SPINOFF_TITLE]["fanart"] not in serialized_movie

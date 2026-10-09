@@ -397,7 +397,7 @@ def test_search_queries_include_parent_series_context():
 
 
 def test_missing_identity_still_produces_local_work():
-    """GREEN：没有身份线索时仍必须生成本地 Work（阶段 1 的既有契约）。"""
+    """GREEN：普通未识别季集没有身份线索时仍生成本地 Work。"""
 
     facts = ParsedFacts(
         parsed_fact_id="facts-none",
@@ -406,12 +406,14 @@ def test_missing_identity_still_produces_local_work():
         work_title="",
         title_candidates=(),
         media_type="tv",
-        group_type="special",
+        group_type="season",
+        season_candidate=1,
+        episode_candidate=1,
         series_group="",
         confidence="low",
         needs_review=True,
     )
-    graph = MediaResolver().resolve([(_evidence(0, "动画/未知/[Group] SP01.mkv"), facts)])
+    graph = MediaResolver().resolve([(_evidence(0, "动画/未知/未知.S01E01.mkv"), facts)])
 
     # 有目录名可用时用目录名做本地身份；完全没有可用标题时才退化为 local:file:。
     assert len(graph.works) == 1

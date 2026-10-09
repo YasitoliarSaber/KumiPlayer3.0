@@ -37,6 +37,8 @@ def _pair(
         relative_path=relative,
         entry_kind="video",
         provider=provider,
+        source_locator=f"C:/KumiTest/p001/{evidence_id}/{relative}",
+        playback_locator=f"C:/KumiTest/p001/{evidence_id}/{relative}",
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-{evidence_id}",
@@ -206,11 +208,11 @@ def test_local_only_metadata_must_not_become_confirmed_binding_or_succeeded_job(
 
 
 # ---------------------------------------------------------------------------
-# 7.2.2 / 7.3.F：投影必须只发布 ready 作品。
+# 7.2.2 / 7.3.F：已确认作品在资料等待期间仍可进入作品卡片。
 # ---------------------------------------------------------------------------
 
 
-def test_projection_excludes_local_only_works_from_formal_library(tmp_path):
+def test_projection_publishes_confirmed_local_only_work_while_metadata_waits(tmp_path):
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.projection.library import V4LibraryProjection
@@ -230,11 +232,6 @@ def test_projection_excludes_local_only_works_from_formal_library(tmp_path):
     revision_service.create_draft("rev-p001-proj", [(evidence, facts)])
     revision_service.confirm("rev-p001-proj")
     runner = V4JobRunner(database)
-    mirror_job = next(
-        job for job in revision_service.list_jobs("rev-p001-proj")
-        if job["job_type"] == "materialize_mirror"
-    )
-    runner.process_job(mirror_job["job_id"], mirror_root=tmp_path / "mirror")
     scrape_job = next(
         job for job in revision_service.list_jobs("rev-p001-proj")
         if job["job_type"] == "scrape_work"
@@ -242,16 +239,19 @@ def test_projection_excludes_local_only_works_from_formal_library(tmp_path):
     runner.scrape.process(
         scrape_job["job_id"],
         lambda _work: {"provider": "local", "provider_id": "", "metadata_state": "waiting_metadata"},
-        mirror_root=tmp_path / "mirror",
     )
 
     snapshot = V4LibraryProjection(database).rebuild()
 
-    assert all(card["metadata"].get("metadata_state") != "ready" for card in snapshot.cards)
+    with database.connect() as conn:
+        confirmed_work_id = str(conn.execute("SELECT work_id FROM works").fetchone()[0])
+    assert len(snapshot.cards) == 1
+    assert snapshot.cards[0]["work_id"] == confirmed_work_id
+    assert snapshot.cards[0]["metadata"]["metadata_state"] == "waiting_metadata"
 
 
 # ---------------------------------------------------------------------------
-# 7.2.8 / 7.3.G：多季作品必须报告真实常规季数，S00 不计入。
+# 7.2.8 / 7.3.G：多季作品报告常规季数，排除规则不准入新的特别篇。
 # ---------------------------------------------------------------------------
 
 
@@ -282,6 +282,8 @@ def test_projection_reports_regular_season_count_excluding_specials(tmp_path):
         relative_path="Show/Specials/Show.SP01.mkv",
         entry_kind="video",
         provider="local",
+        source_locator="C:/KumiTest/p001-season/Show/Specials/Show.SP01.mkv",
+        playback_locator="C:/KumiTest/p001-season/Show/Specials/Show.SP01.mkv",
     )
     special_facts = ParsedFacts(
         parsed_fact_id="facts-sp",
@@ -294,6 +296,7 @@ def test_projection_reports_regular_season_count_excluding_specials(tmp_path):
         season_candidate=0,
         special_candidate=True,
         special_number=1,
+        is_importable=True,
     )
     entries.append((special_evidence, special_facts))
     revision_service = V4RevisionService(database)
@@ -304,7 +307,11 @@ def test_projection_reports_regular_season_count_excluding_specials(tmp_path):
 
     card = snapshot.cards[0]
     assert card["regular_season_count"] == 2
-    assert card["special_season_count"] == 1
+    assert card["special_season_count"] == 0
+    with database.connect() as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM revision_bindings WHERE revision_id='rev-p001-season' AND evidence_id='ev-sp'"
+        ).fetchone()[0] == 0
 
 
 # ---------------------------------------------------------------------------

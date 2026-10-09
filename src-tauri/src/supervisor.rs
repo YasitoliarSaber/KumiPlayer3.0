@@ -19,6 +19,8 @@ use crate::runtime_identity::{backend_is_compatible, runtime_id_for};
 
 pub const BACKEND_HOST: &str = "127.0.0.1";
 pub const BACKEND_PORT: u16 = 37821;
+pub(crate) const HEALTH_RESPONSE_LIMIT: usize = 4096;
+pub(crate) const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// 健康检查的等待参数：总期限与轮询间隔。
 ///
@@ -88,7 +90,7 @@ pub struct RuntimeContext {
 }
 
 #[derive(Debug, Deserialize)]
-struct BackendIdentity {
+pub(crate) struct BackendIdentity {
     app: String,
     #[serde(default)]
     runtime_kind: String,
@@ -102,11 +104,38 @@ struct BackendIdentity {
 pub struct ManagedBackend {
     child: Child,
     _job: KillOnCloseJob,
+    api_token: String,
 }
 
 impl ManagedBackend {
     /// 终止后端并回收进程；作业对象在本结构被丢弃时连带清理子孙进程。
     pub fn shutdown(&mut self) {
+        self.shutdown_at(std::net::SocketAddr::from(([127, 0, 0, 1], BACKEND_PORT)));
+    }
+
+    pub(crate) fn shutdown_at(&mut self, address: std::net::SocketAddr) {
+        let owns_authenticated_session = !self.api_token.is_empty();
+        let deadline = std::time::Instant::now()
+            + if owns_authenticated_session {
+                SHUTDOWN_TIMEOUT
+            } else {
+                Duration::ZERO
+            };
+        if owns_authenticated_session {
+            let _ = request_graceful_shutdown(address, &self.api_token, SHUTDOWN_TIMEOUT);
+        }
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(_)) => return,
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                _ => break,
+            }
+        }
+        // Graceful shutdown is bounded. If lifespan cleanup exceeds the window,
+        // terminate only the child owned by this supervisor; dropping the Job
+        // object also reclaims its descendants.
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -114,29 +143,105 @@ impl ManagedBackend {
 
 /// Connect to the backend and read its desktop runtime identity.
 fn health_identity() -> Option<BackendIdentity> {
-    let request = b"GET /api/health HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-    if let Ok(mut stream) = TcpStream::connect_timeout(
-        &std::net::SocketAddr::from(([127, 0, 0, 1], BACKEND_PORT)),
+    read_health_identity_from(
+        std::net::SocketAddr::from(([127, 0, 0, 1], BACKEND_PORT)),
         Duration::from_secs(1),
-    ) {
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
-        if stream.write(request).is_ok() {
-            let mut buf = Vec::with_capacity(512);
-            if stream.read_to_end(&mut buf).is_ok() {
-                let response = String::from_utf8_lossy(&buf);
-                let status_ok =
-                    response.starts_with("HTTP/1.0 200") || response.starts_with("HTTP/1.1 200");
-                if status_ok {
-                    let body = response.split("\r\n\r\n").nth(1)?;
-                    let identity: BackendIdentity = serde_json::from_str(body).ok()?;
-                    if identity.app == "KumiPlayer" {
-                        return Some(identity);
-                    }
-                }
-            }
+    )
+}
+
+pub(crate) fn read_health_identity_from(
+    address: std::net::SocketAddr,
+    timeout: Duration,
+) -> Option<BackendIdentity> {
+    let deadline = std::time::Instant::now() + timeout;
+    let remaining = || deadline.saturating_duration_since(std::time::Instant::now());
+    let mut stream = TcpStream::connect_timeout(&address, remaining()).ok()?;
+    stream.set_read_timeout(Some(remaining())).ok()?;
+    stream.set_write_timeout(Some(remaining())).ok()?;
+    stream
+        .write_all(b"GET /api/health HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .ok()?;
+
+    let mut response = Vec::with_capacity(512);
+    let mut chunk = [0_u8; 512];
+    loop {
+        let time_left = remaining();
+        if time_left.is_zero() {
+            return None;
+        }
+        stream.set_read_timeout(Some(time_left)).ok()?;
+        let count = stream.read(&mut chunk).ok()?;
+        if count == 0 {
+            break;
+        }
+        if response.len() + count > HEALTH_RESPONSE_LIMIT {
+            return None;
+        }
+        response.extend_from_slice(&chunk[..count]);
+    }
+
+    let separator = response.windows(4).position(|part| part == b"\r\n\r\n")?;
+    let headers = std::str::from_utf8(&response[..separator]).ok()?;
+    if !headers.starts_with("HTTP/1.0 200") && !headers.starts_with("HTTP/1.1 200") {
+        return None;
+    }
+    let body = &response[separator + 4..];
+    if let Some(length) = headers.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("content-length")
+            .then(|| value.trim().parse::<usize>().ok())
+            .flatten()
+    }) {
+        if length > HEALTH_RESPONSE_LIMIT || length != body.len() {
+            return None;
         }
     }
-    None
+    let identity: BackendIdentity = serde_json::from_slice(body).ok()?;
+    (identity.app == "KumiPlayer").then_some(identity)
+}
+
+pub(crate) fn request_graceful_shutdown(
+    address: std::net::SocketAddr,
+    token: &str,
+    timeout: Duration,
+) -> bool {
+    if token.is_empty() {
+        return false;
+    }
+    let deadline = std::time::Instant::now() + timeout;
+    let remaining = || deadline.saturating_duration_since(std::time::Instant::now());
+    let Ok(mut stream) = TcpStream::connect_timeout(&address, remaining()) else {
+        return false;
+    };
+    let request = format!(
+        "POST /api/system/shutdown HTTP/1.0\r\nHost: 127.0.0.1\r\nX-KumiPlayer-Token: {token}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+    );
+    if stream.set_write_timeout(Some(remaining())).is_err()
+        || stream.write_all(request.as_bytes()).is_err()
+        || stream.set_read_timeout(Some(remaining())).is_err()
+    {
+        return false;
+    }
+    let mut status = Vec::with_capacity(64);
+    let mut byte = [0_u8; 1];
+    while status.len() < 128 {
+        let time_left = remaining();
+        if time_left.is_zero() || stream.set_read_timeout(Some(time_left)).is_err() {
+            return false;
+        }
+        let Ok(count) = stream.read(&mut byte) else {
+            return false;
+        };
+        if count == 0 {
+            break;
+        }
+        status.push(byte[0]);
+        if status.ends_with(b"\r\n") {
+            break;
+        }
+    }
+    let status = String::from_utf8_lossy(&status);
+    status.starts_with("HTTP/1.0 202") || status.starts_with("HTTP/1.1 202")
 }
 
 pub fn health_matches(context: &RuntimeContext, expected_instance: Option<&str>) -> bool {
@@ -257,10 +362,12 @@ impl RuntimeContext {
     }
 
     fn apply_environment(&self, command: &mut Command, runtime_dir: &Path) {
+        let data_dir = data_dir_for(self).unwrap_or_else(|_| self.install_root.join("data"));
         command
             .env("KUMIPLAYER_HOST", BACKEND_HOST)
             .env("KUMIPLAYER_PORT", BACKEND_PORT.to_string())
             .env("KUMIPLAYER_RUNTIME_DIR", runtime_dir)
+            .env("KUMIPLAYER_DATA_DIR", data_dir)
             .env("KUMIPLAYER_RUNTIME_KIND", &self.kind)
             .env("KUMIPLAYER_RUNTIME_ID", &self.runtime_id)
             .env("KUMIPLAYER_INSTANCE_ID", &self.instance_id)
@@ -404,9 +511,20 @@ pub fn restart_backend_with(
     ))
 }
 
-pub fn protect_backend(mut child: Child) -> Result<ManagedBackend, String> {
+pub fn protect_backend(child: Child) -> Result<ManagedBackend, String> {
+    protect_backend_with_token(child, String::new())
+}
+
+fn protect_backend_with_token(
+    mut child: Child,
+    api_token: String,
+) -> Result<ManagedBackend, String> {
     match KillOnCloseJob::assign(&child) {
-        Ok(job) => Ok(ManagedBackend { child, _job: job }),
+        Ok(job) => Ok(ManagedBackend {
+            child,
+            _job: job,
+            api_token,
+        }),
         Err(error) => {
             let _ = child.kill();
             let _ = child.wait();
@@ -419,8 +537,7 @@ pub fn protect_backend(mut child: Child) -> Result<ManagedBackend, String> {
 fn diagnostic_log_path(context: &RuntimeContext) -> Result<PathBuf, String> {
     let data_dir = data_dir_for(context)?;
     let logs_dir = data_dir.join("logs");
-    std::fs::create_dir_all(&logs_dir)
-        .map_err(|error| format!("无法创建诊断日志目录：{error}"))?;
+    std::fs::create_dir_all(&logs_dir).map_err(|error| format!("无法创建诊断日志目录：{error}"))?;
     Ok(logs_dir.join("backend-stderr.log"))
 }
 
@@ -446,7 +563,7 @@ fn start_bundled_backend(context: &RuntimeContext) -> Result<Option<ManagedBacke
         .stderr(Stdio::from(diagnostic_log_file(context)?))
         .spawn()
         .map_err(|error| format!("内置后端无法启动，安装包可能不完整：{error}"))?;
-    protect_backend(child).map(Some)
+    protect_backend_with_token(child, context.api_token.clone()).map(Some)
 }
 
 fn start_python_backend(context: &RuntimeContext) -> Result<ManagedBackend, String> {
@@ -463,21 +580,13 @@ fn start_python_backend(context: &RuntimeContext) -> Result<ManagedBackend, Stri
     let mut command = Command::new(&python);
     context.apply_environment(&mut command, &root);
     let child = command
-        .args([
-            "-m",
-            "uvicorn",
-            "app.main:app",
-            "--host",
-            BACKEND_HOST,
-            "--port",
-        ])
-        .arg(BACKEND_PORT.to_string())
+        .arg("desktop_backend.py")
         .current_dir(&backend_dir)
         .stdout(Stdio::null())
         .stderr(Stdio::from(diagnostic_log_file(context)?))
         .spawn()
         .map_err(|error| format!("无法启动 Python 后端：{error}"))?;
-    protect_backend(child)
+    protect_backend_with_token(child, context.api_token.clone())
 }
 
 pub fn start_backend(context: &RuntimeContext) -> Result<Option<ManagedBackend>, String> {
@@ -501,13 +610,36 @@ pub fn start_backend(context: &RuntimeContext) -> Result<Option<ManagedBackend>,
 }
 
 pub fn data_dir_for(context: &RuntimeContext) -> Result<PathBuf, String> {
-    if context.kind == "bundled" {
-        let local_app_data = std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .ok_or_else(|| "无法确定 LocalAppData 目录".to_string())?;
+    resolve_data_dir(
+        &context.kind,
+        &context.install_root,
+        std::env::var_os("KUMIPLAYER_DATA_DIR").as_deref(),
+        std::env::var_os("LOCALAPPDATA").as_deref().map(Path::new),
+    )
+}
+
+pub(crate) fn resolve_data_dir(
+    kind: &str,
+    install_root: &Path,
+    override_dir: Option<&std::ffi::OsStr>,
+    local_app_data: Option<&Path>,
+) -> Result<PathBuf, String> {
+    if let Some(override_dir) = override_dir.filter(|path| !path.is_empty()) {
+        let path = PathBuf::from(override_dir);
+        return if path.is_absolute() {
+            Ok(path)
+        } else {
+            std::env::current_dir()
+                .map(|cwd| cwd.join(path))
+                .map_err(|error| format!("无法确定当前目录：{error}"))
+        };
+    }
+    if kind == "bundled" {
+        let local_app_data =
+            local_app_data.ok_or_else(|| "无法确定 LocalAppData 目录".to_string())?;
         return Ok(local_app_data.join("KumiPlayer").join("data"));
     }
-    Ok(context.install_root.join("data"))
+    Ok(install_root.join("data"))
 }
 
 pub fn stop_backend(process: &BackendProcess) -> Result<(), String> {

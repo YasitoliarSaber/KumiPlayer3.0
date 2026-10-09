@@ -174,7 +174,7 @@ def list_source_cards(database: V4Database) -> list[dict]:
         summaries[revision_id][status] += 1
         jobs_by_revision[revision_id].append(row)
 
-    cards = []
+    cards: list[dict] = []
     progress_service = V4RevisionService(database)
     for root in roots:
         root_id = str(root["root_id"])

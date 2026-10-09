@@ -4,7 +4,6 @@ import json
 from types import SimpleNamespace
 
 import pytest
-
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.path_validation import validate_playback_locator_syntax
 from app.media_v4.persistence.database import V4Database
@@ -60,7 +59,18 @@ def test_direct_playback_does_not_create_strm_and_retains_resume_identity(tmp_pa
 
 @pytest.mark.parametrize("locator", ["", "https://media.invalid/video.mkv", "file:///C:/video.mkv"])
 def test_invalid_saved_playback_never_falls_back_or_stops_active_session(tmp_path, monkeypatch, locator):
-    database, _media, binding = _confirmed_media(tmp_path, playback=locator)
+    database, _media, binding = _confirmed_media(tmp_path)
+    # 模拟历史库中的损坏路径；新确认链已经禁止写入这种数据。
+    with database.connect() as conn:
+        triggers = conn.execute(
+            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='source_evidence'"
+        ).fetchall()
+        for trigger in triggers:
+            conn.execute(f'DROP TRIGGER "{trigger["name"]}"')
+        conn.execute('UPDATE source_evidence SET playback_locator=?', (locator,))
+        for trigger in triggers:
+            conn.execute(trigger['sql'])
+        conn.commit()
     manager = V4PlaybackManager(database, session_dir=tmp_path / "sessions")
     actions = []
     monkeypatch.setattr(manager, "stop", lambda: actions.append("stop"))

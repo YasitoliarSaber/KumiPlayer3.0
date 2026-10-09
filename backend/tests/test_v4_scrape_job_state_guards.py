@@ -11,8 +11,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 
 def _entry(evidence_id: str):
     from app.media_v4.domain.models import ParsedFacts, SourceEvidence
@@ -25,7 +23,8 @@ def _entry(evidence_id: str):
         relative_path=f"Show/{evidence_id}.mkv",
         entry_kind="video",
         provider="local",
-        source_locator=f"local://{evidence_id}",
+        source_locator=rf"C:\\KumiPlayerFixture\\{evidence_id}.mkv",
+        playback_locator=rf"C:\\KumiPlayerFixture\\{evidence_id}.mkv",
         fingerprint=f"sha256:{evidence_id}",
     )
     facts = ParsedFacts(
@@ -127,37 +126,16 @@ def _ready_metadata() -> dict:
     }
 
 
-def _patch_artwork(monkeypatch):
-    from app.media_v4.jobs import metadata_artifacts as module
-
-    downloads: list[str] = []
-
-    def fake_download(url: str, path, *, client):
-        downloads.append(url)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"image-bytes")
-        return "digest-" + path.name
-
-    monkeypatch.setattr(module, "_download_artwork", fake_download)
-    monkeypatch.setattr(
-        module,
-        "load_config",
-        lambda: SimpleNamespace(artwork_storage_mode="local", tmdb_timeout=5, proxy_url=""),
-    )
-    return downloads
-
-
 def test_process_does_not_overwrite_a_terminal_state_written_during_the_run(tmp_path, monkeypatch):
     """运行期间被"失联回收"判 failed 时，收尾不得把它改回 succeeded。"""
 
     from app.media_v4.persistence.database import V4Database
 
     database, service, job_id = _confirmed_job(tmp_path)
-    _patch_artwork(monkeypatch)
     real_open = V4Database.open_connection
 
     def provider(_target):
-        # 模拟图片下载耗时期间失联回收把任务判为 failed。
+        # 模拟 Provider 请求期间失联回收把任务判为 failed。
         with real_open(database) as other:
             other.execute(
                 "UPDATE jobs SET status = 'failed', last_error = '任务异常中断，可重试' WHERE job_id = ?",
@@ -172,9 +150,8 @@ def test_process_does_not_overwrite_a_terminal_state_written_during_the_run(tmp_
     assert last_error == "任务异常中断，可重试"
 
 
-def test_process_heartbeats_while_downloading_artwork(tmp_path, monkeypatch):
+def test_process_heartbeats_after_provider_returns(tmp_path):
     database, service, job_id = _confirmed_job(tmp_path)
-    downloads = _patch_artwork(monkeypatch)
     seen: dict[str, str] = {}
 
     def provider(_target):
@@ -186,7 +163,6 @@ def test_process_heartbeats_while_downloading_artwork(tmp_path, monkeypatch):
 
     service.process(job_id, provider, mirror_root=tmp_path / "mirror")
 
-    assert downloads, "前置条件：确实发生了图片下载"
     status, _error = _job_status(database, job_id)
     with database.connect() as conn:
         after = str(conn.execute(
@@ -194,25 +170,23 @@ def test_process_heartbeats_while_downloading_artwork(tmp_path, monkeypatch):
         ).fetchone()["heartbeat_at"])
 
     assert status == "succeeded"
-    assert after > seen["before"], f"下载阶段必须推进心跳（{seen['before']} -> {after}）"
+    assert after > seen["before"], f"Provider 返回后必须推进心跳（{seen['before']} -> {after}）"
 
 
-def test_publish_reports_progress_for_every_download(tmp_path, monkeypatch):
-    from app.media_v4.jobs import metadata_artifacts as module
-
-    downloads = _patch_artwork(monkeypatch)
-    ticks: list[int] = []
-    database, _service, _job_id = _confirmed_job(tmp_path)
-
-    module.publish_metadata_artifacts(
-        database,
-        revision_id="rev-1",
-        work_id=_work_id(database),
-        target={"work_type": "movie", "title": "Show", "year": 2024, "episodes": []},
-        metadata=_ready_metadata(),
-        mirror_root=tmp_path / "mirror",
-        on_progress=lambda: ticks.append(1),
+def test_scrape_persists_artwork_requirements_without_downloading(tmp_path, monkeypatch):
+    database, service, job_id = _confirmed_job(tmp_path)
+    monkeypatch.setattr(
+        "app.media_v4.jobs.metadata_artifacts._download_artwork",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("scrape must not download artwork")),
     )
 
-    assert len(downloads) == 3
-    assert len(ticks) == 3, "每张图下载前都应上报一次心跳"
+    service.process(job_id, lambda _target: _ready_metadata())
+
+    with database.connect() as conn:
+        rows = conn.execute(
+            "SELECT r.source_url,r.state FROM artwork_bindings b "
+            "JOIN artwork_resources r ON r.resource_id=b.candidate_id WHERE b.work_id=?",
+            (_work_id(database),),
+        ).fetchall()
+    assert len(rows) == 3
+    assert all(row["state"] == "pending" for row in rows)

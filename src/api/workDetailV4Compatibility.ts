@@ -124,9 +124,8 @@ export const workDetailV4Compatibility = {
         work_id: targetId, candidate_id: candidateId, scope,
         ...(scope === 'season' ? { season_number: seasonNumber } : {}),
       });
-      if (result.status !== 'confirmed') throw new Error('在线资料刷新未完成；已保留上一次成功的资料');
-      // metadata/confirm 同步完成刮削并刷新投影；空 task_id 表示无需轮询。
-      return { task_id: '', status: 'succeeded', result };
+      if (result.status !== 'accepted') throw new Error('在线资料刷新未受理；已保留上一次成功的资料');
+      return { task_id: result.job_ids[0] || '', task_ids: result.job_ids, status: 'queued', result };
     },
     rerunWorkScrape: async (workId: string) => {
       const result = await mediaV4Api.enqueueWorkScrape(workId);

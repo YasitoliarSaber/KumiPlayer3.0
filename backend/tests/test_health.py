@@ -1,5 +1,6 @@
 """健康检查与基础模型测试"""
 
+import json
 import sys
 from pathlib import Path
 
@@ -9,9 +10,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_health_endpoint():
     """测试健康检查端点"""
-    from fastapi.testclient import TestClient
-
     from app.main import app
+    from fastapi.testclient import TestClient
 
     client = TestClient(app)
     response = client.get("/api/health")
@@ -22,9 +22,8 @@ def test_health_endpoint():
 
 
 def test_health_endpoint_reports_desktop_runtime_identity(monkeypatch):
-    from fastapi.testclient import TestClient
-
     from app.main import app
+    from fastapi.testclient import TestClient
 
     monkeypatch.setenv("KUMIPLAYER_RUNTIME_KIND", "bundled")
     monkeypatch.setenv("KUMIPLAYER_RUNTIME_ID", "runtime-a1b2")
@@ -54,24 +53,26 @@ def test_config_load():
 
 
 def test_config_mask():
-    """测试敏感字段脱敏"""
+    """公开配置清空凭据，只暴露是否已配置。"""
     from app.core.config import AppConfig
 
-    config = AppConfig(tmdb_bearer_token="abcdefghijklmnop")
+    token = "synthetic-tmdb-secret-value"
+    config = AppConfig(tmdb_bearer_token=token)
     public = config.to_public_dict()
-    assert public["tmdb_bearer_token"] == "abcdefgh..."
-    assert "ijklmnop" not in public["tmdb_bearer_token"]
+    assert public["tmdb_bearer_token"] == ""
+    assert public["tmdb_configured"] is True
+    assert token not in json.dumps(public)
 
 
 def test_config_mask_short_value():
-    """测试短敏感值也脱敏（长度 <= 8 时显示前 4 位 + ...）"""
+    """短凭据同样完全清空，并保留配置状态。"""
     from app.core.config import AppConfig
 
     config = AppConfig(tmdb_bearer_token="short")
     public = config.to_public_dict()
-    # 短值：显示前 4 位 + ...
-    assert public["tmdb_bearer_token"] == "shor..."
-    assert public["tmdb_bearer_token"] != "short"
+    assert public["tmdb_bearer_token"] == ""
+    assert public["tmdb_configured"] is True
+    assert "short" not in json.dumps(public)
 
 
 def _fake_credential(name: str) -> str:
@@ -87,8 +88,9 @@ def test_config_mask_deepseek_key():
     key = _fake_credential("deepseek_api_key")
     config = AppConfig(deepseek_api_key=key)
     public = config.to_public_dict()
-    assert public["deepseek_api_key"] == key[:8] + "..."
-    assert key[8:] not in public["deepseek_api_key"]
+    assert public["deepseek_api_key"] == ""
+    assert public["deepseek_configured"] is True
+    assert key not in json.dumps(public)
 
 
 def test_config_mask_bangumi_token():
@@ -98,8 +100,9 @@ def test_config_mask_bangumi_token():
     token = _fake_credential("bangumi_access_token")
     config = AppConfig(bangumi_access_token=token)
     public = config.to_public_dict()
-    assert public["bangumi_access_token"] == token[:8] + "..."
-    assert token[8:] not in public["bangumi_access_token"]
+    assert public["bangumi_access_token"] == ""
+    assert public["bangumi_configured"] is True
+    assert token not in json.dumps(public)
 
 
 def test_config_series_card_image_mode_public():

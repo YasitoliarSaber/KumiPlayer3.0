@@ -1,21 +1,24 @@
-"""V4 镜像物化器合同。"""
+"""已退役镜像物化链不再参与 V4 确认后的 SQLite 执行。"""
 
 from __future__ import annotations
 
-import pytest
+from dataclasses import replace
+
+from app.media_v4.domain.models import ParsedFacts, SourceEvidence
+from app.media_v4.persistence.database import V4Database
+from app.media_v4.revisions.service import V4RevisionService
 
 
 def _entry(evidence_id: str, locator: str):
-    from app.media_v4.domain.models import ParsedFacts, SourceEvidence
-
     evidence = SourceEvidence(
         evidence_id=evidence_id,
-        scan_id="scan-mirror",
-        root_id="root-mirror",
+        scan_id="scan-snapshot",
+        root_id="root-snapshot",
         source_key=evidence_id,
         relative_path=f"Show/{evidence_id}.mkv",
         entry_kind="video",
         provider="local",
+        ingest_method="local_scan",
         source_locator=locator,
         playback_locator=locator,
         fingerprint=f"sha256:{evidence_id}",
@@ -35,270 +38,60 @@ def _entry(evidence_id: str, locator: str):
     return evidence, facts
 
 
-def test_mirror_consumes_confirmed_revision_and_keeps_multiple_assets(tmp_path, monkeypatch):
-    from app.media_v4.jobs.mirror import V4MirrorMaterializer
-    from app.media_v4.persistence.database import V4Database
-    from app.media_v4.revisions.service import V4RevisionService
+def test_confirmation_keeps_distinct_assets_in_sqlite_without_legacy_materialization(tmp_path):
+    media = []
+    for name in ("show-1080p.mkv", "show-2160p.mkv"):
+        path = tmp_path / name
+        path.write_bytes(b"video fixture")
+        media.append(path)
 
-    def entry(evidence_id: str, name: str) -> tuple:
-        media = tmp_path / name
-        media.write_bytes(b"video")
-        evidence, facts = _entry(evidence_id, str(media))
-        return evidence, facts
-
-    database = V4Database(tmp_path / "mirror.db")
-    database.initialize()
-    revision_service = V4RevisionService(database)
-    revision_service.create_draft(
-        "rev-mirror",
-        [entry("1080p", "show.1080p.mkv"), entry("2160p", "show.2160p.mkv")],
-    )
-    revision_service.confirm("rev-mirror")
-    job = next(
-        job for job in revision_service.list_jobs("rev-mirror") if job["job_type"] == "materialize_mirror"
-    )
-
-    def fail_if_recognized(*_args, **_kwargs):
-        raise AssertionError("mirror 不得重新识别")
-
-    monkeypatch.setattr("app.recognition.media.recognize_media", fail_if_recognized)
-    materializer = V4MirrorMaterializer(database)
-    result = materializer.process(job["job_id"], tmp_path / "mirror")
-
-    assert result.status == "succeeded"
-    files = sorted((tmp_path / "mirror").rglob("*.strm"))
-    assert len(files) == 2
-    assert {file.read_text(encoding="utf-8") for file in files} == {
-        str(tmp_path / "show.1080p.mkv"),
-        str(tmp_path / "show.2160p.mkv"),
-    }
-
-
-def test_mirror_job_is_idempotent_after_success(tmp_path):
-    from app.media_v4.jobs.mirror import V4MirrorMaterializer
-    from app.media_v4.persistence.database import V4Database
-    from app.media_v4.revisions.service import V4RevisionService
-
-    media = tmp_path / "show.mkv"
-    media.write_bytes(b"video")
-    database = V4Database(tmp_path / "mirror-idempotent.db")
-    database.initialize()
-    revision_service = V4RevisionService(database)
-    revision_service.create_draft("rev-mirror", [_entry("1080p", str(media))])
-    revision_service.confirm("rev-mirror")
-    job = next(
-        job for job in revision_service.list_jobs("rev-mirror") if job["job_type"] == "materialize_mirror"
-    )
-    materializer = V4MirrorMaterializer(database)
-    first = materializer.process(job["job_id"], tmp_path / "mirror")
-    second = materializer.process(job["job_id"], tmp_path / "mirror")
-
-    assert first.status == "succeeded"
-    assert second.status == "succeeded"
-    assert len(list((tmp_path / "mirror").rglob("*.strm"))) == 1
-
-
-def test_mounted_assets_without_fingerprints_get_distinct_mirror_files(tmp_path):
-    from app.media_v4.domain.models import ParsedFacts, SourceEvidence
-    from app.media_v4.jobs.mirror import V4MirrorMaterializer
-    from app.media_v4.persistence.database import V4Database
-    from app.media_v4.revisions.service import V4RevisionService
-
-    database = V4Database(tmp_path / "mirror-no-fingerprint.db")
-    database.initialize()
-    pairs = []
-    locators = []
-    for evidence_id in ("remote-a", "remote-b"):
-        media = tmp_path / f"{evidence_id}.mkv"
-        media.write_bytes(b"video fixture")
-        locator = str(media)
-        locators.append(locator)
-        evidence = SourceEvidence(
-            evidence_id=evidence_id,
-            scan_id="scan-remote",
-            root_id="root-remote",
-            source_key=evidence_id,
-            relative_path=f"Show/{evidence_id}.mkv",
-            entry_kind="video",
-            provider="pan115",
-            source_locator=f"https://example.invalid/{evidence_id}.mkv",
-            playback_locator=locator,
-        )
-        facts = ParsedFacts(
-            parsed_fact_id=f"facts-{evidence_id}",
-            evidence_id=evidence_id,
-            parser_version="fixture",
-            work_title="Show",
-            title_candidates=("Show",),
-            media_type="tv",
-            group_type="season",
-            season_candidate=1,
-            episode_candidate=1,
-        )
-        pairs.append((evidence, facts))
-
-    revisions = V4RevisionService(database)
-    revisions.create_draft("rev-remote", pairs)
-    revisions.confirm("rev-remote")
-    job = next(job for job in revisions.list_jobs("rev-remote") if job["job_type"] == "materialize_mirror")
-
-    V4MirrorMaterializer(database).process(job["job_id"], tmp_path / "mirror")
-    files = sorted((tmp_path / "mirror").rglob("*.strm"))
-
-    assert len(files) == 2
-    assert {path.read_text(encoding="utf-8") for path in files} == set(locators)
-
-
-def test_non_txt_assets_keep_bounded_sampling_without_per_row_disk_probes(tmp_path, monkeypatch):
-    """非 TXT 镜像只做头/中/尾 3 次可达性抽样；逐行只做纯语法校验。
-
-    5 个本地 Asset 的调用计数必须是 3 次可达性 + 5 次语法；逐行循环再对
-    每条 Asset 做可达性探测会放大成 N+3 次源盘 I/O，属于回归。
-    """
-
-    from app.media_v4.jobs import mirror as mirror_module
-    from app.media_v4.jobs.mirror import V4MirrorMaterializer
-    from app.media_v4.persistence.database import V4Database
-    from app.media_v4.revisions.service import V4RevisionService
-
-    database = V4Database(tmp_path / "mirror-sampling.db")
-    database.initialize()
-    pairs = []
-    for index in range(5):
-        media = tmp_path / f"show.s01e{index + 1:02d}.mkv"
-        media.write_bytes(b"video")
-        pairs.append(_entry(f"ep{index}", str(media)))
-    revisions = V4RevisionService(database)
-    revisions.create_draft("rev-sampling", pairs)
-    revisions.confirm("rev-sampling")
-    job = next(
-        job for job in revisions.list_jobs("rev-sampling") if job["job_type"] == "materialize_mirror"
-    )
-
-    real_validate = mirror_module.validate_playback_locator
-    real_syntax = mirror_module.validate_playback_locator_syntax
-    locator_calls: list[str] = []
-    syntax_calls: list[str] = []
-
-    def counting_validate(locator):
-        locator_calls.append(locator)
-        return real_validate(locator)
-
-    def counting_syntax(locator):
-        syntax_calls.append(locator)
-        return real_syntax(locator)
-
-    monkeypatch.setattr(mirror_module, "validate_playback_locator", counting_validate)
-    monkeypatch.setattr(mirror_module, "validate_playback_locator_syntax", counting_syntax)
-
-    result = V4MirrorMaterializer(database).process(job["job_id"], tmp_path / "mirror")
-
-    assert result.status == "succeeded"
-    assert len(locator_calls) == 3
-    assert len(syntax_calls) == 5
-
-
-def test_openlist_assets_are_list_only_and_skip_mount_reachability_probe(tmp_path, monkeypatch):
-    """OpenList 扫描只读取目录清单，镜像阶段不得探测挂载盘上的文件。"""
-
-    from app.media_v4.domain.models import ParsedFacts, SourceEvidence
-    from app.media_v4.jobs import mirror as mirror_module
-    from app.media_v4.jobs.mirror import V4MirrorMaterializer
-    from app.media_v4.persistence.database import V4Database
-    from app.media_v4.revisions.service import V4RevisionService
-
-    evidence = SourceEvidence(
-        evidence_id="openlist-only",
-        scan_id="scan-openlist-only",
-        root_id="root-openlist-only",
-        source_key="/Anime/Show/S01E01.mkv",
-        relative_path="Show/S01E01.mkv",
-        entry_kind="video",
-        provider="openlist",
-        ingest_method="openlist_api",
-        source_locator="/Anime/Show/S01E01.mkv",
-        playback_locator=str(tmp_path / "unmounted" / "Show.S01E01.mkv"),
-        fingerprint="sha256:openlist-only",
-    )
-    facts = ParsedFacts(
-        parsed_fact_id="facts-openlist-only",
-        evidence_id=evidence.evidence_id,
-        parser_version="fixture",
-        work_title="Show",
-        title_candidates=("Show",),
-        media_type="tv",
-        group_type="season",
-        season_candidate=1,
-        episode_candidate=1,
-    )
-    database = V4Database(tmp_path / "openlist-only.db")
+    database = V4Database(tmp_path / "snapshot.db")
     database.initialize()
     revisions = V4RevisionService(database)
-    revisions.create_draft("rev-openlist-only", [(evidence, facts)])
-    revisions.confirm("rev-openlist-only")
-    job = next(item for item in revisions.list_jobs("rev-openlist-only") if item["job_type"] == "materialize_mirror")
+    revisions.create_draft("rev-snapshot", [
+        _entry("1080p", str(media[0])),
+        _entry("2160p", str(media[1])),
+    ])
+    revisions.confirm("rev-snapshot")
 
-    monkeypatch.setattr(
-        mirror_module,
-        "validate_playback_locator",
-        lambda _locator: (_ for _ in ()).throw(AssertionError("OpenList 不得探测挂载盘")),
-    )
-
-    result = V4MirrorMaterializer(database).process(job["job_id"], tmp_path / "mirror")
-
-    assert result.status == "succeeded"
-    assert len(list((tmp_path / "mirror").rglob("*.strm"))) == 1
-
-
-def test_remote_tree_asset_with_relative_locator_fails_before_publishing(tmp_path, monkeypatch):
-    """无效/相对播放定位不能发布 STRM：mirror 必须失败且零 Artifact。"""
-
-    from app.media_v4.domain.models import ParsedFacts, SourceEvidence
-    from app.media_v4.jobs.mirror import V4MirrorMaterializer
-    from app.media_v4.persistence.database import V4Database
-    from app.media_v4.revisions.service import V4RevisionService
-
-    evidence = SourceEvidence(
-        evidence_id="inventory-only",
-        scan_id="scan-inventory",
-        root_id="root-inventory",
-        source_key="Show/Show.S01E01.mkv",
-        relative_path="Show/Show.S01E01.mkv",
-        entry_kind="video",
-        provider="pan115",
-        source_locator="Show/Show.S01E01.mkv",
-        playback_locator="",
-    )
-    facts = ParsedFacts(
-        parsed_fact_id="facts-inventory",
-        evidence_id=evidence.evidence_id,
-        parser_version="fixture",
-        work_title="Show",
-        title_candidates=("Show",),
-        media_type="tv",
-        group_type="season",
-        season_candidate=1,
-        episode_candidate=1,
-    )
-    database = V4Database(tmp_path / "inventory.db")
-    database.initialize()
-    revisions = V4RevisionService(database)
-    revisions.create_draft("rev-inventory", [(evidence, facts)])
-    revisions.confirm("rev-inventory")
-    job = next(
-        item for item in revisions.list_jobs("rev-inventory") if item["job_type"] == "materialize_mirror"
-    )
-
-    with pytest.raises(RuntimeError, match="不是本地绝对路径"):
-        V4MirrorMaterializer(database).process(job["job_id"], tmp_path / "mirror")
-
-    assert list((tmp_path / "mirror").rglob("*.strm")) == []
     with database.connect() as conn:
-        status = conn.execute(
-            "SELECT status FROM jobs WHERE job_id = ?", (job["job_id"],)
-        ).fetchone()["status"]
-        published = conn.execute(
-            "SELECT COUNT(*) FROM artifacts WHERE revision_id = 'rev-inventory' AND artifact_type = 'mirror'"
+        rows = conn.execute(
+            "SELECT rb.asset_id,rb.episode_id,se.playback_locator "
+            "FROM revision_bindings rb JOIN source_evidence se ON se.evidence_id=rb.evidence_id "
+            "WHERE rb.revision_id='rev-snapshot' ORDER BY se.playback_locator"
+        ).fetchall()
+        jobs = conn.execute(
+            "SELECT job_type FROM jobs WHERE revision_id='rev-snapshot' ORDER BY job_type"
+        ).fetchall()
+        artifacts = conn.execute(
+            "SELECT COUNT(*) FROM artifacts WHERE revision_id='rev-snapshot'"
         ).fetchone()[0]
-    assert status == "failed"
-    assert published == 0
+
+    assert len(rows) == 2
+    assert len({row["asset_id"] for row in rows}) == 2
+    assert len({row["episode_id"] for row in rows}) == 1
+    assert {row["playback_locator"] for row in rows} == {str(path) for path in media}
+    assert [row["job_type"] for row in jobs] == ["refresh_projection", "scrape_work"]
+    assert artifacts == 0
+
+
+def test_confirmed_snapshot_does_not_probe_source_files(tmp_path, monkeypatch):
+    database = V4Database(tmp_path / "no-probe.db")
+    database.initialize()
+    evidence, facts = _entry("openlist", str(tmp_path / "not-mounted" / "Show.S01E01.mkv"))
+    evidence = replace(evidence, provider="openlist", ingest_method="openlist_api",
+                       source_locator="/Anime/Show/Show.S01E01.mkv")
+    revisions = V4RevisionService(database)
+    revisions.create_draft("rev-no-probe", [(evidence, facts)])
+
+    def fail_probe(_self, *args, **kwargs):
+        raise AssertionError("confirm must persist the source snapshot without probing mounted files")
+
+    monkeypatch.setattr("pathlib.Path.is_file", fail_probe)
+    revisions.confirm("rev-no-probe")
+
+    with database.connect() as conn:
+        locator = conn.execute(
+            "SELECT playback_locator FROM assets WHERE root_id='root-snapshot'"
+        ).fetchone()[0]
+    assert locator == str(tmp_path / "not-mounted" / "Show.S01E01.mkv")

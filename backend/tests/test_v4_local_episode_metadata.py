@@ -3,6 +3,7 @@ from copy import deepcopy
 
 from app.media_v4.jobs import metadata as metadata_module
 from app.scrape.tmdb_client import TMDBClientError
+
 from tests.test_v4_import_numbering_status import _episode, _install_client, _target
 
 
@@ -149,6 +150,7 @@ def test_explicit_mapping_conflict_is_not_hidden_by_complete_display_fields():
 def test_missing_episode_display_details_do_not_discard_reusable_work_snapshot(tmp_path, monkeypatch):
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.projection.library import V4LibraryProjection
+
     from tests import test_v4_import_metadata_lifecycle as lifecycle_tests
 
     complete_provider = lifecycle_tests.provider
@@ -167,7 +169,7 @@ def test_missing_episode_display_details_do_not_discard_reusable_work_snapshot(t
         raise AssertionError('missing optional episode display fields must not refetch an unchanged work')
 
     V4JobRunner(database, metadata_provider=unexpected).process_available(mirror_root=mirror)
-    card = V4LibraryProjection(database).ensure_current().cards[0]
+    card = V4LibraryProjection(database).rebuild().cards[0]
     assert card['metadata']['metadata_state'] == 'ready'
     assert card['metadata']['episode_metadata_status'] == 'incomplete'
     with database.connect() as conn:

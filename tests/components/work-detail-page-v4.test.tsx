@@ -5,6 +5,9 @@ import { useLibraryStore } from '../../src/stores/library';
 import { useUiStore } from '../../src/stores/ui';
 import WorkDetailPage from '../../src/pages/WorkDetailPage';
 
+const artworkPath = (resourceHex: string, digestHex: string, width: number) =>
+  `/api/assets/artwork/${resourceHex.repeat(64)}/${digestHex.repeat(64)}-webp-v1/${width}`;
+
 const work = {
   work_id: 'work-v4',
   title: '测试动画',
@@ -21,10 +24,10 @@ const work = {
   card_type: 'main_series',
   poster_path: '',
   fanart_path: '',
-  local_poster_path: '/api/assets/artwork/poster/v1/384',
-  local_fanart_path: '/api/assets/artwork/fanart/v1/1280',
+  local_poster_path: artworkPath('a', '1', 384),
+  local_fanart_path: artworkPath('b', '1', 1280),
   clearlogo_path: 'https://image.tmdb.org/t/p/original/logo.png',
-  local_clearlogo_path: '/api/assets/artwork/logo/v1/512',
+  local_clearlogo_path: artworkPath('c', '1', 512),
   dir_path: '',
   tags: [],
   related_works: [],
@@ -39,7 +42,7 @@ const work = {
       season_number: 1,
       episode_number: 1,
       title: '启程',
-      thumb_path: '/api/assets/artwork/still/v1/384',
+      thumb_path: artworkPath('d', '1', 384),
       group_type: 'season',
       kind: 'episode',
       source: 'baidu',
@@ -92,8 +95,8 @@ test('单作品图片发布更新当前详情，不重新请求详情或重置�
   await screen.findByText('启程');
   const getDetail = useLibraryStore.getState().getWorkDetail;
   expect(getDetail).toHaveBeenCalledOnce();
-  const updated = { ...work, episodes: [{ ...work.episodes[0], thumb_path: '/api/assets/artwork/still/v2/384' }],
-    cast: [{ name: '新演员', role: '角色', profile_path: '/api/assets/artwork/actor/v2/384' }] };
+  const updated = { ...work, episodes: [{ ...work.episodes[0], thumb_path: artworkPath('d', '2', 384) }],
+    cast: [{ name: '新演员', role: '角色', profile_path: artworkPath('e', '2', 384) }] };
   act(() => useLibraryStore.setState({ selectedWorkDetail: updated as never }));
   expect(container.querySelector('.episode-thumb img')).not.toBeNull();
   expect(screen.getByText('新演员')).toBeVisible();
@@ -322,10 +325,10 @@ test('详情首屏优先复用本地图片，不重复请求同一张背景图',
   const logo = await screen.findByAltText('测试动画 logo');
   const episodeImage = container.querySelector('.episode-thumb img');
 
-  expect(hero.getAttribute('src')).toContain('/api/assets/artwork/fanart/v1/1280');
+  expect(hero.getAttribute('src')).toContain(artworkPath('b', '1', 1280));
   expect(hero).toHaveAttribute('loading', 'eager');
   expect(container.querySelector('.detail-hero-bg')).toBeNull();
-  expect(logo.getAttribute('src')).toContain('/api/assets/artwork/logo/v1/512');
+  expect(logo.getAttribute('src')).toContain(artworkPath('c', '1', 512));
   expect(episodeImage).toHaveAttribute('loading', 'eager');
 });
 
@@ -506,8 +509,8 @@ test('全部有图的特别篇也显示原名列表', async () => {
 });
 
 test('关联与推荐优先本地海报，只有横图或图片失败时保留文字占位', async () => {
-  const related = { ...work, work_id: 'related', title: '关联作品甲', local_poster_path: '/api/assets/artwork/related/v1/384', fanart_path: 'https://image.tmdb.org/t/p/original/related-fanart.jpg' };
-  const similar = { ...work, work_id: 'similar', title: '推荐作品乙', local_poster_path: '/api/assets/artwork/similar/v1/384' };
+  const related = { ...work, work_id: 'related', title: '关联作品甲', local_poster_path: artworkPath('f', '1', 384), fanart_path: 'https://image.tmdb.org/t/p/original/related-fanart.jpg' };
+  const similar = { ...work, work_id: 'similar', title: '推荐作品乙', local_poster_path: artworkPath('9', '1', 384) };
   const noPoster = { ...work, work_id: 'no-poster', title: '只有背景图', local_poster_path: '', poster_path: '', fanart_path: 'https://image.tmdb.org/t/p/original/only-fanart.jpg' };
   const detailWork = { ...work, related_works: [{ work_id: related.work_id, title: related.title, poster_path: 'https://image.tmdb.org/t/p/w500/remote.jpg', fanart_path: related.fanart_path }, { work_id: noPoster.work_id, title: noPoster.title, fanart_path: noPoster.fanart_path }] };
   useLibraryStore.setState({ works: [detailWork, related, similar, noPoster] as never, getWorkDetail: vi.fn().mockResolvedValue(detailWork) });

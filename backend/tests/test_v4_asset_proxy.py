@@ -8,13 +8,13 @@ from pathlib import Path
 
 import httpx
 import pytest
-from backend.tests.test_v4_artwork_catalog import _database, _image, enqueue_metadata
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from app.api import assets, media_v4
 from app.media_v4.assets.catalog import get_work_artwork
 from app.media_v4.assets.service import ArtworkService, _atomic_bytes
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from backend.tests.test_v4_artwork_catalog import _database, _image, enqueue_metadata
 
 TMDB_URL = 'https://image.tmdb.org/t/p/original/poster.jpg'
 
@@ -35,7 +35,7 @@ def _published(tmp_path, monkeypatch):
         picture = get_work_artwork(conn, 'one')['poster']
         variant = dict(conn.execute('SELECT * FROM artwork_variants WHERE width=384').fetchone())
     monkeypatch.setattr(media_v4, 'get_database', lambda: db)
-    monkeypatch.setattr(assets, 'get_data_dir', lambda: tmp_path)
+    monkeypatch.setattr('app.core.paths.get_data_dir', lambda: tmp_path)
     app = FastAPI()
     app.include_router(assets.router)
     return app, db, picture, variant
@@ -72,8 +72,6 @@ def test_cache_get_uses_registered_etag_and_size_without_read_bytes(tmp_path, mo
 
 def test_remote_and_path_gets_are_retired_even_with_preexisting_cache(tmp_path, monkeypatch):
     app, _, _, _ = _published(tmp_path, monkeypatch)
-    monkeypatch.setattr(assets, '_get_remote_asset_client', lambda *args: pytest.fail('GET cannot download'))
-    monkeypatch.setattr(assets, 'get_mirror_root', lambda: pytest.fail('GET cannot inspect mirror'))
     with TestClient(app) as client:
         assert client.get('/api/assets/remote', params={'url': TMDB_URL}).status_code == 404
         assert client.get('/api/assets', params={'path': 'poster.jpg'}).status_code == 404

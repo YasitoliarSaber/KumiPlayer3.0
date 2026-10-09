@@ -4,10 +4,10 @@ from __future__ import annotations
 
 
 def test_confirmed_revision_has_one_job_per_work_and_one_projection_job(tmp_path):
-    from backend.tests.test_v4_revision_confirmation import _entry
-
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
+
+    from backend.tests.test_v4_revision_confirmation import _entry
 
     database = V4Database(tmp_path / "jobs.db")
     database.initialize()
@@ -19,5 +19,6 @@ def test_confirmed_revision_has_one_job_per_work_and_one_projection_job(tmp_path
     service.confirm("rev-1")
 
     jobs = service.list_jobs("rev-1")
-    assert len([job for job in jobs if job["job_type"] == "materialize_mirror"]) == 1
+    assert len([job for job in jobs if job["job_type"] == "scrape_work"]) == 1
     assert len([job for job in jobs if job["job_type"] == "refresh_projection"]) == 1
+    assert all(job["job_type"] not in {"materialize_mirror", "cleanup_superseded_artifacts"} for job in jobs)

@@ -70,9 +70,13 @@ def test_pan115_tree_sample_links_standalone_movie_to_tv_series():
     special = next(item for item in evidence if "04.5(Extra Episode)" in item.relative_path)
     from app.media_v4.parsing.parser import V4Parser
     facts = V4Parser().parse(special)
-    assert facts.content_class == "playable_special" and facts.is_importable
+    assert facts.content_class == "attached_special" and not facts.is_importable
     main = next(work for work in graph.works if work.preferred_title == "紫罗兰永恒花园" and work.media_type == "tv")
-    assert special.evidence_id in main.source_evidence_ids
+    assert special.evidence_id not in main.source_evidence_ids
+    assert not any(
+        special.evidence_id in episode.asset_evidence_ids
+        for episode in graph.episodes
+    )
     assert len(graph.works) == 3
 
 

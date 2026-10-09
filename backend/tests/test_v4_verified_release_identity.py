@@ -3,7 +3,6 @@
 from dataclasses import asdict, replace
 
 import pytest
-
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.resolution.resolver import MediaResolver
 from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
@@ -29,6 +28,7 @@ def resolve(paths, *, prefix=""):
             root_id="release", scan_id="scan", provider="local", ingest_method="openlist_scan",
             relative_path=path.removeprefix(prefix), source_key=path.removeprefix(prefix),
             source_locator="/mount/" + path,
+            playback_locator=f"C:/KumiTest/release/{path}",
         ))
         pairs.append((evidence, V4Parser().parse(evidence)))
     before = [(asdict(evidence), asdict(facts)) for evidence, facts in pairs]
@@ -236,6 +236,8 @@ def test_anime_release_knowledge_does_not_override_family_or_explicit_provider_t
     evidence = to_source_evidence(SourceEntry(
         root_id="release", scan_id="scan", provider="local", ingest_method="local_scan",
         relative_path="Films/Tamako Love Story.mkv", source_key="film",
+        source_locator="C:/KumiTest/release-family/Films/Tamako Love Story.mkv",
+        playback_locator="C:/KumiTest/release-family/Films/Tamako Love Story.mkv",
         import_family=family, tmdb_hint_type=hint_type, tmdb_hint_id="42" if hint_type else "",
     ))
     facts = V4Parser().parse(evidence)

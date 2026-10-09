@@ -1,191 +1,154 @@
-"""O6：重复发布产物必须是增量的——只补缺失的图片产物。
-
-`retry_artifacts` 的公开承诺是"只重新下载**缺失**的图片产物"，但发布路径原先无条件
-重新下载全部剧照/海报/背景图并重写全部 NFO：24 集作品点一次重试 ≈ 27 个 HTTPS 请求
-+ 25 次写盘，而且正好落进"下载阶段没有心跳"的失联回收窗口（120s 后被误判为失败）。
-"""
+"""异步图片准备按资源增量执行，资料发布只写入 SQLite 快照。"""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+
+def _artwork_fixture(tmp_path, monkeypatch):
+    from app.media_v4.assets.service import ArtworkService
+
+    from backend.tests.test_v4_artwork_catalog import _database, _image
+
+    database = _database(tmp_path)
+    image = _image(tmp_path)
+    calls: list[str] = []
+    service = ArtworkService(database, data_root=tmp_path)
+    monkeypatch.setattr(service, "_download", lambda url: (calls.append(url), image.read_bytes())[-1])
+    return database, image, service, calls
 
 
-def _entry(evidence_id: str):
+def test_repeated_published_source_is_not_downloaded_again(tmp_path, monkeypatch):
+    from app.media_v4.assets.catalog import get_work_artwork
+
+    from backend.tests.test_v4_artwork_catalog import enqueue_metadata
+
+    database, _image, service, calls = _artwork_fixture(tmp_path, monkeypatch)
+    poster_url = "https://image.tmdb.org/t/p/original/shared-poster.jpg"
+    with database.connect() as conn:
+        for work_id in ("one", "two"):
+            enqueue_metadata(
+                conn, revision_id="r", work_id=work_id, snapshot_id="shared",
+                metadata={"poster_url": poster_url},
+            )
+
+    assert service.process_available() == 1
+    assert calls == [poster_url]
+    with database.connect() as conn:
+        assert get_work_artwork(conn, "one")["poster"]["state"] == "ready"
+        assert get_work_artwork(conn, "two")["poster"]["state"] == "ready"
+        assert conn.execute("SELECT COUNT(*) FROM artwork_resources").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM artwork_variants").fetchone()[0] == 3
+
+    assert service.process_available() == 0
+    assert calls == [poster_url]
+
+
+def test_incremental_snapshot_prepares_only_new_artwork_resource(tmp_path, monkeypatch):
+    from app.media_v4.assets.catalog import get_work_artwork
+
+    from backend.tests.test_v4_artwork_catalog import enqueue_metadata
+
+    database, _image, service, calls = _artwork_fixture(tmp_path, monkeypatch)
+    poster_url = "https://image.tmdb.org/t/p/original/poster.jpg"
+    first_fanart = "https://image.tmdb.org/t/p/original/fanart-old.jpg"
+    next_fanart = "https://image.tmdb.org/t/p/original/fanart-new.jpg"
+    with database.connect() as conn:
+        enqueue_metadata(conn, revision_id="r", work_id="one", snapshot_id="first",
+                         metadata={"poster_url": poster_url, "fanart_url": first_fanart})
+    assert service.process_available() == 2
+    assert set(calls) == {poster_url, first_fanart}
+    with database.connect() as conn:
+        first_ids = {
+            row["role"]: row["candidate_id"]
+            for row in conn.execute("SELECT role,candidate_id FROM artwork_bindings WHERE work_id='one'")
+        }
+
+    calls.clear()
+    with database.connect() as conn:
+        enqueue_metadata(conn, revision_id="r", work_id="one", snapshot_id="next",
+                         metadata={"poster_url": poster_url, "fanart_url": next_fanart})
+    assert service.process_available() == 1
+    assert calls == [next_fanart]
+    with database.connect() as conn:
+        artwork = get_work_artwork(conn, "one")
+        next_ids = {
+            row["role"]: row["candidate_id"]
+            for row in conn.execute("SELECT role,candidate_id FROM artwork_bindings WHERE work_id='one'")
+        }
+        assert artwork["poster"]["state"] == "ready"
+        assert artwork["fanart"]["state"] == "ready"
+    assert next_ids["poster"] == first_ids["poster"]
+    assert next_ids["fanart"] != first_ids["fanart"]
+
+
+def test_scrape_publishes_sqlite_snapshot_and_queues_artwork_without_files(tmp_path):
     from app.media_v4.domain.models import ParsedFacts, SourceEvidence
-
-    evidence = SourceEvidence(
-        evidence_id=evidence_id,
-        scan_id="scan-retry",
-        root_id="root-retry",
-        source_key=evidence_id,
-        relative_path=f"Show/{evidence_id}.mkv",
-        entry_kind="video",
-        provider="local",
-        source_locator=f"local://{evidence_id}",
-        fingerprint=f"sha256:{evidence_id}",
-    )
-    facts = ParsedFacts(
-        parsed_fact_id=f"facts-{evidence_id}",
-        evidence_id=evidence_id,
-        parser_version="fixture",
-        work_title="Show",
-        title_candidates=("Show",),
-        year_candidate=2024,
-        media_type="movie",
-        group_type="movie",
-    )
-    return evidence, facts
-
-
-def _download_counter(monkeypatch, module) -> list[tuple[str, str]]:
-    calls: list[tuple[str, str]] = []
-
-    def fake_download(url: str, path, *, client):
-        calls.append((url, str(path)))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"image-bytes")
-        return "digest-" + path.name
-
-    monkeypatch.setattr(module, "_download_artwork", fake_download)
-    return calls
-
-
-def _artwork_config():
-    return SimpleNamespace(artwork_storage_mode="local", tmdb_timeout=5, proxy_url="")
-
-
-def test_materialize_skips_artwork_that_is_already_published(tmp_path, monkeypatch):
-    from app.media_v4.jobs import metadata_artifacts as module
-
-    calls = _download_counter(monkeypatch, module)
-    work_dir = tmp_path / "mirror" / "work"
-    target = {
-        "work_type": "series",
-        "episodes": [
-            {"episode_id": "e1", "local_season_number": 1, "local_episode_number": 1},
-            {"episode_id": "e2", "local_season_number": 1, "local_episode_number": 2},
-        ],
-    }
-    metadata = {
-        "poster_url": "https://image.tmdb.org/t/p/w500/poster.jpg",
-        "fanart_url": "https://image.tmdb.org/t/p/w500/fanart.jpg",
-    }
-    episode_metadata = {
-        "e1": {"still_url": "https://image.tmdb.org/t/p/w500/s1.jpg"},
-        "e2": {"still_url": "https://image.tmdb.org/t/p/w500/s2.jpg"},
-    }
-
-    first: list = []
-    module._materialize_local_artwork(
-        config=_artwork_config(), work_id="work", mirror_root=work_dir.parent,
-        work_dir=work_dir, target=target, metadata=dict(metadata),
-        episode_metadata={key: dict(value) for key, value in episode_metadata.items()},
-        artifacts=first,
-    )
-    assert len(calls) == 4, "首轮：2 张剧照 + 海报 + 背景图"
-    assert len(first) == 4
-
-    # 第二轮：产物已发布且文件非空 → 一次下载都不该发生，digest 复用既有值。
-    calls.clear()
-    published = {(artifact_type, str(path)): digest for artifact_type, path, digest in first}
-    second: list = []
-    module._materialize_local_artwork(
-        config=_artwork_config(), work_id="work", mirror_root=work_dir.parent,
-        work_dir=work_dir, target=target, metadata=dict(metadata),
-        episode_metadata={key: dict(value) for key, value in episode_metadata.items()},
-        artifacts=second,
-        published=published,
-    )
-
-    assert calls == [], "已发布产物不得重新下载"
-    assert [(t, str(p), d) for t, p, d in second] == [(t, str(p), d) for t, p, d in first]
-
-
-def test_materialize_redownloads_only_the_artifact_whose_file_is_gone(tmp_path, monkeypatch):
-    from app.media_v4.jobs import metadata_artifacts as module
-
-    calls = _download_counter(monkeypatch, module)
-    work_dir = tmp_path / "mirror" / "work"
-    target = {"work_type": "movie", "episodes": []}
-    metadata = {
-        "poster_url": "https://image.tmdb.org/t/p/w500/poster.jpg",
-        "fanart_url": "https://image.tmdb.org/t/p/w500/fanart.jpg",
-    }
-
-    first: list = []
-    module._materialize_local_artwork(
-        config=_artwork_config(), work_id="work", mirror_root=work_dir.parent,
-        work_dir=work_dir, target=target, metadata=dict(metadata),
-        episode_metadata={}, artifacts=first,
-    )
-    assert len(calls) == 2
-    poster_path = next(path for artifact_type, path, _digest in first if artifact_type == "poster")
-    poster_path.unlink()
-
-    calls.clear()
-    published = {(artifact_type, str(path)): digest for artifact_type, path, digest in first}
-    second: list = []
-    module._materialize_local_artwork(
-        config=_artwork_config(), work_id="work", mirror_root=work_dir.parent,
-        work_dir=work_dir, target=target, metadata=dict(metadata),
-        episode_metadata={}, artifacts=second, published=published,
-    )
-
-    assert [url for url, _path in calls] == ["https://image.tmdb.org/t/p/w500/poster.jpg"]
-
-
-def test_republish_does_not_rewrite_unchanged_nfo_or_redownload_artwork(tmp_path, monkeypatch):
-    """走完整发布路径：第二次发布应零下载、零 NFO 重写。"""
-
-    from app.media_v4.jobs import metadata_artifacts as module
+    from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
 
     database = V4Database(tmp_path / "retry.db")
     database.initialize()
+    evidence = SourceEvidence(
+        evidence_id="evidence-movie",
+        scan_id="scan-movie",
+        root_id="root-movie",
+        source_key="movie-source",
+        relative_path="Show/Show.mkv",
+        entry_kind="video",
+        provider="local",
+        source_locator=str(tmp_path / "source" / "Show.mkv"),
+        playback_locator=str(tmp_path / "source" / "Show.mkv"),
+    )
+    facts = ParsedFacts(
+        parsed_fact_id="facts-movie",
+        evidence_id=evidence.evidence_id,
+        parser_version="fixture",
+        work_title="Show",
+        title_candidates=("Show",),
+        media_type="movie",
+        group_type="movie",
+        confidence="high",
+    )
     revisions = V4RevisionService(database)
-    revisions.create_draft("rev-1", [_entry("1080p")])
-    revisions.confirm("rev-1")
-    with database.connect() as conn:
-        work_id = str(conn.execute(
-            "SELECT work_id FROM revision_bindings WHERE revision_id = 'rev-1' LIMIT 1"
-        ).fetchone()["work_id"])
-
-    calls = _download_counter(monkeypatch, module)
-    writes: list[str] = []
-    real_write = module._write_atomic
-
-    def counting_write(path, payload):
-        writes.append(str(path))
-        return real_write(path, payload)
-
-    monkeypatch.setattr(module, "_write_atomic", counting_write)
-    monkeypatch.setattr(module, "load_config", _artwork_config)
-
-    target = {"work_type": "movie", "title": "Show", "year": 2024, "episodes": []}
-    metadata = {
+    revisions.create_draft("revision-movie", [(evidence, facts)])
+    revisions.confirm("revision-movie")
+    job = next(
+        item for item in revisions.list_jobs("revision-movie")
+        if item["job_type"] == "scrape_work"
+    )
+    result = {
         "provider": "tmdb",
         "provider_id": "1",
+        "media_type": "movie",
         "title": "Show",
+        "metadata_state": "ready",
         "poster_url": "https://image.tmdb.org/t/p/w500/poster.jpg",
         "fanart_url": "https://image.tmdb.org/t/p/w500/fanart.jpg",
         "clearlogo_url": "https://image.tmdb.org/t/p/w500/logo.png",
     }
-    mirror_root = tmp_path / "mirror"
+    V4ScrapeService(database).process(job["job_id"], lambda _target: result)
 
-    module.publish_metadata_artifacts(
-        database, revision_id="rev-1", work_id=work_id, target=target,
-        metadata=dict(metadata), mirror_root=mirror_root,
-    )
-    assert len(calls) == 3, "首轮：海报 + 背景图 + clearlogo"
-    assert writes, "首轮必须写出 NFO"
+    with database.connect() as conn:
+        binding = conn.execute(
+            "SELECT metadata_json,status FROM scrape_bindings WHERE work_id=?",
+            (job["work_id"],),
+        ).fetchone()
+        import json
 
-    calls.clear()
-    writes.clear()
-    module.publish_metadata_artifacts(
-        database, revision_id="rev-1", work_id=work_id, target=target,
-        metadata=dict(metadata), mirror_root=mirror_root,
-    )
+        payload = json.loads(binding["metadata_json"])
+        snapshot = conn.execute(
+            "SELECT metadata_json FROM metadata_snapshots WHERE snapshot_id=?",
+            (payload["metadata_snapshot_id"],),
+        ).fetchone()
+        resources = conn.execute(
+            "SELECT b.role,r.state FROM artwork_bindings b JOIN artwork_resources r "
+            "ON r.resource_id=b.candidate_id WHERE b.snapshot_id=?",
+            (payload["metadata_snapshot_id"],),
+        ).fetchall()
+        assert conn.execute("SELECT COUNT(*) FROM artifacts").fetchone()[0] == 0
 
-    assert calls == [], "重复发布不得重新下载任何图片"
-    assert writes == [], "内容未变的 NFO 不得重写"
+    assert binding["status"] == "confirmed"
+    assert json.loads(snapshot["metadata_json"])["metadata_state"] == "ready"
+    assert {row["role"] for row in resources} == {"poster", "fanart", "clearlogo"}
+    assert all(row["state"] == "pending" for row in resources)
+    assert list(tmp_path.rglob("*.nfo")) == []

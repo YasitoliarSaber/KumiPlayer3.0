@@ -58,8 +58,10 @@ class V4JobRunner:
             mark_cancelled(self.database, job_id)
             return JobRunResult(job_id, job['job_type'], 'cancelled')
         try:
-            policy = json.loads(job['result_json'] or '{}').get('runtime_policy')
+            job_payload = json.loads(job['result_json'] or '{}')
+            policy = job_payload.get('runtime_policy')
         except (ValueError, TypeError, AttributeError):
+            job_payload = {}
             policy = None
         if job['job_type'] in {'scrape_work', 'recover_work_aliases'} and policy != 'sqlite-artwork-v1':
             mark_cancelled(self.database, job_id)
@@ -88,6 +90,28 @@ class V4JobRunner:
 
         if job["job_type"] in {"scrape_work", "recover_work_aliases"}:
             provider = self.metadata_provider
+            selected_provider = job_payload.get("selected_provider")
+            if job["job_type"] == "scrape_work" and isinstance(selected_provider, dict):
+                selected_binding = {
+                    "provider": str(selected_provider.get("provider") or ""),
+                    "media_type": str(selected_provider.get("media_type") or ""),
+                    "provider_id": str(selected_provider.get("provider_id") or ""),
+                }
+                if not all(selected_binding.values()):
+                    raise ValueError("人工确认任务缺少完整的 Provider 身份")
+
+                def pinned_provider(target):
+                    bindings = [
+                        item for item in target.get("provider_bindings", [])
+                        if (str(item.get("provider") or ""), str(item.get("media_type") or ""))
+                        != (selected_binding["provider"], selected_binding["media_type"])
+                    ]
+                    return self.metadata_provider({
+                        **target,
+                        "provider_bindings": [*bindings, selected_binding],
+                    })
+
+                provider = pinned_provider
             if job["job_type"] == "recover_work_aliases":
                 if self.recovery_provider is None:
                     raise ValueError("未配置名称恢复执行器")
@@ -186,14 +210,7 @@ class V4JobRunner:
             raise
 
     def process_available(self, *, mirror_root: str | Path | None = None) -> list[JobRunResult]:
-        with self.database.connect() as conn:
-            conn.execute("UPDATE jobs SET status='cancelled',cancel_requested=1,finished_at=?,updated_at=? "
-                         "WHERE job_type IN ('materialize_mirror','cleanup_superseded_artifacts') "
-                         "AND status IN ('queued','running')", (now(), now()))
-            conn.execute("UPDATE jobs SET status='cancelled',cancel_requested=1,finished_at=?,updated_at=? "
-                         "WHERE job_type IN ('scrape_work','recover_work_aliases') AND status IN ('queued','running') "
-                         "AND (NOT json_valid(result_json) OR COALESCE(json_extract(result_json,'$.runtime_policy'),'') "
-                         "<>'sqlite-artwork-v1')", (now(), now()))
+        self._cancel_legacy_jobs_if_present()
         self.recover_stale_jobs()
         self.schedule_recovery()
         with self.database.connect() as conn:
@@ -289,6 +306,47 @@ class V4JobRunner:
             results.append(self.process_job(job_id, mirror_root=mirror_root))
         return results
 
+    def _cancel_legacy_jobs_if_present(self) -> None:
+        """只在只读探测发现待清理历史任务时才开启写事务，并在事务内重核。"""
+
+        legacy_types = ("materialize_mirror", "cleanup_superseded_artifacts")
+        with self.database.connect() as conn:
+            candidates = conn.execute(
+                """
+                SELECT 1 FROM jobs
+                WHERE status IN ('queued', 'running') AND (
+                    job_type IN (?, ?) OR (
+                        job_type IN ('scrape_work', 'recover_work_aliases') AND (
+                            NOT json_valid(result_json) OR
+                            COALESCE(json_extract(result_json, '$.runtime_policy'), '') != 'sqlite-artwork-v1'
+                        )
+                    )
+                ) LIMIT 1
+                """,
+                legacy_types,
+            ).fetchone()
+        if candidates is None:
+            return
+
+        current_time = now()
+        with self.database.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "UPDATE jobs SET status='cancelled',cancel_requested=1,finished_at=?,updated_at=? "
+                "WHERE job_type IN (?, ?) AND status IN ('queued','running')",
+                (current_time, current_time, *legacy_types),
+            )
+            conn.execute(
+                """
+                UPDATE jobs SET status='cancelled',cancel_requested=1,finished_at=?,updated_at=?
+                WHERE job_type IN ('scrape_work','recover_work_aliases')
+                  AND status IN ('queued','running')
+                  AND (NOT json_valid(result_json) OR
+                       COALESCE(json_extract(result_json,'$.runtime_policy'),'') != 'sqlite-artwork-v1')
+                """,
+                (current_time, current_time),
+            )
+
     # 恢复候选查询：先把可能阻断恢复的 revision 物化成集合，再按集合反连接。
     # 原实现把取消/排队两个相关条件内联为主查询的 NOT EXISTS，历史 jobs
     # 只增不减（本机 4082 条时单次约 76~103ms）；空闲轮询每轮调用三次会
@@ -367,7 +425,7 @@ class V4JobRunner:
 
     def _prerequisites_succeeded(self, job: dict) -> bool:
         job_type = str(job["job_type"])
-        if job_type in {"scrape_work", "refresh_projection"}:
+        if job_type == "scrape_work":
             return True
         if job_type == "delete_source_library":
             # 按来源删除不依赖本 revision 的镜像/刮削是否完成：它只回收产物并按
@@ -379,6 +437,11 @@ class V4JobRunner:
             if payload.get('next_retry_at', '') > now():
                 return False
             predicate = "job_type='scrape_work'"
+            params = (job["revision_id"],)
+        elif job_type == "refresh_projection":
+            # Projection is the revision's final step: it must wait for both
+            # first-pass scraping and any alias-recovery work scheduled from it.
+            predicate = "job_type IN ('scrape_work','recover_work_aliases')"
             params = (job["revision_id"],)
         else:
             return False

@@ -186,11 +186,10 @@ def test_completion_sync_uses_the_playback_database_not_the_api_global_database(
 def test_completion_sync_retries_transient_remote_failures(tmp_path, monkeypatch):
     """瞬时网络失败不能让一次已完成剧集永久失去自动同步机会。"""
 
-    from fastapi import HTTPException
-
     from app.api import bangumi
     from app.media_v4 import playback as playback_package
     from app.media_v4.playback.session import V4PlaybackManager
+    from fastapi import HTTPException
 
     database = _confirmed_three_episode_work(tmp_path)
     attempts: list[tuple[str, int | None]] = []
@@ -215,11 +214,10 @@ def test_completion_sync_retries_transient_remote_failures(tmp_path, monkeypatch
 def test_completion_sync_can_retry_after_a_previous_transient_retry_cycle(tmp_path, monkeypatch):
     """一次临时失败耗尽即时重试后，仍须允许后续完成检查点重新投递。"""
 
-    from fastapi import HTTPException
-
     from app.api import bangumi
     from app.media_v4 import playback as playback_package
     from app.media_v4.playback.session import V4PlaybackManager
+    from fastapi import HTTPException
 
     database = _confirmed_three_episode_work(tmp_path)
     attempts: list[str] = []
@@ -285,6 +283,71 @@ def test_exit_forces_the_last_completed_sample_and_sync(tmp_path, monkeypatch):
         "position": 96.0, "duration": 100.0, "completed": True,
     }
     assert synced == [first["episode_id"]]
+
+
+def test_stop_checkpoints_cached_progress_before_sending_mpv_quit(tmp_path, monkeypatch):
+    """Shutdown persists the latest observed sample before graceful IPC quit."""
+
+    from app.media_v4.playback import session as session_module
+    from app.media_v4.playback.session import V4PlaybackManager
+    from app.media_v4.playback.store import V4PlaybackStore
+
+    database = _confirmed_three_episode_work(tmp_path)
+    with database.connect() as conn:
+        first = conn.execute(
+            "SELECT work_id, episode_id, asset_id FROM revision_bindings ORDER BY episode_id LIMIT 1"
+        ).fetchone()
+    manager = V4PlaybackManager(database, session_dir=tmp_path / "sessions")
+    asset = manager._resolve_asset(first["work_id"], first["episode_id"], first["asset_id"])
+    events = []
+
+    class FakeProcess:
+        pid = 12345
+
+        def wait(self, timeout=None):
+            events.append(("wait", timeout))
+            progress = V4PlaybackStore(database).get_progress(first["episode_id"], first["asset_id"])
+            assert progress["position"] == 42.5
+            assert events[0] == "checkpoint"
+            assert events[1] == "quit"
+            return 0
+
+        def terminate(self):
+            raise AssertionError("graceful fake MPV should not be terminated")
+
+        def kill(self):
+            raise AssertionError("graceful fake MPV should not be killed")
+
+    manager._process = FakeProcess()
+    manager._session = {
+        "session_id": "shutdown-session",
+        "status": "playing",
+        "ipc_server": "fake-ipc",
+        "work_id": first["work_id"],
+        "episode_id": first["episode_id"],
+        "asset_id": first["asset_id"],
+        "playlist": [asset],
+        "playlist_position": 0,
+        "position": 42.5,
+        "duration": 120.0,
+    }
+    monkeypatch.setattr(
+        manager,
+        "_force_checkpoint",
+        lambda session: (events.append("checkpoint"), V4PlaybackStore(database).save_progress(
+            first["work_id"], first["episode_id"], first["asset_id"], 42.5, 120.0, False
+        )),
+    )
+    monkeypatch.setattr(
+        session_module,
+        "send_mpv_quit",
+        lambda _ipc, timeout=1.0: (events.append("quit") or True),
+    )
+
+    result = manager.stop()
+
+    assert result["status"] == "stopped"
+    assert events[:2] == ["checkpoint", "quit"]
 
 
 def test_progress_event_path_must_match_a_unique_v4_playlist_asset():

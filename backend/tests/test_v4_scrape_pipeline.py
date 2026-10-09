@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -20,7 +19,8 @@ def _entry(evidence_id: str):
         relative_path=f"Show/{evidence_id}.mkv",
         entry_kind="video",
         provider="local",
-        source_locator=f"local://{evidence_id}",
+        source_locator=rf"C:\\KumiPlayerFixture\\{evidence_id}.mkv",
+        playback_locator=rf"C:\\KumiPlayerFixture\\{evidence_id}.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-{evidence_id}",
@@ -393,26 +393,14 @@ def test_retry_keeps_successful_details_only_for_same_identity(tmp_path, retry_p
         assert detail["episodes"][0]["scraped_title"] == ""
 
 
-def test_missing_episode_artwork_keeps_work_information_but_is_not_completed(tmp_path, monkeypatch):
-    """作品资料保留，缺少正片缩略图时不能宣布刮削完成。"""
+def test_missing_episode_artwork_keeps_work_metadata_ready(tmp_path, monkeypatch):
+    """缺少 still 不会把在线 metadata 快照改成失败。"""
 
-    from types import SimpleNamespace
-
-    from app.media_v4.jobs import completeness as completeness_module
-    from app.media_v4.jobs import metadata_artifacts as artifacts_module
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
 
-    mirror_root = _patch_scrape_env(tmp_path, monkeypatch)
-    local_config = lambda: SimpleNamespace(  # noqa: E731 - 测试夹具保持简短
-        artwork_storage_mode="local", tmdb_timeout=5, proxy_url=None
-    )
-    monkeypatch.setattr(artifacts_module, "load_config", local_config)
-    monkeypatch.setattr(completeness_module, "load_config", local_config)
-
     database = V4Database(tmp_path / "artifact-degraded.db")
-    monkeypatch.setattr(artifacts_module, "_download_artwork", lambda *_args, **_kwargs: "")
     database.initialize()
     revisions = V4RevisionService(database)
     revisions.create_draft("rev-artifact", [_entry("a")])
@@ -420,17 +408,15 @@ def test_missing_episode_artwork_keeps_work_information_but_is_not_completed(tmp
     scrape = V4ScrapeService(database)
     job = scrape.enqueue_for_revision("rev-artifact")[0]
 
-    # provider 资料完整，只是远端没有可用图片地址 → 本地产物完整性必然失败。
+    # 在线资料完成但该 episode 没有 still URL；图片准备状态独立于 metadata。
     scrape.process(
         job["job_id"],
         lambda _target: {**_ready_metadata(target=_target), "poster_url": "", "fanart_url": ""},
-        mirror_root=mirror_root,
     )
 
     detail = revisions.get_work_execution_detail("rev-artifact", job["work_id"])
-    assert detail["work"]["metadata_state"] == "failed"
-    assert detail["work"]["metadata_reason_code"] == "episode_artwork_incomplete"
-    assert detail["work"]["metadata_recovery_action"] == "retry_metadata"
+    assert detail["work"]["metadata_state"] == "ready"
+    assert detail["artwork"]["status"] in {"pending", "not_required"}
     with database.connect() as conn:
         binding_status = str(conn.execute(
             "SELECT status FROM scrape_bindings WHERE revision_id = 'rev-artifact' AND work_id = ?",
@@ -440,9 +426,8 @@ def test_missing_episode_artwork_keeps_work_information_but_is_not_completed(tmp
             "SELECT metadata_json FROM scrape_bindings WHERE revision_id = 'rev-artifact' AND work_id = ?",
             (job["work_id"],),
         ).fetchone()[0]))
-    assert binding_status == "failed"
-    assert stored["metadata_state"] == "failed"
-    assert stored["artifact_state"] == "incomplete"
+    assert binding_status == "confirmed"
+    assert stored["metadata_state"] == "ready"
 
 
 def test_legacy_missing_local_thumbnail_preserves_metadata_without_rewriting_data(tmp_path, monkeypatch):
@@ -484,8 +469,8 @@ def test_legacy_missing_local_thumbnail_preserves_metadata_without_rewriting_dat
     detail = revisions.get_work_execution_detail("rev-legacy", work_id)
     assert detail["work"]["metadata_state"] == "ready"
     assert detail["work"]["metadata_reason_code"] != "episode_artwork_incomplete"
-    assert detail["work"]["artifact_state"] == "degraded"
-    assert detail["work"]["artifact_reasons"] == ["海报下载或发布失败"]
+    assert detail["work"]["artifact_state"] == "not_required"
+    assert detail["work"]["artifact_reasons"] == []
     # 只读归一：数据库里的历史失败记录保持原样。
     with database.connect() as conn:
         raw = str(conn.execute(
@@ -494,27 +479,14 @@ def test_legacy_missing_local_thumbnail_preserves_metadata_without_rewriting_dat
     assert json.loads(raw)["metadata_state"] == "failed"
 
 
-def test_retry_artifacts_republishes_without_asking_provider_again(tmp_path, monkeypatch):
-    """重下图片必须复用已保存资料：不产生新的在线搜索。"""
+def test_retry_artifacts_requeues_persisted_requirements_without_provider_call(tmp_path):
+    """显式重试唤醒失败的 artwork 资源，不重新请求 metadata Provider。"""
 
-    from types import SimpleNamespace
-
-    from app.media_v4.jobs import completeness as completeness_module
-    from app.media_v4.jobs import metadata_artifacts as artifacts_module
-    from app.media_v4.jobs import scrape as scrape_module
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
 
-    mirror_root = _patch_scrape_env(tmp_path, monkeypatch)
-    local_config = lambda: SimpleNamespace(  # noqa: E731
-        artwork_storage_mode="local", tmdb_timeout=5, proxy_url=None
-    )
-    monkeypatch.setattr(artifacts_module, "load_config", local_config)
-    monkeypatch.setattr(completeness_module, "load_config", local_config)
-
     database = V4Database(tmp_path / "artifact-retry.db")
-    monkeypatch.setattr(artifacts_module, "_download_artwork", lambda *_args, **_kwargs: "")
     database.initialize()
     revisions = V4RevisionService(database)
     revisions.create_draft("rev-retry-artifact", [_entry("a")])
@@ -523,24 +495,31 @@ def test_retry_artifacts_republishes_without_asking_provider_again(tmp_path, mon
     job = scrape.enqueue_for_revision("rev-retry-artifact")[0]
     scrape.process(
         job["job_id"],
-        lambda _target: {**_ready_metadata(target=_target), "poster_url": "", "fanart_url": ""},
-        mirror_root=mirror_root,
+        lambda _target: _ready_metadata(target=_target),
     )
+    with database.connect() as conn:
+        before = conn.execute(
+            "SELECT metadata_json FROM scrape_bindings WHERE revision_id='rev-retry-artifact'"
+        ).fetchone()[0]
+        failed = conn.execute(
+            "UPDATE artwork_resources SET state='failed',attempts=1,error_kind='network' "
+            "WHERE resource_id IN (SELECT candidate_id FROM artwork_bindings WHERE work_id=?)",
+            (job["work_id"],),
+        ).rowcount
+    assert failed > 0
 
-    published: list[dict] = []
-    monkeypatch.setattr(
-        scrape_module, "publish_metadata_artifacts",
-        lambda _db, **kwargs: published.append(kwargs),
-    )
+    result = scrape.retry_artifacts("rev-retry-artifact", job["work_id"])
 
-    result = scrape.retry_artifacts("rev-retry-artifact", job["work_id"], mirror_root=mirror_root)
-
-    assert len(published) == 1
-    # 复用已保存的 provider 身份，说明这一轮没有任何在线搜索。
-    assert published[0]["metadata"]["provider_id"] == "42"
-    # publisher被替换为仅记录调用，未产出本次NFO；不能借上一代产物冒充成功。
-    assert result["metadata_state"] == "failed"
-    assert result["binding_status"] == "failed"
+    assert result["requeued"] == failed
+    with database.connect() as conn:
+        after = conn.execute(
+            "SELECT metadata_json FROM scrape_bindings WHERE revision_id='rev-retry-artifact'"
+        ).fetchone()[0]
+        queued = conn.execute(
+            "SELECT COUNT(*) FROM artwork_resources WHERE state='pending'"
+        ).fetchone()[0]
+    assert after == before
+    assert queued >= failed
 
 
 @pytest.mark.parametrize("candidate_found", [False, True])
@@ -749,7 +728,6 @@ def test_scrape_shared_provider_identity_keeps_both_local_works_playable(tmp_pat
 def test_scrape_identity_mismatch_is_discarded_before_artifact_publish(tmp_path, monkeypatch):
     """同 Work 返回不同在线 ID 时局部降级；既不发布错误资料，也不撞 local 唯一键。"""
 
-    from app.media_v4.jobs import scrape as scrape_module
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -773,18 +751,6 @@ def test_scrape_identity_mismatch_is_discarded_before_artifact_publish(tmp_path,
             (work_id,),
         )
 
-    published: list[str] = []
-    monkeypatch.setattr(
-        scrape_module,
-        "publish_metadata_artifacts",
-        lambda *_args, **_kwargs: published.append("published"),
-    )
-    monkeypatch.setattr(
-        scrape_module,
-        "assess_metadata_completeness",
-        lambda *_args, **_kwargs: (True, []),
-    )
-
     scrape.process(
         job["job_id"],
         lambda _target: {**_ready_metadata("99"), "title": "Wrong Show"},
@@ -807,19 +773,18 @@ def test_scrape_identity_mismatch_is_discarded_before_artifact_publish(tmp_path,
             (work_id,),
         ).fetchone()
 
-    assert published == []
     assert tuple(job_row) == ("succeeded", "")
     assert str(frozen["provider_id"]) == "42"
     assert len(rows) == 1
     assert tuple(rows[0][:3]) == ("local", "", "waiting_metadata")
     assert json.loads(rows[0]["metadata_json"])["reason_code"] == "local_identity_mismatch"
+    with database.connect() as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM artwork_bindings WHERE work_id=?", (work_id,)
+        ).fetchone()[0] == 0
 
 
-def test_local_artwork_mode_materializes_episode_stills_as_v4_artifacts(tmp_path, monkeypatch):
-    from types import SimpleNamespace
-
-    from app.media_v4.jobs import completeness as completeness_module
-    from app.media_v4.jobs import metadata_artifacts as artifacts_module
+def test_scrape_stores_episode_still_as_pending_artwork_requirement(tmp_path):
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -834,23 +799,6 @@ def test_local_artwork_mode_materializes_episode_stills_as_v4_artifacts(tmp_path
     with database.connect() as conn:
         episode_id = conn.execute("SELECT episode_id FROM episodes").fetchone()[0]
 
-    local_config = SimpleNamespace(artwork_storage_mode="local", tmdb_timeout=5, proxy_url=None)
-    monkeypatch.setattr(artifacts_module, "load_config", lambda: local_config)
-    monkeypatch.setattr(completeness_module, "load_config", lambda: local_config)
-
-    downloaded: list[tuple[str, str]] = []
-    download_clients: list[object] = []
-
-    def fake_download(url, path, *, client=None):
-        assert client is not None
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"image")
-        downloaded.append((url, str(path)))
-        download_clients.append(client)
-        return "image-digest"
-
-    monkeypatch.setattr(artifacts_module, "_download_artwork", fake_download)
-    mirror_root = tmp_path / "mirror"
     scrape.process(
         job["job_id"],
         lambda _target: {
@@ -862,33 +810,28 @@ def test_local_artwork_mode_materializes_episode_stills_as_v4_artifacts(tmp_path
                 "title": "Episode",
             }],
         },
-        mirror_root=mirror_root,
     )
 
     with database.connect() as conn:
         binding = conn.execute(
             "SELECT metadata_json FROM scrape_bindings WHERE revision_id = 'rev-episode-artwork'"
         ).fetchone()
-        episode_thumb = conn.execute(
-            "SELECT target_path FROM artifacts WHERE revision_id = 'rev-episode-artwork' "
-            "AND artifact_type = 'episode_thumb'"
+        artwork = conn.execute(
+            "SELECT r.source_url,r.state FROM artwork_bindings b "
+            "JOIN artwork_resources r ON r.resource_id=b.candidate_id "
+            "WHERE b.work_id=? AND b.role='episode_thumb'",
+            (job["work_id"],),
         ).fetchone()
 
     metadata = json.loads(binding["metadata_json"])
-    local_thumb = metadata["episode_mappings"][0]["local_thumb_path"]
-    assert episode_thumb is not None
-    assert episode_thumb["target_path"] == local_thumb
-    assert '.metadata' in local_thumb and local_thumb.endswith(f"episode-{episode_id}-thumb.jpg")
-    assert any(url == 'https://image.tmdb.org/t/p/w500/still.jpg' and '.pending-' in path
-               and Path(path).name == Path(local_thumb).name for url, path in downloaded)
-    assert Path(local_thumb).is_file()
-    assert len({id(client) for client in download_clients}) == 1
-    assert Path(local_thumb).read_bytes() == b"image"
+    assert "local_thumb_path" not in metadata["episode_mappings"][0]
+    assert artwork is not None
+    assert artwork["source_url"] == "https://image.tmdb.org/t/p/w500/still.jpg"
+    assert artwork["state"] == "pending"
 
 
 def test_invalid_scrape_mapping_is_rejected_before_metadata_files_are_published(tmp_path):
     import pytest
-
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService

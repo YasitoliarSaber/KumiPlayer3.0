@@ -3,7 +3,6 @@
 from copy import deepcopy
 
 import pytest
-
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.jobs import metadata, scrape
 from app.media_v4.persistence.database import V4Database
@@ -160,7 +159,10 @@ def entry(key="one", *, number=1, title="Child A", child=False):
     evidence = SourceEvidence(
         evidence_id="ev-" + key, scan_id="scan", root_id="root", source_key=key + ".mkv",
         relative_path=f"{title}/{title} S01E{number:02d}.mkv", entry_kind="video",
-        provider="local", source_locator="local://fixture/" + key, import_family="anime",
+        provider="local",
+        source_locator=f"C:/KumiTest/provider-child/{key}/{title} S01E{number:02d}.mkv",
+        playback_locator=f"C:/KumiTest/provider-child/{key}/{title} S01E{number:02d}.mkv",
+        import_family="anime",
     )
     facts = ParsedFacts(
         parsed_fact_id="facts-" + key, evidence_id=evidence.evidence_id, parser_version="fixture",
@@ -207,10 +209,8 @@ def test_confirmed_scrape_loads_episode_pair_without_season_splicing(tmp_path, s
 
 
 @pytest.mark.parametrize("child", [False, True])
-def test_confirmed_season_only_binding_maps_regular_episode_and_retry_loads_full_pair(tmp_path, monkeypatch, child):
+def test_confirmed_season_only_binding_maps_regular_episode_and_retry_loads_full_pair(tmp_path, child):
     db, _revisions, job = setup_db(tmp_path, [entry(child=child)])
-    monkeypatch.setattr(scrape, "assess_metadata_completeness", lambda *_a, **_k: (True, []))
-    monkeypatch.setattr(scrape, "publish_metadata_artifacts", lambda *_a, **_k: None)
     with db.connect() as conn:
         episode = conn.execute("SELECT episode_id,season_id FROM episodes").fetchone()
         conn.execute("INSERT INTO season_provider_mappings(season_id,provider,provider_season_number) "
@@ -302,10 +302,8 @@ def test_specials_never_request_provider_season_zero():
 
 
 @pytest.mark.parametrize("old_mapping", [None, 7])
-def test_one_local_season_spanning_provider_seasons_never_uses_last_claim(tmp_path, monkeypatch, old_mapping):
+def test_one_local_season_spanning_provider_seasons_never_uses_last_claim(tmp_path, old_mapping):
     db, _revisions, job = setup_db(tmp_path, [entry("one"), entry("two", number=2)])
-    monkeypatch.setattr(scrape, "assess_metadata_completeness", lambda *_a, **_k: (True, []))
-    monkeypatch.setattr(scrape, "publish_metadata_artifacts", lambda *_a, **_k: None)
     with db.connect() as conn:
         episodes = [dict(r) for r in conn.execute("SELECT episode_id,season_id FROM episodes ORDER BY local_episode_number")]
         season_id = episodes[0]["season_id"]

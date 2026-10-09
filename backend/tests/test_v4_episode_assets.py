@@ -14,6 +14,8 @@ def _pair(evidence_id: str, *, edition_tags: tuple[str, ...] = ()):
         relative_path=f"Show/Show.S01E01.{evidence_id}.mkv",
         entry_kind="video",
         provider="local",
+        source_locator=f"C:/KumiTest/assets/{evidence_id}/Show.S01E01.mkv",
+        playback_locator=f"C:/KumiTest/assets/{evidence_id}/Show.S01E01.mkv",
         fingerprint=f"sha256:{evidence_id}",
     )
     facts = ParsedFacts(
@@ -142,7 +144,8 @@ def test_movie_assets_bind_directly_to_work_without_fake_episode(tmp_path):
         relative_path="Movie (2024)/Movie.mkv",
         entry_kind="video",
         provider="local",
-        source_locator="Movie.mkv",
+        source_locator="C:/KumiTest/movies/Movie (2024)/Movie.mkv",
+        playback_locator="C:/KumiTest/movies/Movie (2024)/Movie.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id="facts-movie",

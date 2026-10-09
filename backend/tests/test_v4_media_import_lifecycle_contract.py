@@ -1,15 +1,12 @@
 """Real local scanner -> durable finalize -> confirm -> runner lifecycle, no success-row stubs."""
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import threading
 from types import SimpleNamespace
 
-import httpx
 import pytest
-
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.playback.session import V4PlaybackManager
@@ -59,24 +56,15 @@ def external_provider(target):
 
 def setup(tmp_path, monkeypatch):
     from app.core.config import AppConfig
+
     config = AppConfig(artwork_storage_mode='local')
     monkeypatch.setattr('app.media_v4.jobs.metadata_artifacts.load_config', lambda: config)
     monkeypatch.setattr('app.media_v4.jobs.completeness.load_config', lambda: config)
-    # Only the external HTTP boundary is replaced; download/write/digest/completeness stay real.
-    image = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=')
-    def artwork_response(request):
-        assert request.url.host == 'image.tmdb.org'
-        return httpx.Response(200, content=image, headers={'content-type': 'image/png'})
-    monkeypatch.setattr('app.media_v4.jobs.metadata_artifacts._artwork_client',
-                        lambda _config: httpx.Client(transport=httpx.MockTransport(artwork_response)))
-    monkeypatch.setattr('app.core.url_guard.socket.getaddrinfo', lambda *_a, **_k: [
-        (None, None, None, None, ('93.184.216.34', 443)),
-    ])
     database = V4Database(tmp_path / 'lifecycle.db')
     database.initialize()
     source = tmp_path / 'source'
     source.mkdir()
-    return database, source, tmp_path / 'mirror'
+    return database, source
 
 
 def write_video(source, relative, data=b'fixture-video'):
@@ -99,8 +87,8 @@ def immutable_rows(database):
 
 
 def test_scan_runner_rescan_append_failure_and_replacement(tmp_path, monkeypatch):
-    """CHECK-010A: actual scanner, publisher, local images, progress and rescan."""
-    database, source, mirror = setup(tmp_path, monkeypatch)
+    """CHECK-010A: actual scanner, SQLite metadata snapshots, playback and rescan."""
+    database, source = setup(tmp_path, monkeypatch)
     names = ['Show/Show.S01E01.mkv', 'Show/Show.S01E02.1080p.mkv', 'Show/Show.S01E02.2160p.mkv',
              'Show/Specials/Show.S01E03.mkv', 'Happy Ending/Happy Ending.S01E01.mkv',
              'Unknown/未知甲.mkv', 'Unknown/未知乙.mkv', 'Show/Show.S02E13.mkv', 'Show/Show.S02E14.mkv',
@@ -109,24 +97,37 @@ def test_scan_runner_rescan_append_failure_and_replacement(tmp_path, monkeypatch
         write_video(source, name)
     scan(database, source, 'r1', monkeypatch)
     runner = V4JobRunner(database, metadata_provider=external_provider)
-    runner.process_available(mirror_root=mirror)
+    runner.process_available()
     first = bindings(database, 'r1')
     excluded = {names[3], names[-1]}
     assert excluded.isdisjoint(first)
     with database.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM source_evidence WHERE relative_path='Show/Specials/Show.S01E03.mkv'").fetchone()[0] == 1
-        assert {r[0] for r in conn.execute("SELECT artifact_type FROM artifacts WHERE status='published'")} >= {'poster', 'fanart', 'nfo'}
+        snapshot = conn.execute(
+            "SELECT ms.snapshot_id,ms.metadata_json FROM revision_metadata_refs mr "
+            "JOIN metadata_snapshots ms ON ms.snapshot_id=mr.snapshot_id "
+            "WHERE mr.revision_id='r1' AND mr.work_id=?",
+            (first['Show/Show.S01E01.mkv']['work_id'],),
+        ).fetchone()
+        assert snapshot is not None
+        assert json.loads(snapshot['metadata_json'])['metadata_state'] == 'ready'
+        pending_roles = {r[0] for r in conn.execute(
+            "SELECT DISTINCT b.role FROM artwork_bindings b JOIN artwork_resources r "
+            "ON r.resource_id=b.candidate_id WHERE b.snapshot_id=? AND r.state='pending'",
+            (snapshot['snapshot_id'],),
+        )}
+        assert {'poster', 'fanart', 'episode_thumb'} <= pending_roles
     main = first[names[0]]
     store = V4PlaybackStore(database)
     store.save_progress(main['work_id'], main['episode_id'], main['asset_id'], 123, 1500, False)
     immutable = immutable_rows(database)
-    files = {p: p.read_bytes() for p in mirror.rglob('*') if p.is_file()}
+    source_files = {p: p.read_bytes() for p in source.rglob('*') if p.is_file()}
     scan(database, source, 'r2', monkeypatch)
     requested = []
     def counting(target):
         requested.append(target['work_type'])
         return external_provider(target)
-    V4JobRunner(database, metadata_provider=counting).process_available(mirror_root=mirror)
+    V4JobRunner(database, metadata_provider=counting).process_available()
     second = bindings(database, 'r2')
     assert excluded.isdisjoint(second)
     with database.connect() as conn:
@@ -155,12 +156,12 @@ def test_scan_runner_rescan_append_failure_and_replacement(tmp_path, monkeypatch
     scan(database, source, 'r3', monkeypatch)
     V4JobRunner(database, metadata_provider=lambda target: {
         'provider': 'tmdb', 'provider_id': '321', 'metadata_state': 'source_unavailable', 'reason_code': 'provider_unavailable',
-    }).process_available(mirror_root=mirror)
-    card = next(c for c in V4LibraryProjection(database).ensure_current().cards if c['work_id'] == main['work_id'])
+    }).process_available()
+    card = next(c for c in V4LibraryProjection(database).rebuild().cards if c['work_id'] == main['work_id'])
     assert card['metadata']['metadata_source'] == 'retained'
     assert card['metadata']['refresh_status'] == 'failed'
     assert card['metadata']['episode_mapping_status'] == 'partial'
-    assert all(p.is_file() and p.read_bytes() == data for p, data in files.items())
+    assert all(p.is_file() and p.read_bytes() == data for p, data in source_files.items())
     write_video(source, names[0], b'replacement-longer-content')
     scan(database, source, 'r4', monkeypatch)
     replaced = bindings(database, 'r4')[names[0]]
@@ -168,13 +169,14 @@ def test_scan_runner_rescan_append_failure_and_replacement(tmp_path, monkeypatch
     with pytest.raises(KeyError):
         store.get_progress(replaced['episode_id'], replaced['asset_id'])
     assert store.get_progress(main['episode_id'], main['asset_id'])['position'] == 123
+    assert (source / names[0]).read_bytes() == b'replacement-longer-content'
     after = immutable_rows(database)
     for table, rows in immutable.items():
         assert all(after[table][key] == value for key, value in rows.items())
 
 
 def test_late_provider_cannot_publish_after_new_confirmation(tmp_path, monkeypatch):
-    database, source, mirror = setup(tmp_path, monkeypatch)
+    database, source = setup(tmp_path, monkeypatch)
     write_video(source, 'Show/Show.S01E01.mkv')
     scan(database, source, 'r1', monkeypatch)
     ready, release = threading.Event(), threading.Event()
@@ -186,7 +188,7 @@ def test_late_provider_cannot_publish_after_new_confirmation(tmp_path, monkeypat
         return result
     def run():
         try:
-            V4JobRunner(database, metadata_provider=delayed).process_available(mirror_root=mirror)
+            V4JobRunner(database, metadata_provider=delayed).process_available()
         except Exception as exc:
             errors.append(exc)
     worker = threading.Thread(target=run)
@@ -221,7 +223,7 @@ def test_upgraded_v21_accepts_new_scan_without_changing_old_facts(tmp_path, monk
 
 
 def test_duplicate_confirmation_is_idempotent_under_barrier(tmp_path, monkeypatch):
-    database, source, _mirror = setup(tmp_path, monkeypatch)
+    database, source = setup(tmp_path, monkeypatch)
     write_video(source, 'Show/Show.S01E01.mkv')
     scan(database, source, 'r1', monkeypatch, confirm_revision=False)
     gate = threading.Barrier(3)
@@ -241,14 +243,14 @@ def test_duplicate_confirmation_is_idempotent_under_barrier(tmp_path, monkeypatc
     assert not errors and not any(w.is_alive() for w in workers)
     with database.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM import_revisions WHERE status='confirmed'").fetchone()[0] == 1
-        assert conn.execute('SELECT COUNT(*) FROM jobs').fetchone()[0] == 3
-        assert conn.execute('SELECT COUNT(DISTINCT idempotency_key) FROM jobs').fetchone()[0] == 3
+        assert conn.execute('SELECT COUNT(*) FROM jobs').fetchone()[0] == 2
+        assert conn.execute('SELECT COUNT(DISTINCT idempotency_key) FROM jobs').fetchone()[0] == 2
 
 
 @pytest.mark.parametrize('cancelled', [False, True])
 def test_partial_scan_does_not_replace_confirmed_baseline(tmp_path, monkeypatch, cancelled):
     from app.media_v4.sources.scanner import SourceScanCancelled
-    database, source, _mirror = setup(tmp_path, monkeypatch)
+    database, source = setup(tmp_path, monkeypatch)
     write_video(source, 'Show/Show.S01E01.mkv')
     scan(database, source, 'r1', monkeypatch)
     before = immutable_rows(database)

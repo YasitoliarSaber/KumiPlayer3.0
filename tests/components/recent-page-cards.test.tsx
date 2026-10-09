@@ -6,6 +6,7 @@ import { useUiStore } from '../../src/stores/ui';
 import type { PlaybackHistoryItem, WorkIndex } from '../../src/api/types';
 
 const openWorkDetail = vi.fn();
+const episodeThumb = `/api/assets/artwork/${'a'.repeat(64)}/${'b'.repeat(64)}-webp-v1/384`;
 const work = {
   work_id: 'w-recent', title: '异世界归来的舅舅', original_title: '',
   show_type: 'anime_series', media_type: 'tv', source: 'local',
@@ -15,7 +16,7 @@ const history = {
   work_id: work.work_id, episode_id: 'e-six', asset_id: 'a-six',
   season_number: 1, episode_number: 6, position: 694, duration: 1422,
   completed: false, updated_at: '2026-09-30T12:40:00',
-  thumb_path: '/api/assets/artwork/episode-six-thumb/v1/384',
+  thumb_path: episodeThumb,
 } as PlaybackHistoryItem;
 
 beforeEach(() => {
@@ -29,7 +30,7 @@ test('最近观看使用对应集缩略图，并按集号·剩余时间·时间�
   render(<RecentPage />);
   const card = screen.getByRole('button', { name: /异世界归来的舅舅.*S01E06/ });
   const image = screen.getByRole('img');
-  expect(image.getAttribute('src')).toContain('episode-six-thumb');
+  expect(image.getAttribute('src')).toContain(episodeThumb);
   expect(image.getAttribute('src')).not.toContain('work-backdrop');
   expect(screen.getByText('S01E06')).toBeVisible();
   // 2026-10-01 规格：继续观看只给剩余时间，不再显示 `位置 / 总时长 · 百分比`。

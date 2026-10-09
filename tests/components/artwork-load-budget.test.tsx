@@ -84,3 +84,22 @@ test('旧请求终态不能标记已替换地址的新记录就绪', () => {
   expect(newState).toHaveBeenCalledWith('ready');
   lifecycle.dispose();
 });
+
+test('持续可见的失败图片有限重试，卸载取消冷却重排', async () => {
+  vi.useFakeTimers();
+  const lifecycle = new PosterImageLifecycle(new ArtworkLoadBudget(1, 1, 30_000));
+  const node = image();
+  const state = vi.fn();
+  const remove = lifecycle.register(node, { url: '/transient', onState: state });
+  node.dispatchEvent(new Event('error'));
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(state.mock.calls.filter(([value]) => value === 'loading')).toHaveLength(2);
+  node.dispatchEvent(new Event('error'));
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(state.mock.calls.filter(([value]) => value === 'loading')).toHaveLength(3);
+  node.dispatchEvent(new Event('error'));
+  await vi.advanceTimersByTimeAsync(90_000);
+  expect(state.mock.calls.filter(([value]) => value === 'loading')).toHaveLength(3);
+  remove(); lifecycle.dispose();
+  expect(vi.getTimerCount()).toBe(0);
+});

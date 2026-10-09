@@ -1,7 +1,6 @@
 from dataclasses import replace
 
 import pytest
-
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.resolution.resolver import MediaResolver
 
@@ -16,6 +15,7 @@ def entry(eid, *, root="root", prefix="", year=None, special=False, container="S
         parsed_fact_id=f"facts-{eid}", evidence_id=eid, parser_version="test",
         work_title="Show", title_candidates=("Show",), media_type="tv",
         year_candidate=year, group_type="special" if special else "season",
+        is_importable=not special, is_auxiliary=special,
         season_candidate=0 if special else 1, episode_candidate=None if special else 1,
         special_candidate=special, special_number=1 if special else None,
     )
@@ -23,13 +23,29 @@ def entry(eid, *, root="root", prefix="", year=None, special=False, container="S
 
 
 @pytest.mark.parametrize("reverse", [False, True])
-def test_yearless_special_reuses_unique_work_in_exact_source_directory(reverse):
-    entries = [entry("main", year=2024), entry("bonus", special=True)]
+def test_yearless_regular_episode_reuses_unique_work_in_exact_source_directory(reverse):
+    entries = [entry("main", year=2024), entry("bonus")]
     graph = MediaResolver().resolve(entries[::-1] if reverse else entries)
     assert len(graph.works) == 1
     assert graph.works[0].year == 2024
-    assert {episode.local_season_number for episode in graph.episodes} == {0, 1}
+    assert {episode.local_season_number for episode in graph.episodes} == {1}
+    assert all(episode.season_kind == "regular" for episode in graph.episodes)
     assert entries[1][1].year_candidate is None
+
+
+def test_yearless_special_is_excluded_without_affecting_regular_year_identity():
+    main = entry("main", year=2024)
+    special = entry("bonus", special=True)
+
+    graph = MediaResolver().resolve([main, special])
+
+    assert len(graph.works) == 1
+    assert graph.works[0].year == 2024
+    assert graph.works[0].source_evidence_ids == ("main",)
+    assert len(graph.episodes) == 1
+    assert graph.episodes[0].local_season_number == 1
+    assert special[1].is_importable is False
+    assert special[1].is_auxiliary is True
 
 
 @pytest.mark.parametrize("reverse", [False, True])
@@ -53,10 +69,10 @@ def test_work_year_takes_earliest_known_year_regardless_of_input_order(reverse):
 @pytest.mark.parametrize("scope", ["root", "ambiguous", "standalone"])
 def test_yearless_entry_does_not_borrow_year_from_other_work_scope(scope):
     main = entry("main", year=2024)
-    special = entry("bonus", root="other" if scope == "root" else "root", special=True)
+    yearless = entry("bonus", root="other" if scope == "root" else "root")
     if scope == "standalone":
-        special = (special[0], replace(special[1], card_type="standalone"))
-    entries = [main, special]
+        yearless = (yearless[0], replace(yearless[1], card_type="standalone"))
+    entries = [main, yearless]
     if scope == "ambiguous":
         entries.append(entry("remake", year=1998))
     graph = MediaResolver().resolve(entries)
@@ -64,7 +80,7 @@ def test_yearless_entry_does_not_borrow_year_from_other_work_scope(scope):
     assert "bonus" not in main_work.source_evidence_ids
 
 
-def test_yearless_entry_borrows_unique_year_across_directories_in_same_root():
+def test_yearless_regular_entry_borrows_unique_year_across_directories_in_same_root():
     """同一 root、同一边界标题、同一媒体类型下只有唯一已知年份时，缺年份条目并入该年份。
 
     R3 把 `_coalesce_missing_year_keys` 的作用域从"同一实际作品目录"放宽为
@@ -75,15 +91,13 @@ def test_yearless_entry_borrows_unique_year_across_directories_in_same_root():
     """
 
     main = entry("main", year=2024)
-    special = entry("bonus", prefix="Elsewhere/", special=True)
-    graph = MediaResolver().resolve([main, special])
+    yearless = entry("bonus", prefix="Elsewhere/")
+    graph = MediaResolver().resolve([main, yearless])
 
     assert len(graph.works) == 1
     work = graph.works[0]
     assert set(work.source_evidence_ids) == {"main", "bonus"}
     assert work.year == 2024
-    # 集号/季号语义不受影响：特别篇仍是 special season，正片仍是 Season 1。
     assert {(episode.local_season_number, episode.season_kind) for episode in graph.episodes} == {
-        (0, "special"),
         (1, "regular"),
     }

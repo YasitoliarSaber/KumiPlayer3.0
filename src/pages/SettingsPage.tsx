@@ -407,7 +407,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
               </div>
               <a href={TMDB_API_SETTINGS_URL} target="_blank" rel="noreferrer">创建或查看令牌 <ExternalLink size={14} /></a>
             </div>
-            <ConfigRow label="API 读取访问令牌" value={config.tmdb_bearer_token} secret placeholder="粘贴 TMDB API 读取访问令牌" onSave={saveTmdbCredential} />
+            <ConfigRow label="API 读取访问令牌" value={config.tmdb_configured ? 'configured' : ''} secret placeholder="粘贴 TMDB API 读取访问令牌" onSave={saveTmdbCredential} />
           </div>
           <div className="settings-actions">
             <GhostButton onClick={() => testConfig('tmdb')}>测试 TMDB 连接</GhostButton>

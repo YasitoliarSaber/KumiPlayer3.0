@@ -14,6 +14,8 @@ def _pair(evidence_id: str, *, provider: str, title: str, year: int | None = 202
         relative_path=f"{title}/{title}.S01E01.mkv",
         entry_kind="video",
         provider=provider,
+        source_locator=f"C:/KumiTest/work-resolution/{provider}/{evidence_id}/{title}.S01E01.mkv",
+        playback_locator=f"C:/KumiTest/work-resolution/{provider}/{evidence_id}/{title}.S01E01.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-{evidence_id}",

@@ -128,7 +128,6 @@ def test_progress_shape_and_completed_state(tmp_path):
     database = _fresh_database(tmp_path)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w1", title="摇曳露营", episode_ids=["ep-w1-1", "ep-w1-2"], asset_count=3, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "succeeded", 1, ""),
     ], scrape_status="confirmed")
     _seed_projection_job(database, "rev-progress", "succeeded")
@@ -137,8 +136,7 @@ def test_progress_shape_and_completed_state(tmp_path):
     assert progress["revision_id"] == "rev-progress"
     assert progress["revision_status"] == "confirmed"
     assert progress["overall_status"] == "completed"
-    assert progress["stage_summary"]["mirror"]["total"] == 1
-    assert progress["stage_summary"]["mirror"]["succeeded"] == 1
+    assert progress["stage_summary"]["artwork"]["status"] == "succeeded"
     assert progress["stage_summary"]["metadata"]["succeeded"] == 1
     assert progress["stage_summary"]["projection"]["succeeded"] == 1
     assert progress["stage_summary"]["projection"]["status"] == "succeeded"
@@ -150,9 +148,9 @@ def test_progress_shape_and_completed_state(tmp_path):
     assert unit["episode_count"] == 2  # 去重：3 个 asset 只绑 2 个 episode
     assert unit["asset_count"] == 3
     assert unit["overall_status"] == "completed"
-    assert unit["mirror"]["status"] == "succeeded"
+    assert unit["artwork"]["status"] == "not_required"
     assert unit["metadata"]["status"] == "succeeded"
-    assert unit["metadata"]["job_id"] == "job-w1-1"
+    assert unit["metadata"]["job_id"] == "job-w1-0"
 
 
 def test_ready_metadata_state_is_completed(tmp_path):
@@ -160,7 +158,6 @@ def test_ready_metadata_state_is_completed(tmp_path):
     database = _fresh_database(tmp_path)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w-ready", title="已就绪", episode_ids=["ep-ready"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "succeeded", 1, ""),
     ], scrape_status="confirmed", scrape_metadata={"metadata_state": "ready", "episode_mappings": [
         {'episode_id': 'ep-ready', 'provider_episode_id': '9001', 'title': 'Episode',
@@ -175,48 +172,44 @@ def test_ready_metadata_state_is_completed(tmp_path):
     assert progress["stage_summary"]["metadata"]["needs_attention"] == 0
 
 
-def test_mirror_running_and_failed_are_not_hidden(tmp_path):
+def test_metadata_running_and_failed_are_not_hidden(tmp_path):
     database = _fresh_database(tmp_path)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w-running", title="运行中的作品", episode_ids=["ep-a"], asset_count=1, jobs=[
-        ("materialize_mirror", "running", 2, ""),
-        ("scrape_work", "queued", 0, ""),
+        ("scrape_work", "running", 2, ""),
     ])
     _seed_work(database, "rev-progress", work_id="w-failed", title="镜像失败的作品", episode_ids=["ep-b"], asset_count=1, jobs=[
-        ("materialize_mirror", "failed", 1, "磁盘写入失败"),
-        ("scrape_work", "queued", 0, ""),
+        ("scrape_work", "failed", 1, "在线资料服务暂不可用"),
     ])
 
     progress = _progress(database)
     by_id = {unit["work_id"]: unit for unit in progress["work_units"]}
-    assert by_id["w-running"]["overall_status"] == "running_mirror"
-    assert by_id["w-running"]["mirror"]["attempts"] == 2
+    assert by_id["w-running"]["overall_status"] == "running_metadata"
+    assert by_id["w-running"]["metadata"]["attempts"] == 2
     assert by_id["w-failed"]["overall_status"] == "failed"
-    assert by_id["w-failed"]["mirror"]["last_error"] == "磁盘写入失败"
+    assert by_id["w-failed"]["metadata"]["last_error"] == "任务未能完成，请重试"
     # 优先级：running > needs_attention > queued > completed
     assert progress["overall_status"] == "running"
-    assert progress["stage_summary"]["mirror"]["status"] == "running"
-    assert progress["stage_summary"]["mirror"]["failed"] == 1
+    assert progress["stage_summary"]["metadata"]["status"] == "running"
+    assert progress["stage_summary"]["metadata"]["failed"] == 1
 
 
 def test_progress_hides_technical_task_and_metadata_error_details(tmp_path):
     database = _fresh_database(tmp_path)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w-task", title="任务异常", episode_ids=["ep-a"], asset_count=1, jobs=[
-        ("materialize_mirror", "failed", 1, "UNIQUE constraint failed: provider_bindings.provider_id"),
-        ("scrape_work", "queued", 0, ""),
+        ("scrape_work", "failed", 1, "UNIQUE constraint failed: provider_bindings.provider_id"),
     ])
     _seed_work(database, "rev-progress", work_id="w-metadata", title="资料异常", episode_ids=["ep-b"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "succeeded", 1, ""),
     ], scrape_status="source_unavailable", scrape_metadata={
         "reason": "在线资料服务暂不可用，请稍后重试（TMDBClientError）",
     })
 
     by_id = {unit["work_id"]: unit for unit in _progress(database)["work_units"]}
-    assert by_id["w-task"]["mirror"]["last_error"] == "媒体身份与已有记录冲突，请检查识别结果后重试"
+    assert by_id["w-task"]["metadata"]["last_error"] == "媒体身份与已有记录冲突，请检查识别结果后重试"
     assert by_id["w-metadata"]["metadata_reason"] == "在线资料服务暂不可用，请稍后重试"
-    assert "constraint" not in by_id["w-task"]["mirror"]["last_error"]
+    assert "constraint" not in by_id["w-task"]["metadata"]["last_error"]
     assert "TMDBClientError" not in by_id["w-metadata"]["metadata_reason"]
 
 
@@ -224,15 +217,12 @@ def test_metadata_stage_state_mapping(tmp_path):
     database = _fresh_database(tmp_path)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w-wait", title="等待刮削", episode_ids=["ep-a"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "queued", 0, ""),
     ])
     _seed_work(database, "rev-progress", work_id="w-scraping", title="正在刮削", episode_ids=["ep-b"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "running", 1, ""),
     ])
     _seed_work(database, "rev-progress", work_id="w-cancelled", title="已取消", episode_ids=["ep-c"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "cancelled", 0, ""),
     ])
 
@@ -248,7 +238,6 @@ def test_fully_cancelled_execution_is_not_reported_as_needing_attention(tmp_path
     database = _fresh_database(tmp_path)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w-cancelled", title="用户已终止", episode_ids=["ep-a"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "cancelled", 0, ""),
     ])
     _seed_projection_job(database, "rev-progress", "cancelled")
@@ -262,7 +251,6 @@ def test_scrape_needs_attention_is_not_completed(tmp_path):
     database = _fresh_database(tmp_path)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w-review", title="需要人工确认", episode_ids=["ep-a"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "succeeded", 1, ""),
     ], scrape_status="waiting_review")
 
@@ -276,7 +264,6 @@ def test_metadata_stage_summary_separates_attention_from_completed_jobs(tmp_path
     database = _fresh_database(tmp_path)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w-review", title="需要人工确认", episode_ids=["ep-a"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "succeeded", 1, ""),
     ], scrape_status="waiting_review", scrape_metadata={
         "reason_code": "ambiguous_candidates",
@@ -293,7 +280,6 @@ def test_needs_attention_exposes_a_safe_human_readable_reason(tmp_path):
     database = _fresh_database(tmp_path)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w-review", title="房间露营", episode_ids=["ep-a"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "succeeded", 1, ""),
     ], scrape_status="waiting_review", scrape_metadata={
         "reason": "没有唯一匹配的在线作品，需要人工确认后再继续",
@@ -308,11 +294,9 @@ def test_overall_priority_queued_over_completed(tmp_path):
     database = _fresh_database(tmp_path)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w-done", title="已完成", episode_ids=["ep-a"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "succeeded", 1, ""),
     ], scrape_status="confirmed")
     _seed_work(database, "rev-progress", work_id="w-queued", title="排队中", episode_ids=["ep-b"], asset_count=1, jobs=[
-        ("materialize_mirror", "queued", 0, ""),
         ("scrape_work", "queued", 0, ""),
     ])
 
@@ -322,18 +306,16 @@ def test_overall_priority_queued_over_completed(tmp_path):
 
 
 def test_execution_progress_api_contract(tmp_path, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4
     from app.media_v4.persistence.database import V4Database
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = V4Database(tmp_path / "api-progress.db")
     database.initialize()
     monkeypatch.setattr(media_v4, "_database", database)
     _seed_revision(database)
     _seed_work(database, "rev-progress", work_id="w1", title="API 作品", episode_ids=["ep-a"], asset_count=1, jobs=[
-        ("materialize_mirror", "succeeded", 1, ""),
         ("scrape_work", "succeeded", 1, ""),
     ], scrape_status="confirmed")
 
@@ -350,10 +332,9 @@ def test_execution_progress_api_contract(tmp_path, monkeypatch):
 
 
 def test_unknown_revision_returns_404(tmp_path, monkeypatch):
+    from app.api import media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-
-    from app.api import media_v4
 
     _database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", _database)

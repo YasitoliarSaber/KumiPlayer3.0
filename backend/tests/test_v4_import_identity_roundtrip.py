@@ -14,7 +14,6 @@ from collections import defaultdict
 from dataclasses import replace
 
 import pytest
-
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.parsing.parser import V4Parser, normalize_batch_parsed_facts
 from app.media_v4.persistence.database import V4Database
@@ -38,9 +37,13 @@ def _tree_entries(text: str, *, root_id: str, scan_id: str, provider: str = "bai
     _scan, evidence = build_directory_tree_evidence(
         text, root_id=root_id, scan_id=scan_id, provider=provider
     )
-    return normalize_batch_parsed_facts(
+    entries = normalize_batch_parsed_facts(
         [(item, PARSER.parse(item, root_container="动画")) for item in evidence]
     )
+    return [
+        (replace(item, playback_locator=f"C:/KumiTest/tree/{root_id}/{item.relative_path}"), facts)
+        for item, facts in entries
+    ]
 
 
 def _local_entry(
@@ -60,8 +63,8 @@ def _local_entry(
             ingest_method="local_scan",
             relative_path=path,
             source_key=path,
-            source_locator=path,
-            playback_locator=path,
+            source_locator=f"C:/KumiTest/local/{root_id}/{path}",
+            playback_locator=f"C:/KumiTest/local/{root_id}/{path}",
             size=size,
             mtime=mtime,
         )
@@ -91,6 +94,8 @@ def _pair(
         relative_path=path,
         entry_kind="video",
         provider="local",
+        source_locator=f"C:/KumiTest/roundtrip/{root_id}/{path}",
+        playback_locator=f"C:/KumiTest/roundtrip/{root_id}/{path}",
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-rt-{index:03d}",

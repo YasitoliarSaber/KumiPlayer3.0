@@ -1431,6 +1431,57 @@ class V4RevisionService:
             )
         return decisions
 
+    def _confirmed_manual_decisions(self, conn, entries, payloads):
+        """按已有 SourceFile 连续性继承确认的人工决定，不改写原始解析事实。"""
+        if not entries:
+            return dict(payloads), []
+        root_id = entries[0][0].root_id
+        context = self._load_identity_context(conn, root_id, entries)
+        decisions = self._decide_observations(entries, context)
+        previous_ids = sorted({decision.previous_evidence_id for decision in decisions.values()
+                               if decision.previous_evidence_id})
+        previous_payloads = {}
+        for start in range(0, len(previous_ids), 500):
+            batch = previous_ids[start:start + 500]
+            rows = conn.execute(
+                f"""SELECT ro.evidence_id, ro.overrides_json
+                    FROM revision_overrides ro
+                    JOIN import_revisions ir ON ir.revision_id = ro.revision_id
+                    WHERE ir.root_id = ? AND ir.status IN ('confirmed', 'superseded')
+                      AND ir.confirmed_at <> ''
+                      AND ro.evidence_id IN ({','.join('?' for _ in batch)})
+                    ORDER BY COALESCE(NULLIF(ir.confirmed_at, ''), ir.created_at), ir.revision_id""",
+                [root_id, *batch],
+            ).fetchall()
+            for row in rows:
+                previous_payloads[str(row['evidence_id'])] = json.loads(row['overrides_json'])
+        merged = dict(payloads)
+        issues = []
+        for evidence, _facts in entries:
+            decision = decisions[evidence.evidence_id]
+            old = previous_payloads.get(decision.previous_evidence_id)
+            if not old:
+                continue
+            if continuity_reuses_asset(decision.continuity):
+                merged[evidence.evidence_id] = {**old, **merged.get(evidence.evidence_id, {})}
+            elif not set(old).issubset(merged.get(evidence.evidence_id, {})):
+                issues.append(ResolutionIssue(
+                    code='manual_override_continuity_conflict', evidence_id=evidence.evidence_id,
+                    message='文件内容连续性已改变，请重新确认之前的人工修正',
+                ))
+        return merged, issues
+
+    @staticmethod
+    def _entries_with_overrides(entries, payloads):
+        result = []
+        for evidence, facts in entries:
+            payload = dict(payloads.get(evidence.evidence_id, {}))
+            for key in ('title_candidates', 'edition_tags'):
+                if key in payload:
+                    payload[key] = tuple(payload[key] or ())
+            result.append((evidence, replace(facts, **payload)))
+        return result
+
     def _previous_confirmed_revision_id(
         self, conn, root_id: str, revision_id: str
     ) -> str | None:
@@ -1440,6 +1491,7 @@ class V4RevisionService:
             """
             SELECT revision_id FROM import_revisions
             WHERE root_id = ? AND revision_id != ? AND status IN ('confirmed', 'superseded')
+              AND confirmed_at <> ''
             ORDER BY COALESCE(NULLIF(confirmed_at, ''), created_at) DESC, revision_id DESC
             LIMIT 1
             """,
@@ -1839,6 +1891,17 @@ class V4RevisionService:
             previous_revision_id: str | None = None
             added_evidence_ids: set[str] | None = None
             try:
+                if not _publish:
+                    override_payloads, manual_issues = self._confirmed_manual_decisions(
+                        conn, entries, override_payloads,
+                    )
+                    if override_payloads or manual_issues:
+                        entries = self._entries_with_overrides(entries, override_payloads)
+                        graph, candidates_by_key = self._evaluate_draft(
+                            entries, conn=conn, frozen_candidates=candidates_by_key,
+                        )
+                        graph = replace(graph, issues=(*graph.issues, *manual_issues))
+                        graph_digest = self._graph_digest(graph)
                 if _publish:
                     from app.media_v4.persistence.identity_lifecycle import release_retired_source_identities
 
@@ -1874,6 +1937,14 @@ class V4RevisionService:
                                               self._load_revision_entries(revision_id, conn=conn)
                                               if facts.is_importable and item.relative_path not in old_paths}
                     entries = self._load_revision_entries(revision_id, conn=conn)
+                    # 服务层在发布写事务内守住最终本地路径及人工纠错连续性，
+                    # API 预检不能替代这里的权威检查。
+                    self._validate_entry_playback_paths(entries)
+                    _, manual_issues = self._confirmed_manual_decisions(
+                        conn, entries, self._load_override_payloads(revision_id, conn=conn),
+                    )
+                    if manual_issues:
+                        raise ValueError(manual_issues[0].message)
                     candidates_by_key = self._load_draft_candidates(revision_id, conn=conn)
                     # C-001/C-003：上一代成员与文件槽位必须在同一写事务里重读。
                     # 预览与客户端给出的 file/asset ID 只是提示，不能成为权威。
@@ -2737,6 +2808,10 @@ class V4RevisionService:
                 conn=conn,
                 frozen_candidates=candidates_by_key,
             )
+            _, manual_issues = self._confirmed_manual_decisions(
+                conn, entries, self._load_override_payloads(revision_id, conn=conn),
+            )
+            graph = replace(graph, issues=(*graph.issues, *manual_issues))
             if not refresh_snapshot:
                 return graph
             try:
@@ -2818,6 +2893,10 @@ class V4RevisionService:
                     conn=conn,
                     frozen_candidates=frozen_candidates,
                 )
+                _, manual_issues = self._confirmed_manual_decisions(
+                    conn, entries, self._load_override_payloads(revision_id, conn=conn),
+                )
+                graph = replace(graph, issues=(*graph.issues, *manual_issues))
                 conn.execute("DELETE FROM revision_issues WHERE revision_id = ?", (revision_id,))
                 for index, issue in enumerate(graph.issues):
                     conn.execute(
@@ -2945,10 +3024,14 @@ class V4RevisionService:
 
     def validate_playback_paths(self, revision_id: str) -> None:
         """导入确认入口检查最终落库路径，只做语法校验，不触盘或修订证据。"""
+        self._validate_entry_playback_paths(self._load_revision_entries(revision_id))
+
+    @staticmethod
+    def _validate_entry_playback_paths(entries) -> None:
         from app.media_v4.path_validation import validate_playback_locator_syntax
 
-        for evidence, _facts in self._load_revision_entries(revision_id):
-            if evidence.entry_kind != 'video':
+        for evidence, facts in entries:
+            if evidence.entry_kind != 'video' or not _is_admitted(facts):
                 continue
             ok, reason = validate_playback_locator_syntax(evidence.playback_locator)
             if not ok:

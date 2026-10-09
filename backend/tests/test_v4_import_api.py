@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -43,8 +44,8 @@ def _payload(revision_id: str = "rev-api"):
                 "provider": "local",
                 "ingest_method": "local_scan",
                 "relative_path": "Show/Show.S01E01.mkv",
-                "source_locator": "local://show/Show.S01E01.mkv",
-                "playback_locator": "local://show/Show.S01E01.mkv",
+                "source_locator": str(Path.cwd() / "_test-only" / "Show.S01E01.mkv"),
+                "playback_locator": str(Path.cwd() / "_test-only" / "Show.S01E01.mkv"),
             }
         ],
     }
@@ -59,8 +60,8 @@ def test_confirmed_revision_can_request_termination_while_a_job_is_running(tmp_p
     evidence = SourceEvidence(
         evidence_id="ev-cancel", scan_id="scan-cancel", root_id="root-cancel",
         source_key="cancel", relative_path="Cancel/Cancel.S01E01.mkv", entry_kind="video",
-        source_locator="local://cancel/Cancel.S01E01.mkv",
-        playback_locator="local://cancel/Cancel.S01E01.mkv",
+        source_locator=str(tmp_path / "Cancel.S01E01.mkv"),
+        playback_locator=str(tmp_path / "Cancel.S01E01.mkv"),
     )
     facts = ParsedFacts(
         parsed_fact_id="facts-cancel", evidence_id=evidence.evidence_id, parser_version="fixture",
@@ -72,7 +73,7 @@ def test_confirmed_revision_can_request_termination_while_a_job_is_running(tmp_p
     service.confirm("rev-cancel-api")
     with media_v4.get_database().connect() as conn:
         conn.execute(
-            "UPDATE jobs SET status = 'running' WHERE revision_id = ? AND job_type = 'materialize_mirror'",
+            "UPDATE jobs SET status = 'running' WHERE revision_id = ? AND job_type = 'scrape_work'",
             ("rev-cancel-api",),
         )
 
@@ -80,7 +81,7 @@ def test_confirmed_revision_can_request_termination_while_a_job_is_running(tmp_p
 
     assert response.status_code == 200, response.text
     assert response.json()["running"] == 1
-    assert response.json()["cancelled"] == 2
+    assert response.json()["cancelled"] == 1
 
 
 def test_source_card_delete_hides_only_the_card_and_keeps_confirmed_media(tmp_path, monkeypatch):
@@ -93,8 +94,8 @@ def test_source_card_delete_hides_only_the_card_and_keeps_confirmed_media(tmp_pa
     evidence = SourceEvidence(
         evidence_id="ev-delete-card", scan_id="scan-delete-card", root_id="root-delete-card",
         source_key="delete-card", relative_path="DeleteCard/DeleteCard.S01E01.mkv", entry_kind="video",
-        source_locator="local://delete-card/DeleteCard.S01E01.mkv",
-        playback_locator="local://delete-card/DeleteCard.S01E01.mkv",
+        source_locator=str(tmp_path / "DeleteCard.S01E01.mkv"),
+        playback_locator=str(tmp_path / "DeleteCard.S01E01.mkv"),
     )
     facts = ParsedFacts(
         parsed_fact_id="facts-delete-card", evidence_id=evidence.evidence_id, parser_version="fixture",
@@ -143,8 +144,8 @@ def test_visible_post_retirement_source_card_can_be_renamed_and_hidden(tmp_path,
             evidence_id=f"ev-{revision}", scan_id=scan, root_id="root-visible-retired",
             source_key=f"Visible/Visible.S01E{episode:02d}.mkv",
             relative_path=f"Visible/Visible.S01E{episode:02d}.mkv", entry_kind="video",
-            source_locator="local://visible/Visible.S01E01.mkv",
-            playback_locator="local://visible/Visible.S01E01.mkv",
+            source_locator=str(tmp_path / f"Visible.S01E{episode:02d}.mkv"),
+            playback_locator=str(tmp_path / f"Visible.S01E{episode:02d}.mkv"),
         )
         facts = ParsedFacts(
             parsed_fact_id=f"facts-{revision}", evidence_id=evidence.evidence_id, parser_version="fixture",
@@ -198,6 +199,8 @@ def test_drafts_endpoint_keeps_new_reimport_draft_after_source_retirement(tmp_pa
             source_key=f"Mini/Mini.S01E{episode:02d}.mkv",
             relative_path=f"Mini/Mini.S01E{episode:02d}.mkv",
             entry_kind="video",
+            source_locator=str(tmp_path / f"Mini.S01E{episode:02d}.mkv"),
+            playback_locator=str(tmp_path / f"Mini.S01E{episode:02d}.mkv"),
             provider="local",
         )
         facts = ParsedFacts(
@@ -420,7 +423,8 @@ def test_playback_refuses_unreachable_asset_without_launching_mpv(tmp_path, monk
     assert "挂载路径不可访问" in str(exc_info.value)
 
 
-def test_mirror_failure_keeps_scrape_and_projection_queued(tmp_path):
+def test_scrape_failure_keeps_projection_queued(tmp_path):
+    import pytest
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -456,11 +460,14 @@ def test_mirror_failure_keeps_scrape_and_projection_queued(tmp_path):
     revisions.create_draft("rev-gate", [(evidence, facts)])
     revisions.confirm("rev-gate")
     jobs = revisions.list_jobs("rev-gate")
-    mirror_job = next(item for item in jobs if item["job_type"] == "materialize_mirror")
+    scrape_job = next(item for item in jobs if item["job_type"] == "scrape_work")
 
-    runner = V4JobRunner(database)
-    with pytest.raises(RuntimeError, match="挂载路径不可访问"):
-        runner.process_job(mirror_job["job_id"], mirror_root=tmp_path / "mirror")
+    runner = V4JobRunner(
+        database,
+        metadata_provider=lambda _target: (_ for _ in ()).throw(RuntimeError("provider unavailable")),
+    )
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        runner.process_job(scrape_job["job_id"])
 
     with database.connect() as conn:
         statuses = {
@@ -469,8 +476,7 @@ def test_mirror_failure_keeps_scrape_and_projection_queued(tmp_path):
                 "SELECT job_type, status FROM jobs WHERE revision_id = 'rev-gate'"
             ).fetchall()
         }
-    assert statuses["materialize_mirror"] == "failed"
-    assert statuses["scrape_work"] == "queued"
+    assert statuses["scrape_work"] == "failed"
     assert statuses["refresh_projection"] == "queued"
 
 
@@ -740,9 +746,8 @@ def test_tree_scan_resolves_the_precise_sub_library_root_from_the_tree_location(
 
 
 def test_remote_tree_scan_requires_a_playback_mapping(tmp_path, monkeypatch):
-    from fastapi import HTTPException
-
     from app.api import media_v4
+    from fastapi import HTTPException
 
     tree = tmp_path / "tree.txt"
     tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
@@ -797,10 +802,9 @@ def test_local_scan_receives_all_configured_cloud_mount_roots(monkeypatch):
 
 
 def test_explicit_openlist_incremental_without_baseline_returns_actionable_409(monkeypatch):
-    from fastapi import HTTPException
-
     from app.api import media_v4
     from app.integrations.openlist.providers import OpenListRouteConfig
+    from fastapi import HTTPException
 
     config = SimpleNamespace(
         openlist_server_url="https://openlist.example.test",
@@ -886,11 +890,10 @@ def test_openlist_auto_scan_rebuilds_missing_checkpoint_from_confirmed_revision(
 def test_plain_openlist_full_scan_confirm_enables_incremental_and_keeps_mode(tmp_path, monkeypatch):
     """普通 OpenList 完整扫描确认后即可增量；来源卡模式保持 openlist_full。"""
 
-    from fastapi import HTTPException
-
     from app.api import media_v4, openlist_v4
     from app.integrations.openlist.providers import OpenListRouteConfig
     from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
+    from fastapi import HTTPException
 
     config = SimpleNamespace(
         openlist_server_url="https://openlist.example.test",
@@ -1098,9 +1101,8 @@ def test_openlist_status_endpoint_reports_no_baseline_for_unconfirmed_root(tmp_p
 
 
 def test_openlist_scan_rejects_an_unmapped_remote_root_before_network(monkeypatch):
-    from fastapi import HTTPException
-
     from app.api import media_v4, openlist_v4
+    from fastapi import HTTPException
 
     config = SimpleNamespace(
         openlist_server_url="https://openlist.example.test",
@@ -1583,10 +1585,13 @@ def test_metadata_manual_confirm_requeues_scrape_and_refreshes_projection(tmp_pa
         "candidate_id": candidate_id,
     })
     assert result.status_code == 200, result.text
+    assert result.json()["status"] == "accepted"
+    assert result.json()["refresh_status"] == "queued"
+    assert len(result.json()["job_ids"]) == 1
 
     with media_v4._database.connect() as conn:
         binding = conn.execute(
-            "SELECT provider, provider_id, status, metadata_json FROM scrape_bindings WHERE work_id = ? AND provider = 'tmdb'",
+            "SELECT provider_id FROM provider_bindings WHERE work_id = ? AND provider = 'tmdb' AND media_type = 'tv'",
             (work_id,),
         ).fetchone()
         candidates = conn.execute(
@@ -1594,27 +1599,44 @@ def test_metadata_manual_confirm_requeues_scrape_and_refreshes_projection(tmp_pa
             (work_id,),
         ).fetchall()
         jobs = conn.execute(
-            "SELECT job_id, status, attempts FROM jobs WHERE revision_id = 'rev-manual' AND work_id = ? AND job_type = 'scrape_work'",
+            "SELECT job_id, status, attempts, result_json FROM jobs WHERE revision_id = 'rev-manual' AND work_id = ? AND job_type = 'scrape_work'",
             (work_id,),
         ).fetchall()
     assert binding is not None
-    assert binding["status"] == "confirmed"
     assert binding["provider_id"] == "12345"
     assert any(
         row["provider"] == "tmdb" and row["provider_id"] == "12345" and row["status"] == "confirmed"
         for row in candidates
     )
-    assert provider_calls == [False, True]
+    assert provider_calls == [False]
     assert len(jobs) == 1
-    assert jobs[0]["status"] == "succeeded"
-    assert jobs[0]["attempts"] == 2
+    assert jobs[0]["job_id"] == result.json()["job_ids"][0]
+    assert jobs[0]["status"] == "queued"
+    payload = json.loads(jobs[0]["result_json"])
+    assert payload["selected_provider"] == {
+        "provider": "tmdb",
+        "provider_id": "12345",
+        "media_type": "tv",
+        "candidate_id": candidate_id,
+    }
+
+    V4ScrapeService(media_v4._database).process(jobs[0]["job_id"], fake_provider)
+    with media_v4._database.connect() as conn:
+        binding = conn.execute(
+            "SELECT provider, provider_id, status, metadata_json FROM scrape_bindings WHERE work_id = ? AND provider = 'tmdb'",
+            (work_id,),
+        ).fetchone()
+        job = conn.execute("SELECT status, attempts FROM jobs WHERE job_id=?", (jobs[0]["job_id"],)).fetchone()
+    assert provider_calls == [False, True]
+    assert job["status"] == "succeeded"
+    assert job["attempts"] == 2
     metadata = json.loads(binding["metadata_json"])
     assert metadata["metadata_state"] == "ready"
     assert metadata["episode_mapping_status"] == "complete"
     assert metadata["mapped_count"] == metadata["total_count"] == 1
     from app.media_v4.projection.library import V4LibraryProjection
 
-    card = V4LibraryProjection(media_v4._database).ensure_current().cards[0]
+    card = V4LibraryProjection(media_v4._database).rebuild().cards[0]
     assert card["metadata"]["metadata_state"] == "ready"
     assert card["metadata"]["episode_mappings"][0]["title"] == "Online Episode"
 
@@ -1728,11 +1750,10 @@ def test_sync_and_durable_tree_entries_share_one_root_identity(tmp_path, monkeyp
     """
 
     _patch_database(tmp_path, monkeypatch)
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4
     from app.media_v4.sources.durable_scan import get_durable_scan
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = media_v4.get_database()
     mount = tmp_path / "百度网盘"

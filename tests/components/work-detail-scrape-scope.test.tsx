@@ -15,11 +15,11 @@ beforeEach(() => {
     candidate_id: 'candidate-1', provider_id: '123', media_type: 'tv',
     title: 'Online show', original_title: '', year: null,
   }] });
-  api.metadataConfirm.mockResolvedValue({ status: 'confirmed', scope: 'season', season_number: 2,
-    episode_mapping_status: 'partial', mapped_count: 1, total_count: 2, refresh_status: 'partial' });
+  api.metadataConfirm.mockResolvedValue({ status: 'accepted', job_ids: ['job-root-1', 'job-root-2'],
+    scope: 'season', season_number: 2, refresh_status: 'queued' });
 });
 
-test('selected season reaches V4 confirmation and returns the real mapping result', async () => {
+test('selected season reaches V4 confirmation and exposes every queued source task', async () => {
   await workDetailV4Compatibility.scrape.searchCandidates('work-1', 'Online show', 2020);
   const task = await workDetailV4Compatibility.scrape.selectCandidate(
     'work-1', 123, 'tv', 'manual_replace', 'Online show', 2, true, 'work-1', 'season',
@@ -27,8 +27,9 @@ test('selected season reaches V4 confirmation and returns the real mapping resul
   expect(api.metadataConfirm).toHaveBeenCalledWith({
     work_id: 'work-1', candidate_id: 'candidate-1', scope: 'season', season_number: 2,
   });
-  expect(task.result.mapped_count).toBe(1);
-  expect(task.result.total_count).toBe(2);
+  expect(task.task_id).toBe('job-root-1');
+  expect(task.task_ids).toEqual(['job-root-1', 'job-root-2']);
+  expect(task.status).toBe('queued');
 });
 
 test('a season request without a selected regular season never refreshes the whole work', async () => {
@@ -44,5 +45,5 @@ test('an unavailable provider result is not presented as a completed scrape', as
   api.metadataConfirm.mockResolvedValue({ status: 'refresh_unavailable' });
   await expect(workDetailV4Compatibility.scrape.selectCandidate(
     'work-3', 123, 'tv', 'manual_replace', 'Online show', 1, true, 'work-3', 'work',
-  )).rejects.toThrow('刷新未完成');
+  )).rejects.toThrow('刷新未受理');
 });

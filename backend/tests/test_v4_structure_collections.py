@@ -2,15 +2,25 @@
 
 import json
 import sqlite3
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 import pytest
-from backend.tests.test_v4_structure_context import resolve
-
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.library import V4LibraryProjection
 from app.media_v4.resolution.candidates import merge_graph
 from app.media_v4.revisions.service import V4RevisionService
+
+from backend.tests.test_v4_structure_context import resolve as _resolve
+
+
+def resolve(paths, **kwargs):
+    """给可确认的结构图合成已挂载的本地播放路径，保留来源定位符。"""
+    graph, pairs = _resolve(paths, **kwargs)
+    mounted_pairs = [
+        (replace(evidence, playback_locator=f"C:/KumiTest/collections/{evidence.relative_path}"), facts)
+        for evidence, facts in pairs
+    ]
+    return graph, mounted_pairs
 
 PATHS = ["动画/物语系列/化物语/化物语 S01E01.mkv",
          "动画/物语系列/伪物语/伪物语 S01E01.mkv"]
@@ -46,9 +56,9 @@ def test_ordinary_standalone_movie_keeps_online_canonical_title(tmp_path, parsed
 def test_verified_movie_title_is_stable_across_projection_detail_and_refresh(tmp_path, monkeypatch, scope):
     from dataclasses import replace
 
-    from backend.tests.test_v4_library_projection import _entry
-
     from app.api import library_v4
+
+    from backend.tests.test_v4_library_projection import _entry
 
     db = V4Database(tmp_path / "canonical-title.db")
     db.initialize()
@@ -76,7 +86,6 @@ def test_verified_movie_title_is_stable_across_projection_detail_and_refresh(tmp
         conn.execute("INSERT INTO scrape_bindings(binding_id,revision_id,work_id,provider,provider_id,metadata_json,status,created_at,updated_at) VALUES('scrape','title',?,'tmdb','526426',?,'ready','now','now')",
                      (work_id, json.dumps(metadata, ensure_ascii=False)))
     monkeypatch.setattr(library_v4, "get_database", lambda: db)
-    monkeypatch.setattr(library_v4, "queue_library_artwork", lambda _: None)
     projection = V4LibraryProjection(db)
     projected = next(card for card in projection.rebuild().cards if card["work_id"] == work_id)
     assert projected["title"] == metadata["title"]
@@ -84,16 +93,16 @@ def test_verified_movie_title_is_stable_across_projection_detail_and_refresh(tmp
         conn.execute("UPDATE library_cards SET title=? WHERE work_id=?", (original, work_id))
         conn.execute("UPDATE v4_meta SET value='regular-only-2' WHERE key='library_presentation_policy'")
     # 已发布的旧投影也自动更新，不能只修复以后新建的媒体库。
-    assert next(card for card in projection.ensure_current().cards if card["work_id"] == work_id)["title"] == metadata["title"]
+    assert next(card for card in projection.rebuild().cards if card["work_id"] == work_id)["title"] == metadata["title"]
     for _ in range(2):
-        listed = next(work for work in library_v4.get_library(include_all=True)["works"] if work["work_id"] == work_id)
+        listed = next(work for work in library_v4.get_library()["works"] if work["work_id"] == work_id)
         detailed = library_v4.get_work_detail(work_id)
         assert listed["title"] == detailed["title"] == metadata["title"]
         projection.rebuild()
     with db.connect() as conn:
         assert conn.execute("SELECT preferred_title FROM works WHERE work_id=?", (work_id,)).fetchone()[0] == original
         conn.execute("INSERT INTO work_overrides(work_id,override_json,created_at,updated_at) VALUES(?,?, 'now','now')", (work_id, json.dumps({"title": "我的中文名"})))
-    listed = next(work for work in library_v4.get_library(include_all=True)["works"] if work["work_id"] == work_id)
+    listed = next(work for work in library_v4.get_library()["works"] if work["work_id"] == work_id)
     assert listed["title"] == library_v4.get_work_detail(work_id)["title"] == "我的中文名"
 
 
@@ -113,9 +122,8 @@ def test_shared_tv_title_guard_is_identical_in_list_and_detail(tmp_path, monkeyp
         conn.execute("INSERT INTO provider_bindings(work_id,provider,provider_id,media_type) SELECT work_id,'tmdb','42','tv' FROM works")
         conn.execute("INSERT INTO scrape_bindings(binding_id,revision_id,work_id,provider,provider_id,metadata_json,status,created_at,updated_at) SELECT 'binding-'||work_id,'shared',work_id,'tmdb','42',?,'ready','now','now' FROM works", (json.dumps(metadata, ensure_ascii=False),))
     monkeypatch.setattr(library_v4, "get_database", lambda: db)
-    monkeypatch.setattr(library_v4, "queue_library_artwork", lambda _: None)
     V4LibraryProjection(db).rebuild()  # 先由后台发布，再核对只读列表与详情的一致性。
-    listed = library_v4.get_library(include_all=True)["works"]
+    listed = library_v4.get_library()["works"]
     assert {work["title"] for work in listed} == {"来自深渊", "来自深渊 烈日的黄金乡"}
     for work in listed:
         assert library_v4.get_work_detail(work["work_id"])["title"] == work["title"]
@@ -192,8 +200,7 @@ def test_confirmed_collection_persists_projects_and_obeys_retirement(tmp_path, m
     assert {card["title"] for card in first.cards} == {"化物语", "伪物语"}
     from app.api import library_v4
     monkeypatch.setattr(library_v4, "get_database", lambda: db)
-    monkeypatch.setattr(library_v4, "queue_library_artwork", lambda _: None)
-    library = library_v4.get_library(include_all=True)
+    library = library_v4.get_library()
     assert len(library["collections"]) == 1
     assert set(library["collections"][0]["work_ids"]) == {card["work_id"] for card in first.cards}
     detail = library_v4.get_work_detail(first.cards[0]["work_id"])
@@ -234,6 +241,7 @@ def test_v25_physical_fixture_migration_preserves_existing_confirmed_data(tmp_pa
                      (json.dumps({"中文": "保留"}, ensure_ascii=False),))
         conn.execute("INSERT INTO works(work_id,identity_key,preferred_title,work_type,created_at,updated_at) VALUES('old','old-identity','旧作品','series','now','now')")
         conn.commit()
+    db.initialize()
     _, old_pairs = resolve(["旧来源/迁移正片 S01E01.mkv"])
     service = V4RevisionService(db)
     service.create_draft("old-confirmed", old_pairs)
@@ -245,7 +253,9 @@ def test_v25_physical_fixture_migration_preserves_existing_confirmed_data(tmp_pa
                   for table in protected}
     db.initialize()
     with db.connect() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 26
+        from app.media_v4.persistence.database import V4_SCHEMA_VERSION
+
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == V4_SCHEMA_VERSION
         assert conn.execute("SELECT preferred_title FROM works WHERE work_id='old'").fetchone()[0] == "旧作品"
         assert json.loads(conn.execute("SELECT value FROM v4_meta WHERE key='structure-preservation'").fetchone()[0]) == {"中文": "保留"}
         assert not conn.execute("SELECT * FROM media_collections").fetchall()

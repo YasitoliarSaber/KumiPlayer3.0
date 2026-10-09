@@ -473,24 +473,52 @@ def _cancel_or_block_old_jobs(conn: sqlite3.Connection, work_id: str) -> None:
         raise IdentityRepairBlockedError("旧 Work 仍有运行中的任务，暂不能应用身份恢复")
 
 
+def _validate_repair_asset_paths(conn: sqlite3.Connection, items: list[dict]) -> None:
+    """身份迁移前只检查实际 Asset 的播放定位语法，不探测源文件。"""
+
+    from app.media_v4.path_validation import validate_playback_locator_syntax
+
+    asset_ids = sorted({str(item["asset_id"]) for item in items if item.get("asset_id")})
+    for offset in range(0, len(asset_ids), 500):
+        batch = asset_ids[offset:offset + 500]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            f"SELECT asset_id,playback_locator FROM assets WHERE asset_id IN ({placeholders})",
+            batch,
+        ).fetchall()
+        locators = {str(row["asset_id"]): str(row["playback_locator"] or "") for row in rows}
+        for asset_id in batch:
+            locator = locators.get(asset_id)
+            if locator is None:
+                raise IdentityRepairBlockedError("待恢复的媒体 Asset 不存在，不能迁移身份")
+            valid, reason = validate_playback_locator_syntax(locator)
+            if not valid:
+                raise IdentityRepairBlockedError(reason)
+
+
 def _insert_job(conn: sqlite3.Connection, job_type: str, revision_id: str, work_id: str, now: str) -> None:
     job_id = str(uuid.uuid4())
     key = f"{job_type}:{revision_id}:{work_id}"
+    payload = '{"runtime_policy":"sqlite-artwork-v1"}' if job_type == "scrape_work" else "{}"
     conn.execute(
         """
         INSERT OR IGNORE INTO jobs(
             job_id, job_type, revision_id, work_id, idempotency_key,
-            status, attempts, last_error, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 'queued', 0, '', ?, ?)
+            status, attempts, last_error, created_at, updated_at, result_json
+        ) VALUES (?, ?, ?, ?, ?, 'queued', 0, '', ?, ?, ?)
         """,
-        (job_id, job_type, revision_id, work_id, key, now, now),
+        (job_id, job_type, revision_id, work_id, key, now, now, payload),
     )
 
 
 def _apply_transaction(conn: sqlite3.Connection, preview: dict, operation_id: str) -> dict:
     old_work_id = str(preview["work_id"])
+    _validate_repair_asset_paths(conn, list(preview.get("items") or []))
     now = _now()
     _cancel_or_block_old_jobs(conn, old_work_id)
+    from app.media_v4.assets.catalog import capture_identity_repair_bindings
+
+    artwork_bindings = capture_identity_repair_bindings(conn, old_work_id)
 
     conn.execute(
         "UPDATE works SET identity_key = ?, status = 'superseded', updated_at = ? WHERE work_id = ?",
@@ -499,6 +527,19 @@ def _apply_transaction(conn: sqlite3.Connection, preview: dict, operation_id: st
     target_ids: dict[str, str] = {}
     for target in preview["target_works"]:
         target_ids[target["work_key"]] = _ensure_work(conn, target, old_work_id, now)
+    from app.media_v4.assets.catalog import preserve_identity_repair_bindings
+
+    artwork_changes = preserve_identity_repair_bindings(
+        conn,
+        old_work_id,
+        list(target_ids.values()),
+        source_bindings=artwork_bindings,
+    )
+    changed_artwork_work_ids = sorted(set(artwork_changes["manual"]) | set(artwork_changes["automatic"]))
+    if changed_artwork_work_ids:
+        from app.media_v4.projection.library import mark_projection_dirty
+
+        mark_projection_dirty(conn, changed_artwork_work_ids)
 
     season_ids: dict[tuple[str, int, str], str] = {}
     episode_ids: dict[tuple[str, int, str, Any, Any, str], str] = {}
@@ -661,10 +702,8 @@ def _apply_transaction(conn: sqlite3.Connection, preview: dict, operation_id: st
                 ),
             )
         for target_work_id in target_ids.values():
-            _insert_job(conn, "materialize_mirror", new_revision_id, target_work_id, now)
             if any(
                 assignment["target_work_key"] in target_ids
-                and assignment["target_work_key"] in target_ids
                 and assignment["provider"] != "local"
                 and target_ids[assignment["target_work_key"]] == target_work_id
                 for assignment in preview["provider_assignments"]
@@ -739,6 +778,7 @@ def apply_identity_repair(database: V4Database, *, preview_id: str, digest: str)
     """校验预览摘要后，在单事务中应用身份恢复。"""
 
     with database.connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         status, preview, result_json = _load_operation(conn, preview_id)
         if status == "completed":
             return json.loads(result_json or "{}")
@@ -751,7 +791,6 @@ def apply_identity_repair(database: V4Database, *, preview_id: str, digest: str)
         current = _collect_preview(conn, str(preview["work_id"]))
         if current["digest"] != digest:
             raise IdentityRepairBlockedError("数据库内容已变化，请重新生成身份恢复预览")
-        conn.execute("BEGIN IMMEDIATE")
         result = _apply_transaction(conn, preview, preview_id)
         conn.commit()
         return result

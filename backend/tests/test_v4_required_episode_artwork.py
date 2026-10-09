@@ -1,17 +1,12 @@
 """分集图片单独评估；图片缺项不使已确认作品资料失效。"""
-import hashlib
 import json
-from pathlib import Path
 
 import pytest
-
-from app.core.config import AppConfig
-from app.media_v4.jobs.metadata_quality import missing_episode_artwork, require_regular_episode_metadata
+from app.media_v4.jobs.metadata_quality import require_regular_episode_metadata
 from app.media_v4.jobs.runner import V4JobRunner
-from app.media_v4.jobs.scrape import V4ScrapeService
 from app.media_v4.persistence.database import V4Database
-from app.media_v4.projection.library import V4LibraryProjection
 from app.media_v4.revisions.service import V4RevisionService, metadata_recovery_policy
+
 from tests.test_v4_import_metadata_lifecycle import confirm, provider
 from tests.test_v4_import_numbering_status import _episode, _install_client, _target
 
@@ -88,45 +83,22 @@ def test_mapped_episode_fetches_missing_thumbnail_from_its_own_image_details(mon
         assert not any(item.get('still_url', '').endswith('/recovered.jpg') for item in result['episode_mappings'])
 
 
-@pytest.mark.parametrize('missing_download', [True, False])
-@pytest.mark.parametrize('invalidation', ['delete', 'corrupt'])
-def test_actual_local_thumbnail_download_controls_completion(tmp_path, monkeypatch, missing_download, invalidation):
-    config = AppConfig(artwork_storage_mode='local')
-    monkeypatch.setattr('app.media_v4.jobs.metadata_artifacts.load_config', lambda: config)
-    monkeypatch.setattr('app.media_v4.jobs.completeness.load_config', lambda: config)
-
-    def download(url, path, **_kwargs):
-        if missing_download and url.endswith('/episode.jpg'):
-            return ''
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b'fixture-image')
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-
-    monkeypatch.setattr('app.media_v4.jobs.metadata_artifacts._download_artwork', download)
+def test_image_sources_are_snapshotted_without_blocking_metadata_completion(tmp_path):
     database = V4Database(tmp_path / 'thumb.db')
     database.initialize()
     confirm(database, 'r1')
-    V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=tmp_path / 'mirror')
+    V4JobRunner(database, metadata_provider=provider).process_available()
     unit = V4RevisionService(database).get_execution_progress('r1')['work_units'][0]
-    assert unit['overall_status'] == ('needs_attention' if missing_download else 'completed')
+    assert unit['overall_status'] == 'completed'
+    assert unit['artwork']['status'] == 'pending'
     with database.connect() as conn:
         metadata = json.loads(conn.execute('SELECT metadata_json FROM scrape_bindings').fetchone()[0])
-    assert metadata['metadata_state'] == ('failed' if missing_download else 'ready')
-    if not missing_download:
-        thumb = Path(metadata['episode_mappings'][0]['local_thumb_path'])
-        if invalidation == 'delete':
-            thumb.unlink()
-        else:
-            thumb.write_bytes(b'corrupted')
-        card = V4LibraryProjection(database).rebuild().cards[0]
-        assert card['metadata']['metadata_state'] == 'ready'
-        # 资料读取不以现场检查撤销成功；图片完整性由显式后台检查单独判定。
-        with database.connect() as conn:
-            artifacts = [dict(row) for row in conn.execute("SELECT * FROM artifacts WHERE artifact_type='episode_thumb'")]
-        assert missing_episode_artwork(
-            [{'episode_id': metadata['episode_mappings'][0]['episode_id']}], metadata, artifacts, 'local') == 1
-    # 缺图失败、文件丢失或损坏后，复用已保存的身份和图片地址即可恢复。
-    missing_download = False
-    result = V4ScrapeService(database).retry_artifacts('r1', unit['work_id'], mirror_root=tmp_path / 'mirror')
-    assert result['metadata_state'] == 'ready'
-    assert V4RevisionService(database).get_execution_progress('r1')['work_units'][0]['overall_status'] == 'completed'
+        bindings = conn.execute(
+            "SELECT b.role,r.source_url,r.state FROM artwork_bindings b "
+            "JOIN artwork_resources r ON r.resource_id=b.candidate_id WHERE b.work_id=?",
+            (unit['work_id'],),
+        ).fetchall()
+    assert metadata['metadata_state'] == 'ready'
+    assert metadata['episode_mappings'][0]['still_url'].endswith('/episode.jpg')
+    assert 'local_thumb_path' not in metadata['episode_mappings'][0]
+    assert any(row['source_url'].endswith('/episode.jpg') and row['state'] == 'pending' for row in bindings)

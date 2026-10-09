@@ -61,6 +61,75 @@ from app.media_v4.tracking.store import V4TrackingStore
 router = APIRouter(prefix="/api/v4", tags=["media-v4"])
 
 
+class ArtworkCachePreviewRequest(BaseModel):
+    retention_days: int = Field(default=30, ge=1, le=3650)
+
+
+class ArtworkCacheConfirmRequest(BaseModel):
+    preview_id: str = Field(min_length=1, max_length=64)
+    digest: str = Field(min_length=64, max_length=64)
+    confirm: Literal[True]
+
+
+@router.post('/artwork-cache/preview')
+def artwork_cache_preview(request: ArtworkCachePreviewRequest):
+    """生成有期限的受管缓存清理预览；普通图片读取不触发回收。"""
+    from app.media_v4.assets.gc import preview_artwork_gc
+
+    database = get_database()
+    root = Path(get_data_dir()).resolve()
+    plan = preview_artwork_gc(database, root, retention_days=request.retention_days)
+    preview_id = uuid.uuid4().hex
+    digest = hashlib.sha256(json.dumps(plan, sort_keys=True).encode('utf-8')).hexdigest()
+    record = {
+        'status': 'preview', 'plan': plan, 'digest': digest,
+        'root': str(root), 'expires_at': (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
+    }
+    with database.connect() as conn:
+        conn.execute('DELETE FROM v4_meta WHERE key LIKE ? AND json_extract(value,?)<?',
+                     ('artwork_gc_preview:%', '$.expires_at', _now_iso()))
+        conn.execute('INSERT INTO v4_meta(key,value) VALUES (?,?)',
+                     ('artwork_gc_preview:' + preview_id, json.dumps(record)))
+    return {'preview_id': preview_id, 'digest': digest, **plan}
+
+
+@router.post('/artwork-cache/confirm')
+def artwork_cache_confirm(request: ArtworkCacheConfirmRequest):
+    """只执行服务端保存的预览，拒绝客户端提交任意文件清单。"""
+    from app.media_v4.assets.gc import execute_artwork_gc
+
+    database = get_database()
+    key = 'artwork_gc_preview:' + request.preview_id
+    root = Path(get_data_dir()).resolve()
+    with database.connect() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        row = conn.execute('SELECT value FROM v4_meta WHERE key=?', (key,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail='图片清理预览不存在')
+        record = json.loads(row['value'])
+        if record['digest'] != request.digest or record['root'] != str(root):
+            raise HTTPException(status_code=409, detail='图片清理预览已变化，请重新预览')
+        if record['status'] == 'completed':
+            return record['result']
+        if record['expires_at'] <= _now_iso():
+            raise HTTPException(status_code=409, detail='图片清理预览已过期，请重新预览')
+        if record['status'] == 'running':
+            raise HTTPException(status_code=409, detail='图片清理正在执行')
+        record['status'] = 'running'
+        conn.execute('UPDATE v4_meta SET value=? WHERE key=?', (json.dumps(record), key))
+    try:
+        result = execute_artwork_gc(database, root, record['plan'], confirm=request.confirm)
+    except Exception:
+        record['status'] = 'preview'
+        with database.connect() as conn:
+            conn.execute('UPDATE v4_meta SET value=? WHERE key=?', (json.dumps(record), key))
+        raise
+    record.update(status='completed', result=result)
+    with database.connect() as conn:
+        conn.execute('UPDATE v4_meta SET value=? WHERE key=?', (json.dumps(record), key))
+    return result
+
+
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -1904,7 +1973,7 @@ async def upload_work_artwork(work_id: str, request: ArtworkUploadRequest):
         with warnings.catch_warnings():
             warnings.simplefilter('error', Image.DecompressionBombWarning)
             with Image.open(io.BytesIO(raw)) as image:
-                suffix = {'PNG': '.png', 'JPEG': '.jpg', 'WEBP': '.webp'}.get(image.format)
+                suffix = {'PNG': '.png', 'JPEG': '.jpg', 'WEBP': '.webp'}.get(image.format or '')
                 if not suffix or image.width * image.height > 40_000_000:
                     raise ValueError('invalid image format or dimensions')
                 image.verify()
@@ -2112,8 +2181,6 @@ def run_job(job_id: str):
         "job_type": result.job_type,
         "status": result.status,
         "generation_id": result.snapshot.generation_id if result.snapshot else "",
-        "artifact_paths": list(result.materialized.artifact_paths) if result.materialized else [],
-        "warnings": list(result.materialized.errors) if result.materialized else [],
     }
 
 
@@ -2528,7 +2595,7 @@ def identity_repair_resume(request: IdentityRepairResumeRequest):
 
 @router.post("/metadata/confirm")
 def metadata_confirm(request: MetadataConfirmRequest):
-    """只接受服务端候选 candidate_id；确认后重排刮削（job 不再搜索）并刷新投影。"""
+    """确认服务端候选并登记现有刮削任务；Provider 资料在后台快照中更新。"""
 
     database = get_database()
     with database.connect() as conn:
@@ -2571,13 +2638,6 @@ def metadata_confirm(request: MetadataConfirmRequest):
     if request.scope == "season":
         if request.season_number is None or media_type != "tv":
             raise HTTPException(status_code=409, detail="请先选择可刮削的正片季度")
-        with database.connect() as conn:
-            existing_binding = conn.execute(
-                "SELECT provider_id FROM provider_bindings WHERE work_id=? AND provider=? AND media_type=?",
-                (request.work_id, provider, media_type),
-            ).fetchone()
-        if existing_binding is None or str(existing_binding["provider_id"]) != provider_id:
-            raise HTTPException(status_code=409, detail="当前季度只能刷新同一在线作品；更换作品请选整部作品")
     try:
         updated_at = datetime.fromisoformat(str(candidate["updated_at"]))
     except (ValueError, TypeError):
@@ -2605,15 +2665,22 @@ def metadata_confirm(request: MetadataConfirmRequest):
         ).fetchall()]
     if not active_revisions:
         raise HTTPException(status_code=409, detail="所选范围没有活动来源中的已确认剧集")
-    scrape = V4ScrapeService(database)
-    try:
-        jobs = [scrape.requeue_work(
-            current_revision, request.work_id,
-            season_number=request.season_number if request.scope == "season" else None,
-        ) for current_revision in active_revisions]
-    except (KeyError, RuntimeError, ValueError) as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    now = _now_iso()
+    selected_provider = {
+        "provider": provider,
+        "provider_id": provider_id,
+        "media_type": media_type,
+        "candidate_id": request.candidate_id,
+    }
     with database.connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if request.scope == 'season':
+            existing_binding = conn.execute(
+                'SELECT provider_id FROM provider_bindings WHERE work_id=? AND provider=? AND media_type=?',
+                (request.work_id, provider, media_type),
+            ).fetchone()
+            if existing_binding is None or str(existing_binding['provider_id']) != provider_id:
+                raise HTTPException(status_code=409, detail='当前季度只能刷新同一在线作品；更换作品请选整部作品')
         conn.execute(
             """
             INSERT INTO provider_bindings(work_id, provider, media_type, provider_id)
@@ -2624,43 +2691,32 @@ def metadata_confirm(request: MetadataConfirmRequest):
         )
         conn.execute(
             "UPDATE revision_work_candidates SET status = 'confirmed', updated_at = ? WHERE candidate_id = ?",
-            (_now_iso(), request.candidate_id),
+            (now, request.candidate_id),
         )
         conn.execute(
             """
             UPDATE revision_work_candidates SET status = 'rejected', updated_at = ?
             WHERE work_id = ? AND status = 'proposed' AND candidate_id != ?
             """,
-            (_now_iso(), request.work_id, request.candidate_id),
+            (now, request.work_id, request.candidate_id),
         )
-    from app.media_v4.jobs.metadata import default_metadata_provider
-
-    for job in jobs:
-        scrape.process(job["job_id"], default_metadata_provider)
-    V4LibraryProjection(database).rebuild()
-    with database.connect() as conn:
-        finished_jobs = [conn.execute(
-            "SELECT status,result_json,last_error FROM jobs WHERE job_id=?", (job["job_id"],)
-        ).fetchone() for job in jobs]
-    if any(row is None or row["status"] != "succeeded" for row in finished_jobs):
-        raise HTTPException(status_code=502, detail="部分来源刮削未完成；已保留原有资料")
-    outcomes = [json.loads(str(row["result_json"] or "{}")) for row in finished_jobs if row is not None]
-    reason_codes = sorted({str(code) for outcome in outcomes for code in outcome.get("reason_codes", [])})
-    available = all(outcome.get("outcome") in {"published", "partial"} for outcome in outcomes)
-    from app.media_v4.persistence.metadata_lifecycle import referenced_metadata
-    with database.connect() as conn:
-        visible_metadata = referenced_metadata(conn, request.work_id) or {}
+        scrape = V4ScrapeService(database)
+        try:
+            jobs = [scrape.requeue_work(
+                current_revision, request.work_id,
+                season_number=request.season_number if request.scope == "season" else None,
+                selected_provider=selected_provider, connection=conn,
+            ) for current_revision in active_revisions]
+        except (KeyError, RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {
         "work_id": request.work_id,
         "candidate_id": request.candidate_id,
         "provider": provider,
         "provider_id": provider_id,
-        "status": "confirmed" if available else "refresh_unavailable",
+        "status": "accepted",
         "scope": request.scope,
         "season_number": request.season_number if request.scope == "season" else None,
-        "episode_mapping_status": visible_metadata.get("episode_mapping_status", ""),
-        "mapped_count": int(visible_metadata.get("mapped_count") or 0),
-        "total_count": int(visible_metadata.get("total_count") or 0),
-        "refresh_status": "failed" if not available else "complete",
-        "reason_codes": reason_codes,
+        "refresh_status": "queued",
+        "job_ids": [str(job["job_id"]) for job in jobs],
     }

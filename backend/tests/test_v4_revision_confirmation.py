@@ -20,6 +20,7 @@ def _entry(title: str = "Show", evidence_id: str = "ev-revision"):
         relative_path=f"{title}/{evidence_id}.mkv" if title else f"unknown/{evidence_id}.mkv",
         entry_kind="video",
         provider="local",
+        playback_locator=f"C:/KumiTest/{title or 'unknown'}/{evidence_id}.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-{evidence_id}",
@@ -53,6 +54,7 @@ def _entry_for_root(
         scan_id=scan_id,
         source_key=f"{title}/S01E{episode:02d}.mkv",
         relative_path=f"{title}/S01E{episode:02d}.mkv",
+        playback_locator=f"C:/KumiTest/{root_id}/{title}/S01E{episode:02d}.mkv",
     )
     facts = replace(
         facts,
@@ -148,8 +150,9 @@ def test_confirmation_does_not_reuse_bindings_created_earlier_in_same_revision(t
             evidence_id=evidence_id,
             scan_id="scan-binding-order",
             root_id="root-binding-order",
-            source_key=relative_path,
-            relative_path=relative_path,
+                source_key=relative_path,
+                relative_path=relative_path,
+                playback_locator=str(tmp_path / relative_path),
             entry_kind="video",
             provider="baidu",
             ingest_method="directory_tree",
@@ -347,6 +350,7 @@ def test_override_rechecks_structural_identity_before_confirmation(tmp_path):
         root_id="root-override-structure",
         source_key="Show/Show.S01E01.mkv",
         relative_path="Show/Show.S01E01.mkv",
+        playback_locator=str(tmp_path / "Show.S01E01.mkv"),
         entry_kind="video",
         provider="local",
     )
@@ -502,6 +506,7 @@ def test_unconfirmed_draft_cannot_change_confirmed_library_projection(tmp_path):
         root_id="root-revision",
         source_key="episode-2",
         relative_path="Show/Show.S01E02.mkv",
+        playback_locator=str(tmp_path / "Show.S01E02.mkv"),
         entry_kind="video",
         provider="local",
     )
@@ -536,6 +541,7 @@ def test_confirmed_range_keeps_one_asset_bound_to_each_episode(tmp_path):
         root_id="root-range",
         source_key="range",
         relative_path="Show/Show.S01E01-E03.mkv",
+        playback_locator=str(tmp_path / "Show.S01E01-E03.mkv"),
         entry_kind="video",
         provider="local",
     )

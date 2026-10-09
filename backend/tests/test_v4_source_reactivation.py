@@ -17,8 +17,8 @@ def _entry(root_id: str = "root-reactivated", episode: int = 1):
         relative_path=f"Mini/Mini.S01E{episode:02d}.mkv",
         entry_kind="video",
         provider="local",
-        source_locator=f"local://mini/Mini.S01E{episode:02d}.mkv",
-        playback_locator=f"local://mini/Mini.S01E{episode:02d}.mkv",
+        source_locator=f"C:/KumiTest/reactivation/{root_id}/Mini/Mini.S01E{episode:02d}.mkv",
+        playback_locator=f"C:/KumiTest/reactivation/{root_id}/Mini/Mini.S01E{episode:02d}.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-reactivated-{episode}",
@@ -239,7 +239,6 @@ def test_hiding_a_source_card_requires_its_active_tasks_to_finish(tmp_path):
     """活动扫描或执行尚未结束时，卡片不能被静默隐藏。"""
 
     import pytest
-
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.projection.source_libraries import hide_source_card, list_source_cards
     from app.media_v4.revisions.service import V4RevisionService

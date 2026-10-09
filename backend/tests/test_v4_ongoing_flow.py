@@ -7,7 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from app.api import media_v4, tracking_v4
 from app.core.config import AppConfig
 from app.media_v4.jobs.runner import V4JobRunner
@@ -43,7 +42,7 @@ def run_registered(database, scan_id: str) -> str:
 def environment(tmp_path, monkeypatch):
     import builtins
 
-    database, source, mirror = setup(tmp_path, monkeypatch)
+    database, source = setup(tmp_path, monkeypatch)
     config = AppConfig(artwork_storage_mode="local")
     monkeypatch.setattr(media_v4, "_database", database)
     monkeypatch.setattr(media_v4, "load_config", lambda: config)
@@ -61,25 +60,25 @@ def environment(tmp_path, monkeypatch):
         return real_open(path, mode, *args, **kwargs)
     monkeypatch.setattr(Path, "open", fixture_write_only)
     monkeypatch.setattr(builtins, "open", no_media_reads)
-    return database, source, mirror, config
+    return database, source, config
 
 
-def confirm_ready(database, revision, mirror):
+def confirm_ready(database, revision):
     service = V4RevisionService(database)
     assert service.get_status(revision) == "draft"
     service.confirm(revision)
-    V4JobRunner(database, metadata_provider=external_provider).process_available(mirror_root=mirror)
+    V4JobRunner(database, metadata_provider=external_provider).process_available()
 
 
 @pytest.fixture
 def baseline(tmp_path, monkeypatch):
-    database, source, mirror, _config = environment(tmp_path, monkeypatch)
+    database, source, _config = environment(tmp_path, monkeypatch)
     first_file = empty_video(source, "Show/Show.S01E01.mkv")
     requested = media_v4._start_durable_local_scan(media_v4.SourceScanRequest(
         source="local", root_path=str(source), content_scope="ongoing", revision_id="first",
     ))
     assert run_registered(database, requested["scan_id"]) == "first"
-    confirm_ready(database, "first", mirror)
+    confirm_ready(database, "first")
     first = bindings(database, "first")["Show/Show.S01E01.mkv"]
     with database.connect() as conn:
         metadata = conn.execute("SELECT status, metadata_json FROM scrape_bindings WHERE revision_id='first' AND work_id=?",
@@ -90,7 +89,7 @@ def baseline(tmp_path, monkeypatch):
         assert conn.execute("SELECT COUNT(*) FROM jobs WHERE status!='succeeded'").fetchone()[0] == 0
     store = V4PlaybackStore(database)
     store.save_progress(first["work_id"], first["episode_id"], first["asset_id"], 123, 1500, False)
-    return SimpleNamespace(database=database, source=source, mirror=mirror, root_id=requested["root_id"],
+    return SimpleNamespace(database=database, source=source, root_id=requested["root_id"],
                            first=first, first_file=first_file, stat=first_file.stat(), store=store,
                            immutable=immutable_rows(database))
 
@@ -127,8 +126,8 @@ def test_local_new_episode_auto_confirms_scrapes_and_unchanged_does_not_duplicat
     assert context.first_file.stat().st_size == context.stat.st_size == 0
     assert context.first_file.stat().st_mtime_ns == context.stat.st_mtime_ns
     assert list_refresh_sources(context.database)[0]["activity_kind"] == "execution"
-    V4JobRunner(context.database, metadata_provider=external_provider).process_available(mirror_root=context.mirror)
-    card = next(card for card in V4LibraryProjection(context.database).ensure_current().cards if card["work_id"] == old["work_id"])
+    V4JobRunner(context.database, metadata_provider=external_provider).process_available()
+    card = next(card for card in V4LibraryProjection(context.database).rebuild().cards if card["work_id"] == old["work_id"])
     assert card["metadata"]["metadata_state"] == "ready"
     assert card["metadata"]["episode_mapping_status"] == "complete"
     mappings = {item["episode_id"]: item for item in card["metadata"]["episode_mappings"]}
@@ -205,7 +204,7 @@ def test_scope_or_target_conflict_rolls_back_registration_without_changing_basel
 def test_txt_new_export_is_copied_and_auto_appended_without_media_disk_io(tmp_path, monkeypatch):
     import builtins
 
-    database, _source, mirror, config = environment(tmp_path, monkeypatch)
+    database, _source, config = environment(tmp_path, monkeypatch)
     mount = tmp_path / "snapshot-mount"
     export_dir = mount / "Ongoing"
     export_dir.mkdir(parents=True)
@@ -226,7 +225,7 @@ def test_txt_new_export_is_copied_and_auto_appended_without_media_disk_io(tmp_pa
         source="tree", provider="baidu", tree_file=str(old_txt), content_scope="ongoing", revision_id="tree-first",
     ))
     assert run_registered(database, first["scan_id"]) == "tree-first"
-    confirm_ready(database, "tree-first", mirror)
+    confirm_ready(database, "tree-first")
     old = bindings(database, "tree-first")["Show/Show.S01E01.mkv"]
     store = V4PlaybackStore(database)
     store.save_progress(old["work_id"], old["episode_id"], old["asset_id"], 123, 1500, False)
@@ -239,7 +238,7 @@ def test_txt_new_export_is_copied_and_auto_appended_without_media_disk_io(tmp_pa
     assert update["root_id"] == first["root_id"]
     assert run_registered(database, update["scan_id"]) == "tree-next"
     assert V4RevisionService(database).get_status("tree-next") == "confirmed"
-    V4JobRunner(database, metadata_provider=external_provider).process_available(mirror_root=mirror)
+    V4JobRunner(database, metadata_provider=external_provider).process_available()
     current = bindings(database, "tree-next")
     assert {key: current["Show/Show.S01E01.mkv"][key] for key in ("work_id", "episode_id", "asset_id")} == {
         key: old[key] for key in ("work_id", "episode_id", "asset_id")}
@@ -248,7 +247,7 @@ def test_txt_new_export_is_copied_and_auto_appended_without_media_disk_io(tmp_pa
     after = immutable_rows(database)
     assert all(after[table][key] == value for table, rows in before.items() for key, value in rows.items())
     assert copies == [(old_txt.name, "rb"), (new_txt.name, "rb")]
-    card = next(card for card in V4LibraryProjection(database).ensure_current().cards if card["work_id"] == old["work_id"])
+    card = next(card for card in V4LibraryProjection(database).rebuild().cards if card["work_id"] == old["work_id"])
     assert card["metadata"]["metadata_state"] == "ready" and card["metadata"]["episode_mapping_status"] == "complete"
 
 
@@ -258,7 +257,7 @@ def test_remote_real_incremental_scan_auto_appends_and_unchanged_keeps_jobs(tmp_
     from app.integrations.openlist.models import OpenListEntry
     from app.integrations.openlist.providers import OpenListRouteConfig
 
-    database, _source, mirror, config = environment(tmp_path, monkeypatch)
+    database, _source, config = environment(tmp_path, monkeypatch)
     mount = tmp_path / "remote-mount"
     config.openlist_mount_root = str(mount)
     config.openlist_server_url = "https://offline.example.test"
@@ -289,7 +288,7 @@ def test_remote_real_incremental_scan_auto_appends_and_unchanged_keeps_jobs(tmp_
         scan_mode="full", content_scope="ongoing", revision_id="remote-first",
     ))
     assert run_registered(database, first["scan_id"]) == "remote-first"
-    confirm_ready(database, "remote-first", mirror)
+    confirm_ready(database, "remote-first")
     old = bindings(database, "remote-first")["Show/Show.S01E01.mkv"]
     store = V4PlaybackStore(database)
     store.save_progress(old["work_id"], old["episode_id"], old["asset_id"], 123, 1500, False)
@@ -302,8 +301,8 @@ def test_remote_real_incremental_scan_auto_appends_and_unchanged_keeps_jobs(tmp_
     assert {key: current["Show/Show.S01E01.mkv"][key] for key in ("work_id", "episode_id", "asset_id")} == {
         key: old[key] for key in ("work_id", "episode_id", "asset_id")}
     assert current["Show/Show.S01E02.mkv"]["work_id"] == old["work_id"]
-    V4JobRunner(database, metadata_provider=external_provider).process_available(mirror_root=mirror)
-    card = next(card for card in V4LibraryProjection(database).ensure_current().cards if card["work_id"] == old["work_id"])
+    V4JobRunner(database, metadata_provider=external_provider).process_available()
+    card = next(card for card in V4LibraryProjection(database).rebuild().cards if card["work_id"] == old["work_id"])
     assert card["metadata"]["metadata_state"] == "ready" and card["metadata"]["episode_mapping_status"] == "complete"
     assert store.get_progress(old["episode_id"], old["asset_id"])["position"] == 123
     with database.connect() as conn:
@@ -340,7 +339,7 @@ def test_cancelled_refresh_can_restart_without_losing_baseline_or_progress(basel
     assert retried["task_id"] != queued["task_id"]
     revision = run_registered(context.database, retried["task_id"])
     assert V4RevisionService(context.database).get_status(revision) == "confirmed"
-    V4JobRunner(context.database, metadata_provider=external_provider).process_available(mirror_root=context.mirror)
+    V4JobRunner(context.database, metadata_provider=external_provider).process_available()
     assert list_refresh_sources(context.database)[0]["status"] == "completed"
     assert_baseline_preserved(context)
 
@@ -380,7 +379,7 @@ def test_restart_recovers_real_evidence_and_finalizer_without_repeat_scan_or_job
         after_jobs = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
         assert after_jobs == before_jobs if crash_after_confirmation else after_jobs > before_jobs
         assert conn.execute("SELECT COUNT(*) FROM source_evidence WHERE scan_id=?", (queued["task_id"],)).fetchone()[0] == 2
-    V4JobRunner(context.database, metadata_provider=external_provider).process_available(mirror_root=context.mirror)
+    V4JobRunner(context.database, metadata_provider=external_provider).process_available()
     assert list_refresh_sources(context.database)[0]["status"] == "completed"
     assert_baseline_preserved(context)
 
@@ -391,29 +390,26 @@ def test_library_scope_is_explicit_even_when_watched_completed_or_refresh_disabl
 
     context = baseline
     monkeypatch.setattr(library_v4, "get_database", lambda: context.database)
-    monkeypatch.setattr(library_v4, "queue_library_artwork", lambda _: None)
     with context.database.connect() as conn:
         conn.execute("INSERT INTO tracking_states(work_id, provider, provider_id, metadata_json, updated_at) "
                      "VALUES (?, 'local', '', ?, 'now')", (context.first["work_id"], json.dumps({"status": "completed"})))
-    work = next(work for work in library_v4.get_library(compact=True)["works"] if work["work_id"] == context.first["work_id"])
+    work = next(work for work in library_v4.get_library()["works"] if work["work_id"] == context.first["work_id"])
     assert work["content_scope"] == "ongoing" and work["watch_status"]["status"] == "completed"
     assert next(card for card in list_source_cards(context.database) if card["root_id"] == context.root_id)["content_scope"] == "ongoing"
     with context.database.connect() as conn:
         conn.execute("UPDATE source_roots SET enabled=0 WHERE root_id=?", (context.root_id,))
     assert refresh_all_sources(context.database) == []
-    disabled = next(work for work in library_v4.get_library(compact=True)["works"] if work["work_id"] == context.first["work_id"])
+    disabled = next(work for work in library_v4.get_library()["works"] if work["work_id"] == context.first["work_id"])
     assert disabled.get("content_scope") == "ongoing", disabled
     with context.database.connect() as conn:
         conn.execute("UPDATE source_roots SET retired_at='now' WHERE root_id=?", (context.root_id,))
-    assert context.first["work_id"] not in library_v4._content_scope_map([context.first["work_id"]])
-    assert all(work.get("content_scope") != "ongoing" for work in library_v4.get_library(compact=True)["works"]
+    V4LibraryProjection(context.database).rebuild()
+    assert all(work.get("content_scope") != "ongoing" for work in library_v4.get_library()["works"]
                if work["work_id"] == context.first["work_id"])
 
 
 def test_multi_work_update_only_enqueues_changed_work_and_retains_unchanged_results(tmp_path, monkeypatch):
-    from app.media_v4.persistence.metadata_lifecycle import collect_cleanup_candidates
-
-    database, source, mirror, _config = environment(tmp_path, monkeypatch)
+    database, source, _config = environment(tmp_path, monkeypatch)
     for title in ("Show", "Second"):
         empty_video(source, f"{title}/{title}.S01E01.mkv")
     calls = []
@@ -426,16 +422,16 @@ def test_multi_work_update_only_enqueues_changed_work_and_retains_unchanged_resu
     run_registered(database, first["scan_id"])
     service = V4RevisionService(database)
     service.confirm("multi-first")
-    V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
+    V4JobRunner(database, metadata_provider=provider).process_available()
     initial = bindings(database, "multi-first")
     show, second = initial["Show/Show.S01E01.mkv"], initial["Second/Second.S01E01.mkv"]
     store = V4PlaybackStore(database)
     store.save_progress(second["work_id"], second["episode_id"], second["asset_id"], 123, 1500, False)
     with database.connect() as conn:
         snapshot_id = conn.execute("SELECT snapshot_id FROM revision_metadata_refs WHERE revision_id='multi-first' AND work_id=?", (second["work_id"],)).fetchone()[0]
-        old_mirrors = {row["artifact_id"]: dict(row) for row in conn.execute(
-            "SELECT * FROM artifacts WHERE revision_id='multi-first' AND work_id=? AND artifact_type='mirror'", (second["work_id"],))}
-    assert len(old_mirrors) == 1
+        assert conn.execute(
+            "SELECT COUNT(*) FROM artifacts WHERE revision_id='multi-first' AND artifact_type='mirror'"
+        ).fetchone()[0] == 0
     immutable = immutable_rows(database)
     empty_video(source, "Show/Show.S01E02.mkv")
     queued = refresh_all_sources(database)[0]
@@ -443,13 +439,12 @@ def test_multi_work_update_only_enqueues_changed_work_and_retains_unchanged_resu
     assert service.get_status(revision) == "confirmed"
     with database.connect() as conn:
         work_jobs = {(row["work_id"], row["job_type"]) for row in conn.execute(
-            "SELECT work_id,job_type FROM jobs WHERE revision_id=? AND job_type IN ('materialize_mirror','scrape_work')", (revision,))}
+            "SELECT work_id,job_type FROM jobs WHERE revision_id=? AND job_type='scrape_work'", (revision,))}
     failures = []
-    if work_jobs != {(show["work_id"], "materialize_mirror"), (show["work_id"], "scrape_work")}:
-        failures.append("unchanged Second received materialize_mirror/scrape_work jobs")
+    if work_jobs != {(show["work_id"], "scrape_work")}:
+        failures.append("metadata refresh was not limited to the changed Show work")
     calls.clear()
-    # The real cleanup job only collects candidates and reports removed_count=0.
-    V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
+    V4JobRunner(database, metadata_provider=provider).process_available()
     if calls != ["Show"]:
         failures.append(f"provider calls were {calls!r}")
     current = bindings(database, revision)["Second/Second.S01E01.mkv"]
@@ -458,22 +453,20 @@ def test_multi_work_update_only_enqueues_changed_work_and_retains_unchanged_resu
     with database.connect() as conn:
         retained = conn.execute("SELECT snapshot_id FROM revision_metadata_refs WHERE revision_id=? AND work_id=?", (revision, second["work_id"])).fetchone()
         assert retained and retained[0] == snapshot_id
-        refs = {row[0] for row in conn.execute("SELECT artifact_id FROM artifact_references WHERE revision_id=? AND work_id=? AND snapshot_id IS NULL AND role='mirror'", (revision, second["work_id"]))}
-        if not set(old_mirrors) <= refs:
-            failures.append("unchanged Second mirror references missing in current revision")
-        for artifact_id, before in old_mirrors.items():
-            assert dict(conn.execute("SELECT * FROM artifacts WHERE artifact_id=?", (artifact_id,)).fetchone()) == before
-        assert not (set(old_mirrors) & {row["artifact_id"] for row in collect_cleanup_candidates(conn, revision, mirror)})
-        cleanup = conn.execute("SELECT result_json FROM jobs WHERE revision_id=? AND job_type='cleanup_superseded_artifacts'", (revision,)).fetchone()
-        assert cleanup and json.loads(cleanup[0])["removed_count"] == 0
+        assert conn.execute(
+            "SELECT COUNT(*) FROM artifacts WHERE revision_id=? AND artifact_type='mirror'", (revision,)
+        ).fetchone()[0] == 0
+        assert conn.execute(
+            "SELECT COUNT(*) FROM artifact_references WHERE revision_id=? AND role='mirror'", (revision,)
+        ).fetchone()[0] == 0
     detail = service.get_work_execution_detail(revision, second["work_id"])
-    if detail["mirror"]["artifact_count"] != 1:
-        failures.append("unchanged Second detail lost its one mirror artifact")
+    if detail["work_id"] != second["work_id"]:
+        failures.append("unchanged Second execution detail lost its work identity")
     progress = service.get_execution_progress(revision)
     unit = next(unit for unit in progress["work_units"] if unit["work_id"] == second["work_id"])
     if unit["overall_status"] != "completed" or progress["overall_status"] != "completed":
         failures.append(f"execution status Second={unit['overall_status']} revision={progress['overall_status']}")
-    card = next(card for card in V4LibraryProjection(database).ensure_current().cards if card["work_id"] == second["work_id"])
+    card = next(card for card in V4LibraryProjection(database).rebuild().cards if card["work_id"] == second["work_id"])
     assert card["metadata"]["metadata_state"] == "ready" and card["metadata"]["episode_mapping_status"] == "complete"
     after = immutable_rows(database)
     assert all(after[table][key] == value for table, rows in immutable.items() for key, value in rows.items())
@@ -513,8 +506,8 @@ def test_auxiliary_files_never_enter_regular_numbering_or_block_new_episode(base
     if add_episode:
         current = bindings(context.database, revision)
         assert set(current) == {"Show/Show.S01E01.mkv", "Show/Show.S01E02.mkv"}
-        V4JobRunner(context.database, metadata_provider=external_provider).process_available(mirror_root=context.mirror)
-        card = next(card for card in V4LibraryProjection(context.database).ensure_current().cards if card["work_id"] == context.first["work_id"])
+        V4JobRunner(context.database, metadata_provider=external_provider).process_available()
+        card = next(card for card in V4LibraryProjection(context.database).rebuild().cards if card["work_id"] == context.first["work_id"])
         assert card["metadata"]["metadata_state"] == "ready"
         assert len(card["metadata"]["episode_mappings"]) == 2
     else:

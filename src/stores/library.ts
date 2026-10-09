@@ -23,6 +23,8 @@ interface LibraryState {
   works: WorkIndex[]
   history: PlaybackHistoryItem[]
   loading: boolean
+  updating: boolean
+  generationId: string
   error: string | null
   loaded: boolean
   changeSequence: number | null
@@ -96,6 +98,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   works: [],
   history: [],
   loading: false,
+  updating: false,
+  generationId: '',
   error: null,
   loaded: false,
   changeSequence: null,
@@ -196,7 +200,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const hasUsableContent = get().works.length > 0
     set({ loading: !hasUsableContent, error: null })
 
-    const libraryRequest = libraryApi.getLibrary({ compact: true }).then((libraryRes) => {
+    const libraryRequest = libraryApi.getLibrary().then((libraryRes) => {
       if (requestId !== libraryLoadRequest) return
 
       // SQLite projection 已经保证一 Work 一卡片；前端只按 work_id 消费，不再二次合卡。
@@ -205,6 +209,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         works,
         loaded: true,
         loading: false,
+        updating: libraryRes.updating ?? false,
+        generationId: libraryRes.generation_id ?? libraryRes.generated_at ?? '',
         error: null,
         changeSequence: libraryRes.change_sequence ?? 0,
       })
@@ -244,10 +250,14 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       let cursor = get().changeSequence!
       const changed = new Map<string, 'work_upsert' | 'work_remove' | 'artwork' | 'watch'>()
       const cards = new Map<string, WorkIndex>()
+      let updating = get().updating
+      let generationId = get().generationId
       try {
         let hasMore = true
         while (hasMore) {
           const page = await libraryApi.getChanges(cursor)
+          updating = page.updating ?? updating
+          generationId = page.generation_id ?? generationId
           if (generation !== libraryLoadRequest) return false
           if (page.reset_required || page.changes.some((event) => !['work_upsert', 'work_remove', 'artwork', 'watch'].includes(event.kind))) return get().loadLibrary({ force: true })
           const ids = [...new Set(page.changes.map((event) => event.work_id).filter(Boolean))]
@@ -289,7 +299,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           const card = cards.get(id)
           if (detail?.work_id === id && (!card || id === selectedId)) detail = card ? refreshedDetail : null
         }
-        set({ works: changed.size ? works : state.works, selectedWorkDetail: detail, changeSequence: cursor })
+        set({ works: changed.size ? works : state.works, selectedWorkDetail: detail, changeSequence: cursor, updating, generationId })
         if (changed.size) saveLibraryCache(works)
         if ([...changed.values()].includes('watch') || state.history.some((item) => changed.has(item.work_id))) void get().refreshHistory()
         return true

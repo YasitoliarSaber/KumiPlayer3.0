@@ -1533,7 +1533,7 @@ def _build_tv_episode_mappings(
             _record_unmapped(diagnostics, episode, UNMAPPED_INCOMPLETE_COORDINATES)
             continue
         if child_scope and not complete:
-            rule = verified_offsets.get(_positive_int(episode.get("local_season_number"))) or {}
+            rule = verified_offsets.get(_positive_int(episode.get("local_season_number")) or 0) or {}
             remote_season = _positive_int(rule.get("provider_season_number"))
             has_numbering_evidence = bool(rule or _absolute_number(episode) is not None)
             if remote_season is None and provider_regular_seasons == [1] and has_numbering_evidence:
@@ -1732,7 +1732,6 @@ def _build_tv_episode_mappings(
             season_mapping_verified = True
 
         for episode in episodes:
-            provider_episode: int | None
             provider_episode = _positive_int(episode.get("provider_episode_number"))
             if provider_episode is None:
                 # 明确季号下"本地集号即 Provider 集号"是既有约定（C-004：Provider
@@ -1758,20 +1757,20 @@ def _build_tv_episode_mappings(
                             'retryable': _tmdb_retryable(exc),
                             'verified_missing': _tmdb_reason_code(exc) == 'provider_resource_missing',
                         }
-                error = episode_errors.get(coordinate)
-                if error:
+                episode_detail_error = episode_errors.get(coordinate)
+                if episode_detail_error:
                     if needs_identity:
                         _record_unmapped(diagnostics, episode, UNMAPPED_PROVIDER_RESOURCE_MISSING
-                                         if error['verified_missing'] else UNMAPPED_PROVIDER_UNAVAILABLE)
+                                         if episode_detail_error['verified_missing'] else UNMAPPED_PROVIDER_UNAVAILABLE)
                     if season_results is not None and provider_season not in reported_seasons:
                         reported_seasons.add(provider_season)
                         season_results.append({
                             'season_id': str(episode.get('season_id') or ''),
                             'local_season_number': _positive_int(episode.get('local_season_number')),
                             'provider_season_number': provider_season,
-                            'status': 'provider_resource_missing' if error['verified_missing'] else 'source_unavailable',
-                            'reason_code': error['reason_code'], 'failure_stage': 'episode_detail',
-                            'retryable': error['retryable'],
+                            'status': 'provider_resource_missing' if episode_detail_error['verified_missing'] else 'source_unavailable',
+                            'reason_code': episode_detail_error['reason_code'], 'failure_stage': 'episode_detail',
+                            'retryable': episode_detail_error['retryable'],
                         })
                     if needs_identity:
                         continue

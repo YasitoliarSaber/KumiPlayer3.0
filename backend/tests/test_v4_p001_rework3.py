@@ -23,6 +23,8 @@ def _entry(evidence_id: str, *, work_title: str, year: int = 2024, relative_path
         relative_path=relative,
         entry_kind="video",
         provider="local",
+        source_locator=f"C:/KumiTest/p001-rework3/{evidence_id}/{relative}",
+        playback_locator=f"C:/KumiTest/p001-rework3/{evidence_id}/{relative}",
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-{evidence_id}",

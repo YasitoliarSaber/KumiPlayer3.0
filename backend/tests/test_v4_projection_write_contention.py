@@ -1,11 +1,11 @@
 """媒体墙耗时校验不能占用任务写入锁，也不能清掉并发更新。"""
-from backend.tests.test_v4_library_projection import _entry
-
 from app.media_v4.jobs.control import claim_running, heartbeat
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection import collections
 from app.media_v4.projection.library import V4LibraryProjection
 from app.media_v4.revisions.service import V4RevisionService
+
+from backend.tests.test_v4_library_projection import _entry
 
 
 def _database(tmp_path, monkeypatch):
@@ -65,7 +65,7 @@ def test_concurrent_authority_update_keeps_projection_dirty(tmp_path, monkeypatc
     assert first.cards[0]['title'] == 'Show'
     with database.connect() as conn:
         assert conn.execute("SELECT 1 FROM v4_meta WHERE key='library_projection_dirty'").fetchone()
-    assert projection.ensure_current().cards[0]['title'] == 'Updated Show'
+    assert projection.rebuild().cards[0]['title'] == 'Updated Show'
     with database.connect() as conn:
         assert not conn.execute("SELECT 1 FROM v4_meta WHERE key='library_projection_dirty'").fetchone()
 

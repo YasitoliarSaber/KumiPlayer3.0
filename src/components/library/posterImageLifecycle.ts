@@ -83,6 +83,7 @@ interface ImageEntry {
   url: string; visible: boolean; preload: boolean; resident: boolean;
   ready: boolean; job?: ReturnType<ArtworkLoadBudget['enqueue']>;
   onState?: (state: State) => void;
+  retries: number; retryTimer?: ReturnType<typeof setTimeout>;
 }
 
 // 三个观察器各有明确职责：可见优先，少量预取，较宽驻留区避免往返抖动。
@@ -116,7 +117,7 @@ export class PosterImageLifecycle {
   }
 
   register(image: HTMLImageElement, value: { url: string; path?: string; width?: number; local?: boolean; onState?: ImageEntry['onState'] }) {
-    const entry: ImageEntry = { url: value.url, onState: value.onState, visible: false, preload: false, resident: true, ready: false };
+    const entry: ImageEntry = { url: value.url, onState: value.onState, visible: false, preload: false, resident: true, ready: false, retries: 0 };
     this.entries.set(image, entry);
     image.dataset.state = 'idle';
     this.observers.forEach((observer) => observer.observe(image));
@@ -124,6 +125,7 @@ export class PosterImageLifecycle {
     return () => {
       this.observers.forEach((observer) => observer.unobserve(image));
       this.entries.delete(image);
+      clearTimeout(entry.retryTimer);
       entry.job?.cancel();
       // 未完成的 src 不主动清除；浏览器终态仍负责释放全局预算。
       if (!entry.job?.pending()) clearImageSource(image);
@@ -131,6 +133,7 @@ export class PosterImageLifecycle {
   }
 
   private update(image: HTMLImageElement, entry: ImageEntry) {
+    if (!entry.visible) { clearTimeout(entry.retryTimer); entry.retryTimer = undefined; }
     if (!entry.visible && !entry.preload) {
       if (!entry.job?.pending()) {
         if (!entry.resident) { clearImageSource(image); entry.ready = false; image.dataset.state = 'idle'; }
@@ -139,11 +142,19 @@ export class PosterImageLifecycle {
     }
     if (entry.job?.pending()) { entry.job.priority(entry.visible ? 0 : 1); return; }
     if (entry.ready || !entry.url) return;
+    if (entry.retryTimer) return;
     entry.job = this.budget.enqueue(image, entry.url, entry.visible ? 0 : 1, (state) => {
       if (this.entries.get(image) !== entry) return;
       entry.ready = state === 'ready';
       image.dataset.state = state;
       entry.onState?.(state);
+      if (state === 'error' && entry.visible && entry.retries < 2) {
+        entry.retries += 1;
+        entry.retryTimer = setTimeout(() => {
+          entry.retryTimer = undefined;
+          if (this.entries.get(image) === entry && entry.visible) this.update(image, entry);
+        }, 30_000);
+      }
       if ((state === 'ready' || state === 'error') && !entry.resident && !entry.visible && !entry.preload) {
         clearImageSource(image); entry.ready = false;
       }
@@ -154,6 +165,7 @@ export class PosterImageLifecycle {
     this.observers.forEach((observer) => observer.disconnect());
     this.observers = [];
     for (const [image, entry] of this.entries) {
+      clearTimeout(entry.retryTimer);
       entry.job?.cancel();
       if (!entry.job?.pending()) clearImageSource(image);
     }

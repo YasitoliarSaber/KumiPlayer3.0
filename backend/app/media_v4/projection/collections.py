@@ -83,7 +83,7 @@ def collection_metadata(conn) -> dict[str, dict]:
 
 
 def related_works(metadata: dict) -> list[dict]:
-    values = {}
+    values: dict[str | None, dict] = {}
     for row in [*(metadata.get("related_works") or []), *(metadata.get("collection_related_works") or [])]:
         if isinstance(row, dict):
             values.setdefault(row.get("work_id") or row.get("title"), row)

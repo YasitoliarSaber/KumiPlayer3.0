@@ -91,6 +91,17 @@ beforeEach(() => {
 });
 afterEach(() => resetScrollGestureForTests());
 
+test('尚未发布与已发布空库有不同状态，普通同步只读发布摘要', async () => {
+  getHistory.mockResolvedValue({ items: [] });
+  getLibrary.mockResolvedValue({ works: [], change_sequence: 0, generation_id: '', updating: true });
+  await useLibraryStore.getState().loadLibrary();
+  expect(useLibraryStore.getState()).toMatchObject({ loaded: true, loading: false, updating: true, generationId: '' });
+  getChanges.mockResolvedValue({ changes: [], next_sequence: 0, has_more: false, reset_required: false, generation_id: 'published-empty', updating: false });
+  await useLibraryStore.getState().syncChanges();
+  expect(useLibraryStore.getState()).toMatchObject({ updating: false, generationId: 'published-empty', works: [] });
+  expect(getLibrary).toHaveBeenCalledTimes(1);
+});
+
 test('详情预热和点击导航只取数据，DOM 图片统一预算加载，不显式解码', async () => {
   const decode = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode });

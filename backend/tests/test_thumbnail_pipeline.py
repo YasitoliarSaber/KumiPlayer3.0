@@ -2,11 +2,10 @@
 
 
 import pytest
-from fastapi.testclient import TestClient
-from PIL import Image
-
 from app.main import app
 from app.media_v4.assets import thumbnails as thumb
+from fastapi.testclient import TestClient
+from PIL import Image
 
 
 @pytest.fixture
@@ -18,7 +17,6 @@ def client():
 def mirror_dir(tmp_path, monkeypatch):
     mirror = tmp_path / "mirror"
     mirror.mkdir()
-    monkeypatch.setattr("app.api.assets.get_mirror_root", lambda: pytest.fail("retired GET must not inspect files"))
     monkeypatch.setattr("app.core.paths.get_mirror_root", lambda: mirror)
     return mirror
 

@@ -10,8 +10,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 
 def _policy(metadata: dict) -> dict:
     from app.media_v4.revisions.service import metadata_recovery_policy
@@ -54,43 +52,26 @@ def test_action_fallback_never_routes_the_artifact_only_case_to_online_retry():
 
 
 def test_real_degraded_run_records_the_artifact_reason_code(tmp_path, monkeypatch):
-    """走真实刮削路径：仅图片缺失必须落 `artifact_state=degraded` 与专用原因码。"""
+    """在线快照先持久化；图片需求独立进入 SQLite artwork 队列。"""
 
-    from app.media_v4.jobs import metadata_artifacts as artifacts_module
     from app.media_v4.jobs import scrape as scrape_module
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
 
+    source = tmp_path / "source.mkv"
+    source.write_bytes(b"fixture")
     database = V4Database(tmp_path / "artifact-code.db")
     database.initialize()
     revisions = V4RevisionService(database)
-    revisions.create_draft("rev-1", [_entry("1080p")])
+    revisions.create_draft("rev-1", [_entry("1080p", str(source))])
     revisions.confirm("rev-1")
     with database.connect() as conn:
         job_id = str(conn.execute(
             "SELECT job_id FROM jobs WHERE revision_id = 'rev-1' AND job_type = 'scrape_work' LIMIT 1"
         ).fetchone()["job_id"])
 
-    monkeypatch.setattr(
-        scrape_module,
-        "assess_metadata_completeness",
-        lambda *_args, **_kwargs: (False, ["海报下载或发布失败", "背景图下载或发布失败"]),
-    )
-
-    def fake_download(url: str, path, *, client):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"image-bytes")
-        return "digest-" + path.name
-
-    monkeypatch.setattr(artifacts_module, "_download_artwork", fake_download)
-    monkeypatch.setattr(
-        artifacts_module,
-        "load_config",
-        lambda: SimpleNamespace(artwork_storage_mode="local", tmdb_timeout=5, proxy_url=""),
-    )
-
     service = scrape_module.V4ScrapeService(database)
-    service.process(job_id, lambda _target: _ready_metadata(), mirror_root=tmp_path / "mirror")
+    service.process(job_id, lambda _target: _ready_metadata())
 
     with database.connect() as conn:
         row = conn.execute(
@@ -98,20 +79,27 @@ def test_real_degraded_run_records_the_artifact_reason_code(tmp_path, monkeypatc
             "WHERE revision_id = 'rev-1' ORDER BY updated_at DESC, binding_id DESC LIMIT 1"
         ).fetchone()
         job = conn.execute("SELECT status FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+        artwork = conn.execute(
+            "SELECT b.role,r.source_url,r.state FROM artwork_bindings b "
+            "JOIN artwork_resources r ON r.resource_id=b.candidate_id WHERE b.work_id=? ORDER BY b.role",
+            (conn.execute("SELECT work_id FROM jobs WHERE job_id=?", (job_id,)).fetchone()[0],),
+        ).fetchall()
 
     assert job["status"] == "succeeded"
     import json
 
     metadata = json.loads(str(row["metadata_json"] or "{}"))
-    assert metadata["metadata_state"] == "ready", "资料已就绪，只降级产物"
-    assert metadata["artifact_state"] == "degraded"
-    assert metadata["reason_code"] == "artifact_incomplete"
+    assert metadata["metadata_state"] == "ready"
+    assert metadata["poster_url"].endswith("poster.jpg")
+    assert {item["role"] for item in artwork} == {"poster", "fanart"}
+    assert all(item["source_url"].startswith("https://image.tmdb.org/") for item in artwork)
+    assert all(item["state"] == "pending" for item in artwork)
 
     policy = _policy(metadata)
     assert policy["action"] == "none"
 
 
-def _entry(evidence_id: str):
+def _entry(evidence_id: str, locator: str):
     from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 
     evidence = SourceEvidence(
@@ -122,7 +110,8 @@ def _entry(evidence_id: str):
         relative_path=f"Show/{evidence_id}.mkv",
         entry_kind="video",
         provider="local",
-        source_locator=f"local://{evidence_id}",
+        source_locator=locator,
+        playback_locator=locator,
         fingerprint=f"sha256:{evidence_id}",
     )
     facts = ParsedFacts(

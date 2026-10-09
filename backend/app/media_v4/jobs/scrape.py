@@ -6,6 +6,7 @@ import json
 import logging
 import uuid
 from collections.abc import Callable
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from typing import Any
 
@@ -416,10 +417,13 @@ class V4ScrapeService:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def requeue_work(self, revision_id: str, work_id: str, *, season_number: int | None = None) -> dict:
+    def requeue_work(
+        self, revision_id: str, work_id: str, *, season_number: int | None = None,
+        selected_provider: dict | None = None, connection=None,
+    ) -> dict:
         """仅重置一个已确认作品的刮削任务，供人工确认候选后继续执行。"""
 
-        with self.database.connect() as conn:
+        with (nullcontext(connection) if connection is not None else self.database.connect()) as conn:
             revision = conn.execute(
                 "SELECT status FROM import_revisions WHERE revision_id = ?",
                 (revision_id,),
@@ -461,6 +465,13 @@ class V4ScrapeService:
                             (revision_id, work_id)).fetchone():
                 raise RuntimeError("该作品正在核对名称，请等待或取消后重试")
             now = _now()
+            payload: dict[str, Any] = {
+                'runtime_policy': 'sqlite-artwork-v1', 'explicit_refresh': True,
+                'scope': 'season' if season_number is not None else 'work',
+                'season_number': season_number,
+            }
+            if selected_provider is not None:
+                payload['selected_provider'] = selected_provider
             # 守卫必须写进 UPDATE 本身：先 SELECT 判 running 再 UPDATE 是读后写，
             # 并发两次重试时后到的会把已被执行器领取的 running 改回 queued，
             # 于是同一个 work 被两个执行器同时跑（重复请求 + 交叉覆盖绑定与产物）。
@@ -472,8 +483,7 @@ class V4ScrapeService:
                     result_json = ?
                 WHERE job_id = ? AND status != 'running'
                 """,
-                (now, json.dumps({'runtime_policy': 'sqlite-artwork-v1', "explicit_refresh": True, "scope": "season" if season_number is not None else "work",
-                                  "season_number": season_number}, ensure_ascii=False), job["job_id"]),
+                (now, json.dumps(payload, ensure_ascii=False), job["job_id"]),
             )
             if updated.rowcount != 1:
                 raise RuntimeError("该作品正在获取媒体信息")

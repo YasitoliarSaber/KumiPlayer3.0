@@ -14,14 +14,13 @@ API_TOKEN_QUERY = "api_token"
 _PUBLIC_HTTP_PATHS = frozenset({"/api/health"})
 _QUERY_TOKEN_PATHS = frozenset(
     {
-        "/api/assets",
-        "/api/assets/remote",
-        "/api/assets/thumbnail",
         "/api/integrations/bangumi/avatar",
         "/api/integrations/bangumi/subject-image",
     }
 )
-_ARTWORK_GET_PATH = re.compile(r'/api/assets/artwork/[0-9a-f]{64}/[0-9a-f]{64}-webp-v[1-9][0-9]*/[0-9]{2,4}')
+_ARTWORK_GET_PATH = re.compile(
+    r'/api/assets/artwork/[0-9a-f]{64}/[0-9a-f]{64}-webp-v1/(?:256|384|512|768|1280)'
+)
 
 
 def get_expected_api_token() -> str:

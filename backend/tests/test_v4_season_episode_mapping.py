@@ -24,6 +24,8 @@ def _fact(*, evidence_id: str, season: int | None, episode: int | None, absolute
         year_candidate=2024,
         media_type="tv",
         group_type="special" if special else "season",
+        is_importable=not special,
+        is_auxiliary=special,
         season_candidate=season,
         episode_candidate=episode,
         absolute_episode_candidate=absolute,
@@ -50,18 +52,18 @@ def test_absolute_and_local_episode_numbers_are_kept_as_separate_facts():
     assert episode.provider_episode_number is None
 
 
-def test_special_episode_is_not_simulated_by_clearing_all_episode_identity():
+def test_attached_special_is_excluded_from_confirmed_graph():
     from app.media_v4.resolution.resolver import MediaResolver
 
-    graph = MediaResolver().resolve(
-        [_fact(evidence_id="ev-sp", season=None, episode=None, special=True, special_number=1)]
-    )
+    evidence, facts = _fact(evidence_id="ev-sp", season=None, episode=None, special=True, special_number=1)
+    graph = MediaResolver().resolve([(evidence, facts)])
 
-    episode = graph.episodes[0]
-    assert episode.season_kind == "special"
-    assert episode.local_season_number == 0
-    assert episode.special_number == 1
-    assert episode.episode_kind == "special"
+    assert facts.group_type == "special"
+    assert facts.is_importable is False
+    assert facts.is_auxiliary is True
+    assert not graph.works
+    assert not graph.episodes
+    assert not graph.work_assets
 
 
 def test_conflicting_absolute_numbers_do_not_split_a_local_episode():

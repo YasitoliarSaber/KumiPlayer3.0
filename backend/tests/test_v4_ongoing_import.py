@@ -3,12 +3,11 @@
 from dataclasses import replace
 
 import pytest
-
 from app.media_v4.domain.models import SourceEvidence
 from app.media_v4.parsing.parser import V4Parser
 
 
-@pytest.mark.parametrize("filename", ["Show.S01E01.mkv", "Show.SP01.mkv", "Show.OVA01.mkv", "Show.Movie.01.mkv",
+@pytest.mark.parametrize("filename", ["Show.S01E01.mkv", "Show.Movie.01.mkv",
                                        "Show - 01.mkv", "01.mkv", "Show 第01集.mkv"])
 def test_explicit_ongoing_scope_only_produces_regular_tv(filename):
     from app.media_v4.tracking.ongoing import parse_for_scope
@@ -44,12 +43,22 @@ def test_ongoing_does_not_import_non_video_and_keeps_numbering_trace_consistent(
     item = SourceEvidence(evidence_id="ev", scan_id="scan", root_id="root", source_key="Show.nfo",
                           relative_path="Show/Show.S01E01.nfo", entry_kind="nfo")
     assert not parse_for_scope(V4Parser(), item, content_scope="ongoing").is_importable
-    facts = parse_for_scope(V4Parser(), replace(item, entry_kind="video", relative_path="Show/Show.SP01.mkv"),
+    facts = parse_for_scope(V4Parser(), replace(item, entry_kind="video", relative_path="Show/Show.S01E01.mkv"),
                             content_scope="ongoing")
     trace = next(row for row in facts.decision_trace if row.field == "numbering")
     assert trace.value["season"] == facts.season_candidate
     assert trace.value["episode"] == facts.episode_candidate
     assert facts.numbering.episode_origin != "unknown"
+
+
+@pytest.mark.parametrize('filename', ['Show.SP01.mkv','Show.OVA01.mkv','Show.OAD01.mkv'])
+def test_ongoing_excludes_specials_without_fabricating_numbering(filename):
+    from app.media_v4.tracking.ongoing import parse_for_scope
+    item = SourceEvidence(evidence_id='ev',scan_id='scan',root_id='root',source_key=filename,
+                          relative_path='Show/'+filename,entry_kind='video')
+    facts = parse_for_scope(V4Parser(),item,content_scope='ongoing')
+    assert facts.is_auxiliary and not facts.is_importable
+    assert facts.numbering.episode_origin == 'unknown'
 
 
 def test_remote_top_root_conflicts_only_in_the_same_account_namespace(tmp_path):

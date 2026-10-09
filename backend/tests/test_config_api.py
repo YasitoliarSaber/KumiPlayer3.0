@@ -4,10 +4,9 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.core.config import AppConfig, invalidate_config_cache, load_config, save_config
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 def _fake_credential(name: str) -> str:
@@ -74,8 +73,8 @@ class TestGetConfig:
         assert "auto_play_next_episode" in data
         assert "heartbeat_enabled" in data
 
-    def test_sensitive_fields_masked(self, client, temp_config):
-        """敏感字段应脱敏"""
+    def test_sensitive_fields_are_omitted_and_configuration_state_is_public(self, client, temp_config):
+        """公开配置清空凭据值，仅返回配置状态。"""
         # 写入带 token 的配置
         config = AppConfig(
             tmdb_bearer_token="sk-1234567890abcdef",
@@ -86,12 +85,12 @@ class TestGetConfig:
         resp = client.get("/api/config")
         data = resp.json()
 
-        # token 应被脱敏
-        assert data["tmdb_bearer_token"] != "sk-1234567890abcdef"
-        assert "..." in data["tmdb_bearer_token"]
-
-        assert data["deepseek_api_key"] != DEEPSEEK_KEY
-        assert "..." in data["deepseek_api_key"]
+        assert data["tmdb_bearer_token"] == ""
+        assert data["tmdb_configured"] is True
+        assert data["deepseek_api_key"] == ""
+        assert data["deepseek_configured"] is True
+        assert "sk-1234567890abcdef" not in resp.text
+        assert DEEPSEEK_KEY not in resp.text
 
     def test_empty_sensitive_fields_not_masked(self, client, temp_config):
         """空敏感字段不应脱敏"""

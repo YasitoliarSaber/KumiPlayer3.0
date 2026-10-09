@@ -10,7 +10,7 @@ export function buildAssetUrl(
   _options: { kind?: AssetKind; thumbnailWidth?: number; cacheOnly?: boolean } = {},
 ): string {
   if (!path) return ''
-  if (/^\/api\/assets\/artwork\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/\d+$/.test(path)) {
+  if (/^\/api\/assets\/artwork\/[0-9a-f]{64}\/[0-9a-f]{64}-webp-v1\/(?:256|384|512|768|1280)$/.test(path)) {
     return withApiSessionToken(API_BASE + path)
   }
   // 候选与普通展示都只读已发布资源，未准备图片使用已有文字占位。

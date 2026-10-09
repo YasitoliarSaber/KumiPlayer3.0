@@ -8,13 +8,23 @@ import sys
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 
 from app.api.media_v4 import get_database
 from app.media_v4.path_validation import validate_playback_locator_syntax
 
 router = APIRouter(prefix="/api/system", tags=["system"])
+
+
+@router.post("/shutdown", status_code=202)
+def request_shutdown(request: Request, background_tasks: BackgroundTasks):
+    """Ask the owning desktop server to exit after this response is sent."""
+    callback = getattr(request.app.state, "request_shutdown", None)
+    if not callable(callback):
+        raise HTTPException(status_code=503, detail="当前服务未注册桌面关闭入口")
+    background_tasks.add_task(callback)
+    return {"accepted": True}
 
 
 class OpenFolderRequest(BaseModel):

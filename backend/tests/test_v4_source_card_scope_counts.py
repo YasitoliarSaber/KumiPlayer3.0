@@ -27,8 +27,8 @@ def _pair(prefix: str, name: str, *, content_class: str = "regular", media_type:
         source_key=name,
         relative_path=f"Show/{name}",
         entry_kind="video",
-        source_locator=f"local://show/{name}",
-        playback_locator=f"local://show/{name}",
+        source_locator=f"C:/KumiTest/source-card/Show/{name}",
+        playback_locator=f"C:/KumiTest/source-card/Show/{name}",
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-{prefix}",

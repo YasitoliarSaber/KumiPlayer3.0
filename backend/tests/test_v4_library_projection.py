@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -26,6 +27,7 @@ def _entry(evidence_id: str):
         entry_kind="video",
         provider="local",
         source_locator=f"local://{evidence_id}",
+        playback_locator=str(Path.cwd() / "backend" / "tests" / "media-fixtures" / f"{evidence_id}.mkv"),
         fingerprint=f"sha256:{evidence_id}",
     )
     facts = ParsedFacts(
@@ -41,6 +43,13 @@ def _entry(evidence_id: str):
         episode_candidate=1,
     )
     return evidence, facts
+
+
+def test_projection_exposes_only_explicit_reads_and_background_refresh():
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    assert not hasattr(V4LibraryProjection, "ensure_current")
+    assert "compact" not in __import__("inspect").signature(V4LibraryProjection.current).parameters
 
 
 def test_projection_has_one_card_and_counts_all_assets(tmp_path):
@@ -134,6 +143,7 @@ def test_title_change_on_same_source_lineage_keeps_work_identity(tmp_path):
             relative_path=f"Show/{revision}.mkv",
             entry_kind="video",
             provider="local",
+            playback_locator=str(Path.cwd() / "backend" / "tests" / "media-fixtures" / f"{revision}.mkv"),
         )
         facts = ParsedFacts(
             parsed_fact_id=f"facts-{revision}",
@@ -165,7 +175,6 @@ def test_projection_publishes_metadata_before_independent_artwork(tmp_path, monk
     import base64
 
     import httpx
-
     from app.core.config import AppConfig
     from app.media_v4.assets import service as artwork_service
     from app.media_v4.assets.catalog import get_work_artwork
@@ -273,6 +282,7 @@ def test_projection_does_not_check_files_for_selected_scrape_revision(tmp_path, 
             entry_kind="video",
             provider="local",
             source_locator=f"local://{suffix}",
+            playback_locator=str(Path.cwd() / "backend" / "tests" / "media-fixtures" / f"{suffix}.mkv"),
         )
         facts = ParsedFacts(
             parsed_fact_id=f"facts-{suffix}",
@@ -527,7 +537,7 @@ def test_current_reads_generation_and_cards_from_one_snapshot(tmp_path, monkeypa
     而 `library_cards` 是 ON DELETE CASCADE。没有读事务时（sqlite3 默认 autocommit，
     每条 SELECT 各看一次最新提交），cards 查询会落在旧 generation 已被删除之后，
     返回空集 —— `/api/library` 的 works 直接来自 cards，于是媒体墙在一切正常的情况下
-    瞬间清空，而脏标记已被对方清掉，`ensure_current()` 也不会补重建。
+    瞬间清空；读接口始终只读取已发布代次。
     """
 
     from app.media_v4.persistence.database import V4Database

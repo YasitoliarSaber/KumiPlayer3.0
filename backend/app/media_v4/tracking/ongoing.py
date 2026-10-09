@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from dataclasses import replace
 
 from app.media_v4.domain.identity import DecisionTrace, NumberingEvidence
@@ -19,10 +18,8 @@ def parse_for_scope(
     facts = parser.parse(evidence, root_container=root_container)
     if content_scope != "ongoing" or evidence.entry_kind != "video" or facts.resource_type != "video" or facts.is_auxiliary:
         return facts
-    number = facts.episode_candidate or facts.absolute_episode_candidate or facts.special_number
-    if not number:
-        marker = re.search(r"(?i)(?<![A-Za-z])(?:SP|OVA|OAD)[ ._-]*(\d+)(?!\d|\.\d)", evidence.relative_path.rsplit("/", 1)[-1])
-        number = int(marker[1]) if marker else None
+    # 特别篇由解析准入门禁排除，追更不能通过第二套名称回退重新准入。
+    number = facts.episode_candidate or facts.absolute_episode_candidate
     if number is None:
         candidates = {trace.value.get("number") for trace in facts.decision_trace
                       if trace.field == "episode_number_candidate" and isinstance(trace.value, dict)

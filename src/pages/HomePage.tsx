@@ -28,6 +28,7 @@ export default function HomePage() {
   const works = useLibraryStore((state) => state.works);
   const history = useLibraryStore((state) => state.history);
   const loading = useLibraryStore((state) => state.loading);
+  const updating = useLibraryStore((state) => state.updating);
   const error = useLibraryStore((state) => state.error);
   const openWorkDetail = useLibraryStore((state) => state.openWorkDetail);
   const getWorkDetail = useLibraryStore((state) => state.getWorkDetail);
@@ -111,7 +112,7 @@ export default function HomePage() {
   };
 
 
-  if (loading && works.length === 0) return <LoadingState label="正在载入媒体库" detail="正在整理你的作品" />;
+  if ((loading || updating) && works.length === 0) return <LoadingState label="正在载入媒体库" detail="正在整理你的作品" />;
   if (error && works.length === 0) return <CenteredMessage>{error}</CenteredMessage>;
   if (displayWorks.length === 0) {
     const libraryIsEmpty = works.length === 0;

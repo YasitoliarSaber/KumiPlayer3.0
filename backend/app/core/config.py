@@ -140,13 +140,11 @@ class AppConfig:
         d = asdict(self)
         d["websearch_configured"] = bool(d.pop("websearch_api_key", ""))
         d["deepseek_configured"] = bool(self.deepseek_api_key)
+        d["tmdb_configured"] = bool(self.tmdb_bearer_token)
+        d["bangumi_configured"] = bool(self.bangumi_access_token)
         for key in _SENSITIVE_FIELDS:
-            val = d.get(key, "")
-            if val:
-                if len(val) > 8:
-                    d[key] = val[:8] + "..."
-                else:
-                    d[key] = val[:4] + "..."
+            if key in d:
+                d[key] = ""
         # OpenList 凭据零泄露：密码绝不进入 API 响应；用户名只暴露打码形式
         # （首尾字符）供用户确认当前保存的账号，避免“不知道存了哪个用户名”。
         username = d.pop("openlist_username", "")

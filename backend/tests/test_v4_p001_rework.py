@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 
@@ -31,6 +33,7 @@ def _entry(
         relative_path=relative,
         entry_kind="video",
         provider="local",
+        playback_locator=str(Path(tempfile.gettempdir()) / "kumi-v4-fixtures" / f"{evidence_id}.mkv"),
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-{evidence_id}",
@@ -61,10 +64,9 @@ def _patch_database(tmp_path, monkeypatch):
 
 
 def _client(tmp_path, monkeypatch):
+    from app.api import library_v4, media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-
-    from app.api import library_v4, media_v4
 
     _patch_database(tmp_path, monkeypatch)
     application = FastAPI()
@@ -222,8 +224,6 @@ def _patch_manual_scrape(monkeypatch, tmp_path, provider_id: str, *, mode="remot
     monkeypatch.setattr("app.media_v4.jobs.metadata.default_metadata_provider", fake_provider)
     monkeypatch.setattr(artifacts_module, "load_config", lambda: _fake_artifacts_config(mode))
     monkeypatch.setattr(completeness_module, "load_config", lambda: _fake_artifacts_config(mode))
-    monkeypatch.setattr("app.core.paths.get_mirror_root", lambda: tmp_path / "mirror")
-    monkeypatch.setattr(artifacts_module, "_download_artwork", lambda *a, **k: "")
 
 def test_manual_confirm_requires_server_side_candidate_and_rejects_forgery(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
@@ -261,6 +261,16 @@ def test_manual_confirm_requires_server_side_candidate_and_rejects_forgery(tmp_p
     _patch_manual_scrape(monkeypatch, tmp_path, "999")
     confirmed = client.post("/api/v4/metadata/confirm", json={"work_id": work_id, "candidate_id": candidate_id})
     assert confirmed.status_code == 200, confirmed.text
+    with database.connect() as conn:
+        job = conn.execute(
+            "SELECT job_id FROM jobs WHERE work_id=? AND job_type='scrape_work' ORDER BY created_at DESC LIMIT 1",
+            (work_id,),
+        ).fetchone()
+    assert job is not None
+    from app.media_v4.jobs.metadata import default_metadata_provider
+    from app.media_v4.jobs.scrape import V4ScrapeService
+
+    V4ScrapeService(database).process(job["job_id"], default_metadata_provider)
     with database.connect() as conn:
         binding = conn.execute(
             "SELECT provider, provider_id, status FROM scrape_bindings WHERE work_id = ?",
@@ -341,8 +351,7 @@ def _scrape_with_metadata(tmp_path, monkeypatch, *, provider_result: dict, mode:
         item for item in service.list_jobs("rev-comp") if item["job_type"] == "scrape_work"
     )
     scrape.process(job["job_id"],
-                   lambda target: _with_episode_metadata(target, provider_result) if complete_episodes else provider_result,
-                   mirror_root=tmp_path / "mirror")
+                   lambda target: _with_episode_metadata(target, provider_result) if complete_episodes else provider_result)
     with database.connect() as conn:
         binding = conn.execute(
             "SELECT status, metadata_json FROM scrape_bindings WHERE work_id = ?",
@@ -351,11 +360,10 @@ def _scrape_with_metadata(tmp_path, monkeypatch, *, provider_result: dict, mode:
     return database, binding
 
 
-def test_missing_local_artwork_keeps_metadata_ready_and_marks_artifacts_degraded(tmp_path, monkeypatch):
+def test_missing_local_artwork_keeps_sqlite_snapshot_ready_and_queues_available_sources(tmp_path, monkeypatch):
     """B1-2：图片产物缺失只降级产物，不再把作品判成“媒体信息失败”。
 
-    Work NFO 与剧集 NFO 已经写出，缺的只是 poster/fanart → 资料保持 ready、
-    产物标为 degraded；绑定仍为 confirmed，作品照常进入媒体库。
+    元数据快照保存在 SQLite；图片请求由独立图片队列处理，不依赖 NFO 物化。
     """
 
     import json
@@ -372,11 +380,22 @@ def test_missing_local_artwork_keeps_metadata_ready_and_marks_artifacts_degraded
     payload = json.loads(binding["metadata_json"])
     assert binding["status"] == "confirmed"
     assert payload["metadata_state"] == "ready"
-    assert payload["artifact_state"] == "degraded"
-    assert payload["artifact_reasons"]
+    snapshot_id = payload["metadata_snapshot_id"]
+    with _database.connect() as conn:
+        snapshot = conn.execute(
+            "SELECT metadata_json FROM metadata_snapshots WHERE snapshot_id = ?", (snapshot_id,)
+        ).fetchone()
+        pending = conn.execute(
+            "SELECT COUNT(*) FROM artwork_bindings b JOIN artwork_resources r "
+            "ON r.resource_id = b.candidate_id WHERE b.snapshot_id = ? AND r.state = 'pending'",
+            (snapshot_id,),
+        ).fetchone()[0]
+    assert snapshot is not None
+    assert json.loads(snapshot["metadata_json"])["metadata_state"] == "ready"
+    assert pending == 1  # 只有剧集缩略图有来源 URL；空海报/背景图不会伪造资源。
 
 
-def test_metadata_ready_with_complete_remote_artwork_and_episode_nfo(tmp_path, monkeypatch):
+def test_metadata_snapshot_ready_with_remote_artwork_sources(tmp_path, monkeypatch):
     import json
 
     _database, binding = _scrape_with_metadata(tmp_path, monkeypatch, mode="remote", provider_result={
@@ -437,6 +456,7 @@ def test_relation_reuses_existing_parent_work_across_revisions(tmp_path, monkeyp
         relative_path="Heya Camp/Season 1/Heya Camp.S01E01.mkv",
         entry_kind="video",
         provider="local",
+        playback_locator=str(Path(tempfile.gettempdir()) / "kumi-v4-fixtures" / "heya2.mkv"),
     )
     facts = ParsedFacts(
         parsed_fact_id="facts-heya2",
@@ -507,6 +527,10 @@ def test_library_returns_persisted_show_type_and_card_type(tmp_path, monkeypatch
     )
     V4RevisionService(media_v4._database).create_draft("rev-card", [(evidence, facts)], candidate_search=lambda *a, **k: [])
     assert client.post("/api/v4/imports/rev-card/confirm").status_code == 200
+
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    V4LibraryProjection(media_v4._database).rebuild()
 
     response = client.get("/api/library?include_all=true")
     assert response.status_code == 200

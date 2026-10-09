@@ -18,7 +18,13 @@ from PIL import Image, ImageOps
 from app.core.config import load_config
 from app.core.paths import get_data_dir
 from app.core.url_guard import assert_public_dns_resolution, validate_remote_asset_url
-from app.media_v4.assets.catalog import RECIPE_VERSION, ROLE_WIDTHS, binding_publishable, enqueue_manual
+from app.media_v4.assets.catalog import (
+    RECIPE_VERSION,
+    ROLE_WIDTHS,
+    binding_publishable,
+    enqueue_legacy_manual_for_diagnosis,
+    enqueue_manual,
+)
 from app.media_v4.jobs.metadata_artifacts import _artwork_client, _valid_artwork
 from app.media_v4.projection.library import bump_display_version
 
@@ -26,6 +32,10 @@ MAX_BYTES = 25 * 1024 * 1024
 MAX_PIXELS = 40_000_000
 _ENCODE_LOCK = threading.Lock()
 _DOWNLOAD_LIMIT = threading.BoundedSemaphore(2)
+
+
+class ManualArtworkSourceError(ValueError):
+    """用户本地图片来源不可采用；需要显式修正或重新提交。"""
 
 
 def _atomic_bytes(path: Path, payload: bytes) -> None:
@@ -46,7 +56,7 @@ class ArtworkService:
         self.database = database
         self.data_root = Path(data_root) if data_root is not None else get_data_dir()
         self._stop = threading.Event()
-        self._thread = None
+        self._thread: threading.Thread | None = None
         self._process_lock = threading.Lock()
 
     def start(self) -> None:
@@ -102,10 +112,21 @@ class ArtworkService:
         return processed
 
     def _claim(self, limit: int) -> list[tuple[dict, str]]:
+        if limit <= 0:
+            return []
         now = time.time()
         claimed = []
         with self.database.connect() as conn:
+            # ArtworkService 每两秒轮询；空闲时只读检查，避免无候选也抢 SQLite 写锁。
+            candidate = conn.execute("""SELECT 1 FROM artwork_resources r
+                WHERE (r.state='running' AND r.lease_until<?)
+                   OR ((r.state='pending' OR (r.state='retry' AND r.retry_at<=?))
+                       AND EXISTS (SELECT 1 FROM artwork_bindings b WHERE b.candidate_id=r.resource_id))
+                LIMIT 1""", (now, now)).fetchone()
+            if candidate is None:
+                return []
             conn.execute('BEGIN IMMEDIATE')
+            # 读检查与认领间允许队列变化，因此在写事务中重新核实候选和租约。
             conn.execute("UPDATE artwork_resources SET state='pending',lease_token='' "
                          "WHERE state='running' AND lease_until<?", (now,))
             rows = conn.execute("""SELECT * FROM artwork_resources r
@@ -140,7 +161,12 @@ class ArtworkService:
                     existing = conn.execute("SELECT priority FROM artwork_bindings WHERE subject_type='work' "
                                             'AND subject_id=? AND role=?', (row['work_id'], role)).fetchone()
                     if source and (existing is None or existing['priority'] < 100):
-                        enqueue_manual(conn, work_id=row['work_id'], role=role, local_path=source)
+                        try:
+                            enqueue_manual(conn, work_id=row['work_id'], role=role, local_path=source)
+                        except ValueError:
+                            enqueue_legacy_manual_for_diagnosis(
+                                conn, work_id=row['work_id'], role=role, local_path=source
+                            )
             next_cursor = rows[-1]['work_id'] if len(rows) == 64 else '~complete'
             conn.execute("INSERT INTO v4_meta(key,value) VALUES ('artwork_manual_adoption_cursor',?) "
                          "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (next_cursor,))
@@ -188,11 +214,18 @@ class ArtworkService:
             if original and row['content_digest']:
                 payload = (self.data_root / original).read_bytes()
             elif row['local_source']:
-                path = Path(row['local_source'])
-                if not path.is_absolute() or path.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'}:
-                    raise ValueError('Invalid manual artwork source')
-                with path.open('rb') as source:
-                    payload = source.read(MAX_BYTES + 1)
+                try:
+                    path = Path(row['local_source'])
+                except (OSError, ValueError) as error:
+                    raise ManualArtworkSourceError('Invalid manual artwork source') from error
+                if (not path.is_absolute()
+                        or path.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'}):
+                    raise ManualArtworkSourceError('Invalid manual artwork source')
+                try:
+                    with path.open('rb') as source:
+                        payload = source.read(MAX_BYTES + 1)
+                except OSError as error:
+                    raise ManualArtworkSourceError('Manual artwork source unavailable') from error
             else:
                 payload = self._download(row['source_url'])
             if not payload or len(payload) > MAX_BYTES:
@@ -239,11 +272,14 @@ class ArtworkService:
             with self.database.connect() as conn:
                 attempts = int(row['attempts']) + 1
                 state = ('cancelled' if not self._live_bindings(conn, resource_id)
+                         else 'failed' if isinstance(error, ManualArtworkSourceError)
                          else 'failed' if attempts >= 5 else 'retry')
+                error_kind = ('invalid_manual_source' if isinstance(error, ManualArtworkSourceError)
+                              else type(error).__name__)
                 conn.execute("UPDATE artwork_resources SET state=?,retry_at=?,lease_token='',lease_until=0, "
                              "error_kind=? WHERE resource_id=? AND state='running' AND lease_token=?",
                              (state, time.time() + min(3600, 30 * 2 ** attempts),
-                              type(error).__name__, resource_id, token))
+                              error_kind, resource_id, token))
 
     @staticmethod
     def _live_bindings(conn, resource_id: str) -> list[dict]:

@@ -1,5 +1,4 @@
 import pytest
-
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
 
@@ -19,11 +18,11 @@ def parse(path):
 def test_explicit_attached_bonus_is_not_regular_episode(path):
     facts = parse(path)
     if "OVA" in path or "[25 SP]" in path:
-        assert facts.is_importable
-        assert facts.content_class == "playable_special"
+        assert not facts.is_importable
+        assert facts.content_class == "attached_special"
         assert facts.episode_candidate is None
         assert facts.group_type == "special"
-        assert not facts.is_auxiliary
+        assert facts.is_auxiliary
         assert facts.special_number is None
     else:
         assert not facts.is_importable
@@ -38,7 +37,7 @@ def test_sp_marker_never_overrides_auxiliary_video(marker):
     assert facts.content_class == "auxiliary"
 
 
-def test_real_numbered_sp_stays_local_without_regular_or_provider_coordinates():
+def test_real_numbered_sp_is_excluded_without_regular_or_provider_coordinates():
     from pathlib import PurePosixPath
 
     from app.media_v4.resolution.resolver import MediaResolver
@@ -51,12 +50,9 @@ def test_real_numbered_sp_stays_local_without_regular_or_provider_coordinates():
     facts = V4Parser().parse(evidence)
     assert facts.episode_title == PurePosixPath(path).stem
     graph = MediaResolver().resolve([(evidence, facts)])
-    assert len(graph.episodes) == 1
-    episode = graph.episodes[0]
-    assert episode.season_kind == episode.episode_kind == "special"
-    assert episode.local_episode_number is None
-    assert episode.provider_season_number is None
-    assert episode.provider_episode_number is None
+    assert not facts.is_importable
+    assert facts.episode_candidate is None
+    assert graph.works == graph.episodes == graph.work_assets == ()
 
 
 def test_malformed_episode_bracket_does_not_drop_clear_episode_number():
@@ -65,6 +61,17 @@ def test_malformed_episode_bracket_does_not_drop_clear_episode_number():
     assert facts.season_candidate == 2
 
 
-@pytest.mark.parametrize("path", ["Independent OVA/[Group] Independent OVA [01].mkv", "Independent OVA/[Group] Independent OVA [01(OVA01)].mkv", "电影/Other Movie [01(OVA)].mkv", "Other Movie/Other Movie.mkv", "Another Spin-off/Another Spin-off.S01E01.mkv"])
+@pytest.mark.parametrize("path", ["电影/Other Movie.mkv", "Other Movie/Other Movie.mkv", "Another Spin-off/Another Spin-off.S01E01.mkv"])
 def test_independent_release_forms_remain_importable(path):
     assert parse(path).is_importable
+
+
+@pytest.mark.parametrize("path", [
+    "Independent OVA/[Group] Independent OVA [01].mkv",
+    "Independent OVA/[Group] Independent OVA [01(OVA01)].mkv",
+    "电影/Other Movie [01(OVA)].mkv",
+])
+def test_explicit_special_markers_are_excluded_even_in_movie_directory(path):
+    facts = parse(path)
+    assert not facts.is_importable
+    assert facts.content_class == "attached_special"

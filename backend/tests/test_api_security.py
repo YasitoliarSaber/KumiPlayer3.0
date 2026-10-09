@@ -1,9 +1,8 @@
 """桌面本地 API 的会话身份与浏览器边界。"""
 
+from app.main import app
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
-
-from app.main import app
 
 
 def test_privileged_api_requires_desktop_session_token(monkeypatch):
@@ -30,23 +29,31 @@ def test_health_remains_available_for_desktop_runtime_detection(monkeypatch):
     assert response.json()["app"] == "KumiPlayer"
 
 
-def test_asset_get_accepts_token_only_through_restricted_query_parameter(monkeypatch):
+def test_only_canonical_artwork_get_accepts_token_through_query_parameter(monkeypatch):
     monkeypatch.setenv("KUMIPLAYER_API_TOKEN", "test-session-token")
     client = TestClient(app)
 
-    unauthorized = client.get("/api/assets", params={"path": "missing.jpg"})
-    authorized = client.get(
+    retired_route = client.get(
         "/api/assets",
         params={"path": "missing.jpg", "api_token": "test-session-token"},
+    )
+    authorized = client.get(
+        "/api/assets/artwork/" + "a" * 64 + "/" + "b" * 64 + "-webp-v1/384",
+        params={"api_token": "test-session-token"},
     )
     config_query = client.get(
         "/api/config",
         params={"api_token": "test-session-token"},
     )
+    invalid_artwork_query = client.get(
+        "/api/assets/artwork/" + "a" * 64 + "/" + "b" * 64 + "-webp-v99/384",
+        params={"api_token": "test-session-token"},
+    )
 
-    assert unauthorized.status_code == 401
+    assert retired_route.status_code == 401
     assert authorized.status_code == 404
     assert config_query.status_code == 401
+    assert invalid_artwork_query.status_code == 401
 
 
 def test_websocket_rejects_missing_token_and_accepts_valid_token(monkeypatch):

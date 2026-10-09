@@ -2,7 +2,6 @@
 from pathlib import PurePosixPath
 
 import pytest
-
 from app.media_v4.domain.models import SourceEvidence
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.resolution.resolver import MediaResolver
@@ -124,7 +123,7 @@ def test_online_episode_mapping_never_requests_special_season():
 
 
 @pytest.mark.parametrize('with_regular', [False, True])
-def test_excluded_specials_never_create_media_jobs_mirrors_or_cards(tmp_path, monkeypatch, with_regular):
+def test_excluded_specials_never_create_import_jobs_or_cards(tmp_path, monkeypatch, with_regular):
     from app.api import library_v4
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
@@ -147,11 +146,8 @@ def test_excluded_specials_never_create_media_jobs_mirrors_or_cards(tmp_path, mo
         return {'provider': 'local', 'metadata_state': 'waiting_metadata'}
 
     runner = V4JobRunner(database, metadata_provider=provider)
-    runner.process_available(mirror_root=tmp_path / 'mirror')
+    runner.process_available()
     assert len(received) == int(with_regular)
-    assert len(list((tmp_path / 'mirror').rglob('*.strm'))) == int(with_regular)
-    assert not list((tmp_path / 'mirror').rglob('*.jpg'))
-    assert not list((tmp_path / 'mirror').rglob('*.nfo'))
     with database.connect() as conn:
         work_row = conn.execute('SELECT work_id FROM works').fetchone()
         assert conn.execute('SELECT COUNT(*) FROM episode_provider_mappings').fetchone()[0] == 0
@@ -161,11 +157,17 @@ def test_excluded_specials_never_create_media_jobs_mirrors_or_cards(tmp_path, mo
         if with_regular:
             work_id = work_row[0]
             assert len(current_episode_signatures(conn, 'local-specials', work_id)) == 1
+            job_types = {
+                str(row[0])
+                for row in conn.execute('SELECT job_type FROM jobs').fetchall()
+            }
+            assert job_types == {'scrape_work', 'refresh_projection'}
         else:
             assert work_row is None
-            # 空媒体图仍通过一个维护投影作业发布，不产生任何作品媒体作业。
+            # 空媒体图仍通过维护投影作业发布，不产生作品媒体作业。
             jobs = conn.execute('SELECT job_type, status FROM jobs').fetchall()
             assert [(row[0], row[1]) for row in jobs] == [('refresh_projection', 'succeeded')]
+        assert conn.execute('SELECT COUNT(*) FROM artifacts').fetchone()[0] == 0
     monkeypatch.setattr(library_v4, 'get_database', lambda: database)
     if with_regular:
         detail = library_v4.get_work_detail(work_id)
@@ -173,8 +175,8 @@ def test_excluded_specials_never_create_media_jobs_mirrors_or_cards(tmp_path, mo
         assert detail['episodes'][0]['kind'] == 'regular'
     else:
         assert not runner.projection.current().cards
-    # 此处正片资料仍等待配置，不应提前发布空白作品卡。
-    assert not library_v4.get_library()['works']
+    # 正片仍发布轻量卡；被排除的特别篇不增加第二张卡。
+    assert len(library_v4.get_library()['works']) == int(with_regular)
 
 
 @pytest.mark.parametrize('name', ['作品甲 SP01.mkv', '作品甲 [SP].mkv'])
@@ -221,15 +223,11 @@ def test_regular_scrape_snapshot_does_not_require_special_metadata(tmp_path, mon
         }
 
     runner = V4JobRunner(database, metadata_provider=provider)
-    runner.process_available(mirror_root=tmp_path / 'mirror')
+    runner.process_available()
     card = runner.projection.current().cards[0]
     assert card['metadata']['metadata_state'] == 'ready'
-    assert card['metadata']['total_count'] == card['metadata']['mapped_count'] == 1
-    assert len(list((tmp_path / 'mirror').rglob('*.strm'))) == 1
-    assert len(list((tmp_path / 'mirror').rglob('*.nfo'))) == 2  # 作品与正片，特别篇没有 NFO。
     with database.connect() as conn:
         snapshot = select_applicable_snapshot(conn, 'mixed-ready', card['work_id'])
         assert snapshot['covers_members']
         metadata = referenced_metadata(conn, card['work_id'])
-        assert metadata['total_count'] == metadata['mapped_count'] == 1
-        assert metadata['unmapped_episode_ids'] == []
+        assert len(metadata['episode_mappings']) == 1

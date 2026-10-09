@@ -6,6 +6,7 @@ import hashlib
 import json
 import sqlite3
 from datetime import UTC, datetime
+from pathlib import Path
 
 from app.media_v4.persistence.metadata_lifecycle import (
     episode_signature,
@@ -104,7 +105,7 @@ def enqueue_metadata(conn: sqlite3.Connection, *, revision_id: str, work_id: str
                             *_metadata_items(metadata, 'collection_related_works')], ('poster_url', 'poster_path')),
     ):
         for item in items:
-            url = metadata_image_source(next((item.get(key) for key in keys if item.get(key)), ''))
+            url = metadata_image_source(str(next((item.get(key) for key in keys if item.get(key)), '')))
             if url:
                 subject = f'{work_id}:{hashlib.sha256(url.encode("utf-8")).hexdigest()}'
                 _enqueue(conn, work_id=work_id, subject_type='metadata', subject_id=subject, role=role,
@@ -171,9 +172,196 @@ def get_metadata_image(conn: sqlite3.Connection, source: str, width: int = 384) 
     return None
 
 
+def get_metadata_images_many(conn: sqlite3.Connection, sources: list[str], width: int = 384) -> dict[str, str]:
+    """按有限 IN 批次读取演员/相关推荐图，键保留调用方传入的来源字符串。"""
+    if width not in {256, 384, 512}:
+        return {}
+    source_urls = {}
+    for source in sources:
+        raw = str(source or '')
+        if raw.strip():
+            source_urls[raw] = metadata_image_source(raw)
+    resource_to_url = {
+        hashlib.sha256(url.encode('utf-8')).hexdigest(): url for url in source_urls.values()
+    }
+    resource_ids = list(resource_to_url)
+    if not resource_ids:
+        return {}
+
+    published = {}
+    for offset in range(0, len(resource_ids), 500):
+        batch = resource_ids[offset:offset + 500]
+        placeholders = ','.join('?' for _ in batch)
+        rows = conn.execute(
+            f"""SELECT r.resource_id,r.content_digest FROM artwork_resources r
+            JOIN artwork_variants v ON v.content_digest=r.content_digest
+            WHERE r.resource_id IN ({placeholders}) AND v.recipe_version=? AND v.width=?
+            AND r.content_digest<>''
+            AND EXISTS (SELECT 1 FROM artwork_bindings b WHERE b.published_id=r.resource_id)""",
+            (*batch, RECIPE_VERSION, width),
+        )
+        for row in rows:
+            version = f'{row["content_digest"]}-{RECIPE_VERSION}'
+            published[resource_to_url[row['resource_id']]] = (
+                f'/api/assets/artwork/{row["resource_id"]}/{version}/{width}'
+            )
+    return {raw: published[url] for raw, url in source_urls.items() if url in published}
+
+
 def enqueue_manual(conn: sqlite3.Connection, *, work_id: str, role: str, local_path: str) -> str:
+    if role not in {'poster', 'fanart', 'clearlogo'}:
+        raise ValueError('Unsupported manual artwork role')
+    if (not isinstance(local_path, str) or not local_path or '\x00' in local_path
+            or not Path(local_path).is_absolute()
+            or Path(local_path).suffix.lower() not in {'.jpg', '.jpeg', '.png', '.webp'}):
+        raise ValueError('Invalid manual artwork source')
     return _enqueue(conn, work_id=work_id, subject_type='work', subject_id=work_id, role=role,
                     local_source=local_path, priority=100)
+
+
+def enqueue_legacy_manual_for_diagnosis(conn: sqlite3.Connection, *, work_id: str, role: str,
+                                        local_path: str) -> str:
+    """登记历史无效覆盖以产生终态诊断；新手工入队必须走 enqueue_manual。"""
+    if role not in {'poster', 'fanart', 'clearlogo'} or not isinstance(local_path, str) or not local_path:
+        raise ValueError('Invalid historical manual artwork source')
+    return _enqueue(conn, work_id=work_id, subject_type='work', subject_id=work_id, role=role,
+                    local_source=local_path, priority=100)
+
+
+def capture_identity_repair_bindings(conn: sqlite3.Connection, old_work_id: str) -> list[dict]:
+    """在身份变更前捕获手工绑定及仍可发布的自动封面资格。"""
+    captured = []
+    for raw in conn.execute(
+        "SELECT * FROM artwork_bindings WHERE subject_type='work' AND subject_id=?",
+        (old_work_id,),
+    ).fetchall():
+        binding = dict(raw)
+        manual = int(binding['priority']) >= 100
+        automatic = _valid_identity_repair_automatic(conn, binding)
+        if manual or automatic:
+            binding['_automatic_validated'] = automatic
+            captured.append(binding)
+    return captured
+
+
+def _valid_identity_repair_automatic(conn: sqlite3.Connection, binding: dict) -> bool:
+    resource_id = binding.get('automatic_id')
+    if not resource_id or binding.get('published_id') != resource_id:
+        return False
+    resource = conn.execute('SELECT state,content_digest FROM artwork_resources WHERE resource_id=?',
+                            (resource_id,)).fetchone()
+    if resource is None or resource['state'] != 'ready' or not resource['content_digest']:
+        return False
+    automatic = dict(binding)
+    automatic.update({
+        'priority': 0,
+        'revision_id': binding.get('automatic_revision_id') or '',
+        'snapshot_id': binding.get('automatic_snapshot_id') or '',
+        'member_signature': binding.get('automatic_member_signature') or '',
+    })
+    if not binding_publishable(conn, automatic):
+        return False
+    sizes = {int(row[0]) for row in conn.execute(
+        'SELECT width FROM artwork_variants WHERE content_digest=? AND recipe_version=?',
+        (resource['content_digest'], RECIPE_VERSION),
+    )}
+    return set(ROLE_WIDTHS[binding['role']]) <= sizes
+
+
+def preserve_identity_repair_bindings(conn: sqlite3.Connection, old_work_id: str,
+                                     target_work_ids: list[str], *, source_bindings: list[dict] | None = None
+                                     ) -> dict[str, list[str]]:
+    """复制可保留的手工封面和当前已发布自动图，不修改旧作品行或文件。
+
+    身份修复若先使旧作品/revision 失效，应在变更前用
+    :func:`capture_identity_repair_bindings` 捕获并传入同一写事务中的快照。
+    """
+    targets = list(dict.fromkeys(target for target in target_work_ids if target and target != old_work_id))
+    if not targets:
+        return {'manual': [], 'automatic': []}
+    source_rows = source_bindings if source_bindings is not None else [dict(row) for row in conn.execute(
+        "SELECT * FROM artwork_bindings WHERE subject_type='work' AND subject_id=?",
+        (old_work_id,),
+    ).fetchall()]
+    changed_manual = set()
+    changed_automatic = set()
+
+    def valid_automatic(binding: dict) -> bool:
+        if '_automatic_validated' in binding:
+            return bool(binding['_automatic_validated'])
+        return _valid_identity_repair_automatic(conn, binding)
+
+    for raw in source_rows:
+        source = dict(raw)
+        manual = int(source['priority']) >= 100
+        automatic_ok = valid_automatic(source)
+        if not manual and not automatic_ok:
+            continue
+        for target in targets:
+            existing_row = conn.execute(
+                "SELECT * FROM artwork_bindings WHERE subject_type='work' AND subject_id=? AND role=?",
+                (target, source['role']),
+            ).fetchone()
+            existing = dict(existing_row) if existing_row else None
+            target_has_manual = bool(existing and int(existing['priority']) >= 100)
+            existing_automatic_ok = bool(existing and valid_automatic(existing))
+            copy_manual = manual and not target_has_manual
+            copy_automatic = automatic_ok and not existing_automatic_ok
+            if not copy_manual and not copy_automatic:
+                continue
+
+            if existing is None:
+                if copy_manual:
+                    published_id = source['published_id'] or (source['automatic_id'] if automatic_ok else None)
+                    values = (
+                        'work', target, target, source['role'], source['candidate_id'], published_id,
+                        source['priority'], source['revision_id'], source['snapshot_id'],
+                        source['member_signature'],
+                    )
+                    automatic_values = ((source['automatic_id'], source['automatic_revision_id'],
+                                         source['automatic_snapshot_id'], source['automatic_member_signature'])
+                                        if automatic_ok else (None, '', '', ''))
+                    conn.execute("""INSERT INTO artwork_bindings
+                        (subject_type,subject_id,work_id,role,candidate_id,published_id,priority,
+                         revision_id,snapshot_id,member_signature,automatic_id,automatic_revision_id,
+                         automatic_snapshot_id,automatic_member_signature)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (*values, *automatic_values))
+                    changed_manual.add(target)
+                    if automatic_ok:
+                        changed_automatic.add(target)
+                else:
+                    conn.execute("""INSERT INTO artwork_bindings
+                        (subject_type,subject_id,work_id,role,candidate_id,published_id,priority,
+                         revision_id,snapshot_id,member_signature,automatic_id,automatic_revision_id,
+                         automatic_snapshot_id,automatic_member_signature)
+                        VALUES ('work',?,?,?, ?,?,0,?,?,?, ?,?,?,?)""",
+                        (target, target, source['role'], source['automatic_id'], source['automatic_id'],
+                         source['automatic_revision_id'], source['automatic_snapshot_id'],
+                         source['automatic_member_signature'], source['automatic_id'],
+                         source['automatic_revision_id'], source['automatic_snapshot_id'],
+                         source['automatic_member_signature']))
+                    changed_automatic.add(target)
+                continue
+
+            if copy_manual:
+                published_id = source['published_id']
+                if not published_id and existing.get('automatic_id') == existing.get('published_id'):
+                    published_id = existing['published_id']
+                conn.execute("UPDATE artwork_bindings SET candidate_id=?,published_id=?,priority=100, "
+                             "revision_id=?,snapshot_id=?,member_signature=? "
+                             "WHERE subject_type='work' AND subject_id=? AND role=?",
+                             (source['candidate_id'], published_id, source['revision_id'], source['snapshot_id'],
+                              source['member_signature'], target, source['role']))
+                changed_manual.add(target)
+            if copy_automatic:
+                conn.execute("UPDATE artwork_bindings SET automatic_id=?,automatic_revision_id=?, "
+                             "automatic_snapshot_id=?,automatic_member_signature=? "
+                             "WHERE subject_type='work' AND subject_id=? AND role=?",
+                             (source['automatic_id'], source['automatic_revision_id'],
+                              source['automatic_snapshot_id'], source['automatic_member_signature'],
+                              target, source['role']))
+                changed_automatic.add(target)
+    return {'manual': sorted(changed_manual), 'automatic': sorted(changed_automatic)}
 
 
 def retry_work(conn: sqlite3.Connection, work_id: str) -> int:
@@ -216,7 +404,7 @@ def get_subject_artwork(conn: sqlite3.Connection, subject_type: str, subject_id:
 
 
 def _get_subject_artwork_many(conn: sqlite3.Connection, subject_type: str, subject_ids: list[str]) -> dict:
-    result = {}
+    result: dict[str, dict] = {}
     subjects = list(dict.fromkeys(subject_ids))
     for offset in range(0, len(subjects), 500):
         batch = subjects[offset:offset + 500]

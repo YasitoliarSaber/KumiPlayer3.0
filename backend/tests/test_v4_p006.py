@@ -74,10 +74,9 @@ def _seed_work(database, *, work_id, title, provider="pan115", season_count=2, e
 
 
 def test_library_list_cards_include_watch_status_and_latest_episode(tmp_path, monkeypatch):
+    from app.api import library_v4, media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-
-    from app.api import library_v4, media_v4
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -109,11 +108,10 @@ def test_library_list_cards_include_watch_status_and_latest_episode(tmp_path, mo
 
 
 def test_playback_history_is_event_based_and_respects_limit(tmp_path, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4, playback_v4
     from app.media_v4.playback.store import V4PlaybackStore
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -138,19 +136,21 @@ def test_playback_history_is_event_based_and_respects_limit(tmp_path, monkeypatc
 
 
 def test_detail_title_and_artwork_and_folder_commands(tmp_path, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4
     from app.media_v4.jobs.scrape import V4ScrapeService
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
     _seed_work(database, work_id="w1", title="原始标题")
     # 打开目录的 exists 查询限定在临时目录，不检查夹具中的挂载盘符。
+    media_path = tmp_path / "media" / "w1" / "episode.mkv"
+    media_path.parent.mkdir(parents=True)
+    media_path.write_bytes(b"fixture")
     with database.connect() as conn:
         conn.execute("UPDATE assets SET playback_locator = ? WHERE root_id = 'root-p'",
-                     (str(tmp_path / 'media' / 'w1' / 'episode.mkv'),))
+                     (str(media_path),))
 
     application = FastAPI()
     application.include_router(media_v4.router)
@@ -162,11 +162,27 @@ def test_detail_title_and_artwork_and_folder_commands(tmp_path, monkeypatch):
     restored = client.delete("/api/v4/works/w1/title")
     assert restored.status_code == 200
 
-    # 图片覆盖层（受控镜像根内）
-    png = base64.b64encode(b"fake-png-bytes").decode()
+    # 手工图片写入临时独立图片库，原图进入 SQLite 候选队列。
+    import io
+
+    from PIL import Image
+
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr("app.core.paths.get_data_dir", lambda: data_dir)
+    buffer = io.BytesIO()
+    Image.new("RGB", (2, 2), color="blue").save(buffer, format="PNG")
+    png = base64.b64encode(buffer.getvalue()).decode()
     artwork = client.post("/api/v4/works/w1/artwork", json={"kind": "poster", "data_base64": png})
     assert artwork.status_code == 200, artwork.text
-    assert "artwork" in artwork.json()["path"]
+    assert artwork.json()["state"] == "pending"
+    assert artwork.json()["path"] == ""
+    with database.connect() as conn:
+        resource = conn.execute(
+            "SELECT state, original_path FROM artwork_resources WHERE resource_id = ?",
+            (artwork.json()["resource_id"],),
+        ).fetchone()
+    assert resource["state"] == "pending"
+    assert resource["original_path"] == ""
     restore_art = client.delete("/api/v4/works/w1/artwork/poster")
     assert restore_art.status_code == 200
 
@@ -199,10 +215,9 @@ def _seed_tracking_work(database, *, work_id, title, status="watching", last_wat
 
 
 def test_tracking_works_lists_seasonal_with_latest_episode(tmp_path, monkeypatch):
+    from app.api import media_v4, tracking_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-
-    from app.api import media_v4, tracking_v4
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -225,11 +240,10 @@ def test_tracking_works_lists_seasonal_with_latest_episode(tmp_path, monkeypatch
 
 
 def test_tracking_scan_all_enqueues_incremental_for_openlist_roots(tmp_path, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4, tracking_v4
     from app.integrations.openlist.providers import OpenListRouteConfig
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -261,7 +275,6 @@ def test_tracking_scan_all_enqueues_incremental_for_openlist_roots(tmp_path, mon
                         lambda _: SimpleNamespace(wake=lambda: None))
 
     monkeypatch.setattr(openlist_v4, "_client", lambda _config: object())
-    monkeypatch.setattr(media_v4, "_configured_mirror_root", lambda: None)
 
     application = FastAPI()
     application.include_router(tracking_v4.router)
@@ -275,14 +288,12 @@ def test_tracking_scan_all_enqueues_incremental_for_openlist_roots(tmp_path, mon
 
 
 def test_work_delete_preview_and_confirm_hides_work(tmp_path, monkeypatch):
+    from app.api import library_v4, media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from app.api import library_v4, media_v4
-
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
-    monkeypatch.setattr(media_v4, "_configured_mirror_root", lambda: None)
     monkeypatch.setattr(library_v4, "get_database", lambda: database)
     _seed_work(database, work_id="w1", title="将被删除")
     _seed_work(database, work_id="w2", title="保留作品")

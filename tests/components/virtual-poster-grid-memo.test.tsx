@@ -10,9 +10,11 @@ const observed = new Set<HTMLImageElement>();
 let observer: IntersectionObserver;
 const observe = vi.fn((node: HTMLImageElement) => observed.add(node));
 const disconnect = vi.fn();
+const artworkPath = (resourceHex: string, digestHex: string, width = 256) =>
+  `/api/assets/artwork/${resourceHex.repeat(64)}/${digestHex.repeat(64)}-webp-v1/${width}`;
 const work = (index: number) => ({
   work_id: `w${index}`, title: `作品${index}`, source: 'local',
-  show_type: 'anime_series', local_poster_path: `/api/assets/artwork/grid${index}/v1/256`, rating: 8,
+  show_type: 'anime_series', local_poster_path: artworkPath((index % 10).toString(16), '1'), rating: 8,
 });
 afterEach(() => { for (let count = 0; count < 2; count++) observed.forEach((node) => fireEvent.load(node)); observed.clear(); vi.useRealTimers(); });
 
@@ -172,12 +174,13 @@ test('图片版本变化更新同一卡片，旧请求终态不能将新版本�
   const card = screen.getByRole('button');
   const image = screen.getByRole('img') as HTMLImageElement;
   intersect([image], true);
-  rerender(<main className="app-main"><VirtualizedPosterGrid works={[{ ...first, local_poster_path: '/api/assets/artwork/changed/v2/256' }]} columns={4} /></main>);
+  const updatedPath = artworkPath('c', '2');
+  rerender(<main className="app-main"><VirtualizedPosterGrid works={[{ ...first, local_poster_path: updatedPath }]} columns={4} /></main>);
   expect(screen.getByRole('button')).toBe(card);
   intersect([image], true);
   fireEvent.load(image);
   expect(image).toHaveAttribute('data-state', 'loading');
-  expect(image).toHaveAttribute('src', expect.stringContaining('/changed/v2/256'));
+  expect(image).toHaveAttribute('src', expect.stringContaining(updatedPath));
   fireEvent.load(image);
   expect(image).toHaveAttribute('data-state', 'ready');
 });

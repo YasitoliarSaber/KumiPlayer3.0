@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.media_v4.domain.models import SourceEvidence
 from app.media_v4.parsing.evidence_policy import (
     arbitrate_hint,
@@ -84,14 +83,14 @@ def test_specials_and_auxiliary_are_excluded_only_with_explicit_evidence():
         assert facts.content_class != "attached_special", path
 
 
-def test_ova_without_regular_season_is_playable_special():
-    """明确 OVA 按最新边界归特别篇，不要求先有正片季号。"""
+def test_ova_without_regular_season_is_excluded_attached_special():
+    """没有本地正片身份的 OVA 明确归为不可导入附属内容。"""
 
     _evidence, facts = _facts("动画/某作品/某作品 [OVA].mkv", 7)
-    assert facts.content_class == "playable_special"
+    assert facts.content_class == "attached_special"
     assert facts.media_type == "tv"
-    assert facts.is_importable is True
-    assert facts.is_auxiliary is False
+    assert facts.is_importable is False
+    assert facts.is_auxiliary is True
     assert facts.episode_candidate is None
 
 

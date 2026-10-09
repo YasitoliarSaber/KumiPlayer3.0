@@ -41,16 +41,18 @@ def test_virtual_poster_grid_tracks_the_app_main_scroll_container():
 def test_poster_grid_does_not_update_react_state_on_scroll():
     component = (Path(__file__).resolve().parents[2] / "src" / "components" / "library" / "VirtualizedPosterGrid.tsx").read_text(encoding="utf-8")
 
-    assert "updateScrollPosition" not in component
+    assert "useVirtualizer(" in component
+    assert "rowVirtualizer.getVirtualItems()" in component
+    assert "recordScrollDiagnostic('virtual-window'" in component
     assert "addEventListener('scroll'" not in component
-    assert "{works.map((work)" in component
 
 
-def test_poster_grid_keeps_card_nodes_and_uses_managed_images():
+def test_poster_grid_renders_virtual_rows_and_uses_managed_images():
     component = (Path(__file__).resolve().parents[2] / "src" / "components" / "library" / "VirtualizedPosterGrid.tsx").read_text(encoding="utf-8")
 
     assert "managedImage" in component
-    assert "works.slice(" not in component
+    assert "virtualRows.map((virtualRow)" in component
+    assert "works.slice(rowStart, rowStart + effectiveColumns)" in component
     assert "PosterImageContext.Provider" in component
 
 

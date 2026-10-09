@@ -26,9 +26,10 @@ _LEGACY_CANDIDATE_SQL = (
     "SELECT j.* FROM jobs j JOIN import_revisions ir ON ir.revision_id=j.revision_id "
     "JOIN source_roots sr ON sr.root_id=ir.root_id JOIN works w ON w.work_id=j.work_id "
     "WHERE j.job_type='scrape_work' AND j.status='succeeded' AND ir.status='confirmed' "
+    "AND json_valid(j.result_json) AND json_extract(j.result_json,'$.runtime_policy')='sqlite-artwork-v1' "
     "AND sr.retired_at='' AND w.status='active' AND NOT EXISTS ("
     "SELECT 1 FROM jobs p WHERE p.revision_id=j.revision_id AND ((p.cancel_requested=1 AND p.job_type!='recover_work_aliases') "
-    "OR (p.job_type IN ('materialize_mirror','scrape_work') AND p.status IN ('queued','running')))) "
+    "OR (p.job_type='scrape_work' AND p.status IN ('queued','running')))) "
     "ORDER BY j.created_at,j.job_id"
 )
 
@@ -81,6 +82,10 @@ def _insert_job(
     result_json: str = "{}",
     idempotency_key: str | None = None,
 ) -> None:
+    if job_type == "scrape_work":
+        payload = json.loads(result_json or "{}")
+        payload.setdefault("runtime_policy", "sqlite-artwork-v1")
+        result_json = json.dumps(payload, ensure_ascii=False)
     conn.execute(
         "INSERT INTO jobs(job_id, job_type, revision_id, work_id, idempotency_key, status, attempts, "
         "cancel_requested, created_at, updated_at, result_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -140,7 +145,6 @@ def test_idle_iteration_schedules_recovery_once(tmp_path, monkeypatch):
         _insert_scan(conn, "scan", "root")
         _insert_revision(conn, "rev", "root", "scan")
         _insert_work(conn, "work")
-        _insert_job(conn, "m1", "materialize_mirror", "rev", "work")
         _insert_job(conn, "s1", "scrape_work", "rev", "work",
                     result_json=_reason({"reason_codes": ["no_candidates"]}))
         # 候选已被排程过（幂等键一致），本迭代不应再产生新作业。
@@ -156,11 +160,11 @@ def test_idle_iteration_schedules_recovery_once(tmp_path, monkeypatch):
         return original()
 
     monkeypatch.setattr(runner, "schedule_recovery", counted)
-    assert runner.process_available(mirror_root=tmp_path / "mirror") == []
+    assert runner.process_available() == []
     assert len(calls) == 1
 
     # 第二轮空闲迭代同样只调度一次；历史任务规模不改变调用次数。
-    assert runner.process_available(mirror_root=tmp_path / "mirror") == []
+    assert runner.process_available() == []
     assert len(calls) == 2
 
 
@@ -177,7 +181,7 @@ def test_recovery_candidate_boundaries_are_preserved(tmp_path):
         "retired_root": False,       # 来源已退役
         "draft_revision": False,     # 非 confirmed revision
         "inactive_work": False,      # 非 active work
-        "queued_mirror": False,      # 同 revision 仍有排队镜像
+        "queued_scrape": False,     # 同 revision 仍有排队刮削
         "running_scrape": False,     # 同 revision 仍有运行中刮削
         "cancelled_first_pass": False,  # 首轮刮削被取消
         "only_recover_cancel": True,    # 仅别名恢复被取消：不阻断首轮
@@ -198,7 +202,6 @@ def test_recovery_candidate_boundaries_are_preserved(tmp_path):
                 status="draft" if name == "draft_revision" else "confirmed",
             )
             _insert_work(conn, work_id, status="merged" if name == "inactive_work" else "active")
-            _insert_job(conn, f"m-{name}", "materialize_mirror", revision_id, work_id)
             payload = {"reason_codes": ["no_candidates"]}
             if name == "ok_name":
                 payload = {"reason_code": "no_candidates"}
@@ -213,11 +216,11 @@ def test_recovery_candidate_boundaries_are_preserved(tmp_path):
                 cancel_requested=1 if name == "cancelled_first_pass" else 0,
                 result_json=_reason(payload),
             )
-        # 阻断型附加作业
-        _insert_job(conn, "block-mirror", "materialize_mirror", "rev-queued_mirror", "work-queued_mirror",
-                    status="queued")
-        _insert_job(conn, "block-scrape", "scrape_work", "rev-running_scrape", "work-running_scrape-other",
-                    status="running")
+            if name in {"queued_scrape", "running_scrape"}:
+                _insert_job(
+                    conn, f"block-{name}", "scrape_work", revision_id, work_id,
+                    status="queued" if name == "queued_scrape" else "running",
+                )
         # 仅别名恢复取消：不阻断
         _insert_job(conn, "cancel-recover", "recover_work_aliases", "rev-only_recover_cancel",
                     "work-only_recover_cancel", status="cancelled", cancel_requested=1,
@@ -251,7 +254,6 @@ def test_recovery_batch_is_bounded_and_resumes_on_next_schedule(tmp_path):
             _insert_scan(conn, f"scan-{index:02d}", f"root-{index:02d}")
             _insert_revision(conn, revision_id, f"root-{index:02d}", f"scan-{index:02d}")
             _insert_work(conn, work_id)
-            _insert_job(conn, f"m-{index:02d}", "materialize_mirror", revision_id, work_id)
             _insert_job(conn, f"s-{index:02d}", "scrape_work", revision_id, work_id,
                         result_json=_reason({"reason_codes": ["no_candidates"]}))
 
@@ -285,8 +287,7 @@ def test_recovery_candidates_match_legacy_shape_on_large_history(tmp_path):
             _insert_scan(conn, scan_id, root_id)
             _insert_revision(conn, revision_id, root_id, scan_id)
             _insert_work(conn, work_id)
-            # 每条 revision 三条历史作业，模拟只增不减的 jobs 表。
-            _insert_job(conn, f"m-{index:05d}", "materialize_mirror", revision_id, work_id)
+            # 每条 revision 两条历史作业，模拟只增不减的 jobs 表。
             _insert_job(
                 conn, f"s-{index:05d}", "scrape_work", revision_id, work_id,
                 result_json=_reason({"reason_codes": ["no_candidates"]}),

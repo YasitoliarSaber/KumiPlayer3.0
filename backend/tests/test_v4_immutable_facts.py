@@ -17,6 +17,7 @@ def test_source_evidence_and_parsed_facts_are_frozen_values():
         source_key="/anime/show/S01E01.mkv",
         relative_path="show/S01E01.mkv",
         entry_kind="video",
+        playback_locator="C:/KumiTest/immutable/show/S01E01.mkv",
         size=123,
         mtime=456.0,
         fingerprint="sha256:test",
@@ -76,6 +77,7 @@ def test_repository_round_trip_preserves_source_and_parse_payload_without_loss(t
         tmdb_hint_type="tv",
         import_family="anime",
         target_filename="S01E01.strm",
+        playback_locator="C:/KumiTest/immutable-roundtrip/show/S01E01.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id="facts-full",
@@ -131,6 +133,7 @@ def test_bulk_parsed_facts_write_preserves_immutability(tmp_path):
             source_key=f"Show/E{index:02d}.mkv",
             relative_path=f"Show/E{index:02d}.mkv",
             entry_kind="video",
+            playback_locator=f"C:/KumiTest/immutable-bulk/Show/E{index:02d}.mkv",
         )
         for index in range(1, 4)
     ]
@@ -182,6 +185,7 @@ def test_persisted_facts_and_confirmed_bindings_are_sql_immutable(tmp_path):
         source_key="Show/S01E01.mkv",
         relative_path="Show/S01E01.mkv",
         entry_kind="video",
+        playback_locator="C:/KumiTest/immutable-confirm/Show/S01E01.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id="facts-immutable",
@@ -238,6 +242,7 @@ def test_reusing_immutable_identity_with_different_payload_is_rejected(tmp_path)
         source_key="Show/file.mkv",
         relative_path="Show/file.mkv",
         entry_kind="video",
+        playback_locator="C:/KumiTest/immutable-conflict/Show/file.mkv",
     )
     repository = V4Repository(database)
     repository.save_source_evidence(evidence)
@@ -273,6 +278,7 @@ def test_bulk_source_evidence_rejects_existing_and_batch_conflicts_atomically(tm
         source_key="Show/01.mkv",
         relative_path="Show/01.mkv",
         entry_kind="video",
+        playback_locator="C:/KumiTest/immutable-duplicate/Show/01.mkv",
     )
     repository.save_source_evidence(first)
     second = replace(first, evidence_id="ev-second", source_key="Show/02.mkv", relative_path="Show/02.mkv")
@@ -316,6 +322,7 @@ def test_source_evidence_must_belong_to_the_scan_root(tmp_path):
         source_key="Show/E01.mkv",
         relative_path="Show/E01.mkv",
         entry_kind="video",
+        playback_locator="C:/KumiTest/immutable-root/Show/E01.mkv",
     )
 
     with pytest.raises(ValueError, match="root"):

@@ -1,7 +1,7 @@
 """作品级执行详情接口合同（3.1 P0）。
 
 展开第三步的已完成作品必须能看到与数据库事实一致的结构化结果：
-作品身份 / 镜像结果 / 剧集结果。详情只读现有投影表，不得启动任务、
+作品身份 / artwork 状态 / 剧集结果。详情只读现有投影表，不得启动任务、
 不得写库、不得越权读取其他 revision 的作品。
 """
 
@@ -14,11 +14,10 @@ from fastapi.testclient import TestClient
 
 
 def _client(tmp_path, monkeypatch):
-    from fastapi import FastAPI
-
     from app.api import media_v4
     from app.core.config import AppConfig
     from app.media_v4.persistence.database import V4Database
+    from fastapi import FastAPI
 
     monkeypatch.setattr('app.media_v4.jobs.completeness.load_config', lambda: AppConfig(artwork_storage_mode='remote'))
 
@@ -77,16 +76,10 @@ def _seed_confirmed_work(database, *, revision_id: str = "rev-detail", work_id: 
                 "SELECT episode_id, local_episode_number FROM episodes WHERE work_id = ?", (work_id,)
             ).fetchall()
         }
-        # 执行结果事实：job 全部成功、镜像产物、刮削结果与剧集映射。
-        for job_type in ("materialize_mirror", "scrape_work"):
-            conn.execute(
-                "UPDATE jobs SET status = 'succeeded', finished_at = 'now' "
-                "WHERE revision_id = ? AND work_id = ? AND job_type = ?",
-                (revision_id, work_id, job_type),
-            )
+        # 执行结果事实：SQLite 刮削快照与剧集映射。
         conn.execute(
-            "INSERT INTO artifacts(artifact_id, revision_id, work_id, artifact_type, target_path, status, created_at, updated_at) "
-            "VALUES ('art-1', ?, ?, 'mirror', 'K:\\镜像\\Show\\Season 01\\S01E01-abc.strm', 'published', 'now', 'now')",
+            "UPDATE jobs SET status = 'succeeded', finished_at = 'now' "
+            "WHERE revision_id = ? AND work_id = ? AND job_type = 'scrape_work'",
             (revision_id, work_id),
         )
         metadata = {
@@ -138,9 +131,8 @@ def test_legacy_confirmed_binding_keeps_numbered_local_episodes_without_online_d
         f"/api/v4/revisions/rev-detail/works/{work_id}/execution-detail"
     ).json()
 
-    assert body["work"]["metadata_state"] == "failed"
-    assert body["work"]["metadata_reason_code"] == "episode_artwork_incomplete"
-    assert body["work"]["metadata_recovery_action"] == "retry_metadata"
+    assert body["work"]["metadata_state"] == "confirmed"
+    assert body["artwork"]["status"] == "not_required"
     assert {episode["episode_number"] for episode in body["episodes"]} == {1, 2}
     assert all(not episode["mapped"] and not episode["provider_episode_id"] for episode in body["episodes"])
 
@@ -399,11 +391,8 @@ def test_completed_work_returns_work_level_and_episode_results(tmp_path, monkeyp
     assert body["work"]["provider"] == "tmdb"
     assert body["work"]["provider_id"] == "12345"
     assert body["work"]["metadata_state"] == "ready"
-    # 镜像阶段结果与产物摘要（只给文件名，不暴露完整本地绝对路径）。
-    assert body["mirror"]["status"] == "succeeded"
-    assert body["mirror"]["artifact_count"] == 1
-    assert body["mirror"]["artifacts"][0]["file_name"].endswith(".strm")
-    assert "\\" not in body["mirror"]["artifacts"][0]["file_name"]
+    # artwork 只反映已发布本地图片绑定，不从旧 artifacts 表拼装文件列表。
+    assert body["artwork"]["status"] == "not_required"
     # 剧集结果：本地季集号 + 刮削后完整集名 + 映射状态 + 播放定位生成。
     episodes = body["episodes"]
     assert len(episodes) == 2
@@ -574,8 +563,8 @@ def test_failed_work_reports_failed_stage(tmp_path, monkeypatch):
     work_id = _seed_confirmed_work(database)
     with database.connect() as conn:
         conn.execute(
-            "UPDATE jobs SET status = 'failed', last_error = '镜像目标已存在且内容不一致' "
-            "WHERE revision_id = 'rev-detail' AND work_id = ? AND job_type = 'materialize_mirror'",
+            "UPDATE jobs SET status = 'failed', last_error = '在线资料服务暂不可用' "
+            "WHERE revision_id = 'rev-detail' AND work_id = ? AND job_type = 'scrape_work'",
             (work_id,),
         )
 
@@ -583,8 +572,8 @@ def test_failed_work_reports_failed_stage(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["mirror"]["status"] == "failed"
-    assert body["mirror"]["error"] == "任务未能完成，请重试"
+    assert body["metadata_job_status"] == "failed"
+    assert body["artwork"]["status"] == "not_required"
     assert body["has_detail"] is True
 
 

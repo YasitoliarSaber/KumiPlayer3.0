@@ -181,11 +181,11 @@ def test_partial_failure_resumes_same_operation_without_repeating_success(tmp_pa
     assert all(not path.exists() for path in paths)
 
 
-def test_projection_failure_resume_rebuilds_projection_only(tmp_path, monkeypatch):
-    """11.14.2-3：投影失败 → projection_failed；resume 只重建投影，不重复文件清理。"""
+def test_maintenance_queues_projection_without_rebuilding_in_request(tmp_path, monkeypatch):
+    """维护请求持久登记投影刷新；后台刷新可在后续调度轮完成。"""
 
     from app.media_v4.maintenance import service as maintenance_service
-    from app.media_v4.maintenance.service import compute_delete_preview, confirm_delete_preview, resume_operation
+    from app.media_v4.maintenance.service import compute_delete_preview, confirm_delete_preview
 
     database = _fresh_database(tmp_path)
     _seed_root(database, root_id="root-a")
@@ -200,13 +200,17 @@ def test_projection_failure_resume_rebuilds_projection_only(tmp_path, monkeypatc
     monkeypatch.setattr(maintenance_service.V4LibraryProjection, "rebuild", broken_rebuild)
     preview = compute_delete_preview(database, provider="pan115", mirror_root=mirror)
     result = confirm_delete_preview(database, preview_id=preview["preview_id"], scope="pan115", digest=preview["digest"], mirror_root=mirror)
-    assert result["status"] == "projection_failed"
-    assert all(not path.exists() for path in paths), "文件应已清理，只有投影失败"
+    assert result["status"] == "completed"
+    assert result["projection_status"] == "accepted"
+    assert all(not path.exists() for path in paths), "文件已清理，投影更新已挂入后台队列"
+    with database.connect() as conn:
+        assert conn.execute("SELECT 1 FROM v4_meta WHERE key='library_projection_full_dirty'").fetchone()
 
-    monkeypatch.setattr(maintenance_service.V4LibraryProjection, "rebuild", lambda self: None)
-    resumed = resume_operation(database, preview_id=preview["preview_id"], mirror_root=mirror)
-    assert resumed["status"] == "completed"
-    assert resumed["projection_status"] == "ok"
+    from app.media_v4.projection.refresh import ProjectionRefreshScheduler
+
+    monkeypatch.undo()
+    assert ProjectionRefreshScheduler(database).tick()
+    assert not __import__('app.media_v4.projection.library', fromlist=['V4LibraryProjection']).V4LibraryProjection(database).summary()['updating']
 
 
 def test_concurrent_confirm_only_one_executes(tmp_path):

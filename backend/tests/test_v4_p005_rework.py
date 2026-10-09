@@ -197,7 +197,7 @@ def test_orphan_history_and_progress_are_removed_and_counted(tmp_path):
     assert track is None
 
 
-def test_operation_state_machine_reports_partial_and_projection_failure(tmp_path, monkeypatch):
+def test_operation_state_machine_reports_artifact_failure_and_queues_projection(tmp_path, monkeypatch):
     """11.13-6：operation 状态机不得把失败伪装成 completed。"""
 
     from app.media_v4.maintenance import service as maintenance_service
@@ -218,21 +218,24 @@ def test_operation_state_machine_reports_partial_and_projection_failure(tmp_path
             (str(artifact),),
         )
 
-    # 投影失败：patch rebuild
+    # 投影应登记后台任务，不能在维护请求内重建。
     def broken_rebuild():
         raise RuntimeError("投影引擎不可用")
 
     monkeypatch.setattr(maintenance_service.V4LibraryProjection, "rebuild", broken_rebuild)
     preview = compute_delete_preview(database, provider="pan115", mirror_root=mirror)
     result = confirm_delete_preview(database, preview_id=preview["preview_id"], scope="pan115", digest=preview["digest"], mirror_root=mirror)
-    assert result["status"] == "projection_failed"
+    assert result["status"] == "completed"
+    assert result["projection_status"] == "accepted"
     assert result["artifact_results"][0]["status"] == "removed"
     with database.connect() as conn:
         op = conn.execute(
             "SELECT status FROM maintenance_operations WHERE operation_id = ?",
             (preview["preview_id"],),
         ).fetchone()
-    assert op["status"] == "projection_failed"
+    assert op["status"] == "completed"
+    with database.connect() as conn:
+        assert conn.execute("SELECT 1 FROM v4_meta WHERE key='library_projection_full_dirty'").fetchone()
 
 
 def test_confirm_unknown_preview_is_rejected(tmp_path):

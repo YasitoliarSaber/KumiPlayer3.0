@@ -25,6 +25,7 @@ def _entry(
         relative_path=f"Library/{work_title}/{evidence_id}.mkv",
         entry_kind="video",
         provider="local",
+        playback_locator=f"C:/KumiTest/Library/{work_title}/{evidence_id}.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-{evidence_id}",
@@ -118,8 +119,8 @@ def test_explicit_tmdb_hint_keeps_provider_and_media_type_in_their_correct_field
     ]
 
 
-def test_explicit_movie_identity_turns_special_folder_files_into_movie_assets():
-    """明确电影身份优先于路径中的 SP/菜单语义，避免电影被展示成 TV。"""
+def test_explicit_movie_hint_does_not_bypass_special_exclusion():
+    """特别篇先排除，Provider 电影提示不能恢复其准入。"""
 
     from app.media_v4.resolution.resolver import MediaResolver
 
@@ -134,9 +135,9 @@ def test_explicit_movie_identity_turns_special_folder_files_into_movie_assets():
     )
     graph = MediaResolver().resolve([entry])
 
-    assert graph.works[0].media_type == "movie"
+    assert graph.works == ()
     assert graph.episodes == ()
-    assert graph.work_assets[0].asset_evidence_ids == ("movie-special",)
+    assert graph.work_assets == ()
 
 
 def test_verified_heya_camp_path_confirms_the_spinoff_without_online_search():
@@ -194,16 +195,18 @@ def test_special_alias_does_not_promote_unrelated_online_candidate():
     from app.media_v4.resolution.candidates import WorkCandidate, plan_work_candidates
     from app.media_v4.resolution.resolver import MediaResolver
 
-    entry = _entry("bonus", work_title="Parent Show", title_candidates=("Parent Show", "Other Show"))
-    entry = (entry[0], replace(entry[1], group_type="special", special_candidate=True))
-    graph = MediaResolver().resolve([entry])
+    main = _entry("main", work_title="Parent Show", title_candidates=("Parent Show",))
+    bonus = _entry("bonus", work_title="Parent Show", title_candidates=("Parent Show", "Other Show"))
+    bonus = (bonus[0], replace(bonus[1], group_type="special", special_candidate=True))
+    entries = [main, bonus]
+    graph = MediaResolver().resolve(entries)
     requested = []
 
     def search(key, queries, _year, _media_type):
         requested.extend(queries)
         return [WorkCandidate(key, "tmdb", "200", "tv", "Other Show", None, "online_search", "high")]
 
-    candidates, _, _ = plan_work_candidates(graph, [entry], search)
+    candidates, _, _ = plan_work_candidates(graph, entries, search)
     assert "Parent Show" in requested
     assert "Other Show" not in requested
     assert all(item.status != "confirmed" for item in candidates[graph.works[0].work_key])
@@ -253,7 +256,7 @@ def test_real_camp_bundle_rechecks_polluted_frozen_candidate():
         assert not merge
         for work in graph.works:
             confirmed = [item.provider_id for item in candidates[work.work_key] if item.status == "confirmed"]
-            if work.preferred_title == "Yuru Camp":
+            if "0" in work.source_evidence_ids:
                 assert confirmed == []
             elif work.media_type == "movie":
                 assert confirmed == ["566466"]

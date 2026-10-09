@@ -131,7 +131,8 @@ def test_installer_build_stages_builtin_mpv_but_blocks_development_only_release(
     assert "release\\KumiPlayer-Setup.exe" in script
     assert "downloadBootstrapper" in config
     assert "from app.main import app" in backend_entrypoint
-    assert "uvicorn.run(app" in backend_entrypoint
+    assert "uvicorn.Server(" in backend_entrypoint
+    assert "app.state.request_shutdown" in backend_entrypoint
     assert "data/" not in config
     assert "data\\" not in script
 

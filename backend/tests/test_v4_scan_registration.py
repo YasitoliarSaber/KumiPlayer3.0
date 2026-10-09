@@ -124,6 +124,7 @@ def test_rescan_keeps_pending_cleanup_on_the_same_card(tmp_path, status):
     from app.api import media_v4
     from app.media_v4.maintenance.source_deletion import enqueue_source_deletion
     from app.media_v4.projection.source_libraries import list_source_cards
+
     from tests.test_v4_source_deletion import _two_sources
 
     database, _mirror = _two_sources(tmp_path)
@@ -167,6 +168,7 @@ def test_rescan_card_does_not_expose_old_confirmed_revision_or_unhide_disabled_c
     from app.api import media_v4
     from app.media_v4.projection.source_libraries import list_source_cards
     from app.media_v4.revisions.service import V4RevisionService
+
     from tests.test_v4_source_reactivation import _entry
 
     database = _database(tmp_path)

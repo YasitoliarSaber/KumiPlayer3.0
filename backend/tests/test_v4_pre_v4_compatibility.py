@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.media_v4.domain.models import SourceEvidence
 from app.media_v4.parsing.parser import V4Parser, normalize_batch_parsed_facts
 from app.media_v4.resolution.resolver import MediaResolver
@@ -113,19 +112,20 @@ def test_pre_v4_series_seasons_specials_and_movie_keep_their_boundaries():
     assert {episode.local_season_number for episode in tv_episodes if episode.episode_kind == "regular"} == {1, 2}
     assert len(graph.work_assets) == 1
     assert graph.work_assets[0].work_key == movie_work.work_key
-    # 用户 2026-10-02 的明确 SP 准入优先于旧的全部特别篇排除合同；
-    # 电影仍保持独立，SP02 保留为主作品可播放的本地特别篇。
+    # 当前合同排除 SP；电影与两个正片季度的身份边界仍保持独立。
     special_facts = [
         facts for item, facts in parsed if "[SP02]" in item.relative_path
     ]
     assert len(special_facts) == 1
     assert special_facts[0].group_type == "special"
-    assert special_facts[0].is_importable is True
-    specials = [episode for episode in graph.episodes if episode.episode_kind == "special"]
-    assert len(specials) == 1
-    assert specials[0].work_key == tv_work.work_key
-    assert specials[0].local_season_number == 0
-    assert specials[0].asset_evidence_ids == (evidence[3].evidence_id,)
+    assert special_facts[0].is_importable is False
+    assert special_facts[0].is_auxiliary is True
+    assert not [episode for episode in graph.episodes if episode.episode_kind == "special"]
+    assert evidence[3].evidence_id not in {
+        evidence_id
+        for episode in graph.episodes
+        for evidence_id in episode.asset_evidence_ids
+    }
 
 
 def test_pre_v4_continuous_absolute_numbers_are_rebased_inside_explicit_later_season():

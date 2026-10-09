@@ -60,8 +60,8 @@ def test_pending_recovery_blocks_projection_and_cancel_does_not_resurrect(tmp_pa
     database, _service = prepare(tmp_path, monkeypatch)
     runner = V4JobRunner(database, metadata_provider=no_candidates, recovery_provider=no_candidates)
     with database.connect() as conn:
-        conn.execute("UPDATE jobs SET status='succeeded',result_json=? WHERE job_type IN ('materialize_mirror','scrape_work')",
-                     (json.dumps({"reason_codes": ["no_candidates"]}),))
+        conn.execute("UPDATE jobs SET status='succeeded',result_json=? WHERE job_type='scrape_work'",
+                     (json.dumps({"runtime_policy": "sqlite-artwork-v1", "reason_codes": ["no_candidates"]}),))
     runner.schedule_recovery()
     with database.connect() as conn:
         projection = dict(conn.execute("SELECT * FROM jobs WHERE job_type='refresh_projection'").fetchone())
@@ -88,8 +88,8 @@ def test_stale_recovery_resumes_same_job_with_bounded_attempts(tmp_path, monkeyp
     database, _service = prepare(tmp_path, monkeypatch)
     runner = V4JobRunner(database, metadata_provider=no_candidates, recovery_provider=no_candidates)
     with database.connect() as conn:
-        conn.execute("UPDATE jobs SET status='succeeded',result_json=? WHERE job_type IN ('materialize_mirror','scrape_work')",
-                     (json.dumps({"reason_codes": ["no_candidates"]}),))
+        conn.execute("UPDATE jobs SET status='succeeded',result_json=? WHERE job_type='scrape_work'",
+                     (json.dumps({"runtime_policy": "sqlite-artwork-v1", "reason_codes": ["no_candidates"]}),))
     runner.schedule_recovery()
     with database.connect() as conn:
         job = conn.execute("SELECT job_id FROM jobs WHERE job_type='recover_work_aliases' LIMIT 1").fetchone()[0]

@@ -13,7 +13,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.parsing.parser import V4Parser, normalize_batch_parsed_facts
 from app.media_v4.persistence.database import V4Database
@@ -305,20 +304,20 @@ def test_two_rounds_of_import_keep_three_semantic_works_stable(tmp_path):
         )
         assert season["episode_count"] > 0
 
-    # 辅助视频排除；普通 SP/半集保留本地特别篇，不能复用旧“特别篇全排除”断言。
+    # 特别篇与辅助视频均排除，不建立本地 S00 特别篇身份。
     parsed_specials = _parsed_facts_for_source_paths()
     excluded_facts = [
         facts
         for _evidence_item, facts in parsed_specials
-        if facts.group_type in {"auxiliary", "ignored"}
+        if facts.group_type in {"auxiliary", "ignored", "special"}
     ]
     assert excluded_facts
     assert all(facts.is_importable is False for facts in excluded_facts)
     assert all(facts.is_auxiliary is True for facts in excluded_facts)
-    local_specials = [facts for _, facts in parsed_specials if facts.content_class == "playable_special"]
-    assert local_specials
-    assert all(facts.is_importable and not facts.is_auxiliary for facts in local_specials)
-    assert all(facts.episode_candidate is None and facts.special_number is None for facts in local_specials)
+    excluded_specials = [facts for _, facts in parsed_specials if facts.content_class == "attached_special"]
+    assert excluded_specials
+    assert all(not facts.is_importable and facts.is_auxiliary for facts in excluded_specials)
+    assert all(facts.episode_candidate is None and facts.special_number is None for facts in excluded_specials)
 
     # 外传与电影是独立 Work，主系列季列表里没有它们的集。
     heya = next(work for work in after_second["works"] if work["preferred_title"] == "Heya Camp")

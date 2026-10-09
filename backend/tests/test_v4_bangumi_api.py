@@ -17,7 +17,8 @@ def _client(tmp_path, monkeypatch):
     evidence = SourceEvidence(
         evidence_id="evidence-1", scan_id="scan-1", root_id="root-1", source_key="episode-1",
         relative_path="Show/Show.S01E01.mkv", entry_kind="video", provider="local",
-        source_locator="local://show/01.mkv",
+        source_locator="C:/KumiTest/bangumi/Show/Show.S01E01.mkv",
+        playback_locator="C:/KumiTest/bangumi/Show/Show.S01E01.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id="fact-1", evidence_id=evidence.evidence_id, parser_version="fixture",

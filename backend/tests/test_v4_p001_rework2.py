@@ -6,7 +6,10 @@ NFO 关联与候选输入、候选 revision 归属。
 
 from __future__ import annotations
 
+import json
+import tempfile
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 
@@ -21,6 +24,7 @@ def _entry(evidence_id: str, *, work_title: str, year: int = 2024, season: int =
         relative_path=f"{work_title}/Season {season}/{work_title}.S{season:02d}E{episode:02d}.mkv",
         entry_kind="video",
         provider="local",
+        playback_locator=str(Path(tempfile.gettempdir()) / "kumi-v4-fixtures" / f"{evidence_id}.mkv"),
     )
     facts = ParsedFacts(
         parsed_fact_id=f"facts-{evidence_id}",
@@ -49,10 +53,9 @@ def _patch_database(tmp_path, monkeypatch):
 
 
 def _client(tmp_path, monkeypatch):
+    from app.api import library_v4, media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-
-    from app.api import library_v4, media_v4
 
     _patch_database(tmp_path, monkeypatch)
     application = FastAPI()
@@ -195,16 +198,15 @@ def test_spinoff_series_group_is_not_used_as_candidate_identity_query(tmp_path, 
 
 
 # ---------------------------------------------------------------------------
-# R7：完整性门控必经 —— 手动确认候选但无镜像产物不得发布。
+# R7：完整性门控必经 —— 手动确认发布 SQLite 快照，图片单独排队。
 # ---------------------------------------------------------------------------
 
 
 def test_manual_confirm_publishes_work_when_only_artwork_is_missing(tmp_path, monkeypatch):
     """B1-2：手动确认候选后，若只缺图片产物，作品仍应 confirmed 并进入媒体墙。
 
-    P-001 R3 的原意是“没有可用产物不得冒充成功发布”；B1-2 之后该约束收窄为
-    “缺 Work NFO / 剧集 NFO 等物化产物不发布”，纯图片缺失只降级产物。
-    本用例同时锁定原因必须全部是图片原因，避免把物化失败也放行。
+    P-001 R3 的原意是“没有可用产物不得冒充成功发布”；现行合同以不可变 SQLite
+    metadata snapshot 发布资料，图片候选通过 artwork_bindings 等待独立准备。
     """
 
     import json as _json
@@ -236,6 +238,16 @@ def test_manual_confirm_publishes_work_when_only_artwork_is_missing(tmp_path, mo
 
     confirmed = client.post("/api/v4/metadata/confirm", json={"work_id": work_id, "candidate_id": candidate_id})
     assert confirmed.status_code == 200, confirmed.text
+    with database.connect() as conn:
+        job = conn.execute(
+            "SELECT job_id FROM jobs WHERE work_id=? AND job_type='scrape_work' ORDER BY created_at DESC LIMIT 1",
+            (work_id,),
+        ).fetchone()
+    assert job is not None
+    from app.media_v4.jobs.metadata import default_metadata_provider
+    from app.media_v4.jobs.scrape import V4ScrapeService
+
+    V4ScrapeService(database).process(job["job_id"], default_metadata_provider)
 
     with database.connect() as conn:
         binding = conn.execute(
@@ -244,28 +256,36 @@ def test_manual_confirm_publishes_work_when_only_artwork_is_missing(tmp_path, mo
         ).fetchone()
     assert binding is not None
     payload = _json.loads(str(binding["metadata_json"] or "{}"))
-    reasons = [str(item) for item in payload.get("artifact_reasons") or []]
-    # 原因必须全部是图片原因，否则说明混入了物化失败，此时不该放行。
-    assert reasons, payload
-    assert all(
-        any(marker in item for marker in ("海报", "背景图", "clearlogo", "poster", "fanart"))
-        for item in reasons
-    )
     assert payload.get("metadata_state") == "ready"
-    assert payload.get("artifact_state") == "degraded"
     assert binding["status"] == "confirmed"
+    snapshot_id = payload["metadata_snapshot_id"]
+    with database.connect() as conn:
+        snapshot = conn.execute(
+            "SELECT metadata_json FROM metadata_snapshots WHERE snapshot_id=?", (snapshot_id,)
+        ).fetchone()
+        pending = conn.execute(
+            "SELECT b.role,r.state FROM artwork_bindings b JOIN artwork_resources r "
+            "ON r.resource_id=b.candidate_id WHERE b.snapshot_id=? ORDER BY b.role", (snapshot_id,)
+        ).fetchall()
+    assert snapshot is not None
+    assert json.loads(snapshot["metadata_json"])["metadata_state"] == "ready"
+    assert {row["role"] for row in pending} == {"poster", "fanart", "episode_thumb"}
+    assert all(row["state"] == "pending" for row in pending)
 
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    V4LibraryProjection(database).rebuild()
     library = client.get("/api/library")
     assert library.status_code == 200
     assert len(library.json()["works"]) == 1
 
 
 # ---------------------------------------------------------------------------
-# R8：完整性权威 —— 删除本地 NFO 后 rebuild 不得保持 ready。
+# R8：投影只读 —— 元数据与图片状态只消费 SQLite，不复查 NFO 文件。
 # ---------------------------------------------------------------------------
 
 
-def test_projection_rechecks_artifact_files_not_only_metadata_json(tmp_path, monkeypatch):
+def test_projection_reads_persisted_metadata_and_pending_artwork_without_file_checks(tmp_path, monkeypatch):
     from app.media_v4.jobs import completeness as completeness_module
     from app.media_v4.jobs import metadata_artifacts as artifacts_module
     from app.media_v4.jobs.scrape import V4ScrapeService
@@ -288,7 +308,6 @@ def test_projection_rechecks_artifact_files_not_only_metadata_json(tmp_path, mon
     ))
     scrape = V4ScrapeService(database)
     job = next(item for item in service.list_jobs("rev-comp2") if item["job_type"] == "scrape_work")
-    mirror_root = tmp_path / "mirror"
     from tests.test_v4_p001_rework import _with_episode_metadata
 
     scrape.process(job["job_id"], lambda target: _with_episode_metadata(target, {
@@ -296,20 +315,26 @@ def test_projection_rechecks_artifact_files_not_only_metadata_json(tmp_path, mon
         "metadata_state": "ready",
         "poster_url": "https://image.tmdb.org/t/p/w780/p.jpg",
         "fanart_url": "https://image.tmdb.org/t/p/original/f.jpg",
-    }), mirror_root=mirror_root)
+    }))
     with database.connect() as conn:
         binding = conn.execute(
             "SELECT status, metadata_json FROM scrape_bindings WHERE work_id = (SELECT work_id FROM works LIMIT 1)"
         ).fetchone()
     assert binding["status"] == "confirmed"
-
-    # 删除本地 NFO 文件：rebuild 必须复查 artifact 文件，不能仍 ready。
-    for nfo in mirror_root.rglob("*.nfo"):
-        nfo.unlink()
-
+    snapshot_id = json.loads(binding["metadata_json"])["metadata_snapshot_id"]
+    with database.connect() as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM artwork_resources r JOIN artwork_bindings b "
+            "ON b.candidate_id=r.resource_id WHERE b.snapshot_id=? AND r.state='pending'",
+            (snapshot_id,),
+        ).fetchone()[0] == 3
     snapshot = V4LibraryProjection(database).rebuild()
     card = snapshot.cards[0]
-    assert card["metadata"].get("metadata_state") != "ready"
+    assert card["metadata"].get("metadata_state") == "ready"
+    with database.connect() as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type IN ('nfo','episode_nfo')"
+        ).fetchone()[0] == 0
 
 
 # ---------------------------------------------------------------------------

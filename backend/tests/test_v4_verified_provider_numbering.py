@@ -4,7 +4,6 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
-
 from app.media_v4.jobs import metadata
 
 CASES = [
@@ -124,18 +123,23 @@ def test_unknown_work_does_not_infer_offset_from_same_counts(monkeypatch):
 
 
 @pytest.mark.parametrize('missing', ['id', 'name', 'still_path'])
-def test_verified_rule_never_hides_missing_provider_fields(monkeypatch, missing):
+def test_verified_rule_keeps_episode_identity_when_optional_artwork_is_missing(monkeypatch, missing):
     _, remote = install_client(monkeypatch, 24)
     remote[12][missing] = ''
     result = metadata.default_metadata_provider(target_for(123249, (12, 12)))
     assert result['metadata_state'] == 'ready'
-    assert result['episode_metadata_status'] == 'incomplete'
     if missing == 'id':
+        assert result['episode_metadata_status'] == 'incomplete'
         assert result['episode_mapping_status'] == 'partial'
         assert result['mapped_count'] == 23
-    else:
+    elif missing == 'name':
+        assert result['episode_metadata_status'] == 'incomplete'
         assert result['episode_mapping_status'] == 'complete'
-        assert result['missing_episode_title_count' if missing == 'name' else 'missing_episode_still_count'] == 1
+        assert result['missing_episode_title_count'] == 1
+    else:
+        assert result['episode_metadata_status'] == 'complete'
+        assert result['episode_mapping_status'] == 'complete'
+        assert result['episode_mappings'][12]['still_url'] == ''
 
 
 def test_real_provider_multiseason_layout_bypasses_continuous_rules(monkeypatch):
@@ -265,9 +269,8 @@ def test_confirmed_import_and_rescrape_publish_correct_fields_in_sqlite_and_deta
         original_numbers = [tuple(r) for r in conn.execute(
             'SELECT episode_id,local_episode_number,display_title FROM episodes ORDER BY episode_id')]
     runner = V4JobRunner(database, metadata_provider=metadata.default_metadata_provider)
-    mirror = tmp_path / 'mirror'
-    runner.process_available(mirror_root=mirror)
-    card = V4LibraryProjection(database).ensure_current().cards[0]
+    runner.process_available()
+    card = V4LibraryProjection(database).rebuild().cards[0]
     assert card['episode_count'] == sum(counts)
     assert card['metadata']['metadata_state'] == 'ready'
     with database.connect() as conn:
@@ -282,14 +285,14 @@ def test_confirmed_import_and_rescrape_publish_correct_fields_in_sqlite_and_deta
     assert requested == [1]
     # 从已入库作品触发重新刮削，沿用在线身份与每集对应，不需要再扫描来源。
     V4ScrapeService(database).requeue_work('r1', card['work_id'])
-    runner.process_available(mirror_root=mirror)
-    refreshed = V4LibraryProjection(database).ensure_current().cards[0]
+    runner.process_available()
+    refreshed = V4LibraryProjection(database).rebuild().cards[0]
     assert refreshed['metadata']['metadata_state'] == 'ready'
     assert requested == [1, 1]
     # 局部刷新按本地季选择成员，但在线请求仍在正确的 Provider 命名空间。
     V4ScrapeService(database).requeue_work('r1', card['work_id'], season_number=first_season + len(counts) - 1)
-    runner.process_available(mirror_root=mirror)
-    assert V4LibraryProjection(database).ensure_current().cards[0]['metadata']['metadata_state'] == 'ready'
+    runner.process_available()
+    assert V4LibraryProjection(database).rebuild().cards[0]['metadata']['metadata_state'] == 'ready'
     assert requested == [1, 1, 1]
     from app.api import library_v4
     monkeypatch.setattr(library_v4, 'get_database', lambda: database)
@@ -297,6 +300,21 @@ def test_confirmed_import_and_rescrape_publish_correct_fields_in_sqlite_and_deta
     assert len(detail['episodes']) == sum(counts)
     for number, episode in enumerate(detail['episodes'], 1):
         assert episode['title'] == f'Online episode {number}'
-        assert episode['thumb_path'].endswith(f'/fixture-{number}.jpg')
+        assert episode['thumb_path'] == ''
     assert [(e['season_number'], e['episode_number']) for e in detail['episodes']] == [
         (e['local_season_number'], e['local_episode_number']) for e in target['episodes']]
+    with database.connect() as conn:
+        metadata_row = conn.execute(
+            "SELECT ms.snapshot_id,ms.metadata_json FROM revision_metadata_refs mr "
+            "JOIN metadata_snapshots ms ON ms.snapshot_id=mr.snapshot_id "
+            "WHERE mr.revision_id='r1' AND mr.work_id=?",
+            (card['work_id'],),
+        ).fetchone()
+        pending_stills = conn.execute(
+            "SELECT COUNT(*) FROM artwork_bindings b JOIN artwork_resources r "
+            "ON r.resource_id=b.candidate_id WHERE b.snapshot_id=? AND b.role='episode_thumb' "
+            "AND r.state='pending'",
+            (metadata_row['snapshot_id'],),
+        ).fetchone()[0]
+    assert len(json.loads(metadata_row['metadata_json'])['episode_mappings']) == sum(counts)
+    assert pending_stills == sum(counts)

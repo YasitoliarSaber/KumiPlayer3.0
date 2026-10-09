@@ -947,7 +947,7 @@ export default function WorkDetailPage() {
     timeoutMs = 10 * 60 * 1000,
   ) => {
     const reportProgress = onProgress || setNotice;
-    // V4 同步命令（metadata/confirm、tracking scan）返回空 task_id，无需轮询。
+    // 无后台作业的操作返回空 task_id，持久刮削作业沿既有轮询读取状态。
     if (!taskId) return { status: 'succeeded' as const, result: {} };
     const deadline = Date.now() + timeoutMs;
     let consecutivePollErrors = 0;
@@ -966,6 +966,7 @@ export default function WorkDetailPage() {
       reportProgress(task.message || '正在处理');
       if (task.status === 'succeeded') return task;
       if (task.status === 'failed') throw new Error(task.error || '任务失败');
+      if (task.status === 'cancelled') throw new Error('任务已取消，请重新提交');
       await new Promise((resolve) => window.setTimeout(resolve, 750));
     }
     throw new Error('任务仍在后台运行，请稍后刷新');
@@ -1247,6 +1248,7 @@ export default function WorkDetailPage() {
       );
       setScrapeCandidates([]);
       setNotice(scrapeScope === 'work' ? '正在刷新整部作品资料...' : '正在刷新当前季度资料...');
+      await Promise.all(task.task_ids.map((taskId) => waitForManagementTask(taskId)));
       const refreshedWork = await reloadCurrentWork();
       await loadAuxiliary({ preferCache: false });
       const result = task.result;

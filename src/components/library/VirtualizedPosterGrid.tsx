@@ -132,12 +132,14 @@ export default function VirtualizedPosterGrid({
     return () => {
       if (measureFrame) window.cancelAnimationFrame(measureFrame);
       observer?.disconnect();
-      imageLifecycle.dispose();
       window.removeEventListener('resize', requestMeasure);
       window.visualViewport?.removeEventListener('resize', requestMeasure);
       resolutionQuery?.removeEventListener('change', handleResolutionChange);
     };
   }, [imageLifecycle, requestedColumns, seriesCardImageMode, works.length]);
+
+  // 测量重新配置保留图片登记；只有作品墙真正卸载才释放生命周期。
+  useEffect(() => () => imageLifecycle.dispose(), [imageLifecycle]);
 
   // 规则网格只做行虚拟化：行内仍由 CSS Grid 排布 effectiveColumns 张卡片。
   const rowCount = rowHeight > 0 ? Math.ceil(works.length / effectiveColumns) : 0;

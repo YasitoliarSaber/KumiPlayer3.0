@@ -83,6 +83,8 @@ def test_explicit_numbering_and_specials_keep_existing_semantics():
     entries = _parse_entries(
         ["Show.S02E03.mkv", "Show.E03-E04.mkv", "Show.ABS13.mkv", "Show.S02.mkv", "Show.S01E05.mkv"]
     )
+    from app.media_v4.resolution.resolver import MediaResolver
+
     by_name = {facts.episode_token_raw: facts for _evidence_item, facts in entries}
     season_episode = next(facts for _e, facts in entries if _e.relative_path.endswith("S02E03.mkv"))
     assert (season_episode.season_candidate, season_episode.episode_candidate) == (2, 3)
@@ -96,11 +98,12 @@ def test_explicit_numbering_and_specials_keep_existing_semantics():
 
     assert by_name  # 至少解析出三种 token 形态，保证上面的查找有效
 
-    special = _parse_entries(["Show/特别篇/Show.SP01.mkv"])[0][1]
-    assert special.content_class == "playable_special"
-    assert special.is_importable is True
+    special_entry, special = _parse_entries(["Show/特别篇/Show.SP01.mkv"])[0]
+    assert special.content_class == "attached_special"
+    assert special.is_importable is False
     assert special.episode_candidate is None
     assert special.special_number is None
+    assert not MediaResolver().resolve([(special_entry, special)]).episodes
 
 
 def test_decision_trace_survives_persistence_roundtrip(tmp_path):

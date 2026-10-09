@@ -3,10 +3,6 @@ from __future__ import annotations
 import io
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from PIL import Image
-
 from app.media_v4.assets.catalog import (
     enqueue_manual,
     get_metadata_image,
@@ -21,6 +17,9 @@ from app.media_v4.assets.catalog import (
 from app.media_v4.assets.service import ArtworkService
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.persistence.metadata_lifecycle import publish_snapshot
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from PIL import Image
 
 
 def _database(tmp_path):
@@ -177,7 +176,7 @@ def test_get_reads_only_published_variant_without_original_or_encoding(tmp_path,
         original = conn.execute('SELECT original_path FROM artwork_resources').fetchone()[0]
     (tmp_path / original).unlink()
     monkeypatch.setattr(media_v4, 'get_database', lambda: db)
-    monkeypatch.setattr(assets, 'get_data_dir', lambda: tmp_path)
+    monkeypatch.setattr('app.core.paths.get_data_dir', lambda: tmp_path)
     monkeypatch.setattr(Image, 'open', lambda *args: pytest.fail('GET must not decode images'))
     app = FastAPI()
     app.include_router(assets.router)
@@ -263,9 +262,9 @@ def test_batch_read_uses_one_query_per_500_subjects(tmp_path):
 
 
 def test_episode_sources_merge_only_current_confirmed_members(tmp_path):
-    from backend.tests.test_v4_revision_confirmation import _entry
-
     from app.media_v4.revisions.service import V4RevisionService
+
+    from backend.tests.test_v4_revision_confirmation import _entry
 
     db = _database(tmp_path)
     revisions = V4RevisionService(db)
@@ -393,8 +392,6 @@ def test_restore_auto_copies_current_snapshot_context_for_guarded_publication(tm
 def test_legacy_picture_routes_are_not_registered_and_do_no_work(monkeypatch):
     from app.api import assets
 
-    monkeypatch.setattr(assets, 'get_mirror_root', lambda: pytest.fail('retired GET inspected mirror'))
-    monkeypatch.setattr(assets, 'load_config', lambda: pytest.fail('retired GET started download'))
     app = FastAPI()
     app.include_router(assets.router)
     assert [route.path for route in assets.router.routes] == ['/api/assets/artwork/{resource_id}/{content_version}/{width}']
@@ -406,9 +403,9 @@ def test_legacy_picture_routes_are_not_registered_and_do_no_work(monkeypatch):
 
 
 def test_episode_number_change_during_download_prevents_publication(tmp_path, monkeypatch):
-    from backend.tests.test_v4_revision_confirmation import _entry
-
     from app.media_v4.revisions.service import V4RevisionService
+
+    from backend.tests.test_v4_revision_confirmation import _entry
 
     db = _database(tmp_path)
     source = _image(tmp_path)

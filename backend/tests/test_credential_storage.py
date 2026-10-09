@@ -36,6 +36,16 @@ class FakeCredentialStore:
         self.values.pop(name, None)
 
 
+def test_public_config_returns_presence_flags_without_secret_fragments():
+    public = AppConfig(tmdb_bearer_token='sentinel-tmdb-long',
+                       bangumi_access_token='sentinel-bangumi-long').to_public_dict()
+    assert public['tmdb_configured'] is True
+    assert public['bangumi_configured'] is True
+    assert public['tmdb_bearer_token'] == ''
+    assert public['bangumi_access_token'] == ''
+    assert 'sentinel' not in json.dumps(public)
+
+
 def enable_fake_store(monkeypatch, tmp_path):
     store = FakeCredentialStore()
     config_file = tmp_path / "config.json"

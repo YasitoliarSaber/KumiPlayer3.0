@@ -3,11 +3,11 @@
 import json
 
 import pytest
-from backend.tests.test_v4_p006 import _seed_work
-
 from app.api import library_v4, media_v4
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.library import V4LibraryProjection
+
+from backend.tests.test_v4_p006 import _seed_work
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def test_diagnostics_never_loads_cards_or_rebuilds(database, monkeypatch):
 def test_missing_projection_is_readable_without_synchronous_build(database, monkeypatch):
     monkeypatch.setattr(V4LibraryProjection, 'rebuild', lambda _: pytest.fail('GET rebuilt projection'))
     assert library_v4.diagnostics()['summary']['work_count'] == 0
-    assert library_v4.get_library(compact=True)['works'] == []
+    assert library_v4.get_library()['works'] == []
 
 
 def test_compact_avoids_decoding_detail_metadata_and_preparing_images(database, monkeypatch):
@@ -71,7 +71,7 @@ def test_compact_avoids_decoding_detail_metadata_and_preparing_images(database, 
     monkeypatch.setattr(V4LibraryProjection, '_decode_card', staticmethod(decode))
     monkeypatch.setattr('app.media_v4.assets.service.ArtworkService.process_available',
                         lambda *_a, **_k: pytest.fail('GET prepared artwork'))
-    result = library_v4.get_library(compact=True)
+    result = library_v4.get_library()
     assert result['works'][0]['plot'] == 'Home synopsis'
     assert result['works'][0]['related_works'][0]['title'] == 'Search alias'
     assert result['collections'][0]['work_ids'] == ['w1']
@@ -104,7 +104,7 @@ def test_manual_title_is_reported_and_updates_lightweight_version(database):
     application = FastAPI()
     application.include_router(media_v4.router)
     assert TestClient(application).patch('/api/v4/works/w1/title', json={'title': 'Manual'}).status_code == 200
-    result = library_v4.get_library(compact=True)
+    result = library_v4.get_library()
     assert result['works'][0]['title_provenance'] == 'manual'
     assert library_v4.diagnostics()['digest'] != before
     with database.connect() as conn:
@@ -238,8 +238,8 @@ def test_summary_query_cost_does_not_grow_with_library(database, monkeypatch, ca
     assert not any('library_cards' in sql for sql in reads)
 
 
-def test_compact_can_read_historical_invalid_json(database):
+def test_card_reader_can_read_historical_invalid_json(database):
     _published(database)
     with database.connect() as conn:
         conn.execute("UPDATE library_cards SET metadata_json='broken'")
-    assert len(library_v4.get_library(compact=True, include_all=True)['works']) == 1
+    assert len(library_v4.get_library()['works']) == 1

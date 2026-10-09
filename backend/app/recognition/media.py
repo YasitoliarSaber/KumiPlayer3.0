@@ -1001,7 +1001,7 @@ def _check_local_collection_subwork(
 
 
 def _clean_standalone_dir_title(dirname: str) -> str:
-    """清理独立卡片目录名前缀（**必须与 title_cleaner 同一套规则**）。
+    r"""清理独立卡片目录名前缀（**必须与 title_cleaner 同一套规则**）。
 
     历史缺陷：这里曾无条件执行 ``re.sub(r"^\d+[.．]\s*", "", dirname)``，把
     ``13.5 伤物语 -历与吸血鬼-`` 截成 ``5 伤物语 -历与吸血鬼-``（序号带小数点时

@@ -47,7 +47,8 @@ export interface LibraryIndex {
   source_summary?: Record<string, SourceSummary>
   summary?: Record<string, unknown>
   generated_at: string
-  needs_rescan?: boolean
+  generation_id: string
+  updating: boolean
 }
 
 export interface SourceSummary {
@@ -75,7 +76,7 @@ export interface WorkIndex {
   rating: number
   plot: string
   genres: string[]
-  studios: string[]
+  studios?: string[]
   show_type: 'anime_series' | 'anime_movie' | 'live_series' | 'live_movie' | ''
   media_type: 'tv' | 'movie' | 'unknown' | ''
   metadata_source?: 'current' | 'retained' | 'local'
@@ -102,7 +103,7 @@ export interface WorkIndex {
   episodes: EpisodeIndex[]
   related_works: RelatedWork[]
   cast?: Array<{ name: string; role: string; profile_path: string }>
-  tags: string[]
+  tags?: string[]
   last_played: string | null
   metadata_state?: 'ready' | 'not_required' | 'waiting_metadata' | 'waiting_review' | 'source_unavailable' | 'failed'
   episode_count?: number
@@ -124,6 +125,9 @@ export interface WorkIndex {
     updated_at: string
   }
 }
+
+/** 详情端点返回演员与完整资料字段，列表卡片不承诺这些集合。 */
+export type WorkDetail = WorkIndex & { studios: string[]; tags: string[] }
 
 export interface ArtworkResource {
   resource_id: string

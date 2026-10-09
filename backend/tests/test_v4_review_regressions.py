@@ -3,7 +3,6 @@
 from dataclasses import asdict, replace
 
 import pytest
-
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.parsing.structure import structure_decision
 from app.media_v4.resolution.resolver import MediaResolver
@@ -133,16 +132,16 @@ def test_collection_direct_season_children_keep_actual_shared_work_title(contain
 
 @pytest.mark.parametrize("tag", ["OVA", "OAD"])
 @pytest.mark.parametrize("locator_prefix", ["C:/not-media/错误系列/", "//server/not-media/错误系列/"])
-def test_physical_scan_does_not_inherit_disk_ancestors_and_keeps_release_special(tag, locator_prefix):
+def test_physical_scan_does_not_inherit_disk_ancestors_or_admit_release_special(tag, locator_prefix):
     graph, pairs = resolve([f"Independent [{tag}]/Independent.01.mkv"],
                            method="local_scan", locator_prefix=locator_prefix)
     facts = pairs[0][1]
-    assert facts.is_importable
-    assert facts.content_class == "playable_special"
+    assert not facts.is_importable
+    assert facts.content_class == "attached_special"
     assert facts.series_group == "Independent"
     assert not (structure_decision(facts) or {}).get("collections")
-    assert len(graph.works) == len(graph.episodes) == 1
-    assert graph.episodes[0].episode_kind == "special"
+    assert not graph.works
+    assert not graph.episodes
 
 
 def test_auxiliary_in_branded_release_directory_is_still_excluded():
@@ -152,7 +151,7 @@ def test_auxiliary_in_branded_release_directory_is_still_excluded():
 
 
 @pytest.mark.parametrize("prefix", ["", "动画/Show.S1-S2+Movie/"])
-def test_movie_directory_special_attaches_to_explicit_tv_series(prefix):
+def test_movie_directory_special_does_not_attach_to_tv_series(prefix):
     graph, _ = resolve([
         "动画/Show.S1-S2+Movie/Show S1/Show S01E01.mkv",
         "动画/Show.S1-S2+Movie/Show Movie (2018)/Show Movie.mkv",
@@ -161,7 +160,7 @@ def test_movie_directory_special_attaches_to_explicit_tv_series(prefix):
     assert len(graph.works) == 2
     main = next(work for work in graph.works if work.media_type == "tv")
     assert main.preferred_title == "Show"
-    assert {episode.episode_kind for episode in graph.episodes} == {"regular", "special"}
+    assert {episode.episode_kind for episode in graph.episodes} == {"regular"}
     assert {episode.work_key for episode in graph.episodes} == {main.work_key}
     assert len(graph.work_assets) == 1
 
@@ -173,20 +172,24 @@ def test_multiseason_scope_suffix_ova_does_not_reclassify_regular_episodes(scope
     assert graph.episodes[0].episode_kind == "regular"
 
 
-def test_same_boundary_provider_hint_unites_regular_and_playable_ova():
+def test_same_boundary_provider_hint_cannot_restore_excluded_ova():
     graph, _ = resolve([
         "Angel Beats! (2010) {tmdbid-42942}/Season 1/Angel Beats! S01E01.mkv",
         "Angel Beats! (2010) {tmdbid-42942}/Specials/Angel Beats! S00E05 OVA2.mkv",
     ])
     assert len(graph.works) == 1
-    assert {episode.episode_kind for episode in graph.episodes} == {"regular", "special"}
+    assert {episode.episode_kind for episode in graph.episodes} == {"regular"}
 
 
 def test_low_confidence_hint_cannot_bridge_unrelated_boundaries():
-    graph, _ = resolve([
+    _, pairs = resolve([
         "Show (2010) {tmdbid-42942}/Season 1/Show S01E01.mkv",
-        "Unrelated (2010) {tmdbid-42942}/Specials/Unrelated OVA01.mkv",
+        "Unrelated (2010) {tmdbid-42942}/Season 1/Unrelated S01E01.mkv",
     ])
+    # 用仍准入的正片显式构造弱提示；特别篇排除不能替代边界隔离验证。
+    evidence, facts = pairs[1]
+    pairs[1] = evidence, replace(facts, confidence="low")
+    graph = MediaResolver().resolve(pairs)
     assert len(graph.works) == 2
     assert {work.preferred_title for work in graph.works} == {"Show", "Unrelated"}
 
@@ -280,11 +283,12 @@ def test_romanized_movie_name_cannot_override_auxiliary_exclusion(suffix):
 
 
 @pytest.mark.parametrize("suffix", ["SP01", "OVA01", "OAD01"])
-def test_romanized_movie_title_keeps_explicit_local_special_playable(suffix):
+def test_romanized_movie_title_cannot_restore_explicit_special(suffix):
     graph, pairs = resolve([f"动画/作品/Season 2/Gekijouban Series {suffix}.mkv"])
-    assert pairs[0][1].content_class == "playable_special"
-    assert pairs[0][1].is_importable
-    assert len(graph.episodes) == 1
+    assert pairs[0][1].content_class == "attached_special"
+    assert not pairs[0][1].is_importable
+    assert not graph.works
+    assert not graph.episodes
     assert not graph.work_assets
 
 

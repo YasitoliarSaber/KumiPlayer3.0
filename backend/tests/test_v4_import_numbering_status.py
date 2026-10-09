@@ -11,7 +11,6 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
-
 from app.media_v4.jobs import metadata as metadata_module
 from app.media_v4.jobs.scrape import V4ScrapeService
 from app.media_v4.persistence.database import V4Database
@@ -742,6 +741,8 @@ def _db_entry(*, season: int = 2, episode: int = 13):
         relative_path="Show/Season 2/Show.S02E13.mkv",
         entry_kind="video",
         provider="local",
+        source_locator="C:/KumiTest/numbering/Show/Season 2/Show.S02E13.mkv",
+        playback_locator="C:/KumiTest/numbering/Show/Season 2/Show.S02E13.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id="facts-num",

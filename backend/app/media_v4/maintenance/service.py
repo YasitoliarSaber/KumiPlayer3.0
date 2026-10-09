@@ -415,7 +415,8 @@ def _artifact_preview_state(conn, revision_id: str, mirror_root: Path | None) ->
         raise ValueError('revision已变化，请重新预览')
     candidates = collect_cleanup_candidates(conn, revision_id, mirror_root)
     jobs = [dict(r) for r in conn.execute(
-        "SELECT job_id,job_type,status FROM jobs WHERE revision_id=? AND status IN ('queued','running') ORDER BY job_id", (revision_id,),
+        "SELECT job_id,job_type,status FROM jobs WHERE revision_id=? AND status IN ('queued','running') "
+        "AND job_type!='refresh_projection' ORDER BY job_id", (revision_id,),
     )]
     payload = [revision_id, _mirror_identity(mirror_root), jobs,
                sorted((r['artifact_id'], r['digest'], r['target_path']) for r in candidates)]
@@ -752,9 +753,11 @@ def _sanitized_summary(path_text: str, mirror_root: Path | None) -> str:
 
 
 def _rebuild_projection(database: V4Database) -> str:
+    from app.media_v4.projection.library import request_projection_refresh
+
     try:
-        V4LibraryProjection(database).rebuild()
-        return "ok"
+        request_projection_refresh(database)
+        return "accepted"
     except Exception as exc:  # noqa: BLE001
         return f"failed: {exc}"
 
@@ -805,7 +808,7 @@ def confirm_delete_preview(database: V4Database, *, preview_id: str, scope: str,
     projection_status = _rebuild_projection(database)
     if has_artifact_failure:
         operation_status = "partial_failed"
-    elif projection_status != "ok":
+    elif projection_status.startswith("failed:"):
         operation_status = "projection_failed"
     else:
         operation_status = "completed"
@@ -857,7 +860,7 @@ def resume_operation(database: V4Database, *, preview_id: str, mirror_root: Path
     projection_status = _rebuild_projection(database)
     if has_artifact_failure:
         operation_status = "partial_failed"
-    elif projection_status != "ok":
+    elif projection_status.startswith("failed:"):
         operation_status = "projection_failed"
     else:
         operation_status = "completed"

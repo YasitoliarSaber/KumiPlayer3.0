@@ -7,6 +7,8 @@
 // 测试二进制，导致进程起不来。被内联的模块里有本测试用不到的启动辅助，故放开 dead_code。
 #![allow(dead_code)]
 
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -115,6 +117,212 @@ fn a_legacy_backend_without_identity_is_labelled_explicitly() {
     );
 }
 
+#[test]
+fn health_response_is_bounded_by_one_deadline_and_a_fixed_body_limit() {
+    use supervisor::{read_health_identity_from, HEALTH_RESPONSE_LIMIT};
+
+    let serve = |response: Vec<u8>, delay: Duration| {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let worker = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0; 128];
+            while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                let count = stream.read(&mut chunk).unwrap();
+                if count == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..count]);
+            }
+            for chunk in response.chunks(32) {
+                let _ = stream.write_all(chunk);
+                std::thread::sleep(delay);
+            }
+        });
+        (address, worker)
+    };
+
+    let body =
+        br#"{"app":"KumiPlayer","runtime_kind":"source","runtime_id":"r","instance_id":"i"}"#;
+    let valid = format!(
+        "HTTP/1.0 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+        body.len(),
+        String::from_utf8_lossy(body)
+    )
+    .into_bytes();
+    let (address, worker) = serve(valid, Duration::ZERO);
+    assert!(read_health_identity_from(address, Duration::from_secs(2)).is_some());
+    worker.join().unwrap();
+
+    let oversized = format!(
+        "HTTP/1.0 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+        HEALTH_RESPONSE_LIMIT + 1,
+        "x".repeat(HEALTH_RESPONSE_LIMIT + 1)
+    )
+    .into_bytes();
+    let (address, worker) = serve(oversized, Duration::ZERO);
+    assert!(read_health_identity_from(address, Duration::from_millis(250)).is_none());
+    worker.join().unwrap();
+
+    let slow = format!(
+        "HTTP/1.0 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+        body.len(),
+        String::from_utf8_lossy(body)
+    )
+    .into_bytes();
+    let (address, worker) = serve(slow, Duration::from_millis(80));
+    let started = Instant::now();
+    assert!(read_health_identity_from(address, Duration::from_millis(120)).is_none());
+    assert!(started.elapsed() < Duration::from_millis(300));
+    worker.join().unwrap();
+}
+
+#[test]
+fn data_root_override_is_shared_by_source_and_bundled_modes() {
+    use supervisor::resolve_data_dir;
+    let override_root = std::env::temp_dir().join("kumiplayer-test-data");
+    let root = std::path::PathBuf::from(r"D:\\install");
+    let local = std::path::PathBuf::from(r"C:\\Users\\test\\AppData\\Local");
+    assert_eq!(
+        resolve_data_dir(
+            "source",
+            &root,
+            Some(override_root.as_os_str()),
+            Some(&local)
+        )
+        .unwrap(),
+        override_root
+    );
+    assert_eq!(
+        resolve_data_dir(
+            "bundled",
+            &root,
+            Some(std::env::temp_dir().join("same-data").as_os_str()),
+            Some(&local)
+        )
+        .unwrap(),
+        std::env::temp_dir().join("same-data")
+    );
+    assert_eq!(
+        resolve_data_dir("source", &root, None, None).unwrap(),
+        root.join("data")
+    );
+    assert_eq!(
+        resolve_data_dir("bundled", &root, None, Some(&local)).unwrap(),
+        local.join("KumiPlayer").join("data")
+    );
+}
+
+#[test]
+fn graceful_shutdown_sends_the_session_token_and_is_bounded() {
+    use supervisor::{request_graceful_shutdown, SHUTDOWN_TIMEOUT};
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let address = listener.local_addr().unwrap();
+    let worker = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = Vec::new();
+        let mut chunk = [0; 256];
+        while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+            let count = stream.read(&mut chunk).unwrap();
+            if count == 0 {
+                break;
+            }
+            request.extend_from_slice(&chunk[..count]);
+        }
+        let request = String::from_utf8_lossy(&request);
+        assert!(request.starts_with("POST /api/system/shutdown HTTP/1.0"));
+        assert!(request.contains("X-KumiPlayer-Token: token-under-test"));
+        stream
+            .write_all(b"HTTP/1.0 202 Accepted\r\nContent-Length: 2\r\n\r\nok")
+            .unwrap();
+    });
+    let accepted = request_graceful_shutdown(address, "token-under-test", Duration::from_secs(2));
+    assert!(SHUTDOWN_TIMEOUT <= Duration::from_secs(5));
+    worker.join().unwrap();
+    assert!(accepted, "expected 202 from test backend");
+}
+
+#[test]
+fn shutdown_status_line_has_one_deadline_for_silent_and_slow_servers() {
+    use supervisor::request_graceful_shutdown;
+
+    let listen = || {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        (listener, address)
+    };
+
+    let (listener, address) = listen();
+    let silent = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = [0; 512];
+        let _ = stream.read(&mut request);
+        std::thread::sleep(Duration::from_millis(300));
+    });
+    let started = Instant::now();
+    assert!(!request_graceful_shutdown(
+        address,
+        "test-token",
+        Duration::from_millis(100)
+    ));
+    assert!(started.elapsed() < Duration::from_millis(250));
+    silent.join().unwrap();
+
+    let (listener, address) = listen();
+    let slow = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = [0; 512];
+        let _ = stream.read(&mut request);
+        for byte in b"HTTP/1.1 202 Accepted\r\n" {
+            if stream.write_all(&[*byte]).is_err() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        }
+    });
+    let started = Instant::now();
+    assert!(!request_graceful_shutdown(
+        address,
+        "test-token",
+        Duration::from_millis(120)
+    ));
+    assert!(started.elapsed() < Duration::from_millis(300));
+    slow.join().unwrap();
+}
+
+#[test]
+fn shutdown_without_a_session_token_never_opens_a_connection() {
+    use supervisor::request_graceful_shutdown;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let address = listener.local_addr().unwrap();
+
+    assert!(!request_graceful_shutdown(
+        address,
+        "",
+        Duration::from_millis(50)
+    ));
+    assert!(listener.accept().is_err(), "empty token must not connect");
+}
+
+#[cfg(windows)]
+#[test]
+fn uncredentialed_managed_child_never_requests_shutdown_from_another_backend() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let address = listener.local_addr().unwrap();
+    let mut child = spawn_sentinel_backend();
+
+    child.shutdown_at(address);
+
+    assert!(
+        listener.accept().is_err(),
+        "empty-token child must not send HTTP"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // P-009：重启失败提示按运行模式区分，且不泄漏凭据/Token
 // ---------------------------------------------------------------------------
@@ -141,8 +349,14 @@ fn restart_failure_message_distinguishes_bundled_and_source_without_leaking_toke
         let process = BackendProcess::new(None);
         let result = restart_backend_with(&process, &context, &supervisor);
         let message = result.expect_err("不健康时必须失败").to_string();
-        assert!(message.contains("未能恢复"), "提示应包含恢复失败信息：{message}");
-        assert!(!message.contains(token), "提示不得泄漏 API Token：{message}");
+        assert!(
+            message.contains("未能恢复"),
+            "提示应包含恢复失败信息：{message}"
+        );
+        assert!(
+            !message.contains(token),
+            "提示不得泄漏 API Token：{message}"
+        );
         assert!(
             !message.contains("token-under-test"),
             "提示不得泄漏会话 Token：{message}"
@@ -163,7 +377,6 @@ fn restart_failure_message_distinguishes_bundled_and_source_without_leaking_toke
     );
     assert_ne!(bundled, source, "两种运行模式的失败提示必须可区分");
 }
-
 
 // ---------------------------------------------------------------------------
 

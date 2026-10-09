@@ -12,7 +12,6 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api.assets import close_remote_asset_client
 from app.api.assets import router as assets_router
 from app.api.bangumi import router as bangumi_router
 from app.api.config import router as config_router
@@ -30,6 +29,32 @@ from app.media_v4.assets.service import ArtworkService
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.projection.refresh import ProjectionRefreshScheduler
 from app.media_v4.runtime import initialize_runtime
+
+
+async def _bounded_thread_call(function, wait_timeout: float, *args, **kwargs) -> bool:
+    """Wait briefly for a blocking shutdown hook without extending lifespan."""
+
+    task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    done, _pending = await asyncio.wait({task}, timeout=max(0.0, wait_timeout))
+    if not done:
+        task.cancel()
+        return False
+    try:
+        task.result()
+    except Exception:
+        logging.getLogger(__name__).warning("桌面后端关闭步骤失败", exc_info=True)
+        return False
+    return True
+
+
+async def _stop_background_tasks(tasks: tuple[asyncio.Task, ...], timeout: float = 0.35) -> None:
+    done, pending = await asyncio.wait(tasks, timeout=timeout)
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+    if done:
+        await asyncio.gather(*done, return_exceptions=True)
 
 
 @asynccontextmanager
@@ -100,16 +125,19 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop_jobs.set()
-        await job_worker
-        await projection_worker
-        await ongoing_worker
-        await asyncio.to_thread(artwork_service.stop)
-        source_scan_worker.stop()
-        await close_remote_asset_client(app)
         from app.media_v4.playback.session import get_v4_playback_manager
 
-        get_v4_playback_manager(database).stop()
-        manager.stop_monitor()
+        # Playback owns the most recent user-visible state. Persist its latest
+        # monitor sample and request MPV's normal quit before waiting on providers.
+        await _bounded_thread_call(
+            get_v4_playback_manager(database).stop,
+            2.5,
+            timeout=2.25,
+        )
+        await _stop_background_tasks((job_worker, projection_worker, ongoing_worker))
+        await _bounded_thread_call(artwork_service.stop, 0.35)
+        await _bounded_thread_call(source_scan_worker.stop, 0.35, timeout=0.25)
+        await _bounded_thread_call(manager.stop_monitor, 0.25)
 
 
 _BUNDLED_RUNTIME = os.environ.get("KUMIPLAYER_RUNTIME_KIND") == "bundled"

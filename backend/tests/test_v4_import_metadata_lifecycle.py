@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.persistence.database import V4Database
@@ -94,7 +93,7 @@ def test_rescan_retains_success_and_unchanged_import_makes_no_request(tmp_path, 
     with database.connect() as conn:
         original_snapshot = dict(conn.execute('SELECT * FROM metadata_snapshots').fetchone())
     confirm(database, 'r2')
-    card = V4LibraryProjection(database).ensure_current().cards[0]
+    card = V4LibraryProjection(database).rebuild().cards[0]
     assert card['title'] == 'Online title'
     assert card['metadata']['metadata_source'] == 'retained'
 
@@ -138,12 +137,13 @@ def test_historical_numbered_local_members_keep_work_usable_without_online_mappi
         cached.pop('episode_metadata_status', None)
         conn.execute('UPDATE library_cards SET metadata_json=?', (json.dumps(cached),))
         conn.execute("DELETE FROM v4_meta WHERE key='library_projection_dirty'")
-    assert V4LibraryProjection(database).ensure_current().cards[0]['metadata']['metadata_state'] == 'ready'
-    assert V4LibraryProjection(database).ensure_current().cards[0]['metadata']['mapped_count'] == 0
+    published = V4LibraryProjection(database).rebuild().cards[0]
+    assert published['metadata']['metadata_state'] == 'ready'
+    assert published['metadata']['mapped_count'] == 0
     from app.api import library_v4
     monkeypatch.setattr(library_v4, 'get_database', lambda: database)
     assert len(library_v4.get_library()['works']) == 1
-    assert library_v4.get_library(include_all=True)['works'][0]['metadata_state'] == 'ready'
+    assert library_v4.get_library()['works'][0]['metadata_state'] == 'ready'
     service = V4RevisionService(database)
     progress = service.get_execution_progress('r1')
     assert progress['work_units'][0]['metadata_state'] == 'ready'
@@ -156,7 +156,7 @@ def test_historical_numbered_local_members_keep_work_usable_without_online_mappi
     with database.connect() as conn:
         retained = select_applicable_snapshot(conn, 'r2', snapshot['work_id'])
         assert retained is not None and retained['covers_members'] is True
-    card = V4LibraryProjection(database).ensure_current().cards[0]
+    card = V4LibraryProjection(database).rebuild().cards[0]
     assert card['metadata']['metadata_state'] == 'ready'
     calls = []
 
@@ -166,7 +166,7 @@ def test_historical_numbered_local_members_keep_work_usable_without_online_mappi
 
     V4JobRunner(database, metadata_provider=fixed_provider).process_available(mirror_root=mirror)
     assert calls == [], '已有正片缩略图完备时，不为缺少在线分集 ID 强制重抓资料'
-    assert V4LibraryProjection(database).ensure_current().cards[0]['metadata']['metadata_state'] == 'ready'
+    assert V4LibraryProjection(database).rebuild().cards[0]['metadata']['metadata_state'] == 'ready'
 
 
 def test_append_failed_refresh_keeps_success_snapshot_and_current_members(tmp_path, monkeypatch):
@@ -179,7 +179,7 @@ def test_append_failed_refresh_keeps_success_snapshot_and_current_members(tmp_pa
         'provider': 'tmdb', 'provider_id': '123', 'metadata_state': 'source_unavailable',
         'reason_code': 'provider_unavailable', 'reason': 'fixture timeout', 'retryable': True,
     }).process_available(mirror_root=mirror)
-    card = V4LibraryProjection(database).ensure_current().cards[0]
+    card = V4LibraryProjection(database).rebuild().cards[0]
     assert card['episode_count'] == 2
     assert card['title'] == 'Online title'
     assert card['metadata']['refresh_status'] == 'failed'
@@ -223,7 +223,7 @@ def test_artifact_preview_preserves_source_and_personal_state(tmp_path, monkeypa
         assert json.loads(conn.execute('SELECT override_json FROM work_overrides WHERE work_id=?', (work_id,)).fetchone()[0]) == override
         assert dict(conn.execute('SELECT * FROM tracking_states WHERE work_id=?', (work_id,)).fetchone()) == tracking_before
     assert cover.read_bytes() == b'user original'
-    assert V4LibraryProjection(database).ensure_current().cards[0]['title'] == 'Online title'
+    assert V4LibraryProjection(database).rebuild().cards[0]['title'] == 'Online title'
 
 
 def test_append_only_requests_missing_episode_and_composes_snapshot(tmp_path, monkeypatch):
@@ -237,7 +237,7 @@ def test_append_only_requests_missing_episode_and_composes_snapshot(tmp_path, mo
 
     V4JobRunner(database, metadata_provider=partial).process_available(mirror_root=mirror)
     assert requested == [2]
-    metadata = V4LibraryProjection(database).ensure_current().cards[0]['metadata']
+    metadata = V4LibraryProjection(database).rebuild().cards[0]['metadata']
     assert metadata['mapped_count'] == metadata['total_count'] == 2
     assert metadata['composed_from_snapshot_id']
 
@@ -324,7 +324,7 @@ def test_failed_snapshot_publication_preserves_previous_reference(tmp_path, monk
         V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
     with database.connect() as conn:
         assert dict(conn.execute('SELECT * FROM revision_metadata_refs').fetchone()) == before
-    card = V4LibraryProjection(database).ensure_current().cards[0]
+    card = V4LibraryProjection(database).rebuild().cards[0]
     assert card['title'] == 'Online title'
     assert card['metadata']['refresh_status'] == 'failed'
 
@@ -443,6 +443,7 @@ def test_shared_work_uses_current_members_and_successes_from_both_roots(tmp_path
     from dataclasses import replace
 
     from app.core.config import AppConfig
+
     from tests.test_v4_import_identity_roundtrip import _tree_entries
     config = AppConfig(artwork_storage_mode='remote')
     monkeypatch.setattr('app.media_v4.jobs.metadata_artifacts.load_config', lambda: config)
@@ -459,7 +460,7 @@ def test_shared_work_uses_current_members_and_successes_from_both_roots(tmp_path
         service.create_draft(root, entries)
         service.confirm(root)
         V4JobRunner(database, metadata_provider=known_provider).process_available(mirror_root=mirror)
-    cards = V4LibraryProjection(database).ensure_current().cards
+    cards = V4LibraryProjection(database).rebuild().cards
     assert len(cards) == 1
     assert cards[0]['episode_count'] == 2
     assert cards[0]['metadata']['mapped_count'] == cards[0]['metadata']['total_count'] == 2

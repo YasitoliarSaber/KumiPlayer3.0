@@ -10,6 +10,10 @@ let requestedImages: Set<HTMLImageElement>;
 let imageSetterSpy: ReturnType<typeof vi.spyOn>;
 let imageVersion = 0;
 
+function artworkPath(resourceHex: string, digestHex: string, width = 384) {
+  return `/api/assets/artwork/${resourceHex.repeat(64)}/${digestHex.repeat(64)}-webp-v1/${width}`;
+}
+
 function work(workId: string) {
   return {
     work_id: workId,
@@ -19,7 +23,7 @@ function work(workId: string) {
     rating: 8.5,
     show_type: 'anime_series',
     source: 'local',
-    poster_path: `/api/assets/artwork/${workId}/v${imageVersion}/384`,
+    poster_path: artworkPath('a', (imageVersion % 16).toString(16)),
     fanart_path: '',
   };
 }
@@ -133,13 +137,13 @@ test('分类页在索引保留远程引用时只用已发布的本地版本图',
   const remoteWork = {
     ...work('w1'),
     poster_path: 'https://image.tmdb.org/t/p/w342/remote.jpg',
-    local_poster_path: '/api/assets/artwork/local/v1/384',
+    local_poster_path: artworkPath('b', '1'),
   };
 
   render(<PosterCard work={remoteWork} thumbnailWidth={384} localArtworkOnly />);
   const image = screen.getByRole('img', { name: '作品w1' });
 
-  expect(image.getAttribute('src')).toContain('/api/assets/artwork/local/v1/384');
+  expect(image.getAttribute('src')).toContain(artworkPath('b', '1'));
   expect(image.getAttribute('src')).not.toContain('/api/assets/remote');
 });
 
@@ -191,7 +195,7 @@ test('海报占位区分加载与失败，图片地址改变后清除旧错误',
   expect(screen.getByText('图片暂不可用')).toBeVisible();
   expect(screen.queryByText('图片加载中')).toBeNull();
 
-  rerender(<PosterCard work={{ ...work('w1'), poster_path: '/api/assets/artwork/w1/v2/384' }} thumbnailWidth={384} />);
+  rerender(<PosterCard work={{ ...work('w1'), poster_path: artworkPath('a', 'f') }} thumbnailWidth={384} />);
   expect(screen.queryByText('图片暂不可用')).toBeNull();
   expect(screen.getByText('图片加载中')).toBeVisible();
 
