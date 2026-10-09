@@ -6,6 +6,9 @@ import { resetScrollGestureForTests } from '../../src/utils/scrollGesture';
 
 const getWorkDetail = vi.fn();
 let addListenerSpy: ReturnType<typeof vi.spyOn>;
+let requestedImages: Set<HTMLImageElement>;
+let imageSetterSpy: ReturnType<typeof vi.spyOn>;
+let imageVersion = 0;
 
 function work(workId: string) {
   return {
@@ -16,13 +19,20 @@ function work(workId: string) {
     rating: 8.5,
     show_type: 'anime_series',
     source: 'local',
-    poster_path: '/local/poster.jpg',
+    poster_path: `/api/assets/artwork/${workId}/v${imageVersion}/384`,
     fanart_path: '',
   };
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
+  imageVersion += 1;
+  requestedImages = new Set();
+  const setter = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src')!.set!;
+  imageSetterSpy = vi.spyOn(HTMLImageElement.prototype, 'src', 'set').mockImplementation(function (this: HTMLImageElement, value: string) {
+    requestedImages.add(this);
+    setter.call(this, value);
+  });
   resetScrollGestureForTests();
   addListenerSpy = vi.spyOn(window, 'addEventListener');
   addListenerSpy.mockClear();
@@ -32,6 +42,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // 卸载不代表传输结束，必须模拟已卸载节点的浏览器终态。
+  requestedImages.forEach((node) => fireEvent.load(node));
+  imageSetterSpy.mockRestore();
   vi.useRealTimers();
 });
 
@@ -108,27 +121,25 @@ test('本地缩略图请求失败时不再重复请求原图，改为常驻标�
   render(<PosterCard work={work('w1')} thumbnailWidth={384} />);
   const image = screen.getByRole('img', { name: '作品w1' });
 
-  expect(image.getAttribute('src')).toContain('/api/assets/thumbnail?path=');
+  expect(image.getAttribute('src')).toContain('/api/assets/artwork/');
   fireEvent.error(image);
 
   await act(async () => {});
-  // 后端在缩略图生成失败时已经返回原图，前端再换原图 URL 只会重复失败请求（规格 §4.5）。
-  expect(image.getAttribute('src')).toContain('/api/assets/thumbnail?path=');
+  expect(image.getAttribute('src')).toContain('/api/assets/artwork/');
   expect(document.querySelector('.poster-placeholder-title')).toBeTruthy();
 });
 
-test('分类页在索引保留远程引用时仍优先使用本地镜像海报', () => {
+test('分类页在索引保留远程引用时只用已发布的本地版本图', () => {
   const remoteWork = {
     ...work('w1'),
     poster_path: 'https://image.tmdb.org/t/p/w342/remote.jpg',
-    local_poster_path: 'D:/mirror/作品w1/poster.jpg',
+    local_poster_path: '/api/assets/artwork/local/v1/384',
   };
 
   render(<PosterCard work={remoteWork} thumbnailWidth={384} localArtworkOnly />);
   const image = screen.getByRole('img', { name: '作品w1' });
 
-  expect(image.getAttribute('src')).toContain('/api/assets/thumbnail?path=');
-  expect(image.getAttribute('src')).toContain('D%3A%2Fmirror%2F');
+  expect(image.getAttribute('src')).toContain('/api/assets/artwork/local/v1/384');
   expect(image.getAttribute('src')).not.toContain('/api/assets/remote');
 });
 
@@ -158,7 +169,7 @@ test('本地与远程图都缺失时分类卡片显示文字占位', () => {
   expect(screen.getAllByText('作品w1').length).toBeGreaterThan(0);
 });
 
-test('recent 卡片本地背景缺失时回退远程 fanart', () => {
+test('recent 卡片尚无已发布背景时保持占位，不回退远程 fanart', () => {
   const recentWork = {
     ...work('w1'),
     fanart_path: 'https://image.tmdb.org/t/p/w1280/remote-fanart.jpg',
@@ -167,24 +178,20 @@ test('recent 卡片本地背景缺失时回退远程 fanart', () => {
   };
 
   render(<PosterCard work={recentWork} showType="recent" />);
-  const image = screen.getByRole('img', { name: '作品w1' });
-
-  expect(image.getAttribute('src')).toContain('/api/assets/remote?url=');
-  expect(image.getAttribute('src')).toContain('remote-fanart');
-  expect(image.getAttribute('src')).not.toContain('/api/assets/thumbnail');
+  expect(screen.queryByRole('img', { name: '作品w1' })).toBeNull();
 });
 
 test('海报占位区分加载与失败，图片地址改变后清除旧错误', async () => {
   const { rerender } = render(<PosterCard work={work('w1')} thumbnailWidth={384} />);
   expect(screen.getByText('图片加载中')).toBeVisible();
   const image = screen.getByRole('img');
-  expect(image).toHaveAttribute('loading', 'lazy');
-  expect(image).not.toHaveAttribute('fetchpriority', 'high');
+  expect(image).toHaveAttribute('loading', 'eager');
+  expect(image).toHaveAttribute('src', expect.stringContaining('/api/assets/artwork/'));
   fireEvent.error(image);
   expect(screen.getByText('图片暂不可用')).toBeVisible();
   expect(screen.queryByText('图片加载中')).toBeNull();
 
-  rerender(<PosterCard work={{ ...work('w1'), poster_path: '/local/new-poster.jpg' }} thumbnailWidth={384} />);
+  rerender(<PosterCard work={{ ...work('w1'), poster_path: '/api/assets/artwork/w1/v2/384' }} thumbnailWidth={384} />);
   expect(screen.queryByText('图片暂不可用')).toBeNull();
   expect(screen.getByText('图片加载中')).toBeVisible();
 

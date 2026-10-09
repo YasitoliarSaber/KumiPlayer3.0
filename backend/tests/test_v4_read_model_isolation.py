@@ -3,11 +3,11 @@
 import json
 
 import pytest
+from backend.tests.test_v4_p006 import _seed_work
+
 from app.api import library_v4, media_v4
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.library import V4LibraryProjection
-
-from backend.tests.test_v4_p006 import _seed_work
 
 
 @pytest.fixture
@@ -69,7 +69,8 @@ def test_compact_avoids_decoding_detail_metadata_and_preparing_images(database, 
         return result
 
     monkeypatch.setattr(V4LibraryProjection, '_decode_card', staticmethod(decode))
-    monkeypatch.setattr(library_v4, 'queue_library_artwork', lambda _: pytest.fail('GET prepared artwork'))
+    monkeypatch.setattr('app.media_v4.assets.service.ArtworkService.process_available',
+                        lambda *_a, **_k: pytest.fail('GET prepared artwork'))
     result = library_v4.get_library(compact=True)
     assert result['works'][0]['plot'] == 'Home synopsis'
     assert result['works'][0]['related_works'][0]['title'] == 'Search alias'
@@ -114,7 +115,7 @@ def test_background_refresh_retries_and_publishes_without_get(database, monkeypa
     from app.media_v4.projection.refresh import ProjectionRefreshScheduler
 
     scheduler = ProjectionRefreshScheduler(database)
-    original = V4LibraryProjection.rebuild
+    original = V4LibraryProjection.refresh_if_needed
     attempts = []
 
     def rebuild(projection):
@@ -123,7 +124,7 @@ def test_background_refresh_retries_and_publishes_without_get(database, monkeypa
             raise OSError('fixture failure')
         return original(projection)
 
-    monkeypatch.setattr(V4LibraryProjection, 'rebuild', rebuild)
+    monkeypatch.setattr(V4LibraryProjection, 'refresh_if_needed', rebuild)
     assert scheduler.tick(now=0) is False
     assert scheduler.tick(now=0.5) is False
     assert len(attempts) == 1
@@ -174,7 +175,8 @@ def test_overlay_reads_respect_connection_variable_limit(database, monkeypatch):
     ids = ['w1', *(f'absent-{i}' for i in range(30))]
     assert library_v4._work_overrides_map(ids) == {}
     assert library_v4._watch_status_map(ids) == {}
-    library_v4._content_scope_map(ids)
+    # 来源用途已发布进精简投影，不再由浏览请求重读确认事实。
+    assert not hasattr(library_v4, '_content_scope_map')
 
 
 def test_validation_scope_hashes_once_and_rechecks_changed_files(tmp_path, monkeypatch):

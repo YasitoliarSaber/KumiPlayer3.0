@@ -11,7 +11,6 @@ from typing import Any
 
 from app.media_v4.domain.identity import NON_IMPORTABLE_CONTENT_CLASSES
 from app.media_v4.domain.models import ResolvedWork
-from app.media_v4.jobs.completeness import assess_metadata_completeness
 from app.media_v4.jobs.control import cancel_requested, claim_running, heartbeat, mark_cancelled
 from app.media_v4.jobs.metadata import (
     ARTIFACT_STATUS_COMPLETE,
@@ -25,7 +24,6 @@ from app.media_v4.jobs.metadata import (
     finalize_metadata_statuses,
     local_special_metadata,
 )
-from app.media_v4.jobs.metadata_artifacts import publish_metadata_artifacts
 from app.media_v4.parsing.parser import show_type_from_import_family
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.persistence.repositories import V4Repository
@@ -306,6 +304,7 @@ def _job_result_payload(
     if not refresh_status:
         refresh_status = REFRESH_STATUS_NOT_REQUESTED
     return {
+        'runtime_policy': 'sqlite-artwork-v1',
         "outcome": _job_outcome(ready, result),
         "identity_status": str(result.get("identity_status") or ""),
         "work_metadata_status": str(result.get("work_metadata_status") or ""),
@@ -404,8 +403,8 @@ class V4ScrapeService:
                     """
                     INSERT OR IGNORE INTO jobs(
                         job_id, job_type, revision_id, work_id, idempotency_key,
-                        created_at, updated_at
-                    ) VALUES (?, 'scrape_work', ?, ?, ?, ?, ?)
+                        created_at, updated_at, result_json
+                    ) VALUES (?, 'scrape_work', ?, ?, ?, ?, ?, '{"runtime_policy":"sqlite-artwork-v1"}')
                     """,
                     (str(uuid.uuid4()), revision_id, work_id, f"scrape_work:{revision_id}:{work_id}", now, now),
                 )
@@ -473,76 +472,38 @@ class V4ScrapeService:
                     result_json = ?
                 WHERE job_id = ? AND status != 'running'
                 """,
-                (now, json.dumps({"explicit_refresh": True, "scope": "season" if season_number is not None else "work",
+                (now, json.dumps({'runtime_policy': 'sqlite-artwork-v1', "explicit_refresh": True, "scope": "season" if season_number is not None else "work",
                                   "season_number": season_number}, ensure_ascii=False), job["job_id"]),
             )
             if updated.rowcount != 1:
                 raise RuntimeError("该作品正在获取媒体信息")
+            conn.execute('DELETE FROM v4_meta WHERE key=?',
+                         ('artwork_cancelled_revision:' + revision_id + ':' + work_id,))
             conn.execute("UPDATE jobs SET status='cancelled',cancel_requested=1,updated_at=? "
                          "WHERE revision_id=? AND work_id=? AND job_type='recover_work_aliases' AND status='queued'",
                          (_now(), revision_id, work_id))
-            conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_projection_dirty',?)", (now,))
+            from app.media_v4.projection.library import mark_projection_dirty
+            mark_projection_dirty(conn, [work_id])
             refreshed = conn.execute(
                 "SELECT * FROM jobs WHERE job_id = ?", (job["job_id"],)
             ).fetchone()
         return dict(refreshed)
 
     def retry_artifacts(self, revision_id: str, work_id: str, *, mirror_root=None) -> dict:
-        """只重下缺失的媒体图片产物，不重新搜索在线资料。
-
-        复用 scrape_work 任务既有的写库路径：把已保存的 metadata_json 当作本轮
-        provider 结果重新发布产物，因此不会产生任何在线请求，也不会改动身份。
-        """
+        """显式图片重试只唤醒持久图片需求，不重跑资料或在线作品搜索。"""
+        from app.media_v4.assets.catalog import retry_work
+        from app.media_v4.assets.status import artwork_status
 
         with self.database.connect() as conn:
-            job = conn.execute(
-                "SELECT job_id FROM jobs WHERE revision_id = ? AND work_id = ? "
-                "AND job_type = 'scrape_work'",
-                (revision_id, work_id),
-            ).fetchone()
-            binding = conn.execute(
-                "SELECT metadata_json FROM scrape_bindings WHERE revision_id = ? AND work_id = ? "
-                "ORDER BY updated_at DESC, binding_id DESC LIMIT 1",
-                (revision_id, work_id),
-            ).fetchone()
-        if job is None:
-            raise RuntimeError("该作品缺少可重试的刮削任务")
-        stored: dict = {}
-        if binding is not None:
-            try:
-                decoded = json.loads(str(binding["metadata_json"] or "{}"))
-                stored = decoded if isinstance(decoded, dict) else {}
-            except (TypeError, ValueError, json.JSONDecodeError):
-                stored = {}
-        if not str(stored.get("provider_id") or "").strip():
-            raise RuntimeError("该作品还没有已保存的在线资料，请先获取媒体信息")
-        requeued = self.requeue_work(revision_id, work_id)
-        self.process(
-            str(requeued["job_id"]),
-            lambda _target: {**stored, "metadata_state": "ready", "reason_code": "", "reason": ""},
-            mirror_root=mirror_root,
-        )
-        with self.database.connect() as conn:
-            row = conn.execute(
-                "SELECT status, metadata_json FROM scrape_bindings WHERE revision_id = ? AND work_id = ? "
-                "ORDER BY updated_at DESC, binding_id DESC LIMIT 1",
-                (revision_id, work_id),
-            ).fetchone()
-        metadata: dict = {}
-        if row is not None:
-            try:
-                decoded = json.loads(str(row["metadata_json"] or "{}"))
-                metadata = decoded if isinstance(decoded, dict) else {}
-            except (TypeError, ValueError, json.JSONDecodeError):
-                metadata = {}
-        return {
-            "work_id": work_id,
-            "revision_id": revision_id,
-            "binding_status": str(row["status"] or "") if row is not None else "",
-            "metadata_state": str(metadata.get("metadata_state") or ""),
-            "artifact_state": str(metadata.get("artifact_state") or ""),
-            "artifact_reasons": [str(item) for item in (metadata.get("artifact_reasons") or [])],
-        }
+            if not conn.execute("SELECT 1 FROM revision_bindings rb JOIN import_revisions ir "
+                                "ON ir.revision_id=rb.revision_id JOIN source_roots sr ON sr.root_id=ir.root_id "
+                                "WHERE rb.revision_id=? AND rb.work_id=? AND ir.status='confirmed' "
+                                "AND sr.retired_at='' LIMIT 1", (revision_id, work_id)).fetchone():
+                raise RuntimeError('作品没有活动确认资料')
+            requeued = retry_work(conn, work_id)
+            state = artwork_status(conn, work_id)
+        return {'work_id': work_id, 'revision_id': revision_id, 'artifact_state': state['status'],
+                'artifact_reasons': [], 'requeued': requeued}
 
     def _cancel(self, job_id: str, reason: str) -> None:
         """记录取消原因并落 cancelled 终态。
@@ -733,17 +694,20 @@ class V4ScrapeService:
                 conn.execute('BEGIN IMMEDIATE')
                 live = conn.execute(
                     "SELECT j.attempts FROM jobs j JOIN import_revisions ir ON ir.revision_id=j.revision_id "
-                    "WHERE j.job_id=? AND j.status='running' AND j.cancel_requested=0 AND ir.status='confirmed'",
+                    "JOIN source_roots sr ON sr.root_id=ir.root_id JOIN works w ON w.work_id=j.work_id "
+                    "WHERE j.job_id=? AND j.status='running' AND j.cancel_requested=0 AND ir.status='confirmed' "
+                    "AND sr.retired_at='' AND sr.enabled=1 AND w.status='active'",
                     (job_id,),
                 ).fetchone()
                 if live is None or live['attempts'] != job['attempts']:
                     return
                 attach_snapshot_refs(conn, job['revision_id'], job['work_id'], retained)
-                payload = {**retained['metadata'], 'outcome': 'reused', 'refresh_status': 'not_requested',
+                payload = {**retained['metadata'], 'runtime_policy': 'sqlite-artwork-v1', 'outcome': 'reused', 'refresh_status': 'not_requested',
                            'snapshot_id': retained['snapshot_id'], 'metadata_source': 'retained'}
                 conn.execute("UPDATE jobs SET status='succeeded',result_json=?,finished_at=?,updated_at=? WHERE job_id=?",
                              (json.dumps(payload, ensure_ascii=False), _now(), _now(), job_id))
-                conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_projection_dirty',?)", (_now(),))
+                from app.media_v4.projection.library import mark_projection_dirty
+                mark_projection_dirty(conn, [job['work_id']])
             return
         candidate_snapshot_id = str(uuid.uuid4())
         try:
@@ -797,22 +761,6 @@ class V4ScrapeService:
                 metadata_state = "ready" if provider_name != "local" else "waiting_metadata"
             has_provider_identity = provider_name not in {"", "local"} and bool(provider_id)
             ready = metadata_state == "ready" and has_provider_identity
-            if ready and mirror_root is None:
-                # 完整性门控必经：镜像根从配置解析，不能由调用方是否传参决定。
-                from app.core.paths import get_mirror_root
-
-                try:
-                    mirror_root = get_mirror_root()
-                except Exception:
-                    mirror_root = None
-                if not mirror_root:
-                    ready = False
-                    result = {
-                        **result,
-                        "metadata_state": "waiting_metadata",
-                        "reason": "镜像目录未配置，无法物化元数据产物",
-                        "reason_code": "mirror_root_missing",
-                    }
             valid_episode_ids = {str(item["episode_id"]) for item in target["episodes"]}
             clear_episode_mapping_ids = {
                 str(item).strip()
@@ -849,7 +797,7 @@ class V4ScrapeService:
                         previous = {}
                     if isinstance(previous, dict):
                         result = _retain_successful_details(previous, result, target)
-            # 在发布 NFO/图片和写入集映射之前先冻结本 Work 的在线身份。
+            # 写入资料和集映射前检查本 Work 的在线身份。
             # 同一 Work 已有不同 ID 时局部降级为 local，避免错误资料先落盘，
             # 也避免事后把 provider 行改成 local 时撞上已有 local 唯一键。
             identity_ready = has_provider_identity
@@ -871,74 +819,9 @@ class V4ScrapeService:
                         "reason": "当前作品保留已有在线资料，本次自动结果未覆盖它。",
                         "reason_code": "local_identity_mismatch",
                     }
-            if mirror_root and job["work_id"] and ready:
-                result = {**result, 'metadata_snapshot_id': candidate_snapshot_id}
-                produced_artifact_ids = list(
-                    publish_metadata_artifacts(
-                        self.database,
-                        revision_id=job["revision_id"],
-                        work_id=job["work_id"],
-                        target=target,
-                        metadata=result,
-                        mirror_root=mirror_root,
-                        snapshot_id=candidate_snapshot_id,
-                        # 图片下载可能持续数分钟：必须持续心跳，否则会被失联回收判为
-                        # failed（随后又被本函数的终态写入覆盖成 succeeded，状态自相矛盾）。
-                        on_progress=lambda: heartbeat(self.database, job_id),
-                    )
-                    or ()
-                )
-                # P-001 7.7 R3：完整性是 ready 的硬门控。
-                complete, reasons = assess_metadata_completeness(
-                    self.database,
-                    revision_id=job["revision_id"],
-                    work_id=job["work_id"],
-                    target=target,
-                    metadata=result,
-                    mirror_root=mirror_root,
-                )
-                if not complete:
-                    # 只有“纯图片原因”才降级为产物缺失：资料状态保持 ready，作品
-                    # 照常进入媒体库。缺 Work NFO / 缺剧集 NFO / 没有镜像根属于
-                    # 未完成物化，仍按失败处理，避免把不可播放的作品当成功发布。
-                    from app.media_v4.jobs.completeness import artwork_only_reasons
-
-                    if any('正片缩略图' in reason for reason in reasons):
-                        result = {
-                            **result, 'metadata_state': 'failed',
-                            'reason_code': 'episode_artwork_incomplete',
-                            'reason': '；'.join(reasons), 'artifact_state': 'incomplete',
-                            'completeness': reasons, 'failure_stage': 'episode_artwork',
-                            'retryable': True, 'episode_artwork_status': 'incomplete',
-                        }
-                        ready = False
-                    elif artwork_only_reasons(reasons):
-                        result = {
-                            **result,
-                            # 显式原因码：资料已就绪、只是本地图片有问题。没有它，
-                            # 恢复策略只能靠文本兜底，会给用户"媒体信息需要处理"这种
-                            # 指向在线资料的误导文案（而真正该做的是只重下图片）。
-                            "reason_code": "artifact_incomplete",
-                            "artifact_state": "degraded",
-                            "artifact_reasons": list(reasons),
-                            "reason": "；".join(reasons),
-                            "completeness": reasons,
-                        }
-                    else:
-                        result = {
-                            **result,
-                            "metadata_state": "failed",
-                            "artifact_state": "incomplete",
-                            "reason": "；".join(reasons),
-                            "completeness": reasons,
-                        }
-                        ready = False
-                else:
-                    result = {
-                        **result,
-                        "artifact_state": "ready",
-                        "artifact_reasons": [],
-                    }
+            if ready:
+                result = {**result, 'metadata_snapshot_id': candidate_snapshot_id,
+                          'artifact_state': 'pending', 'artifact_reasons': []}
             now = _now()
             binding_status = "confirmed" if ready else (
                 str(result.get("metadata_state") or "") or "waiting_metadata"
@@ -958,7 +841,9 @@ class V4ScrapeService:
                 conn.execute('BEGIN IMMEDIATE')
                 live = conn.execute(
                     "SELECT j.attempts FROM jobs j JOIN import_revisions ir ON ir.revision_id=j.revision_id "
-                    "WHERE j.job_id=? AND j.status='running' AND j.cancel_requested=0 AND ir.status='confirmed'",
+                    "JOIN source_roots sr ON sr.root_id=ir.root_id JOIN works w ON w.work_id=j.work_id "
+                    "WHERE j.job_id=? AND j.status='running' AND j.cancel_requested=0 AND ir.status='confirmed' "
+                    "AND sr.retired_at='' AND sr.enabled=1 AND w.status='active'",
                     (job_id,),
                 ).fetchone()
                 if live is None or live['attempts'] != job['attempts']:
@@ -970,10 +855,14 @@ class V4ScrapeService:
                     media_type=binding_media_type, provider_id=provider_id,
                 ):
                     raise ValueError('provider identity changed before publication')
-                if ready and result.get('artifact_state') == 'ready':
+                if ready:
                     publish_snapshot(conn, revision_id=job['revision_id'], work_id=job['work_id'],
                                      snapshot_id=candidate_snapshot_id, metadata=result,
                                      artifact_ids=produced_artifact_ids)
+                    from app.media_v4.assets.catalog import enqueue_metadata
+
+                    enqueue_metadata(conn, revision_id=job['revision_id'], work_id=job['work_id'],
+                                     snapshot_id=candidate_snapshot_id, metadata=result)
                     result = {**result, 'metadata_snapshot_id': candidate_snapshot_id, 'metadata_source': 'current'}
                 elif retained:
                     result = {**result, 'retained_snapshot_id': retained['snapshot_id'],
@@ -1079,13 +968,8 @@ class V4ScrapeService:
                     logger.warning("刮削任务已完成但状态已不是 running，保留现有终态: %s", job_id)
                 # 每个 Work 刮削结果落库后都使投影失效。前端轮询会按需合并重建，
                 # 因而已成功的作品无需等待整批任务结束即可进入对应作品页。
-                conn.execute(
-                    """
-                    INSERT INTO v4_meta(key, value) VALUES ('library_projection_dirty', ?)
-                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
-                    """,
-                    (now,),
-                )
+                from app.media_v4.projection.library import mark_projection_dirty
+                mark_projection_dirty(conn, [job['work_id']])
         except Exception as exc:
             with self.database.connect() as conn:
                 # 同样加 running 守卫：不要把用户刚重试（queued）或已取消的任务改回 failed。
@@ -1094,7 +978,8 @@ class V4ScrapeService:
                     "WHERE job_id = ? AND status = 'running'",
                     (str(exc), _now(), _now(), _now(), job_id),
                 )
-                conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_projection_dirty',?)", (_now(),))
+                from app.media_v4.projection.library import mark_projection_dirty
+                mark_projection_dirty(conn, [job['work_id']])
             raise
 
     def list_bindings(self, revision_id: str) -> list[dict]:

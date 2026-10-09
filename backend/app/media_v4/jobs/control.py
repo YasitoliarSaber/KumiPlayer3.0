@@ -60,4 +60,8 @@ def mark_cancelled(database: V4Database, job_id: str) -> None:
             """,
             (stamp, stamp, stamp, job_id),
         )
-        conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_projection_dirty',?)", (stamp,))
+        from app.media_v4.projection.library import mark_projection_dirty
+
+        work = conn.execute('SELECT work_id FROM jobs WHERE job_id=?', (job_id,)).fetchone()
+        if work and work['work_id']:
+            mark_projection_dirty(conn, [work['work_id']])

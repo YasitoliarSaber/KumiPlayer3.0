@@ -11,8 +11,9 @@ def test_app_gates_normal_shell_behind_first_run_setup():
 
 def test_first_run_page_contains_required_zero_start_steps():
     page = (ROOT / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
-    for text in ["内置播放器", "镜像目录", "媒体来源", "验证并完成", "不会移动或改名你的原始文件"]:
+    for text in ["内置播放器", "本地挂载播放", "媒体来源", "验证并完成", "不会移动或改名你的原始文件"]:
         assert text in page
+    assert "mirror_dir" not in page
     # 不要求重新填写播放器路径；重新引导可以读取现有外部播放器配置。
     assert "pickFolder" in page
     assert "getMpvRuntime" in page
@@ -73,3 +74,11 @@ def test_settings_omits_support_and_build_metadata_from_regular_preferences():
     assert "支持与赞助" not in settings
     assert "KumiPlayer 构建标识" not in settings
     assert "__BUILD_SHA__" not in settings
+
+
+def test_settings_uses_local_artwork_and_saved_playback_paths():
+    settings = (ROOT / "src" / "pages" / "SettingsPage.tsx").read_text(encoding="utf-8")
+    assert "config.mirror_dir" not in settings
+    assert "config.artwork_storage_mode" not in settings
+    assert "独立的本地图片库" in settings
+    assert "网盘必须先挂载到本地" in settings

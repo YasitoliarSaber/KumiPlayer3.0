@@ -200,6 +200,7 @@ def finish_ongoing_update(database: V4Database, revision_id: str) -> str:
     outcome = assess_update(database, revision_id)
     if outcome == "append":
         try:
+            service.validate_playback_paths(revision_id)
             service.confirm(revision_id, auto_append=True)
         except ValueError:
             return "review"

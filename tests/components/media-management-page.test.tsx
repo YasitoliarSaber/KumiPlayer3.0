@@ -519,18 +519,18 @@ test('任务进度使用用户阶段标签而不是内部 job type', async () =>
     status: 'confirmed',
     jobs: [{
       job_id: 'job-1',
-      job_type: 'materialize_mirror',
+      job_type: 'scrape_work',
       revision_id: 'rev-existing',
       work_id: 'work-1',
       status: 'succeeded',
-      idempotency_key: 'materialize_mirror:rev-existing:work-1',
+      idempotency_key: 'scrape_work:rev-existing:work-1',
     }],
     progress: {
       revision_id: 'rev-existing',
       revision_status: 'confirmed',
       overall_status: 'completed',
       stage_summary: {
-        mirror: { status: 'succeeded', total: 1, queued: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
+        artwork: { status: 'succeeded', total: 1, queued: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
         metadata: { status: 'succeeded', total: 1, queued: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
         projection: { status: 'succeeded', total: 1, queued: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
       },
@@ -541,7 +541,6 @@ test('任务进度使用用户阶段标签而不是内部 job type', async () =>
         episode_count: 1,
         asset_count: 1,
         overall_status: 'completed',
-        mirror: { job_id: 'job-1', status: 'succeeded', attempts: 1, last_error: '' },
         metadata: { job_id: 'job-2', status: 'succeeded', attempts: 1, last_error: '' },
       }],
     },
@@ -553,8 +552,9 @@ test('任务进度使用用户阶段标签而不是内部 job type', async () =>
   fireEvent.click(await screen.findByRole('button', { name: '查看进度' }))
 
   // 用户阶段只出现一次，不按后端 job 数量重复。
-  expect(await screen.findByText('生成镜像文件')).toBeVisible()
-  expect(screen.getAllByText('生成镜像文件')).toHaveLength(1)
+  expect(await screen.findByText('准备本地图片')).toBeVisible()
+  expect(screen.getAllByText('准备本地图片')).toHaveLength(1)
+  expect(screen.queryByText('生成镜像文件')).not.toBeInTheDocument()
   expect(screen.queryByText('materialize_mirror')).not.toBeInTheDocument()
 })
 

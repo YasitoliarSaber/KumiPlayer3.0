@@ -14,12 +14,14 @@ export interface LocalWatchStatus {
 }
 
 export const libraryApi = {
+  getChanges: (after: number, limit = 128) => api.get<LibraryChanges>(`/api/library/changes?after=${after}&limit=${limit}`),
+  getCards: (workIds: string[]) => api.get<{ works: WorkIndex[] }>(`/api/library/cards?work_ids=${workIds.map(encodeURIComponent).join(',')}`),
   getLibrary: (params?: { source?: string; compact?: boolean }) => {
     const searchParams = new URLSearchParams();
     if (params?.source && params.source !== 'all') searchParams.set('source', params.source);
     if (params?.compact) searchParams.set('compact', 'true');
     const query = searchParams.toString();
-    return api.get<{ works: WorkIndex[]; summary: Record<string, unknown>; generated_at: string; needs_rescan: boolean }>(
+    return api.get<{ works: WorkIndex[]; summary: Record<string, unknown>; generated_at: string; needs_rescan: boolean; change_sequence: number }>(
       `/api/library${query ? `?${query}` : ''}`,
     );
   },
@@ -33,3 +35,10 @@ export const libraryApi = {
   setWatchStatus: (workId: string, status: LocalWatchStatusValue, note = '', favorite?: boolean) =>
     api.patch<LocalWatchStatus>(`/api/library/watch-status/${encodeURIComponent(workId)}`, { status, note, favorite }),
 };
+
+export interface LibraryChanges {
+  changes: Array<{ sequence: number; kind: 'work_upsert' | 'work_remove' | 'artwork' | 'watch' | 'reset'; work_id: string }>;
+  next_sequence: number;
+  has_more: boolean;
+  reset_required: boolean;
+}

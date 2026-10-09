@@ -15,7 +15,7 @@ const history = {
   work_id: work.work_id, episode_id: 'e-six', asset_id: 'a-six',
   season_number: 1, episode_number: 6, position: 694, duration: 1422,
   completed: false, updated_at: '2026-09-30T12:40:00',
-  thumb_path: '/mirror/episode-six-thumb.jpg',
+  thumb_path: '/api/assets/artwork/episode-six-thumb/v1/384',
 } as PlaybackHistoryItem;
 
 beforeEach(() => {

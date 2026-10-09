@@ -3,24 +3,15 @@
 from __future__ import annotations
 
 import json
-import re
-from collections import Counter
-from pathlib import PurePosixPath
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.api.assets import queue_library_artwork as queue_library_artwork
 from app.api.media_v4 import get_database
-from app.media_v4.parsing.episode_titles import (
-    clean_special_episode_title,
-    ensure_special_title_number,
-    is_generic_special_title,
-    is_special_marker_only,
-)
-from app.media_v4.projection.collections import collection_metadata, related_works, title_identity_guards
+from app.media_v4.projection.collections import related_works
+from app.media_v4.projection.details import _watch_payload
 from app.media_v4.projection.library import V4LibraryProjection
-from app.media_v4.projection.presentation import display_work_title, preserve_identity_title
+from app.media_v4.projection.presentation import display_work_title
 
 router = APIRouter(prefix="/api/library", tags=["library"])
 
@@ -31,37 +22,33 @@ class WatchStatusRequest(BaseModel):
     favorite: bool | None = None
 
 
-def _normalized_display_title(value) -> str:
-    return re.sub(r"[\s._\-:：·]+", "", str(value or "")).casefold()
 
 
-def _episode_display_title(
-    row,
-    scraped_episode: dict,
-    *,
-    work_title: str,
-    scraped_special_title_counts: Counter,
-) -> str:
-    scraped_title = " ".join(str(scraped_episode.get("title") or "").split()).strip()
-    if str(row["season_kind"] or "") != "special":
-        return scraped_title or str(row["display_title"] or "")
 
-    special_number = row["special_number"]
-    local_title = str(row["display_title"] or "").strip()
-    if not local_title:
-        local_title = clean_special_episode_title(
-            str(row["relative_path"] or ""),
-            work_title=work_title,
-            special_number=special_number,
-        )
-    local_title = ensure_special_title_number(local_title, special_number)
 
-    normalized_scraped = _normalized_display_title(scraped_title)
-    scraped_is_usable = bool(scraped_title) and not is_generic_special_title(scraped_title)
-    scraped_is_unique = scraped_special_title_counts.get(normalized_scraped, 0) <= 1
-    if scraped_is_usable and scraped_is_unique and is_special_marker_only(local_title):
-        return scraped_title
-    return local_title or scraped_title or ensure_special_title_number("", special_number)
+def _published_artwork_payload(conn, payload: dict) -> None:
+    from app.media_v4.assets.catalog import get_episode_artwork_many, get_metadata_image, get_work_artwork
+
+    payload['artwork'] = get_work_artwork(conn, str(payload['work_id']))
+    for role in ('poster', 'fanart', 'clearlogo'):
+        variants = payload['artwork'].get(role, {}).get('variants', {})
+        url = variants.get('384') or next(iter(variants.values()), '')
+        payload[f'{role}_path'] = url
+        payload[f'local_{role}_path'] = url
+    episodes = payload.get('episodes') or []
+    artwork = get_episode_artwork_many(conn, [episode['episode_id'] for episode in episodes])
+    for episode in episodes:
+        image = artwork.get(episode['episode_id'], {}).get('episode_thumb', {})
+        episode['thumb_path'] = image.get('variants', {}).get('384', '')
+    episode_map = {episode['episode_id']: episode for episode in episodes}
+    for season in payload.get('seasons') or []:
+        season['episodes'] = [episode_map[episode['episode_id']] for episode in season.get('episodes') or []
+                              if episode['episode_id'] in episode_map]
+    for person in payload.get('cast') or []:
+        person['profile_path'] = get_metadata_image(conn, person.get('profile_path') or person.get('profile_url') or '') or ''
+    for related in payload.get('related_works') or []:
+        related['poster_path'] = get_metadata_image(conn, related.get('poster_path') or related.get('poster_url') or '') or ''
+        related['local_poster_path'] = related['poster_path']
 
 
 def _card_payload(card: dict, override: dict | None = None) -> dict:
@@ -131,12 +118,12 @@ def _card_payload(card: dict, override: dict | None = None) -> dict:
     }
 
 
-def _library_snapshot(*, compact: bool = False):
+def _library_snapshot(*, compact: bool = False, work_ids: tuple[str, ...] | None = None):
     database = get_database()
     projection = V4LibraryProjection(database)
     from app.media_v4.projection.library import LibrarySnapshot
 
-    return projection.current(compact=compact) or LibrarySnapshot('', '', ())
+    return projection.current(compact=compact, work_ids=work_ids) or LibrarySnapshot('', '', ())
 
 
 def _work_overrides_map(work_ids: list[str]) -> dict[str, dict]:
@@ -170,12 +157,21 @@ def _rows_for_work_ids(sql: str, work_ids: list[str]) -> list:
 
 
 @router.get("")
-def get_library(compact: bool = False, source: str | None = None, include_all: bool = False):
-    snapshot = _library_snapshot(compact=compact)
+def get_library(compact: bool = False, source: str | None = None, include_all: bool = False,
+                work_ids: str | None = None):
+    selected = tuple(dict.fromkeys(filter(None, (work_ids or '').split(',')))) if work_ids is not None else None
+    if selected is not None and len(selected) > 128:
+        raise HTTPException(status_code=400, detail='一次最多读取 128 个作品')
+    snapshot = _library_snapshot(compact=True, work_ids=selected)
     work_ids = [card["work_id"] for card in snapshot.cards]
     watch_map = _watch_status_map(work_ids)
     override_map = _work_overrides_map(work_ids)
-    scope_map = _content_scope_map(work_ids)
+    from app.media_v4.assets.catalog import get_metadata_image, get_work_artwork_many
+    with get_database().connect() as conn:
+        artwork_map = get_work_artwork_many(conn, work_ids)
+        related_images = {item.get('poster_path') or item.get('poster_url') or '': get_metadata_image(
+            conn, item.get('poster_path') or item.get('poster_url') or '') for card in snapshot.cards
+            for item in related_works(card.get('metadata') or {})}
     works = []
     for card in snapshot.cards:
         override = override_map.get(card["work_id"], {})
@@ -183,18 +179,24 @@ def get_library(compact: bool = False, source: str | None = None, include_all: b
             # 单作品删除：从活动媒体库排除（不可变快照保留审计事实）。
             continue
         payload = _card_payload(card, override)
+        payload['artwork'] = artwork_map.get(card['work_id'], {})
+        for role in ('poster', 'fanart', 'clearlogo'):
+            variants = payload['artwork'].get(role, {}).get('variants', {})
+            published = variants.get('384') or next(iter(variants.values()), '')
+            payload[f'{role}_path'] = published
+            payload[f'local_{role}_path'] = published
         if compact:
             for key in ('cast', 'studios', 'tags', 'certification', 'certification_country'):
                 payload.pop(key, None)
-        if card["work_id"] in scope_map:
-            payload["content_scope"] = scope_map[card["work_id"]]
+        payload['content_scope'] = card.get('metadata', {}).get('content_scope', '')
+        for related in payload.get('related_works') or []:
+            related['poster_path'] = related_images.get(related.get('poster_path') or related.get('poster_url') or '') or ''
+            related['local_poster_path'] = related['poster_path']
         payload["watch_status"] = watch_map.get(card["work_id"], {
             "work_id": card["work_id"], "status": "", "note": "", "favorite": False, "updated_at": "",
         })
         works.append(payload)
-    if not include_all:
-        # 本地特别篇无需在线资料也可显示；waiting/review/failed 仍走异常区恢复。
-        works = [work for work in works if work.get("metadata_state") in {"ready", "not_required"}]
+    # 所有卡片都来自已确认成员；资料与图片等待不能隐藏可播放媒体。
     if source and source != "all":
         works = [work for work in works if source in work["sources"]]
     collections: dict[str, dict] = {}
@@ -203,6 +205,7 @@ def get_library(compact: bool = False, source: str | None = None, include_all: b
             item = collections.setdefault(collection["collection_id"], {**collection, "work_ids": []})
             item["work_ids"].append(work["work_id"])
     return {
+        'change_sequence': snapshot.change_sequence,
         "works": works,
         "collections": list(collections.values()),
         "summary": {
@@ -215,326 +218,51 @@ def get_library(compact: bool = False, source: str | None = None, include_all: b
     }
 
 
-def _content_scope_map(work_ids: list[str]) -> dict[str, str]:
-    if not work_ids:
-        return {}
-    rows = _rows_for_work_ids(
-            "SELECT DISTINCT rb.work_id,sr.content_scope FROM revision_bindings rb "
-            "JOIN import_revisions ir ON ir.revision_id=rb.revision_id "
-            "JOIN source_roots sr ON sr.root_id=ir.root_id "
-            "WHERE ir.status='confirmed' AND sr.retired_at='' "
-            "AND sr.content_scope IN ('completed','ongoing') AND rb.work_id IN (",
-            work_ids,
-    )
-    result: dict[str, str] = {}
-    for row in rows:
-        if result.get(row["work_id"]) != "ongoing":
-            result[row["work_id"]] = row["content_scope"]
-    return result
+
+
+@router.get('/changes')
+def get_changes(after: int = 0, limit: int = 128):
+    from app.media_v4.projection.changes import read_changes
+    try:
+        with get_database().connect() as conn:
+            conn.execute('BEGIN')
+            return read_changes(conn, after, limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get('/cards')
+def get_cards(work_ids: str):
+    return {'works': get_library(compact=True, work_ids=work_ids)['works']}
 
 
 @router.get("/works/{work_id}")
 def get_work_detail(work_id: str):
-    from app.media_v4.projection.presentation import VISIBLE_BINDING_SQL
-
     with get_database().connect() as conn:
-        work = conn.execute(
-            f"""
-            SELECT w.* FROM works w
-            WHERE w.work_id = ? AND EXISTS (
-                SELECT 1 FROM revision_bindings rb
-                JOIN import_revisions ir ON ir.revision_id = rb.revision_id
-                JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
-                WHERE rb.work_id = w.work_id AND ir.status = 'confirmed' AND {VISIBLE_BINDING_SQL}
-            )
-            """,
-            (work_id,),
-        ).fetchone()
-        if work is None:
-            raise HTTPException(status_code=404, detail=f"作品不存在: {work_id}")
-        seasons = conn.execute(
-            f"""
-            SELECT s.* FROM seasons s
-            WHERE s.work_id = ? AND EXISTS (
-                SELECT 1 FROM revision_bindings rb
-                JOIN import_revisions ir ON ir.revision_id = rb.revision_id
-                JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
-                JOIN episodes e ON e.episode_id = rb.episode_id
-                WHERE e.season_id = s.season_id AND ir.status = 'confirmed' AND {VISIBLE_BINDING_SQL}
-            )
-            ORDER BY s.local_season_number IS NULL, s.local_season_number, s.season_id
-            """,
-            (work_id,),
-        ).fetchall()
-        episodes = conn.execute(
-            f"""
-            SELECT DISTINCT e.*, s.local_season_number, s.season_kind, s.title AS season_title,
-                   a.asset_id, a.root_id, se.playback_locator, se.source_locator,
-                   a.availability_state, se.provider, se.relative_path
-            FROM revision_bindings rb
-            JOIN import_revisions ir ON ir.revision_id = rb.revision_id
-            JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
-            JOIN episodes e ON e.episode_id = rb.episode_id
-            JOIN seasons s ON s.season_id = e.season_id
-            JOIN assets a ON a.asset_id = rb.asset_id
-            JOIN source_evidence se ON se.evidence_id = rb.evidence_id
-            WHERE e.work_id = ? AND ir.status = 'confirmed' AND {VISIBLE_BINDING_SQL}
-            ORDER BY s.local_season_number IS NULL, s.local_season_number,
-                     e.local_episode_number IS NULL, e.local_episode_number, e.episode_id,
-                     CASE WHEN a.availability_state = 'available' THEN 0 ELSE 1 END,
-                     CASE WHEN se.provider = 'local' THEN 0 ELSE 1 END,
-                     CASE lower(a.resolution)
-                         WHEN '4k' THEN 4000 WHEN 'uhd' THEN 4000
-                         ELSE CAST(replace(replace(lower(a.resolution), 'p', ''), 'i', '') AS INTEGER)
-                     END DESC,
-                     a.fingerprint, a.asset_id
-            """,
-            (work_id,),
-        ).fetchall()
-        movie_assets = conn.execute(
-            """
-            SELECT a.asset_id, se.playback_locator, se.source_locator,
-                   a.availability_state, se.provider
-            FROM revision_bindings rb
-            JOIN import_revisions ir ON ir.revision_id = rb.revision_id
-            JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
-            JOIN assets a ON a.asset_id = rb.asset_id
-            JOIN source_evidence se ON se.evidence_id = rb.evidence_id
-            WHERE rb.work_id = ? AND rb.episode_id IS NULL
-              AND rb.asset_id IS NOT NULL AND ir.status = 'confirmed'
-            ORDER BY CASE WHEN a.availability_state = 'available' THEN 0 ELSE 1 END,
-                     CASE WHEN se.provider = 'local' THEN 0 ELSE 1 END,
-                     CASE lower(a.resolution)
-                         WHEN '4k' THEN 4000 WHEN 'uhd' THEN 4000
-                         ELSE CAST(replace(replace(lower(a.resolution), 'p', ''), 'i', '') AS INTEGER)
-                     END DESC,
-                     a.fingerprint, a.asset_id
-            """,
-            (work_id,),
-        ).fetchall()
-        watch_row = conn.execute(
-            "SELECT * FROM tracking_states WHERE work_id = ? AND provider = 'local'",
-            (work_id,),
-        ).fetchone()
-        scrape_row = conn.execute(
-            """
-            SELECT sb.metadata_json
-            FROM scrape_bindings sb
-            JOIN import_revisions ir ON ir.revision_id = sb.revision_id
-            JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
-            WHERE sb.work_id = ? AND ir.status = 'confirmed'
-            ORDER BY sb.updated_at DESC, sb.binding_id DESC LIMIT 1
-            """,
-            (work_id,),
-        ).fetchone()
-
-    try:
-        metadata = json.loads(scrape_row["metadata_json"] or "{}") if scrape_row else {}
-    except (TypeError, ValueError):
-        metadata = {}
-    from app.media_v4.persistence.metadata_lifecycle import referenced_metadata
-    with get_database().connect() as conn:
-        retained_metadata = referenced_metadata(conn, work_id)
-    if retained_metadata is not None:
-        metadata = {**metadata, **retained_metadata}
-    with get_database().connect() as conn:
-        metadata.update(collection_metadata(conn).get(work_id, {
-            "collections": [], "collection_related_works": [],
-        }))
-        identity_ids, shared_tv_ids = title_identity_guards(conn)
-        metadata["preserve_identity_title"] = preserve_identity_title(
-            work_id, {"series": "tv", "movie": "movie"}.get(work["work_type"], "unknown"),
-            metadata, identity_ids, shared_tv_ids,
-        )
-    episode_metadata = {
-        str(item.get("episode_id")): item
-        for item in metadata.get("episode_mappings") or []
-        if item.get("episode_id")
-    }
-    unique_special_ids = {
-        str(row["episode_id"])
-        for row in episodes
-        if str(row["season_kind"] or "") == "special"
-    }
-    scraped_special_title_counts = Counter(
-        _normalized_display_title(episode_metadata.get(episode_id, {}).get("title"))
-        for episode_id in unique_special_ids
-        if _normalized_display_title(episode_metadata.get(episode_id, {}).get("title"))
-    )
-
-    episode_map: dict[str, dict] = {}
-    source_locations: dict[str, list[str]] = {}
-    for row in episodes:
-        scraped_episode = episode_metadata.get(str(row["episode_id"]), {})
-        episode = episode_map.setdefault(
-            row["episode_id"],
-            {
-                "episode_id": row["episode_id"],
-                "work_id": work_id,
-                "season_number": row["local_season_number"],
-                'season_id': row['season_id'],
-                'season_kind': row['season_kind'],
-                'numbering_status': 'known' if row['local_episode_number'] is not None else 'unknown',
-                "episode_number": row["local_episode_number"],
-                "absolute_episode_number": row["absolute_episode_number"],
-                "special_number": row["special_number"],
-                "title": _episode_display_title(
-                    row,
-                    scraped_episode,
-                    work_title=str(work["preferred_title"] or ""),
-                    scraped_special_title_counts=scraped_special_title_counts,
-                ),
-                "original_filename": PurePosixPath(str(row["relative_path"] or "").replace("\\", "/")).name,
-                "plot": "",  # 兼容原响应字段，不再展示历史分集简介。
-                "runtime": scraped_episode.get("runtime"),
-                "thumb_path": (
-                    scraped_episode.get("local_thumb_path")
-                    or scraped_episode.get("still_url")
-                    or scraped_episode.get("thumb_path")
-                    or ""
-                ),
-                "group_type": "season" if row["season_kind"] == "regular" else row["season_kind"],
-                "kind": row["episode_kind"],
-                "playback_locator": "",
-                "asset_id": "",
-                "source": row["provider"] or "local",
-                "availability": "missing",
-                "assets": [],
-            },
-        )
-        if not row["asset_id"]:
-            continue
-        locator = row["playback_locator"] or row["source_locator"] or ""
-        asset = {
-            "asset_id": row["asset_id"],
-            "playback_locator": locator,
-            "availability": row["availability_state"] or "available",
-            "source": row["provider"] or "local",
-        }
-        episode["assets"].append(asset)
-        if not episode["asset_id"]:
-            episode["asset_id"] = row["asset_id"]
-            episode["playback_locator"] = locator
-            episode["availability"] = asset["availability"]
-        provider = row["provider"] or "local"
-        source_locations.setdefault(provider, []).append(row["source_locator"] or locator)
-
-    episode_payload = list(episode_map.values())
-    if work["work_type"] == "movie" and movie_assets:
-        assets = []
-        for row in movie_assets:
-            locator = row["playback_locator"] or row["source_locator"] or ""
-            provider = row["provider"] or "local"
-            assets.append({
-                "asset_id": row["asset_id"],
-                "playback_locator": locator,
-                "availability": row["availability_state"] or "available",
-                "source": provider,
-            })
-            source_locations.setdefault(provider, []).append(row["source_locator"] or locator)
-        first = assets[0]
-        episode_payload = [{
-            "episode_id": f"movie:{work_id}",
-            "work_id": work_id,
-            "season_number": 0,
-            "episode_number": 1,
-            "absolute_episode_number": None,
-            "special_number": None,
-            "title": work["preferred_title"],
-            "group_type": "movie",
-            "kind": "movie",
-            "playback_locator": first["playback_locator"],
-            "asset_id": first["asset_id"],
-            "source": first["source"],
-            "availability": first["availability"],
-            "assets": assets,
-        }]
-    season_payload = [
-        {
-            "season_id": season["season_id"],
-            "season_number": season["local_season_number"],
-            "group_type": "season" if season["season_kind"] == "regular" else season["season_kind"],
-            "label": season["title"] or (
-                "特别篇" if season["season_kind"] == "special" else '未分季' if season['local_season_number'] is None else f"第 {season['local_season_number']} 季"
-            ),
-            "episode_count": sum(
-                1 for item in episode_payload if item.get('season_id') == season['season_id']
-            ),
-            "episodes": [item for item in episode_payload if item.get('season_id') == season['season_id']],
-        }
-        for season in seasons
-    ]
-    media_type = {'series': 'tv', 'movie': 'movie'}.get(work['work_type'], 'unknown')
-    show_type = str(work['show_type'] or '')
-    watch_status = _watch_payload(dict(watch_row)) if watch_row else None
-    sources = sorted({item["source"] for item in episode_payload}) or ["local"]
-    override = _work_overrides_map([work_id]).get(work_id, {})
-    display_title = display_work_title(work["preferred_title"], metadata,
-                                      preserve_identity=metadata["preserve_identity_title"], override=override)
-    local_poster = str(override.get("local_poster_path") or "") or metadata.get("local_poster_path") or ""
-    local_fanart = str(override.get("local_fanart_path") or "") or metadata.get("local_fanart_path") or ""
-    local_clearlogo = str(override.get("local_clearlogo_path") or "") or metadata.get("local_clearlogo_path") or ""
-    payload = {
-        "work_id": work["work_id"],
-        "title": display_title,
-        "original_title": metadata.get("original_title") or work["original_title"] or work["preferred_title"],
-        "year": metadata.get("year") or work["year"],
-        "title_provenance": "manual" if str(override.get('title') or '').strip() else (
-            "online" if metadata.get("provider") not in {None, "", "local"} else "local"),
-        "rating": metadata.get("rating") or 0,
-        "plot": metadata.get("plot") or "",
-        "genres": metadata.get("genres") or [],
-        "studios": metadata.get("studios") or [],
-        "media_type": media_type,
-        "show_type": show_type,
-        "source": sources[0],
-        "sources": sources,
-        "card_type": str(work['card_type'] or ''),
-        "episodes": episode_payload,
-        "seasons": season_payload,
-        "episode_count": len({item["episode_id"] for item in episode_payload}),
-        "asset_count": sum(len(item["assets"]) for item in episode_payload),
-        "source_locations": {key: sorted(set(values)) for key, values in source_locations.items()},
-        "poster_path": metadata.get("poster_url") or "",
-        "fanart_path": metadata.get("fanart_url") or "",
-        "local_poster_path": local_poster,
-        "local_fanart_path": local_fanart,
-        "local_clearlogo_path": local_clearlogo,
-        "clearlogo_path": metadata.get("clearlogo_url") or metadata.get("clearlogo_path") or local_clearlogo,
-        "dir_path": "",
-        "related_works": related_works(metadata),
-        "collections": metadata.get("collections") or [],
-        "cast": metadata.get("cast") or [],
-        "tags": metadata.get("tags") or [],
-        "certification": metadata.get("certification") or "",
-        "certification_country": metadata.get("certification_country") or "",
-        "last_played": None,
-        "metadata_state": metadata.get("metadata_state") or ("ready" if metadata else "pending"),
-        **{key: metadata.get(key) for key in ('metadata_source', 'metadata_snapshot_id', 'refresh_status',
-                                            'episode_mapping_status', 'mapped_count', 'total_count')},
-        'metadata_source': metadata.get('metadata_source', 'local'),
-        'metadata_snapshot_id': metadata.get('metadata_snapshot_id'),
-        'refresh_status': metadata.get('refresh_status', 'not_requested'),
-        'episode_mapping_status': metadata.get('episode_mapping_status', 'unmapped'),
-        'mapped_count': metadata.get('mapped_count', 0),
-        'total_count': metadata.get('total_count', len(episode_payload)),
-        "watch_status": watch_status,
-    }
-    return payload
+        conn.execute('BEGIN')
+        row = conn.execute("SELECT d.detail_json FROM library_details d JOIN v4_meta m "
+                           "ON m.key='current_library_generation' AND m.value=d.generation_id "
+                           "WHERE d.work_id=?", (work_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail='作品展示尚未发布')
+        payload = json.loads(row['detail_json'])
+        _published_artwork_payload(conn, payload)
+        override = conn.execute('SELECT override_json FROM work_overrides WHERE work_id=?', (work_id,)).fetchone()
+        values = json.loads(override['override_json']) if override else {}
+        if values.get('hidden'):
+            raise HTTPException(status_code=404, detail='作品已隐藏')
+        automatic_title = payload.pop('_automatic_title', payload['title'])
+        payload['title'] = values.get('title') or automatic_title
+        automatic_provenance = payload.pop('_automatic_title_provenance', payload.get('title_provenance', 'local'))
+        payload['title_provenance'] = 'manual' if values.get('title') else automatic_provenance
+        state = conn.execute("SELECT * FROM tracking_states WHERE work_id=? AND provider='local'", (work_id,)).fetchone()
+        if state:
+            payload['watch_status'] = _watch_payload(dict(state))
+        return payload
 
 
-def _watch_payload(row: dict) -> dict:
-    try:
-        metadata = json.loads(row.get("metadata_json") or "{}")
-    except (TypeError, ValueError):
-        metadata = {}
-    return {
-        "work_id": row["work_id"],
-        "status": metadata.get("status", ""),
-        "note": metadata.get("note", ""),
-        "favorite": bool(metadata.get("favorite", False)),
-        "updated_at": row.get("updated_at", ""),
-    }
+
+
 
 
 def _watch_status_map(work_ids: list[str]) -> dict[str, dict]:

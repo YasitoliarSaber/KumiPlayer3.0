@@ -5,60 +5,14 @@ import { withApiSessionToken } from './sessionToken'
 
 type AssetKind = 'poster' | 'backdrop' | 'detailBackdrop' | 'candidate' | 'episode' | 'logo'
 
-export function isRemoteAssetPath(path: string | null | undefined): boolean {
-  if (!path) return false
-  return /^https?:\/\//i.test(path) || /^\/[A-Za-z0-9_-]+\.(?:jpe?g|png|webp)$/i.test(path)
-}
-
 export function buildAssetUrl(
   path: string | null | undefined,
-  options: { kind?: AssetKind; thumbnailWidth?: number; cacheOnly?: boolean } = {},
+  _options: { kind?: AssetKind; thumbnailWidth?: number; cacheOnly?: boolean } = {},
 ): string {
   if (!path) return ''
-  if (/^\/[A-Za-z0-9_-]+\.(?:jpe?g|png|webp)$/i.test(path)) {
-    return buildAssetUrl(`https://image.tmdb.org/t/p/original${path}`, { kind: options.kind })
+  if (/^\/api\/assets\/artwork\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/\d+$/.test(path)) {
+    return withApiSessionToken(API_BASE + path)
   }
-  if (/^https?:\/\//i.test(path)) {
-    const normalized = normalizeRemoteImageUrl(path, options.kind)
-    if (
-      /^https:\/\/image\.tmdb\.org\/t\/p\//i.test(normalized)
-      || /^https:\/\/s4\.anilist\.co\/file\/anilistcdn\//i.test(normalized)
-    ) {
-      return withApiSessionToken(API_BASE + '/api/assets/remote?url=' + encodeURIComponent(normalized))
-    }
-    return ''
-  }
-  // 本地镜像图片：分类页等小卡片场景走派生缩略图端点，降低解码与内存开销。
-  // 详情背景也走 1280 派生图，不再整张传输 TMDB original 原图。
-  const { thumbnailWidth } = options
-  const width = typeof thumbnailWidth === 'number' && thumbnailWidth > 0
-    ? thumbnailWidth
-    : options.kind === 'detailBackdrop'
-      ? 1280
-      : 0
-  if (width > 0) {
-    return withApiSessionToken(
-      API_BASE + '/api/assets/thumbnail?path=' + encodeURIComponent(path) + '&width=' + width
-        + (options.cacheOnly ? '&cache_only=true' : ''),
-    )
-  }
-  return withApiSessionToken(API_BASE + '/api/assets?path=' + encodeURIComponent(path))
-}
-
-function normalizeRemoteImageUrl(url: string, kind: AssetKind = 'poster'): string {
-  const tmdbMatch = url.match(/^(https?:\/\/image\.tmdb\.org\/t\/p\/)([^/]+)(\/.+)$/i)
-  if (!tmdbMatch) return url
-
-  const size = kind === 'candidate'
-    ? 'w185'
-    : kind === 'episode'
-      ? 'w500'
-    : kind === 'detailBackdrop'
-      ? 'w1280'
-      : kind === 'backdrop'
-        ? 'w1280'
-        : kind === 'logo'
-          ? 'w300'
-          : 'w342'
-  return tmdbMatch[1] + size + tmdbMatch[3]
+  // 候选与普通展示都只读已发布资源，未准备图片使用已有文字占位。
+  return ''
 }

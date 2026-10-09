@@ -1,7 +1,7 @@
 import { fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import AppShell from '../../src/components/shell/AppShell';
-import { PosterImageLifecycle } from '../../src/components/library/posterImageLifecycle';
+import { ArtworkLoadBudget, PosterImageLifecycle } from '../../src/components/library/posterImageLifecycle';
 import { api } from '../../src/api/client';
 import { clearScrollDiagnostics, disableScrollDiagnostics, dumpScrollDiagnostics, enableScrollDiagnostics } from '../../src/utils/scrollDiagnostics';
 
@@ -10,13 +10,15 @@ vi.mock('../../src/components/shell/DesktopTitleBar', () => ({ default: () => nu
 vi.mock('../../src/api/client', () => ({ API_BASE: '', api: { post: vi.fn() } }));
 
 let intersect: IntersectionObserverCallback;
+const intersections: IntersectionObserverCallback[] = [];
 const disconnect = vi.fn();
 beforeEach(() => {
   disableScrollDiagnostics({ persist: false });
   clearScrollDiagnostics();
   vi.clearAllMocks();
+  intersections.length = 0;
   vi.stubGlobal('IntersectionObserver', class {
-    constructor(callback: IntersectionObserverCallback) { intersect = callback; }
+    constructor(callback: IntersectionObserverCallback) { intersect = callback; intersections.push(callback); }
     observe() {}
     unobserve() {}
     disconnect = disconnect;
@@ -45,23 +47,19 @@ test('页面挂载后开启采样立即记录输入，wheel 不吞掉同帧 scro
   expect(dumpScrollDiagnostics().counts.scroll).toBe(1);
 });
 
-test('冷图准备不冒充 src 写入，就绪和注销只记录实际变更', async () => {
-  vi.useFakeTimers();
-  let finish!: (value: { states: string[] }) => void;
-  vi.mocked(api.post).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+test('已发布资源只写实际 src，可见前不请求准备，完成和注销记录实际变更', () => {
   enableScrollDiagnostics({ persist: false });
-  const lifecycle = new PosterImageLifecycle();
+  const lifecycle = new PosterImageLifecycle(new ArtworkLoadBudget());
   lifecycle.configure(null, 900);
   const image = document.createElement('img');
   const unregister = lifecycle.register(image, { path: 'fixture', width: 256, url: 'fixture-url', local: true });
-  intersect([{ target: image, isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
   expect(image.hasAttribute('src')).toBe(false);
   expect(dumpScrollDiagnostics().counts['image-src-set'] ?? 0).toBe(0);
-  await vi.advanceTimersByTimeAsync(0);
-  finish({ states: ['ready'] });
-  await vi.advanceTimersByTimeAsync(0);
+  intersections[0]([{ target: image, isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+  expect(api.post).not.toHaveBeenCalled();
   expect(image).toHaveAttribute('src', 'fixture-url');
   expect(dumpScrollDiagnostics().counts['image-src-set']).toBe(1);
+  fireEvent.load(image);
   unregister();
   expect(dumpScrollDiagnostics().counts['image-src-cleared']).toBe(1);
   lifecycle.dispose();
@@ -76,7 +74,7 @@ test('布局尺寸未变化不重建图片观察器，不重放全部图片范�
   expect(disconnect).not.toHaveBeenCalled();
   expect(intersect).toBe(callback);
   lifecycle.configure(root, 800);
-  expect(disconnect).toHaveBeenCalledTimes(1);
+  expect(disconnect).toHaveBeenCalledTimes(3);
   lifecycle.dispose();
 });
 

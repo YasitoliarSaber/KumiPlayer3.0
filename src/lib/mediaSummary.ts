@@ -10,7 +10,7 @@ import type { V4ExecutionProgress, V4Preview, V4ResolvedEpisode, V4ReviewIssue }
 /** 全页面共用的作品口径；阶段 pill 的分子分母另为后台任务数。 */
 export function summarizeExecutionWorks(progress: V4ExecutionProgress) {
   const units = progress.work_units
-  const defectCodes = new Set(['special_episode_metadata_incomplete', 'artifact_incomplete'])
+  const defectCodes = new Set(['special_episode_metadata_incomplete'])
   return {
     total: units.length,
     completed: units.filter((unit) => unit.overall_status === 'completed').length,
@@ -214,8 +214,6 @@ export function buildWorkSummaries(preview: V4Preview): RecognitionSummary {
 }
 
 export const WORK_PROGRESS_LABELS: Record<string, string> = {
-  waiting_mirror: '等待生成镜像',
-  running_mirror: '正在生成镜像',
   waiting_metadata: '等待获取媒体信息',
   running_metadata: '正在获取媒体信息',
   needs_attention: '需要处理',
@@ -225,18 +223,16 @@ export const WORK_PROGRESS_LABELS: Record<string, string> = {
 }
 
 export const WORK_PROGRESS_ORDER: Record<string, number> = {
-  running_mirror: 0,
   running_metadata: 0,
   needs_attention: 1,
   failed: 1,
   cancelled: 2,
-  waiting_mirror: 3,
   waiting_metadata: 3,
   completed: 4,
 }
 
 export const STAGE_LABELS: Record<string, string> = {
-  mirror: '生成镜像文件',
+  artwork: '准备本地图片',
   metadata: '获取媒体信息',
   projection: '更新媒体库',
 }

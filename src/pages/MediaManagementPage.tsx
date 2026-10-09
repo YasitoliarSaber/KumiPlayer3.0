@@ -133,7 +133,7 @@ const PROVIDER_OPTIONS: Array<{
 ]
 
 const JOB_LABELS: Record<string, string> = {
-  materialize_mirror: '生成镜像文件',
+  prepare_artwork: '准备本地图片',
   scrape_work: '获取媒体信息',
   refresh_projection: '更新媒体库',
   cleanup_superseded_artifacts: '清理旧版本',
@@ -495,12 +495,11 @@ export default function MediaManagementPage() {
   const previewBlockingIssueCount = preview?.blocking_issue_count ?? 0
   const hasActiveJobs = jobs.some((job) => !['succeeded', 'failed', 'cancelled'].includes(job.status))
   const executionActive = executeProgress?.overall_status === 'running' || executeProgress?.overall_status === 'queued'
-  const executionMirrorTotal = executeProgress?.stage_summary.mirror.total ?? 0
-  const executionMirrorDone = executeProgress
-    ? executeProgress.stage_summary.mirror.succeeded
-      + executeProgress.stage_summary.mirror.failed
-      + executeProgress.stage_summary.mirror.cancelled
-    : 0
+  const executionPublicationStages = executeProgress
+    ? [executeProgress.stage_summary.metadata, executeProgress.stage_summary.projection]
+    : []
+  const executionPublicationTotal = executionPublicationStages.reduce((total, stage) => total + stage.total, 0)
+  const executionPublicationDone = executionPublicationStages.reduce((total, stage) => total + stage.succeeded + stage.failed + stage.cancelled, 0)
   const executionCounts = executeProgress ? summarizeExecutionWorks(executeProgress) : null
   useEffect(() => {
     if (!revisionId || !hasActiveJobs) return
@@ -1806,7 +1805,7 @@ export default function MediaManagementPage() {
             onOverrideChange={(evidenceId, draft) => setOverrideDrafts((current) => ({ ...current, [evidenceId]: draft }))}
             onApplyOverride={applyOverride}
           />
-          <div className="media-v4-command-row media-v4-confirm-row"><div><strong>{previewBlockingIssueCount > 0 ? '需要先处理识别问题' : '识别结果可以建立媒体库'}</strong><span>确认后将生成镜像、获取媒体信息并更新媒体库。</span></div><Button className="media-primary-command" appearance="primary" icon={<Database24Regular />} disabled={busy !== '' || previewBlockingIssueCount > 0 || preview.status === 'confirmed'} onClick={() => void confirmRevision()}>{busy === 'confirm' ? <><Spinner size="tiny" />正在建立</> : preview.status === 'confirmed' ? '已建立媒体库' : '确认并建立媒体库'}</Button></div>
+          <div className="media-v4-command-row media-v4-confirm-row"><div><strong>{previewBlockingIssueCount > 0 ? '需要先处理识别问题' : '识别结果可以建立媒体库'}</strong><span>确认后将获取媒体信息并发布媒体库，图片由后台独立准备。</span></div><Button className="media-primary-command" appearance="primary" icon={<Database24Regular />} disabled={busy !== '' || previewBlockingIssueCount > 0 || preview.status === 'confirmed'} onClick={() => void confirmRevision()}>{busy === 'confirm' ? <><Spinner size="tiny" />正在建立</> : preview.status === 'confirmed' ? '已建立媒体库' : '确认并建立媒体库'}</Button></div>
         </>}
       </section>}
 
@@ -1822,7 +1821,7 @@ export default function MediaManagementPage() {
               </div>
               <div className="media-v4-execution-header-secondary">
                 <span>{executionCounts?.metadataComplete ?? 0} 部资料完整</span>
-                <span>镜像 {executionMirrorDone}/{executionMirrorTotal}</span>
+                <span>资料与发布 {executionPublicationDone}/{executionPublicationTotal}</span>
               </div>
             </div>}
             {preview && <details className="media-v4-review-details"><summary>查看本次识别摘要</summary><div className="media-v4-review-details-body">
@@ -1945,17 +1944,15 @@ export default function MediaManagementPage() {
                     <>
                       <p>{sourceCardPendingDelete.deletion_retry_required ? `重新清理“${sourceCardPendingDelete.display_name}”前，请核对影响范围。` : `要从“已导入来源”中移除“${sourceCardPendingDelete.display_name}”吗？`}</p>
                       {sourceDeletionPreview === null && (
-                        <p>{sourceCardPendingDelete.deletion_retry_required ? '正在读取最新清理范围…' : '只会隐藏这张来源卡，不会删除媒体库、镜像、资料或观看状态；以后重新扫描同一来源时，卡片会再次出现。'}</p>
+                        <p>{sourceCardPendingDelete.deletion_retry_required ? '正在读取最新清理范围…' : '只会隐藏这张来源卡，不会删除媒体库、资料、图片或观看状态；以后重新扫描同一来源时，卡片会再次出现。'}</p>
                       )}
                       {sourceDeletionPreview !== null && (
                         <div className="media-v4-source-card-deletion-preview">
                           {sourceCardPendingDelete.enabled === 0 ? (
-                            <p>媒体库已移除；尚有 <strong>{sourceDeletionPreview.artifact_files}</strong> 个镜像文件和 <strong>{sourceDeletionPreview.artifacts_total}</strong> 条产物记录待核对。</p>
+                            <p>该来源的媒体库已移除；真实媒体文件和已保存图片保留。</p>
                           ) : (
                             <p>
-                              将删除该来源的媒体库：<strong>{sourceDeletionPreview.works_removable}</strong> 部作品离开媒体库、回收{' '}
-                              <strong>{sourceDeletionPreview.artifact_files}</strong> 个镜像文件
-                              {sourceDeletionPreview.artifact_bytes > 0 ? `（约 ${Math.max(1, Math.round(sourceDeletionPreview.artifact_bytes / 1048576))} MB）` : ''}。
+                              将删除该来源的媒体库：<strong>{sourceDeletionPreview.works_removable}</strong> 部作品离开媒体库；真实媒体文件和已保存图片保留。
                             </p>
                           )}
                           {sourceDeletionPreview.works_shared > 0 && (

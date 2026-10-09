@@ -1,22 +1,23 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Profiler, StrictMode } from 'react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import VirtualizedPosterGrid from '../../src/components/library/VirtualizedPosterGrid';
 import { api } from '../../src/api/client';
 
 vi.mock('../../src/api/client', () => ({ API_BASE: '', api: { post: vi.fn() } }));
-let callback: IntersectionObserverCallback;
+let callbacks: IntersectionObserverCallback[] = [];
+const observed = new Set<HTMLImageElement>();
 let observer: IntersectionObserver;
-const observe = vi.fn();
+const observe = vi.fn((node: HTMLImageElement) => observed.add(node));
 const disconnect = vi.fn();
 const work = (index: number) => ({
   work_id: `w${index}`, title: `作品${index}`, source: 'local',
-  show_type: 'anime_series', local_poster_path: `D:/mirror/${index}/poster.jpg`, rating: 8,
+  show_type: 'anime_series', local_poster_path: `/api/assets/artwork/grid${index}/v1/256`, rating: 8,
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => { for (let count = 0; count < 2; count++) observed.forEach((node) => fireEvent.load(node)); observed.clear(); vi.useRealTimers(); });
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.clearAllMocks(); callbacks = [];
   vi.mocked(api.post).mockImplementation(async (_path, body: any) => ({ states: body.items.map(() => 'ready') }));
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 1000 });
   Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, value: 900 });
@@ -28,12 +29,12 @@ beforeEach(() => {
     observe = observe;
     unobserve = vi.fn();
     disconnect = disconnect;
-    constructor(cb: IntersectionObserverCallback) { callback = cb; observer = this as unknown as IntersectionObserver; }
+    constructor(cb: IntersectionObserverCallback) { callbacks.push(cb); observer = this as unknown as IntersectionObserver; }
   });
 });
 
-function intersect(images: HTMLImageElement[], visible: boolean) {
-  act(() => callback(images.map((target) => ({ target, isIntersecting: visible } as unknown as IntersectionObserverEntry)), observer));
+function intersect(images: HTMLImageElement[], visible: boolean, region = 0) {
+  act(() => callbacks[callbacks.length - 3 + region](images.map((target) => ({ target, isIntersecting: visible } as unknown as IntersectionObserverEntry)), observer));
 }
 
 test('窗口未变化的滚动不重建卡片节点，也不逐帧提交 React 更新', () => {
@@ -51,62 +52,6 @@ test('窗口未变化的滚动不重建卡片节点，也不逐帧提交 React �
   for (const top of [40, 120, 0]) { main.scrollTop = top; fireEvent.scroll(main); }
   expect(onRender).not.toHaveBeenCalled();
   expect([...document.querySelectorAll('.poster-card')]).toEqual(before);
-});
-
-test('只为观察器范围内的图片查询准备状态，离开范围移除 src', async () => {
-  render(<main className="app-main"><VirtualizedPosterGrid works={Array.from({ length: 4 }, (_, i) => work(i))} columns={4} /></main>);
-  const images = screen.getAllByRole('img') as HTMLImageElement[];
-  expect(images).toHaveLength(4);
-  expect(images.every((image) => !image.hasAttribute('src'))).toBe(true);
-  intersect(images.slice(0, 4), true);
-  await waitFor(() => expect(images[0]).toHaveAttribute('src', expect.stringContaining('cache_only=true')));
-  expect(api.post).toHaveBeenCalledTimes(1);
-  expect(vi.mocked(api.post).mock.calls[0][1]).toEqual({ items: images.slice(0, 4).map((_, i) => ({ path: `D:/mirror/${i}/poster.jpg`, width: 256 })) });
-  expect(images.filter((image) => image.hasAttribute('src'))).toHaveLength(4);
-  intersect(images.slice(0, 4), false);
-  expect(images.every((image) => !image.hasAttribute('src'))).toBe(true);
-  expect(screen.getAllByRole('button')).toHaveLength(4);
-  intersect(images.slice(0, 4), true);
-  expect(images[0]).toHaveAttribute('src');
-  expect(api.post).toHaveBeenCalledTimes(1);
-});
-
-test('分类图片等待异步解码后显示，加载完成不提交 React 更新', async () => {
-  let finish!: () => void;
-  const decode = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
-  Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode });
-  const onRender = vi.fn();
-  render(<main className="app-main"><Profiler id="grid" onRender={onRender}><VirtualizedPosterGrid works={[work(0)]} columns={4} /></Profiler></main>);
-  const image = screen.getByRole('img') as HTMLImageElement;
-  intersect([image], true);
-  await waitFor(() => expect(image).toHaveAttribute('src'));
-  onRender.mockClear();
-  fireEvent.load(image);
-  expect(image).toHaveAttribute('decoding', 'async');
-  expect(image).toHaveAttribute('data-state', 'loading');
-  expect(decode).toHaveBeenCalledTimes(1);
-  await act(async () => { finish(); });
-  expect(image).toHaveAttribute('data-state', 'ready');
-  expect(onRender).not.toHaveBeenCalled();
-});
-
-test('图片离开范围后旧解码返回，不能恢复 ready 或污染再次加载的状态', async () => {
-  const finishes: Array<() => void> = [];
-  Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true,
-    value: vi.fn(() => new Promise<void>(resolve => finishes.push(resolve))) });
-  render(<main className="app-main"><VirtualizedPosterGrid works={[work(0)]} columns={4} /></main>);
-  const image = screen.getByRole('img') as HTMLImageElement;
-  intersect([image], true);
-  await waitFor(() => expect(image).toHaveAttribute('src'));
-  fireEvent.load(image);
-  intersect([image], false);
-  intersect([image], true);
-  fireEvent.load(image);
-  expect(finishes).toHaveLength(2);
-  await act(async () => { finishes[0](); });
-  expect(image).toHaveAttribute('data-state', 'loading');
-  await act(async () => { finishes[1](); });
-  expect(image).toHaveAttribute('data-state', 'ready');
 });
 
 test('分类切换时首屏未就绪保持隐藏，只等待视口图片，滚动不重新等待', async () => {
@@ -171,23 +116,6 @@ test('无封面的分类首屏和缓存 ready 状态不额外等待超时', asyn
   expect(grid).toHaveAttribute('data-presentation', 'ready');
 });
 
-test('load 与缓存 complete 同时到达只解码一次，错误会使待完成解码失效', async () => {
-  let finish!: () => void;
-  const decode = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
-  Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode });
-  vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true);
-  vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(256);
-  render(<main className="app-main"><VirtualizedPosterGrid works={[work(0)]} columns={4} /></main>);
-  const image = screen.getByRole('img') as HTMLImageElement;
-  intersect([image], true);
-  await waitFor(() => expect(image).toHaveAttribute('src'));
-  fireEvent.load(image);
-  expect(decode).toHaveBeenCalledTimes(1);
-  fireEvent.error(image);
-  await act(async () => { finish(); });
-  expect(image).toHaveAttribute('data-state', 'error');
-});
-
 test('尚无尺寸时只显示标题壳，恢复尺寸后仍等待进入观察范围', async () => {
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 0 });
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 0 });
@@ -202,41 +130,65 @@ test('尚无尺寸时只显示标题壳，恢复尺寸后仍等待进入观察�
   expect(api.post).not.toHaveBeenCalled();
 });
 
-test('StrictMode 重挂载和卸载后清理观察器及批量请求', async () => {
+
+test('已发布尺寸图直接加载，可见优先且没有前台 prepare 请求', () => {
+  render(<main className="app-main"><VirtualizedPosterGrid works={Array.from({ length: 8 }, (_, i) => work(i))} columns={4} /></main>);
+  const images = screen.getAllByRole('img') as HTMLImageElement[];
+  expect(images.every((node) => !node.hasAttribute('src'))).toBe(true);
+  intersect(images, true);
+  expect(images.filter((node) => node.hasAttribute('src'))).toHaveLength(6);
+  expect(api.post).not.toHaveBeenCalled();
+  fireEvent.load(images[0]);
+  expect(images[6]).toHaveAttribute('src', expect.stringContaining('/api/assets/artwork/'));
+  images.forEach((node) => fireEvent.load(node));
+});
+
+test('图片加载完成直接显示，不显式 decode，也不触发 React 整网格更新', () => {
+  const decode = vi.fn(); Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode });
+  const onRender = vi.fn();
+  render(<main className="app-main"><Profiler id="grid" onRender={onRender}><VirtualizedPosterGrid works={[work(0)]} columns={4} /></Profiler></main>);
+  const image = screen.getByRole('img') as HTMLImageElement;
+  intersect([image], true); onRender.mockClear();
+  fireEvent.load(image);
+  expect(image).toHaveAttribute('data-state', 'ready');
+  expect(decode).not.toHaveBeenCalled();
+  expect(onRender).not.toHaveBeenCalled();
+});
+
+test('离开预取区不立即清 src，离开驻留区后才清除', () => {
+  render(<main className="app-main"><VirtualizedPosterGrid works={[work(0)]} columns={4} /></main>);
+  const image = screen.getByRole('img') as HTMLImageElement;
+  intersect([image], true); fireEvent.load(image);
+  intersect([image], false);
+  expect(image).toHaveAttribute('src');
+  intersect([image], false, 2);
+  expect(image).not.toHaveAttribute('src');
+  intersect([image], true); fireEvent.load(image);
+});
+
+test('图片版本变化更新同一卡片，旧请求终态不能将新版本标为完成', () => {
+  const first = work(0);
+  const { rerender } = render(<main className="app-main"><VirtualizedPosterGrid works={[first]} columns={4} /></main>);
+  const card = screen.getByRole('button');
+  const image = screen.getByRole('img') as HTMLImageElement;
+  intersect([image], true);
+  rerender(<main className="app-main"><VirtualizedPosterGrid works={[{ ...first, local_poster_path: '/api/assets/artwork/changed/v2/256' }]} columns={4} /></main>);
+  expect(screen.getByRole('button')).toBe(card);
+  intersect([image], true);
+  fireEvent.load(image);
+  expect(image).toHaveAttribute('data-state', 'loading');
+  expect(image).toHaveAttribute('src', expect.stringContaining('/changed/v2/256'));
+  fireEvent.load(image);
+  expect(image).toHaveAttribute('data-state', 'ready');
+});
+
+test('StrictMode 重放与卸载清理观察器，但已开始请求保留实际终态预算', () => {
   const { unmount } = render(<main className="app-main"><StrictMode><VirtualizedPosterGrid works={[work(0)]} columns={4} /></StrictMode></main>);
   const image = screen.getByRole('img') as HTMLImageElement;
   intersect([image], true);
-  await waitFor(() => expect(image).toHaveAttribute('src'));
+  expect(image).toHaveAttribute('src');
   unmount();
   expect(disconnect).toHaveBeenCalled();
   expect(document.querySelector('.poster-card')).toBeNull();
-});
-
-test('后台临时失败后延迟重试，成功后显示缩略图', async () => {
-  vi.useFakeTimers();
-  vi.mocked(api.post).mockResolvedValueOnce({ states: ['retry'] }).mockResolvedValueOnce({ states: ['ready'] });
-  render(<main className="app-main"><VirtualizedPosterGrid works={[work(0)]} columns={4} /></main>);
-  const image = screen.getByRole('img') as HTMLImageElement;
-  intersect([image], true);
-  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-  expect(image).toHaveAttribute('data-state', 'retry');
-  expect(image).not.toHaveAttribute('src');
-  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
-  expect(image).toHaveAttribute('src');
-  expect(api.post).toHaveBeenCalledTimes(2);
-});
-
-test('图片离开范围后异步就绪不会恢复远处 src，返回时立即复用', async () => {
-  let finish!: (value: { states: string[] }) => void;
-  vi.mocked(api.post).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-  render(<main className="app-main"><VirtualizedPosterGrid works={[work(0)]} columns={4} /></main>);
-  const image = screen.getByRole('img') as HTMLImageElement;
-  intersect([image], true);
-  await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
-  intersect([image], false);
-  await act(async () => { finish({ states: ['ready'] }); });
-  expect(image).not.toHaveAttribute('src');
-  intersect([image], true);
-  expect(image).toHaveAttribute('src');
-  expect(api.post).toHaveBeenCalledTimes(1);
+  fireEvent.load(image);
 });

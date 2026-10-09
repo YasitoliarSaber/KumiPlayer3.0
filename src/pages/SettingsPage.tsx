@@ -425,16 +425,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
       {config && (
         <SettingsSection title="图片策略">
           <div className="settings-field-list">
-            <SelectRow
-              label="图片策略"
-              value={config.artwork_storage_mode || 'local'}
-              options={[
-                { value: 'local', label: '优先使用本地图片' },
-                { value: 'auto', label: '本地优先，缺失时联网' },
-                { value: 'remote', label: '优先使用远程图片' },
-              ]}
-              onSave={(value) => saveConfig({ artwork_storage_mode: value as PublicConfig['artwork_storage_mode'] })}
-            />
+            <span className="field-help">图片由后台下载到独立的本地图片库，并提前准备适合展示的尺寸。浏览时读取本地缓存；图片暂未就绪不影响作品资料和播放。</span>
           </div>
         </SettingsSection>
       )}
@@ -604,13 +595,10 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
         </SettingsSection>
       )}
       {config && (
-        <SettingsSection title="镜像与路径">
-          <div className="settings-field-list">
-            <ConfigRow folder label="镜像目录" value={config.mirror_dir} onSave={(value) => saveConfig({ mirror_dir: value })} />
-          </div>
+        <SettingsSection title="播放路径">
           <div className="settings-actions">
             <GhostButton onClick={testMediaPaths} busy={activeAction === '验证媒体路径'}>验证媒体路径</GhostButton>
-            <span className="field-help">镜像保存播放入口和作品资料，不会移动原始视频。</span>
+            <span className="field-help">导入时保存本地媒体路径，播放时直接读取。网盘必须先挂载到本地，不会移动原始视频。</span>
           </div>
           {mediaPathValidation && (
             <div className="media-path-validation" role="status" aria-label="媒体路径验证结果">

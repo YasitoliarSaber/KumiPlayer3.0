@@ -1,176 +1,165 @@
 import { createContext } from 'react';
-import { api } from '../../api/client';
 import { recordScrollDiagnostic } from '../../utils/scrollDiagnostics';
 
-interface ImageEntry {
-  path: string;
-  width: number;
-  url: string;
-  local: boolean;
-  active: boolean;
-  ready: boolean;
-  version: number;
-  decodingVersion: number;
+type Priority = 0 | 1;
+type State = 'idle' | 'loading' | 'ready' | 'error';
+interface LoadJob {
+  image: HTMLImageElement; url: string; priority: Priority;
+  started: boolean; cancelled: boolean; done: (state: State) => void;
 }
 
-// 一个网格共用一个观察器和批量状态查询，滚动不进入 React 更新队列。
-export class PosterImageLifecycle {
-  private entries = new Map<HTMLImageElement, ImageEntry>();
-  private observer: IntersectionObserver | null = null;
-  private timer = 0;
-  private request: AbortController | null = null;
-  private disposed = false;
-  private root: HTMLElement | null = null;
-  private margin = -1;
+/** 所有页面共用实际 DOM 请求预算，取消挂载不等于浏览器已取消传输。 */
+export class ArtworkLoadBudget {
+  private queued = new Set<LoadJob>();
+  private running = new Set<LoadJob>();
+  private failures = new Map<string, number>();
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
+  constructor(private limit = 6, private preloadLimit = 2, private cooldown = 30_000) {}
 
-  configure(root: HTMLElement | null, height: number) {
-    const margin = Math.round(height * 1.25);
-    if (!this.disposed && this.observer && this.root === root && this.margin === margin) return;
-    this.disposed = false;
-    this.root = root;
-    this.margin = margin;
-    this.observer?.disconnect();
-    if (typeof IntersectionObserver === 'undefined') return;
-    this.observer = new IntersectionObserver((changes) => {
-      for (const change of changes) {
-        const image = change.target as HTMLImageElement;
-        const entry = this.entries.get(image);
-        if (!entry) continue;
-        entry.active = change.isIntersecting;
-        if (entry.active) this.activate(image, entry);
-        else {
-          this.clearSource(image);
-          image.dataset.state = 'idle';
-        }
-      }
-    }, { root, rootMargin: `${margin}px 0px` });
-    for (const image of this.entries.keys()) this.observer.observe(image);
-  }
-
-  register(image: HTMLImageElement, entry: Omit<ImageEntry, 'active' | 'ready' | 'version' | 'decodingVersion'>) {
-    const record = { ...entry, active: false, ready: false, version: 0, decodingVersion: -1 };
-    this.entries.set(image, record);
-    if (this.observer) this.observer.observe(image);
-    else {
-      // 无观察器环境由浏览器原生懒加载兜底。
-      image.loading = 'lazy';
-      record.active = true;
-      this.activate(image, record);
-    }
-    return () => {
-      this.observer?.unobserve(image);
-      this.entries.delete(image);
-      this.clearSource(image);
+  enqueue(image: HTMLImageElement, url: string, priority: Priority, done: LoadJob['done']) {
+    const job: LoadJob = { image, url, priority, done, started: false, cancelled: false };
+    this.queued.add(job);
+    this.pump();
+    return {
+      priority: (next: Priority) => { job.priority = next; this.pump(); },
+      cancel: () => {
+        job.cancelled = true;
+        this.queued.delete(job);
+        // 已开始的请求保留监听器和预算，直到 load/error；不能虚报取消成功。
+        this.pump();
+      },
+      pending: () => !job.started || this.running.has(job),
+      started: () => job.started,
     };
   }
 
-  private activate(image: HTMLImageElement, entry: ImageEntry) {
-    if (image.hasAttribute('src')) return;
-    image.dataset.state = 'loading';
-    if (!entry.local || entry.ready) this.setSource(image, entry.url);
-    else {
-      // 新进入视野的冷图立即查询，不能等待旧轮询的静默间隔。
-      window.clearTimeout(this.timer);
-      this.timer = 0;
-      this.schedule(0);
+  private pump() {
+    if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = undefined; }
+    let retryIn = Infinity;
+    for (const job of [...this.queued].sort((a, b) => a.priority - b.priority)) {
+      if (this.running.size >= this.limit) break;
+      if ([...this.running].some((other) => other.image === job.image)) continue;
+      if (job.priority === 1 && [...this.running].filter((other) => other.priority === 1).length >= this.preloadLimit) continue;
+      const remaining = (this.failures.get(job.url) ?? -Infinity) + this.cooldown - Date.now();
+      if (remaining > 0) { retryIn = Math.min(retryIn, remaining); continue; }
+      this.queued.delete(job);
+      this.running.add(job);
+      job.started = true;
+      const terminal = (state: State) => {
+        if (!this.running.delete(job)) return;
+        job.image.removeEventListener('load', loaded);
+        job.image.removeEventListener('error', failed);
+        if (state === 'error') {
+          this.failures.delete(job.url);
+          this.failures.set(job.url, Date.now());
+          if (this.failures.size > 512) this.failures.delete(this.failures.keys().next().value!);
+        } else this.failures.delete(job.url);
+        if (!job.cancelled) job.done(state);
+        this.pump();
+      };
+      const loaded = () => terminal('ready');
+      const failed = () => terminal('error');
+      job.image.addEventListener('load', loaded);
+      job.image.addEventListener('error', failed);
+      job.done('loading');
+      // 可见性已由观察器控制；原生 lazy 会让已占预算的预取或卸载图片永远不开始。
+      job.image.loading = 'eager';
+      job.image.fetchPriority = job.priority === 0 ? 'high' : 'low';
+      job.image.src = job.url;
+      recordScrollDiagnostic('image-src-set');
+      if (job.image.complete && job.image.naturalWidth > 0) loaded();
     }
+    if (Number.isFinite(retryIn)) this.retryTimer = setTimeout(() => this.pump(), retryIn);
+  }
+}
+
+export const artworkLoadBudget = new ArtworkLoadBudget();
+function clearImageSource(image: HTMLImageElement) {
+  if (!image.hasAttribute('src')) return;
+  image.removeAttribute('src');
+  recordScrollDiagnostic('image-src-cleared');
+}
+interface ImageEntry {
+  url: string; visible: boolean; preload: boolean; resident: boolean;
+  ready: boolean; job?: ReturnType<ArtworkLoadBudget['enqueue']>;
+  onState?: (state: State) => void;
+}
+
+// 三个观察器各有明确职责：可见优先，少量预取，较宽驻留区避免往返抖动。
+export class PosterImageLifecycle {
+  private entries = new Map<HTMLImageElement, ImageEntry>();
+  private observers: IntersectionObserver[] = [];
+  private root: HTMLElement | null = null;
+  private height = -1;
+  constructor(private budget = artworkLoadBudget) {}
+
+  configure(root: HTMLElement | null, height: number) {
+    if (this.observers.length && this.root === root && this.height === height) return;
+    this.root = root; this.height = height;
+    this.observers.forEach((observer) => observer.disconnect());
+    this.observers = [];
+    if (typeof IntersectionObserver === 'undefined') return;
+    const margins = ['0px', `${Math.round(height * 0.5)}px 0px ${Math.round(height)}px 0px`, `${Math.round(height * 2)}px 0px`];
+    (['visible', 'preload', 'resident'] as const).forEach((kind, index) => {
+      const observer = new IntersectionObserver((changes) => {
+        for (const change of changes) {
+          const image = change.target as HTMLImageElement;
+          const entry = this.entries.get(image);
+          if (!entry) continue;
+          entry[kind] = change.isIntersecting;
+          this.update(image, entry);
+        }
+      }, { root, rootMargin: margins[index] });
+      this.observers.push(observer);
+      for (const image of this.entries.keys()) observer.observe(image);
+    });
   }
 
-  private setSource(image: HTMLImageElement, url: string) {
-    if (image.getAttribute('src') === url) return;
-    const entry = this.entries.get(image);
-    if (entry) entry.version += 1;
-    image.dataset.state = 'loading';
-    image.src = url;
-    recordScrollDiagnostic('image-src-set');
-    if (image.complete && image.naturalWidth > 0) void this.revealDecoded(image);
+  register(image: HTMLImageElement, value: { url: string; path?: string; width?: number; local?: boolean; onState?: ImageEntry['onState'] }) {
+    const entry: ImageEntry = { url: value.url, onState: value.onState, visible: false, preload: false, resident: true, ready: false };
+    this.entries.set(image, entry);
+    image.dataset.state = 'idle';
+    this.observers.forEach((observer) => observer.observe(image));
+    if (!this.observers.length) { entry.visible = true; this.update(image, entry); }
+    return () => {
+      this.observers.forEach((observer) => observer.unobserve(image));
+      this.entries.delete(image);
+      entry.job?.cancel();
+      // 未完成的 src 不主动清除；浏览器终态仍负责释放全局预算。
+      if (!entry.job?.pending()) clearImageSource(image);
+    };
   }
 
-  private clearSource(image: HTMLImageElement) {
-    const entry = this.entries.get(image);
-    if (entry) entry.version += 1;
-    if (!image.hasAttribute('src')) return;
-    image.removeAttribute('src');
-    recordScrollDiagnostic('image-src-cleared');
-  }
-
-  async revealDecoded(image: HTMLImageElement): Promise<void> {
-    const entry = this.entries.get(image);
-    if (!entry || !entry.active || image.getAttribute('src') !== entry.url) return;
-    const version = entry.version;
-    if (entry.decodingVersion === version) return;
-    entry.decodingVersion = version;
-    try {
-      if (typeof image.decode === 'function') await image.decode();
-    } catch {
-      // load 已成功但部分 WebView 拒绝 decode；完整资源仍可显示，坏图保持占位。
-      if (image.naturalWidth === 0) {
-        if (this.entries.get(image) === entry && entry.version === version) image.dataset.state = 'error';
-        return;
+  private update(image: HTMLImageElement, entry: ImageEntry) {
+    if (!entry.visible && !entry.preload) {
+      if (!entry.job?.pending()) {
+        if (!entry.resident) { clearImageSource(image); entry.ready = false; image.dataset.state = 'idle'; }
+      } else if (!entry.job?.started()) { entry.job?.cancel(); entry.job = undefined; }
+      return;
+    }
+    if (entry.job?.pending()) { entry.job.priority(entry.visible ? 0 : 1); return; }
+    if (entry.ready || !entry.url) return;
+    entry.job = this.budget.enqueue(image, entry.url, entry.visible ? 0 : 1, (state) => {
+      if (this.entries.get(image) !== entry) return;
+      entry.ready = state === 'ready';
+      image.dataset.state = state;
+      entry.onState?.(state);
+      if ((state === 'ready' || state === 'error') && !entry.resident && !entry.visible && !entry.preload) {
+        clearImageSource(image); entry.ready = false;
       }
-    }
-    // src 清除、重挂载与快速切换后，旧 decode 不得将新请求标记成 ready。
-    if (this.entries.get(image) === entry && entry.version === version && entry.active
-      && image.getAttribute('src') === entry.url) image.dataset.state = 'ready';
-  }
-
-  markError(image: HTMLImageElement): void {
-    const entry = this.entries.get(image);
-    if (!entry || !image.hasAttribute('src')) return;
-    entry.version += 1;
-    image.dataset.state = 'error';
-  }
-
-  private schedule(delay: number) {
-    if (this.disposed || this.timer || this.request) return;
-    this.timer = window.setTimeout(() => {
-      this.timer = 0;
-      void this.poll();
-    }, delay);
-  }
-
-  private async poll() {
-    const pending = [...this.entries].filter(([image, entry]) =>
-      entry.active && entry.local && !image.hasAttribute('src')
-        && (image.dataset.state === 'loading' || image.dataset.state === 'retry'));
-    if (!pending.length || this.disposed) return;
-    const controller = new AbortController();
-    this.request = controller;
-    let delay = 750;
-    try {
-      for (let start = 0; start < pending.length; start += 64) {
-        const batch = pending.slice(start, start + 64);
-        const response = await api.post<{ states: string[] }>('/api/assets/thumbnails/prepare', {
-          items: batch.map(([, entry]) => ({ path: entry.path, width: entry.width })),
-        }, { signal: controller.signal });
-        if (this.disposed || controller.signal.aborted) return;
-        if (response.states.every((state) => state === 'retry')) delay = 2000;
-        batch.forEach(([image, entry], index) => {
-          if (this.entries.get(image) !== entry) return;
-          if (response.states[index] === 'ready') entry.ready = true;
-          if (!entry.active) return;
-          if (entry.ready) this.setSource(image, entry.url);
-          else if (response.states[index] === 'retry') image.dataset.state = 'retry';
-          else if (response.states[index] === 'unavailable') image.dataset.state = 'error';
-        });
-      }
-    } catch {
-      delay = 2000;
-    } finally {
-      if (this.request === controller) this.request = null;
-      if (!this.disposed) this.schedule(delay);
-    }
+    });
   }
 
   dispose() {
-    this.disposed = true;
-    this.observer?.disconnect();
-    this.observer = null;
-    window.clearTimeout(this.timer);
-    this.timer = 0;
-    this.request?.abort();
-    this.request = null;
+    this.observers.forEach((observer) => observer.disconnect());
+    this.observers = [];
+    for (const [image, entry] of this.entries) {
+      entry.job?.cancel();
+      if (!entry.job?.pending()) clearImageSource(image);
+    }
+    this.entries.clear();
   }
 }
 
 export const PosterImageContext = createContext<PosterImageLifecycle | null>(null);
+export const defaultImageLifecycle = new PosterImageLifecycle();

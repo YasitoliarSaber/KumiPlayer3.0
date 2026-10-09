@@ -78,7 +78,6 @@ def test_confirmation_atomically_publishes_revision_and_outbox_jobs(tmp_path):
     assert service.get_status("rev-1") == "confirmed"
     jobs = service.list_jobs("rev-1")
     assert {job["job_type"] for job in jobs} == {
-        "materialize_mirror",
         "scrape_work",
         "refresh_projection",
     }
@@ -97,7 +96,7 @@ def test_confirmation_is_idempotent_and_does_not_duplicate_jobs(tmp_path):
     service.confirm("rev-1")
     service.confirm("rev-1")
 
-    assert len(service.list_jobs("rev-1")) == 3
+    assert len(service.list_jobs("rev-1")) == 2
 
 
 def test_same_provider_hint_does_not_merge_different_source_structures(tmp_path):
@@ -719,7 +718,7 @@ def test_confirming_a_newer_revision_requests_stop_for_old_running_jobs(tmp_path
         conn.execute(
             """
             UPDATE jobs SET status = 'running'
-            WHERE revision_id = 'rev-old' AND job_type = 'materialize_mirror'
+            WHERE revision_id = 'rev-old' AND job_type = 'scrape_work'
             """
         )
 
@@ -734,8 +733,7 @@ def test_confirming_a_newer_revision_requests_stop_for_old_running_jobs(tmp_path
                 "SELECT job_type, status, cancel_requested FROM jobs WHERE revision_id = 'rev-old'"
             )
         }
-    assert jobs["materialize_mirror"] == {"job_type": "materialize_mirror", "status": "running", "cancel_requested": 1}
-    assert jobs["scrape_work"]["status"] == "cancelled"
+    assert jobs["scrape_work"] == {"job_type": "scrape_work", "status": "running", "cancel_requested": 1}
     assert jobs["refresh_projection"]["status"] == "cancelled"
 
 

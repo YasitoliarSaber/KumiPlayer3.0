@@ -257,7 +257,7 @@ def test_api_preview_and_delete_requires_explicit_confirmation(tmp_path, monkeyp
 
     database, mirror = _two_sources(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
-    monkeypatch.setattr("app.core.paths.get_mirror_root", lambda: mirror)
+    monkeypatch.setattr(media_v4, "_configured_mirror_root", lambda: mirror)
     application = FastAPI()
     application.include_router(media_v4.router)
     client = TestClient(application)

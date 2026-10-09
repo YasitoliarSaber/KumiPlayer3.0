@@ -16,8 +16,8 @@ test('详情首屏不重复挂载背景图，并优先消费本地 artwork', () 
 test('非首屏详情缩略图与所有浏览卡片不抢占首屏图片请求', () => {
   assert.match(detail, /loading=\{episodeIndex < 6 \? 'eager' : 'lazy'\}/);
   assert.match(detail, /person\.profile_path[\s\S]*loading="lazy"/);
-  assert.match(posterCard, /preferredImagePath = preferredArtworkPath\(work, artworkKind\)/);
-  assert.match(posterCard, /localArtworkOnly && isRemoteAssetPath\(preferredImagePath\)/);
+  assert.match(posterCard, /preferredImagePath = preferredArtworkPath\(work, artworkKind, thumbnailWidth \|\| undefined\)/);
+  assert.doesNotMatch(posterCard, /isRemoteAssetPath|prepareThumbnail|cacheOnly:/);
   assert.match(home, /preferredArtworkPath\(work, 'fanart'\)/);
 });
 

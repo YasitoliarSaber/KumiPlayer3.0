@@ -516,57 +516,14 @@ def _safe_candidate_decision(value: object) -> dict | None:
     }
 
 
-def _derive_work_status(mirror: dict | None, metadata: dict | None, scrape_status: str) -> str:
-    """由 mirror + metadata jobs 推导作品单元的用户可见状态。
-
-    优先级与文档一致：运行中 > 需要处理/失败/取消 > 等待 > 完成；
-    失败/取消不能被后续 queued job 掩盖。scrape 元数据状态（waiting_review /
-    source_unavailable / failed / waiting_metadata）不能显示为已完成。
-    """
-
-    def first(*jobs: dict | None) -> dict | None:
-        return next((job for job in jobs if job is not None), None)
-
-    mirror_job = first(mirror)
-    metadata_job = first(metadata)
-    if mirror_job is not None:
-        if mirror_job["status"] == "running":
-            return "running_mirror"
-        if mirror_job["status"] == "failed":
-            return "failed"
-        if mirror_job["status"] == "cancelled":
-            return "cancelled"
-        if mirror_job["status"] == "queued":
-            return "waiting_mirror"
-        # mirror succeeded
-        if metadata_job is not None:
-            if metadata_job["status"] == "running":
-                return "running_metadata"
-            if metadata_job["status"] == "failed":
-                return "failed"
-            if metadata_job["status"] == "cancelled":
-                return "cancelled"
-            if metadata_job["status"] == "queued":
-                return "waiting_metadata"
-            # metadata succeeded
-            if scrape_status and scrape_status not in {"ready", "confirmed", "not_required"}:
-                return "needs_attention"
-            return "completed"
-        return "waiting_metadata"
-    # 理论上每个 work 都有 mirror job；异常情况按 metadata 状态展示。
-    if metadata_job is not None:
-        if metadata_job["status"] == "running":
-            return "running_metadata"
-        if metadata_job["status"] == "failed":
-            return "failed"
-        if metadata_job["status"] == "cancelled":
-            return "cancelled"
-        if metadata_job["status"] == "queued":
-            return "waiting_metadata"
-        if scrape_status and scrape_status not in {"ready", "confirmed", "not_required"}:
-            return "needs_attention"
-        return "completed"
-    return "waiting_mirror"
+def _derive_work_status(metadata: dict | None, scrape_status: str) -> str:
+    """资料执行状态独立于图片准备，确认后的媒体始终可发布和播放。"""
+    if metadata is None:
+        return 'completed' if scrape_status in {'ready', 'confirmed', 'not_required'} else 'waiting_metadata'
+    states = {'running': 'running_metadata', 'failed': 'failed', 'cancelled': 'cancelled', 'queued': 'waiting_metadata'}
+    if metadata['status'] in states:
+        return states[metadata['status']]
+    return 'completed' if scrape_status in {'ready', 'confirmed', 'not_required'} else 'needs_attention'
 
 
 def _stage_status(jobs: list[dict]) -> str:
@@ -620,7 +577,7 @@ def _metadata_stage_summary(jobs: list[dict], scrape_rows: dict[str, dict]) -> d
 def _revision_overall_status(work_units: list[dict], stage: dict[str, list[dict]]) -> str:
     """revision 级整体状态：running > needs_attention > queued > cancelled > completed。"""
 
-    if any(unit["overall_status"] in {"running_mirror", "running_metadata"} for unit in work_units):
+    if any(unit["overall_status"] == "running_metadata" for unit in work_units):
         return "running"
     if any(stage["projection"] and str(job["status"]) == "running" for job in stage["projection"]):
         return "running"
@@ -638,7 +595,7 @@ def _revision_overall_status(work_units: list[dict], stage: dict[str, list[dict]
         for job in stage_jobs
     ):
         return "queued"
-    if any(unit["overall_status"] == "waiting_mirror" or unit["overall_status"] == "waiting_metadata" for unit in work_units):
+    if any(unit["overall_status"] == "waiting_metadata" for unit in work_units):
         return "queued"
     if any(unit["overall_status"] == "cancelled" for unit in work_units) or any(
         str(job["status"]) == "cancelled"
@@ -2718,20 +2675,17 @@ class V4RevisionService:
                     """,
                     (created_at, root_id),
                 )
-                conn.execute(
-                    """
-                    INSERT INTO v4_meta(key, value) VALUES ('library_projection_dirty', ?)
-                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
-                    """,
-                    (created_at,),
-                )
+                from app.media_v4.projection.library import mark_projection_dirty
+                affected_work_ids = set(work_ids.values())
+                if previous_revision_id:
+                    affected_work_ids.update(row[0] for row in conn.execute(
+                        'SELECT DISTINCT work_id FROM revision_bindings WHERE revision_id=?', (previous_revision_id,)))
+                mark_projection_dirty(conn, affected_work_ids)
                 from app.media_v4.persistence.metadata_lifecycle import (
                     attach_snapshot_refs,
-                    import_legacy_snapshot,
                     select_applicable_snapshot,
                 )
                 for work_id in sorted(set(work_ids.values())):
-                    import_legacy_snapshot(conn, work_id)
                     retained = select_applicable_snapshot(conn, revision_id, work_id)
                     if retained is not None:
                         attach_snapshot_refs(conn, revision_id, work_id, retained)
@@ -2739,23 +2693,6 @@ class V4RevisionService:
                 if added_evidence_ids is not None:
                     execution_work_ids = {work_ids[work.work_key] for work in graph.works
                                           if added_evidence_ids.intersection(work.source_evidence_ids)}
-                    # 未更新作品保留镜像引用；不生成虚假 succeeded 作业或改写旧产物。
-                    for work_id in sorted(set(work_ids.values()) - execution_work_ids):
-                        for reference in conn.execute(
-                            "SELECT ar.artifact_id,ar.subject_id FROM artifact_references ar "
-                            "JOIN artifacts a ON a.artifact_id=ar.artifact_id "
-                            "WHERE ar.revision_id=? AND ar.work_id=? AND ar.role='mirror' "
-                            "AND ar.snapshot_id IS NULL AND a.status='published' AND EXISTS ("
-                            "SELECT 1 FROM revision_bindings rb WHERE rb.revision_id=? "
-                            "AND rb.work_id=? AND rb.asset_id=ar.subject_id)",
-                            (previous_revision_id, work_id, revision_id, work_id),
-                        ).fetchall():
-                            conn.execute(
-                                "INSERT OR IGNORE INTO artifact_references(reference_id,artifact_id,revision_id,"
-                                "work_id,snapshot_id,role,subject_id,created_at) VALUES (?,?,?,?,NULL,'mirror',?,?)",
-                                (str(uuid.uuid4()), reference["artifact_id"], revision_id,
-                                 work_id, reference["subject_id"], created_at),
-                            )
                 self._enqueue_execution_jobs(conn, revision_id, execution_work_ids, created_at)
                 conn.commit()
             except Exception:
@@ -3006,6 +2943,17 @@ class V4RevisionService:
             for row in rows
         }
 
+    def validate_playback_paths(self, revision_id: str) -> None:
+        """导入确认入口检查最终落库路径，只做语法校验，不触盘或修订证据。"""
+        from app.media_v4.path_validation import validate_playback_locator_syntax
+
+        for evidence, _facts in self._load_revision_entries(revision_id):
+            if evidence.entry_kind != 'video':
+                continue
+            ok, reason = validate_playback_locator_syntax(evidence.playback_locator)
+            if not ok:
+                raise ValueError(reason)
+
     def confirm(self, revision_id: str, *, auto_append: bool = False) -> None:
         with self.database.connect() as conn:
             revision = conn.execute(
@@ -3034,24 +2982,8 @@ class V4RevisionService:
                 """
                 INSERT OR IGNORE INTO jobs(
                     job_id, job_type, revision_id, work_id, idempotency_key,
-                    created_at, updated_at
-                ) VALUES (?, 'materialize_mirror', ?, ?, ?, ?, ?)
-                """,
-                (
-                    str(uuid.uuid4()),
-                    revision_id,
-                    work_id,
-                    f"materialize_mirror:{revision_id}:{work_id}",
-                    now,
-                    now,
-                ),
-            )
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO jobs(
-                    job_id, job_type, revision_id, work_id, idempotency_key,
-                    created_at, updated_at
-                ) VALUES (?, 'scrape_work', ?, ?, ?, ?, ?)
+                    created_at, updated_at, result_json
+                ) VALUES (?, 'scrape_work', ?, ?, ?, ?, ?, '{"runtime_policy":"sqlite-artwork-v1"}')
                 """,
                 (
                     str(uuid.uuid4()),
@@ -3070,28 +3002,6 @@ class V4RevisionService:
             """,
             (str(uuid.uuid4()), revision_id, f"refresh_projection:{revision_id}", now, now),
         )
-        root_id = conn.execute(
-            "SELECT root_id FROM import_revisions WHERE revision_id = ?", (revision_id,)
-        ).fetchone()[0]
-        has_superseded = conn.execute(
-            "SELECT 1 FROM import_revisions WHERE root_id = ? AND status = 'superseded' LIMIT 1",
-            (root_id,),
-        ).fetchone()
-        if has_superseded is not None:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO jobs(
-                    job_id, job_type, revision_id, idempotency_key, created_at, updated_at
-                ) VALUES (?, 'cleanup_superseded_artifacts', ?, ?, ?, ?)
-                """,
-                (
-                    str(uuid.uuid4()),
-                    revision_id,
-                    f"cleanup_superseded_artifacts:{revision_id}",
-                    now,
-                    now,
-                ),
-            )
 
     def list_jobs(self, revision_id: str) -> list[dict]:
         with self.database.connect() as conn:
@@ -3142,21 +3052,6 @@ class V4RevisionService:
                 "ORDER BY job_type, updated_at DESC, job_id",
                 (revision_id, work_id),
             ).fetchall()
-            artifact_rows = conn.execute(
-                "SELECT DISTINCT a.target_path,a.status FROM artifacts a "
-                "LEFT JOIN artifact_references ar ON ar.artifact_id=a.artifact_id "
-                "WHERE a.artifact_type='mirror' AND a.work_id=? AND (a.revision_id=? "
-                "OR (ar.revision_id=? AND ar.work_id=? AND ar.role='mirror' AND ar.snapshot_id IS NULL)) "
-                "ORDER BY a.target_path LIMIT 20",
-                (work_id, revision_id, revision_id, work_id),
-            ).fetchall()
-            artifact_total = int(conn.execute(
-                "SELECT COUNT(DISTINCT a.artifact_id) FROM artifacts a "
-                "LEFT JOIN artifact_references ar ON ar.artifact_id=a.artifact_id "
-                "WHERE a.artifact_type='mirror' AND a.work_id=? AND (a.revision_id=? "
-                "OR (ar.revision_id=? AND ar.work_id=? AND ar.role='mirror' AND ar.snapshot_id IS NULL))",
-                (work_id, revision_id, revision_id, work_id),
-            ).fetchone()[0])
             scrape_row = conn.execute(
                 "SELECT provider, provider_id, status, metadata_json FROM scrape_bindings "
                 "WHERE revision_id = ? AND work_id = ? "
@@ -3318,18 +3213,17 @@ class V4RevisionService:
                 "playback_locator_available": asset_fact["playback_ready"],
             })
 
-        mirror_job = next((dict(row) for row in job_rows if row["job_type"] == "materialize_mirror"), None)
         metadata_job = next((dict(row) for row in sorted(job_rows, key=lambda row: row['updated_at'], reverse=True)
                              if row["job_type"] in {"scrape_work", "recover_work_aliases"}), None)
 
-        mirror_status = str(mirror_job["status"]) if mirror_job else ""
+        from app.media_v4.assets.status import artwork_status
+        with self.database.connect() as conn:
+            artwork = artwork_status(conn, work_id)
+        artifact_state = {'failed': 'degraded', 'not_required': 'not_required'}.get(artwork['status'], artwork['status'])
+        artifact_reasons = ['图片准备失败，可单独重试'] if artwork['status'] == 'failed' else []
         from app.media_v4.jobs.recovery_diagnostics import name_recovery_summary
 
         name_recovery = name_recovery_summary(metadata_job)
-        artifacts = [
-            {"file_name": str(row["target_path"]).replace("\\", "/").rsplit("/", 1)[-1], "status": str(row["status"] or "")}
-            for row in artifact_rows
-        ]
         candidate_decision = _safe_candidate_decision(metadata.get("candidate_decision"))
         metadata_policy = metadata_recovery_policy(
             metadata,
@@ -3369,7 +3263,6 @@ class V4RevisionService:
         has_detail = bool(
             name_recovery
             or episodes
-            or artifacts
             or season_rows
             or bool(metadata.get("season_results"))
             or metadata_state in {"confirmed", "ready"}
@@ -3394,12 +3287,7 @@ class V4RevisionService:
                 "metadata_recovery_action": metadata_policy["action"],
                 "metadata_recovery_hint": metadata_policy["hint"],
             },
-            "mirror": {
-                "status": mirror_status,
-                "error": _friendly_job_error(str((mirror_job or {}).get("last_error") or "")),
-                "artifact_count": artifact_total,
-                "artifacts": artifacts,
-            },
+            'artwork': artwork,
             "metadata_job_status": str(metadata_job["status"]) if metadata_job else "",
             "name_recovery": name_recovery,
             "scrape": scrape_summary,
@@ -3504,15 +3392,15 @@ class V4RevisionService:
                     row['metadata_state'] = row['metadata'].get('metadata_state', row['metadata_state'])
                     row['reason_code'] = row['metadata'].get('reason_code', row.get('reason_code', ''))
         jobs_by_work: dict[str, dict] = {}
-        stage: dict[str, list[dict]] = {"mirror": [], "metadata": [], "projection": []}
+        stage: dict[str, list[dict]] = {"metadata": [], "projection": []}
+        from app.media_v4.assets.status import artwork_status
+        with self.database.connect() as conn:
+            artwork_map = {work_id: artwork_status(conn, work_id) for work_id in work_ids}
         for row in job_rows:
             job = dict(row)
             job_type = str(job["job_type"])
             work_id = str(job["work_id"] or "")
-            if job_type == "materialize_mirror":
-                stage["mirror"].append(job)
-                jobs_by_work.setdefault(work_id, {})["mirror"] = job
-            elif job_type in {"scrape_work", "recover_work_aliases"}:
+            if job_type in {"scrape_work", "recover_work_aliases"}:
                 pair = jobs_by_work.setdefault(work_id, {})
                 previous = pair.get("metadata")
                 if previous is None or str(job['updated_at']) > str(previous['updated_at']):
@@ -3525,13 +3413,15 @@ class V4RevisionService:
         for work_id in work_ids:
             work = works.get(work_id, {})
             job_pair = jobs_by_work.get(work_id, {})
-            mirror = job_pair.get("mirror")
             metadata_job = job_pair.get("metadata")
             scrape = scrape_rows.get(work_id, {})
             scrape_status = str(scrape.get("metadata_state") or scrape.get("status") or "")
             # 历史“只缺图片”的失败在这里只读归一为 ready + degraded，
             # 作品不再被算成待处理，也不再从媒体墙消失。
             normalized_state, artifact_state, artifact_reasons = _artifact_view(scrape.get("metadata"))
+            artwork = artwork_map[work_id]
+            artifact_state = {'failed': 'degraded'}.get(artwork['status'], artwork['status'])
+            artifact_reasons = ['图片准备失败，可单独重试'] if artwork['status'] == 'failed' else []
             if normalized_state:
                 scrape_status = normalized_state
             metadata_policy = metadata_recovery_policy(
@@ -3554,14 +3444,8 @@ class V4RevisionService:
                     (row["asset_count"] for row in binding_rows if row["work_id"] == work_id),
                     0,
                 ) or 0),
-                "overall_status": "completed" if (
-                    mirror is None and metadata_job is None and scrape_status == "ready"
-                    and scrape.get("metadata", {}).get("metadata_source") == "retained"
-                ) else _derive_work_status(
-                    mirror,
-                    metadata_job,
-                    scrape_status,
-                ),
+                "overall_status": _derive_work_status(metadata_job, scrape_status),
+                'artwork': artwork,
                 "metadata_state": scrape_status,
                 **{key: scrape.get('metadata', {}).get(key) for key in (
                     'metadata_source', 'metadata_snapshot_id', 'refresh_status', 'episode_mapping_status', 'mapped_count', 'total_count')},
@@ -3573,13 +3457,11 @@ class V4RevisionService:
                 if isinstance(scrape.get("metadata"), dict) else "",
                 "metadata_recovery_action": metadata_policy["action"],
                 "metadata_recovery_hint": metadata_policy["hint"],
-                "mirror": _job_summary(mirror),
                 "metadata": _job_summary(metadata_job),
                 # 任务状态相同并不代表详情快照不变，例如确认候选会更新
                 # scrape_bindings.metadata_json。用持久更新时间组成版本键，前端
                 # 才能在展开状态下可靠失效旧详情缓存。
                 "detail_version": "|".join((
-                    str((mirror or {}).get("updated_at") or ""),
                     str((metadata_job or {}).get("updated_at") or ""),
                     str(scrape.get("updated_at") or ""),
                 )),
@@ -3590,7 +3472,9 @@ class V4RevisionService:
             "revision_status": str(revision["status"]),
             "overall_status": _revision_overall_status(work_units, stage),
             "stage_summary": {
-                "mirror": _stage_summary(stage["mirror"]),
+                'artwork': _stage_summary([{'status': {'ready': 'succeeded', 'not_required': 'succeeded',
+                                                      'pending': 'queued'}.get(item['status'], item['status'])}
+                                            for item in artwork_map.values()]),
                 "metadata": _metadata_stage_summary(stage["metadata"], scrape_rows),
                 "projection": _stage_summary(stage["projection"]),
             },

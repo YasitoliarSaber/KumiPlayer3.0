@@ -1,6 +1,7 @@
 """桌面本地 API 的会话身份校验。"""
 
 import os
+import re
 import secrets
 from collections.abc import Awaitable, Callable
 
@@ -20,6 +21,7 @@ _QUERY_TOKEN_PATHS = frozenset(
         "/api/integrations/bangumi/subject-image",
     }
 )
+_ARTWORK_GET_PATH = re.compile(r'/api/assets/artwork/[0-9a-f]{64}/[0-9a-f]{64}-webp-v[1-9][0-9]*/[0-9]{2,4}')
 
 
 def get_expected_api_token() -> str:
@@ -65,7 +67,7 @@ class ApiSessionMiddleware:
 
         headers = Headers(scope=scope)
         candidate = headers.get(API_TOKEN_HEADER)
-        if method == "GET" and path in _QUERY_TOKEN_PATHS and not candidate:
+        if method == "GET" and (path in _QUERY_TOKEN_PATHS or _ARTWORK_GET_PATH.fullmatch(path)) and not candidate:
             params = QueryParams(scope.get("query_string", b"").decode("utf-8", errors="ignore"))
             candidate = params.get(API_TOKEN_QUERY)
 

@@ -34,6 +34,7 @@ from app.media_v4.persistence.schema_v4 import (
     migrate_schema_v23_to_v24,
     migrate_schema_v24_to_v25,
     migrate_schema_v25_to_v26,
+    migrate_schema_v26_to_v27,
 )
 
 
@@ -108,6 +109,11 @@ class V4Database:
             "metadata_snapshots",
             "revision_metadata_refs",
             "artifact_references",
+            "artwork_resources",
+            "artwork_bindings",
+            "artwork_variants",
+            "library_changes",
+            "library_details",
         }
     )
     REQUIRED_TRIGGERS = frozenset(
@@ -159,7 +165,7 @@ class V4Database:
         使用字面量；写回后立即读回校验，版本升级时若字面量未同步会立即失败。
         """
 
-        conn.execute("PRAGMA user_version = 26")
+        conn.execute("PRAGMA user_version = 27")
         written = int(conn.execute("PRAGMA user_version").fetchone()[0])
         if written != V4_SCHEMA_VERSION:
             raise RuntimeError(
@@ -212,6 +218,7 @@ class V4Database:
             23: migrate_schema_v23_to_v24,
             24: migrate_schema_v24_to_v25,
             25: migrate_schema_v25_to_v26,
+            26: migrate_schema_v26_to_v27,
         }
         with self.connect() as conn:
             version = int(conn.execute("PRAGMA user_version").fetchone()[0])

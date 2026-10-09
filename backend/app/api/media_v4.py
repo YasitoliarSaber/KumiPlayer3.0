@@ -202,12 +202,8 @@ class IdentityRepairResumeRequest(BaseModel):
 
 
 def _configured_mirror_root():
-    from app.core.paths import get_mirror_root
-
-    try:
-        return get_mirror_root()
-    except Exception:
-        return None
+    value = str(load_config().mirror_dir or '').strip()
+    return Path(value) if value else None
 
 
 class OverrideRequest(BaseModel):
@@ -1074,6 +1070,7 @@ def confirm(revision_id: str):
         require=_revision_has_tree_evidence(database, revision_id),
     )
     try:
+        service.validate_playback_paths(revision_id)
         service.confirm(revision_id)
     except (RevisionBlockedError, ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1358,11 +1355,10 @@ def preview_source_library_deletion(root_id: str):
     再允许确认删除。
     """
 
-    from app.core.paths import get_mirror_root
     from app.media_v4.maintenance.source_deletion import plan_source_deletion
 
     try:
-        return plan_source_deletion(get_database(), root_id, mirror_root=get_mirror_root())
+        return plan_source_deletion(get_database(), root_id, mirror_root=_configured_mirror_root())
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="来源卡不存在或已移除") from exc
 
@@ -1855,7 +1851,7 @@ def set_work_title(work_id: str, request: WorkTitleRequest):
         )
         from app.media_v4.projection.library import bump_display_version
 
-        bump_display_version(conn)
+        bump_display_version(conn, work_id)
     return {"work_id": work_id, "title": request.title.strip()}
 
 
@@ -1870,93 +1866,101 @@ def restore_work_title(work_id: str):
         )
         from app.media_v4.projection.library import bump_display_version
 
-        bump_display_version(conn)
+        bump_display_version(conn, work_id)
     return {"work_id": work_id, "restored": True}
 
 
 @router.post("/works/{work_id}/artwork")
 async def upload_work_artwork(work_id: str, request: ArtworkUploadRequest):
-    """上传作品图片覆盖层；写入受管镜像根内 work 专属目录，返回本地路径。"""
+    """手工原图保存在独立图片库；就绪前继续展示原选择，不触及媒体目录。"""
+    import base64
+    import hashlib
+    import io
+    import os
+    import uuid
+    import warnings
 
-    import base64 as _base64
-    from pathlib import Path as _Path
+    from PIL import Image
 
-    mirror_root = _configured_mirror_root()
-    if mirror_root is None:
-        raise HTTPException(status_code=409, detail="尚未配置镜像根目录，无法保存图片")
-    if request.kind not in {"poster", "fanart", "clearlogo"}:
-        raise HTTPException(status_code=400, detail="不支持的图片类型")
+    from app.core.paths import get_data_dir
+    from app.media_v4.assets.catalog import enqueue_manual
+    from app.media_v4.projection.library import bump_display_version
+
+    if request.kind not in {'poster', 'fanart', 'clearlogo'}:
+        raise HTTPException(status_code=400, detail='不支持的图片类型')
+    if len(request.data_base64) > 7 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail='图片不能超过 5MB')
+    with get_database().connect() as conn:
+        if not conn.execute("SELECT 1 FROM works w JOIN revision_bindings rb ON rb.work_id=w.work_id "
+                            "JOIN import_revisions ir ON ir.revision_id=rb.revision_id "
+                            "JOIN source_roots sr ON sr.root_id=ir.root_id WHERE w.work_id=? "
+                            "AND w.status='active' AND ir.status='confirmed' AND sr.retired_at='' LIMIT 1",
+                            (work_id,)).fetchone():
+            raise HTTPException(status_code=404, detail='作品不存在或已退出媒体库')
     try:
-        raw = _base64.b64decode(request.data_base64, validate=True)
+        raw = base64.b64decode(request.data_base64, validate=True)
+        if not raw or len(raw) > 5 * 1024 * 1024:
+            raise ValueError('invalid image size')
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(raw)) as image:
+                suffix = {'PNG': '.png', 'JPEG': '.jpg', 'WEBP': '.webp'}.get(image.format)
+                if not suffix or image.width * image.height > 40_000_000:
+                    raise ValueError('invalid image format or dimensions')
+                image.verify()
     except Exception as exc:
-        raise HTTPException(status_code=400, detail="图片数据不是有效 Base64") from exc
-    if len(raw) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="图片不能超过 5MB")
-    directory = _Path(mirror_root) / "artwork" / work_id
+        raise HTTPException(status_code=400, detail='图片内容无效或尺寸过大') from exc
+    digest = hashlib.sha256(raw).hexdigest()
+    directory = get_data_dir() / 'artwork' / 'uploads'
     directory.mkdir(parents=True, exist_ok=True)
-    suffix = ".png" if request.kind == "poster" else ".jpg"
-    target = directory / f"{request.kind}{suffix}"
-    target.write_bytes(raw)
-    from app.media_v4.assets.preparation import thumbnail_preparer
-    from app.media_v4.assets.thumbnails import artwork_widths
-
-    for width in artwork_widths(target):
-        thumbnail_preparer.enqueue(target, width)
+    target = directory / (digest + suffix)
+    temporary = directory / ('.upload-' + uuid.uuid4().hex)
+    try:
+        with temporary.open('xb') as output:
+            output.write(raw)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
     now = _now_iso()
     with get_database().connect() as conn:
-        existing = conn.execute(
-            "SELECT override_json FROM work_overrides WHERE work_id = ?",
-            (work_id,),
-        ).fetchone()
-        payload = json.loads(existing["override_json"]) if existing else {}
-        payload[f"local_{request.kind}_path"] = str(target)
-        conn.execute(
-            """
-            INSERT INTO work_overrides(work_id, override_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(work_id) DO UPDATE SET override_json = excluded.override_json, updated_at = excluded.updated_at
-            """,
-            (work_id, json.dumps(payload, ensure_ascii=False), now, now),
-        )
-        from app.media_v4.projection.library import bump_display_version
-
-        bump_display_version(conn)
-    return {"path": str(target)}
+        conn.execute('BEGIN IMMEDIATE')
+        if not conn.execute("SELECT 1 FROM works w JOIN revision_bindings rb ON rb.work_id=w.work_id "
+                            "JOIN import_revisions ir ON ir.revision_id=rb.revision_id "
+                            "JOIN source_roots sr ON sr.root_id=ir.root_id WHERE w.work_id=? "
+                            "AND w.status='active' AND ir.status='confirmed' AND sr.retired_at='' LIMIT 1",
+                            (work_id,)).fetchone():
+            raise HTTPException(status_code=404, detail='作品不存在或已退出媒体库')
+        existing = conn.execute('SELECT override_json FROM work_overrides WHERE work_id=?', (work_id,)).fetchone()
+        payload = json.loads(existing['override_json']) if existing else {}
+        payload[f'local_{request.kind}_path'] = str(target)
+        resource_id = enqueue_manual(conn, work_id=work_id, role=request.kind, local_path=str(target))
+        conn.execute("INSERT INTO work_overrides(work_id,override_json,created_at,updated_at) VALUES (?,?,?,?) "
+                     "ON CONFLICT(work_id) DO UPDATE SET override_json=excluded.override_json,updated_at=excluded.updated_at",
+                     (work_id, json.dumps(payload, ensure_ascii=False), now, now))
+        bump_display_version(conn, work_id, kind='artwork')
+    return {'resource_id': resource_id, 'state': 'pending', 'path': ''}
 
 
 @router.delete("/works/{work_id}/artwork/{kind}")
 def restore_work_artwork(work_id: str, kind: str):
-    """恢复默认图片：清除用户覆盖并删除受控文件。"""
+    """恢复自动选择只改关联，保留手工原图和仍在展示的有效图片。"""
+    from app.media_v4.assets.catalog import restore_auto
+    from app.media_v4.projection.library import bump_display_version
 
-    from pathlib import Path as _Path
-
-    mirror_root = _configured_mirror_root()
-    if kind not in {"poster", "fanart", "clearlogo"}:
-        raise HTTPException(status_code=400, detail="不支持的图片类型")
+    if kind not in {'poster', 'fanart', 'clearlogo'}:
+        raise HTTPException(status_code=400, detail='不支持的图片类型')
     with get_database().connect() as conn:
-        existing = conn.execute(
-            "SELECT override_json FROM work_overrides WHERE work_id = ?",
-            (work_id,),
-        ).fetchone()
-        if existing is not None:
-            payload = json.loads(existing["override_json"])
-            old_path = payload.pop(f"local_{kind}_path", "")
-            conn.execute(
-                "UPDATE work_overrides SET override_json = ?, updated_at = ? WHERE work_id = ?",
-                (json.dumps(payload, ensure_ascii=False), _now_iso(), work_id),
-            )
-            from app.media_v4.projection.library import bump_display_version
-
-            bump_display_version(conn)
-            if mirror_root is not None and old_path:
-                try:
-                    path = _Path(old_path).resolve(strict=False)
-                    root = _Path(mirror_root).resolve(strict=False)
-                    if root in path.parents and path.exists() and not path.is_dir():
-                        path.unlink()
-                except OSError:
-                    pass
-    return {"work_id": work_id, "restored": True}
+        existing = conn.execute('SELECT override_json FROM work_overrides WHERE work_id=?', (work_id,)).fetchone()
+        if existing:
+            payload = json.loads(existing['override_json'])
+            payload.pop(f'local_{kind}_path', None)
+            conn.execute('UPDATE work_overrides SET override_json=?,updated_at=? WHERE work_id=?',
+                         (json.dumps(payload, ensure_ascii=False), _now_iso(), work_id))
+        restore_auto(conn, work_id, kind)
+        bump_display_version(conn, work_id, kind='artwork')
+    return {'work_id': work_id, 'restored': True}
 
 
 @router.get("/works/{work_id}/folder")
@@ -1966,19 +1970,25 @@ def work_folder(work_id: str):
     with get_database().connect() as conn:
         row = conn.execute(
             """
-            SELECT a.playback_locator
+            SELECT se.playback_locator
             FROM revision_bindings rb
             JOIN import_revisions ir ON ir.revision_id = rb.revision_id
             JOIN source_roots sr ON sr.root_id = ir.root_id
             JOIN assets a ON a.asset_id = rb.asset_id
+            JOIN source_evidence se ON se.evidence_id=rb.evidence_id
             WHERE rb.work_id = ? AND ir.status = 'confirmed' AND sr.retired_at = ''
-              AND a.playback_locator != ''
-            ORDER BY a.playback_locator LIMIT 1
+              AND se.playback_locator != ''
+            ORDER BY se.playback_locator LIMIT 1
             """,
             (work_id,),
         ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="该作品没有可打开的已确认媒体文件")
+    from app.media_v4.path_validation import validate_playback_locator_syntax
+
+    ok, reason = validate_playback_locator_syntax(row['playback_locator'])
+    if not ok:
+        raise HTTPException(status_code=409, detail=reason)
     folder = str(Path(row["playback_locator"]).parent)
     return {"folder": folder, "exists": Path(folder).is_dir()}
 
@@ -2386,12 +2396,9 @@ def metadata_artifacts_retry(request: MetadataRetryRequest):
         raise HTTPException(status_code=409, detail="作品不存在或已退出媒体库")
     if revision is None:
         raise HTTPException(status_code=409, detail="该作品没有已确认的 revision，无法重试刮削")
-    mirror_root = _configured_mirror_root()
-    if mirror_root is None:
-        raise HTTPException(status_code=409, detail="请先在设置页配置有效的镜像目录")
     try:
         return V4ScrapeService(database).retry_artifacts(
-            str(revision["revision_id"]), request.work_id, mirror_root=mirror_root,
+            str(revision["revision_id"]), request.work_id,
         )
     except KeyError:
         raise HTTPException(status_code=409, detail="该作品没有可重试的刮削任务") from None
@@ -2448,7 +2455,6 @@ def metadata_retry(request: MetadataRetryRequest):
         binding_status=str(binding["status"] or "") if binding is not None else "",
     )
     action = policy["action"]
-    reason_code = str(metadata.get("reason_code") or "")
     state = str(metadata.get("metadata_state") or (binding["status"] if binding is not None else "") or "")
     if action in {"review_identity", "choose_candidate"}:
         raise HTTPException(status_code=409, detail="请先检查识别结果或选择正确的在线作品")
@@ -2456,8 +2462,6 @@ def metadata_retry(request: MetadataRetryRequest):
         config = load_config()
         if not config.tmdb_bearer_token:
             raise HTTPException(status_code=409, detail="请先在设置页配置有效的 TMDB Token")
-        if reason_code == "mirror_root_missing" and _configured_mirror_root() is None:
-            raise HTTPException(status_code=409, detail="请先在设置页配置有效的镜像目录")
     if action == "none" and state:
         raise HTTPException(status_code=409, detail="当前资料状态没有可用的自动重试动作")
 

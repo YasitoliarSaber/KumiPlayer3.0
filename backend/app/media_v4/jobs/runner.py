@@ -10,12 +10,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from app.core.paths import get_mirror_root
 from app.media_v4.jobs.alias_recovery import NAME_REASONS, RETRY_REASONS, recover_metadata
-from app.media_v4.jobs.cleanup import V4ArtifactCleanup
 from app.media_v4.jobs.control import cancel_requested, claim_running, heartbeat, mark_cancelled, now
 from app.media_v4.jobs.metadata import default_metadata_provider
-from app.media_v4.jobs.mirror import MaterializeResult, V4MirrorMaterializer
 from app.media_v4.jobs.scrape import V4ScrapeService
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.library import LibrarySnapshot, V4LibraryProjection
@@ -27,7 +24,6 @@ class JobRunResult:
     job_type: str
     status: str
     snapshot: LibrarySnapshot | None = None
-    materialized: MaterializeResult | None = None
 
 
 class V4JobRunner:
@@ -38,19 +34,15 @@ class V4JobRunner:
     _MAX_PARALLEL_SCRAPE_JOBS = 3
 
     _LOCAL_JOB_TYPES = frozenset({
-        "materialize_mirror",
         "scrape_work",
         "recover_work_aliases",
         "refresh_projection",
-        "cleanup_superseded_artifacts",
         "delete_source_library",
     })
 
     def __init__(self, database: V4Database, metadata_provider: Callable[[dict], dict] | None = None,
                  *, recovery_provider: Callable[[dict], dict] | None = None):
         self.database = database
-        self.materializer = V4MirrorMaterializer(database)
-        self.cleanup = V4ArtifactCleanup(database)
         self.scrape = V4ScrapeService(database)
         self.projection = V4LibraryProjection(database)
         self.metadata_provider = metadata_provider or default_metadata_provider
@@ -61,6 +53,17 @@ class V4JobRunner:
             job = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
         if job is None:
             raise KeyError(job_id)
+        if job['job_type'] in {'materialize_mirror', 'cleanup_superseded_artifacts'}:
+            # 历史任务不迁成假成功，也不重新接回物化执行链。
+            mark_cancelled(self.database, job_id)
+            return JobRunResult(job_id, job['job_type'], 'cancelled')
+        try:
+            policy = json.loads(job['result_json'] or '{}').get('runtime_policy')
+        except (ValueError, TypeError, AttributeError):
+            policy = None
+        if job['job_type'] in {'scrape_work', 'recover_work_aliases'} and policy != 'sqlite-artwork-v1':
+            mark_cancelled(self.database, job_id)
+            return JobRunResult(job_id, job['job_type'], 'cancelled')
         if job["status"] == "succeeded":
             return JobRunResult(job_id, job["job_type"], "succeeded")
         if bool(job["cancel_requested"]):
@@ -83,10 +86,6 @@ class V4JobRunner:
         if not self._prerequisites_succeeded(dict(job)):
             raise ValueError("任务的前置步骤尚未全部成功")
 
-        if job["job_type"] == "materialize_mirror":
-            materialized = self.materializer.process(job_id, mirror_root or get_mirror_root())
-            return JobRunResult(job_id, job["job_type"], materialized.status, materialized=materialized)
-
         if job["job_type"] in {"scrape_work", "recover_work_aliases"}:
             provider = self.metadata_provider
             if job["job_type"] == "recover_work_aliases":
@@ -102,7 +101,6 @@ class V4JobRunner:
             self.scrape.process(
                 job_id,
                 provider,
-                mirror_root=mirror_root or get_mirror_root(),
             )
             if job['job_type'] == 'recover_work_aliases':
                 with self.database.connect() as conn:
@@ -113,10 +111,6 @@ class V4JobRunner:
                         payload['next_retry_at'] = (datetime.now(UTC) + timedelta(seconds=min(delay, 86400))).isoformat()
                         conn.execute("UPDATE jobs SET status='queued',result_json=?,finished_at='',updated_at=? WHERE job_id=?",
                                      (json.dumps(payload, ensure_ascii=False), now(), job_id))
-            return JobRunResult(job_id, job["job_type"], self._current_status(job_id))
-
-        if job["job_type"] == "cleanup_superseded_artifacts":
-            self.cleanup.process(job_id, mirror_root or get_mirror_root())
             return JobRunResult(job_id, job["job_type"], self._current_status(job_id))
 
         if job["job_type"] == "delete_source_library":
@@ -134,10 +128,16 @@ class V4JobRunner:
             if revision is None:
                 raise ValueError("删除任务的来源 revision 不存在")
             try:
+                cleanup_root = mirror_root
+                if cleanup_root is None:
+                    from app.core.config import load_config
+
+                    configured = str(load_config().mirror_dir or '').strip()
+                    cleanup_root = Path(configured) if configured else None
                 outcome = delete_source_library(
                     self.database,
                     str(revision["root_id"]),
-                    mirror_root=mirror_root or get_mirror_root(),
+                    mirror_root=cleanup_root,
                     should_cancel=lambda: cancel_requested(self.database, job_id),
                     progress=lambda _done, _total: heartbeat(self.database, job_id),
                     # 本作业此刻必然是 running，阻断检查要排除它自己。
@@ -172,7 +172,9 @@ class V4JobRunner:
             if cancel_requested(self.database, job_id):
                 mark_cancelled(self.database, job_id)
                 return JobRunResult(job_id, job["job_type"], "cancelled")
-            snapshot = self.projection.rebuild()
+            snapshot = self.projection.refresh_if_needed()
+            if snapshot is None:
+                snapshot = self.projection.current()
             heartbeat(self.database, job_id)
             if cancel_requested(self.database, job_id):
                 mark_cancelled(self.database, job_id)
@@ -184,6 +186,14 @@ class V4JobRunner:
             raise
 
     def process_available(self, *, mirror_root: str | Path | None = None) -> list[JobRunResult]:
+        with self.database.connect() as conn:
+            conn.execute("UPDATE jobs SET status='cancelled',cancel_requested=1,finished_at=?,updated_at=? "
+                         "WHERE job_type IN ('materialize_mirror','cleanup_superseded_artifacts') "
+                         "AND status IN ('queued','running')", (now(), now()))
+            conn.execute("UPDATE jobs SET status='cancelled',cancel_requested=1,finished_at=?,updated_at=? "
+                         "WHERE job_type IN ('scrape_work','recover_work_aliases') AND status IN ('queued','running') "
+                         "AND (NOT json_valid(result_json) OR COALESCE(json_extract(result_json,'$.runtime_policy'),'') "
+                         "<>'sqlite-artwork-v1')", (now(), now()))
         self.recover_stale_jobs()
         self.schedule_recovery()
         with self.database.connect() as conn:
@@ -193,16 +203,13 @@ class V4JobRunner:
                 FROM jobs
                 WHERE status = 'queued'
                   AND job_type IN (
-                      'materialize_mirror', 'scrape_work', 'recover_work_aliases', 'refresh_projection',
-                      'cleanup_superseded_artifacts', 'delete_source_library'
+                      'scrape_work', 'recover_work_aliases', 'refresh_projection', 'delete_source_library'
                   )
                 ORDER BY CASE job_type
                     WHEN 'delete_source_library' THEN 0
-                    WHEN 'materialize_mirror' THEN 1
                     WHEN 'scrape_work' THEN 2
                     WHEN 'recover_work_aliases' THEN 2
                     WHEN 'refresh_projection' THEN 3
-                    WHEN 'cleanup_superseded_artifacts' THEN 4
                     ELSE 9 END,
                     created_at, job_id
                 """
@@ -225,7 +232,7 @@ class V4JobRunner:
                     results.append(self.process_job(str(row["job_id"]), mirror_root=mirror_root))
                 continue
             job_type = str(job["job_type"])
-            if job_type in {"refresh_projection", "cleanup_superseded_artifacts"}:
+            if job_type == "refresh_projection":
                 # 它们依赖本轮全部 scrape 的终态，必须等有限并发批次收口。
                 deferred_job_ids.append(str(row["job_id"]))
                 continue
@@ -291,11 +298,12 @@ class V4JobRunner:
         "WITH blocked_revisions AS MATERIALIZED ("
         "SELECT DISTINCT p.revision_id FROM jobs p "
         "WHERE (p.cancel_requested=1 AND p.job_type!='recover_work_aliases') "
-        "OR (p.job_type IN ('materialize_mirror','scrape_work') AND p.status IN ('queued','running'))) "
+        "OR (p.job_type='scrape_work' AND p.status IN ('queued','running'))) "
         "SELECT j.revision_id,j.work_id,j.attempts,j.result_json "
         "FROM jobs j JOIN import_revisions ir ON ir.revision_id=j.revision_id "
         "JOIN source_roots sr ON sr.root_id=ir.root_id JOIN works w ON w.work_id=j.work_id "
         "WHERE j.job_type='scrape_work' AND j.status='succeeded' AND ir.status='confirmed' "
+        "AND json_valid(j.result_json) AND json_extract(j.result_json,'$.runtime_policy')='sqlite-artwork-v1' "
         "AND sr.retired_at='' AND w.status='active' "
         "AND NOT EXISTS (SELECT 1 FROM blocked_revisions b WHERE b.revision_id=j.revision_id) "
         "ORDER BY j.created_at,j.job_id"
@@ -349,8 +357,8 @@ class V4JobRunner:
                     break
                 stamp = now()
                 conn.execute(
-                    "INSERT INTO jobs(job_id,job_type,revision_id,work_id,idempotency_key,created_at,updated_at) "
-                    "VALUES (?,'recover_work_aliases',?,?,?,?,?)",
+                    "INSERT INTO jobs(job_id,job_type,revision_id,work_id,idempotency_key,created_at,updated_at,result_json) "
+                    "VALUES (?,'recover_work_aliases',?,?,?,?,?,'{\"runtime_policy\":\"sqlite-artwork-v1\"}')",
                     (str(uuid.uuid4()), row['revision_id'], row['work_id'], key, stamp, stamp),
                 )
                 created += 1
@@ -359,29 +367,18 @@ class V4JobRunner:
 
     def _prerequisites_succeeded(self, job: dict) -> bool:
         job_type = str(job["job_type"])
-        if job_type in {"refresh_projection", "cleanup_superseded_artifacts"}:
-            self.schedule_recovery()
-        if job_type == "materialize_mirror":
+        if job_type in {"scrape_work", "refresh_projection"}:
             return True
         if job_type == "delete_source_library":
             # 按来源删除不依赖本 revision 的镜像/刮削是否完成：它只回收产物并按
             # 引用计数决定哪些作品离开媒体库。
             return True
         params: tuple[object, ...]
-        if job_type == "scrape_work":
-            predicate = "job_type = 'materialize_mirror' AND work_id = ?"
-            params = (job["revision_id"], job.get("work_id"))
-        elif job_type == "recover_work_aliases":
+        if job_type == "recover_work_aliases":
             payload = json.loads(job.get('result_json') or '{}')
             if payload.get('next_retry_at', '') > now():
                 return False
-            predicate = "job_type IN ('materialize_mirror','scrape_work')"
-            params = (job["revision_id"],)
-        elif job_type == "refresh_projection":
-            predicate = "job_type IN ('materialize_mirror', 'scrape_work', 'recover_work_aliases')"
-            params = (job["revision_id"],)
-        elif job_type == "cleanup_superseded_artifacts":
-            predicate = "job_type IN ('materialize_mirror', 'scrape_work', 'recover_work_aliases', 'refresh_projection')"
+            predicate = "job_type='scrape_work'"
             params = (job["revision_id"],)
         else:
             return False
@@ -405,6 +402,11 @@ class V4JobRunner:
             if revision is None:
                 raise KeyError(revision_id)
             stamp = now()
+            work_ids = [row[0] for row in conn.execute(
+                'SELECT DISTINCT work_id FROM revision_bindings WHERE revision_id=?', (revision_id,))]
+            conn.executemany('INSERT OR REPLACE INTO v4_meta(key,value) VALUES (?,?)',
+                             [('artwork_cancelled_revision:' + revision_id + ':' + work_id, stamp)
+                              for work_id in work_ids])
             running = conn.execute(
                 """
                 UPDATE jobs

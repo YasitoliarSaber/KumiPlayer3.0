@@ -59,19 +59,43 @@ def test_completed_source_separates_relation_notices_without_deleting_history(tm
         assert conn.execute('SELECT resolved FROM revision_issues').fetchone()[0] == 0
 
 
-@pytest.mark.parametrize('failure', ['metadata', 'mirror', 'projection'])
+@pytest.mark.parametrize('failure', ['metadata', 'projection'])
 def test_real_failure_is_counted_even_when_work_is_in_library(tmp_path, failure):
     database, _wid = _completed_source(tmp_path)
     with database.connect() as conn:
         if failure == 'metadata':
             conn.execute("UPDATE scrape_bindings SET metadata_json=?", (json.dumps({'metadata_state': 'source_unavailable'}),))
         else:
-            kind = 'materialize_mirror' if failure == 'mirror' else 'refresh_projection'
-            conn.execute("UPDATE jobs SET status='failed' WHERE job_type=?", (kind,))
+            conn.execute("UPDATE jobs SET status='failed' WHERE job_type='refresh_projection'")
     card = list_source_cards(database)[0]
     assert card['work_count'] == 1
     assert card['overall_status'] == 'needs_attention'
     assert card['attention_count'] == 1
+
+
+def test_artwork_failure_does_not_block_source_publication(tmp_path):
+    database, wid = _completed_source(tmp_path)
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO jobs(job_id,job_type,revision_id,work_id,idempotency_key,status,attempts,created_at,updated_at) "
+            "VALUES ('images','prepare_artwork','rev',?,'images:rev','failed',1,'now','now')",
+            (wid,),
+        )
+        conn.execute("UPDATE jobs SET finished_at='finished' WHERE status='succeeded'")
+    card = list_source_cards(database)[0]
+    assert card['overall_status'] == 'completed'
+    assert card['attention_count'] == 0
+    assert card['import_completed_at'] == 'finished'
+
+
+def test_active_artwork_progress_does_not_reuse_completed_media_percent():
+    from app.media_v4.projection.source_libraries import _active_task
+    job = {'job_type': 'prepare_artwork', 'status': 'running', 'cancel_requested': 0}
+    task = _active_task(None, job, 'rev', {
+        'percent': 100, 'stage_summary': {'artwork': {'total': 8, 'succeeded': 1, 'failed': 1}},
+    })
+    assert task['percent'] == 25
+    assert task['label'] == '正在准备本地图片'
 
 
 @pytest.mark.parametrize('status', ['failed', 'queued', 'running'])

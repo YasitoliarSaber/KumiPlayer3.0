@@ -23,14 +23,47 @@ COMPACT_METADATA_FIELDS = (
     'provider', 'original_title', 'rating', 'plot', 'genres', 'sources', 'show_type', 'card_type',
     'regular_season_count', 'special_season_count', 'latest_episode_number', 'poster_url', 'fanart_url', 'clearlogo_url',
     'local_poster_path', 'local_fanart_path', 'local_clearlogo_path', 'clearlogo_path',
-    'metadata_state', 'preserve_identity_title', 'title', 'related_works', 'collection_related_works', 'collections',
+    'metadata_state', 'preserve_identity_title', 'title', 'related_works', 'collection_related_works', 'collections', 'content_scope',
 )
 
 
-def bump_display_version(conn) -> None:
+def bump_display_version(conn, work_id: str = '', *, kind: str = 'work_upsert') -> None:
     """与覆盖/观看写入同事务通知展示变化，不要求重新物化媒体投影。"""
     conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_display_version',?)",
                  (str(uuid.uuid4()),))
+    from app.media_v4.projection.changes import record_change
+
+    record_change(conn, kind if work_id else 'reset', work_id)
+
+
+def mark_projection_dirty(conn, work_ids=None) -> None:
+    """同事实事务记录受影响作品；无法确定范围的维护操作显式要求全量。"""
+    stamp = str(uuid.uuid4())
+    conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_projection_dirty',?)", (stamp,))
+    if work_ids is None:
+        conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_projection_full_dirty',?)", (stamp,))
+    else:
+        affected = set(work_ids)
+        originals = sorted(affected)
+        for offset in range(0, len(originals), 200):
+            batch = originals[offset:offset + 200]
+            placeholders = ','.join('?' for _ in batch)
+            # 父子关系、共享 TV 绑定和合集邻居也会改变已发布展示，不能留下旧标题/成员。
+            affected.update(row[0] for row in conn.execute(f'''
+                SELECT wr.parent_work_id FROM work_relations wr WHERE wr.child_work_id IN ({placeholders})
+                UNION SELECT wr.child_work_id FROM work_relations wr WHERE wr.parent_work_id IN ({placeholders})
+                UNION SELECT other.work_id FROM provider_bindings local JOIN provider_bindings other
+                    ON other.provider=local.provider AND other.media_type=local.media_type
+                    AND other.provider_id=local.provider_id
+                    WHERE local.work_id IN ({placeholders}) AND local.provider_id<>''
+                UNION SELECT other.work_id FROM revision_collection_members local
+                    JOIN revision_collection_members other ON other.collection_id=local.collection_id
+                    JOIN import_revisions ir ON ir.revision_id=other.revision_id AND ir.status='confirmed'
+                    JOIN source_roots sr ON sr.root_id=ir.root_id AND sr.retired_at=''
+                    WHERE local.work_id IN ({placeholders})
+            ''', (*batch, *batch, *batch, *batch)))
+        conn.executemany('INSERT OR REPLACE INTO v4_meta(key,value) VALUES (?,?)',
+                         [('library_dirty_work:' + str(work_id), stamp) for work_id in affected])
 
 
 def display_digest(digest: str, version: str) -> str:
@@ -46,6 +79,7 @@ class LibrarySnapshot:
     generation_id: str
     digest: str
     cards: tuple[dict, ...] = field(default_factory=tuple)
+    change_sequence: int = 0
 
 
 class V4LibraryProjection:
@@ -54,7 +88,7 @@ class V4LibraryProjection:
     def __init__(self, database: V4Database):
         self.database = database
 
-    def current(self, *, compact: bool = False) -> LibrarySnapshot | None:
+    def current(self, *, compact: bool = False, work_ids: tuple[str, ...] | None = None) -> LibrarySnapshot | None:
         """读取已发布 generation；没有 generation 时返回空。
 
         三条 SELECT 必须在**同一个读事务**里完成：并发 rebuild 的收尾会
@@ -68,7 +102,8 @@ class V4LibraryProjection:
         with self.database.connect() as conn:
             conn.execute("BEGIN")
             try:
-                snapshot = self._read_current(conn, compact=True) if compact else self._read_current(conn)
+                snapshot = self._read_current(conn, compact=compact, work_ids=work_ids) if work_ids is not None else (
+                    self._read_current(conn, compact=True) if compact else self._read_current(conn))
             except Exception:
                 conn.execute("ROLLBACK")
                 raise
@@ -76,7 +111,7 @@ class V4LibraryProjection:
         return snapshot
 
     @staticmethod
-    def _read_current(conn, *, compact: bool = False) -> LibrarySnapshot | None:
+    def _read_current(conn, *, compact: bool = False, work_ids: tuple[str, ...] | None = None) -> LibrarySnapshot | None:
         """在同一读事务内读取 generation 与它的 cards。"""
 
         generation_id_row = conn.execute(
@@ -96,17 +131,20 @@ class V4LibraryProjection:
             # 在 SQLite 中裁剪字段，Python 不创建演员、逐集映射等详情对象。
             fields = ','.join(f"'{key}',json_extract(metadata_json,'$.{key}')" for key in COMPACT_METADATA_FIELDS)
             metadata_column = f"CASE WHEN json_valid(metadata_json) THEN json_patch('{{}}',json_object({fields})) ELSE '{{}}' END AS metadata_json"
+        scope = '' if work_ids is None else ' AND work_id IN (' + ','.join('?' for _ in work_ids) + ')'
         cards = tuple(
             V4LibraryProjection._decode_card(dict(row))
             for row in conn.execute(
                 f"""
                 SELECT work_id, title, year, media_type, episode_count, asset_count, {metadata_column}
-                FROM library_cards WHERE generation_id = ? ORDER BY title COLLATE NOCASE, work_id
+                FROM library_cards WHERE generation_id = ? {scope} ORDER BY title COLLATE NOCASE, work_id
                 """,
-                (generation_id,),
+                (generation_id, *(work_ids or ())),
             ).fetchall()
         )
-        return LibrarySnapshot(generation_id, str(generation["digest"]), cards)
+        from app.media_v4.projection.changes import latest_sequence
+
+        return LibrarySnapshot(generation_id, str(generation["digest"]), cards, latest_sequence(conn))
 
     def summary(self) -> dict:
         """只读已发布代次和持久计数，复杂度不随作品数增长。"""
@@ -139,7 +177,12 @@ class V4LibraryProjection:
                 policy = conn.execute("SELECT value FROM v4_meta WHERE key='library_presentation_policy'").fetchone()
             if not summary['updating'] and policy is not None and policy[0] == PRESENTATION_POLICY_VERSION:
                 return None
-            return self.rebuild()
+            with self.database.connect() as conn:
+                full = conn.execute("SELECT 1 FROM v4_meta WHERE key='library_projection_full_dirty'").fetchone()
+                dirty_ids = tuple(row[0].split(':', 1)[1] for row in conn.execute(
+                    "SELECT key FROM v4_meta WHERE key LIKE 'library_dirty_work:%' ORDER BY key LIMIT 64"))
+            scope = dirty_ids if dirty_ids and not full and policy and policy[0] == PRESENTATION_POLICY_VERSION else None
+            return self._rebuild(work_ids=scope)
 
     def ensure_current(self) -> LibrarySnapshot:
         """读取最新投影；权威事实有变化时按需原子重建。"""
@@ -166,7 +209,7 @@ class V4LibraryProjection:
         with _BUILD_LOCK, validation_scope():
             return self._rebuild()
 
-    def _rebuild(self) -> LibrarySnapshot:
+    def _rebuild(self, *, work_ids: tuple[str, ...] | None = None) -> LibrarySnapshot:
         generation_id = str(uuid.uuid4())
         now = _now()
         with self.database.connect() as conn:
@@ -179,6 +222,11 @@ class V4LibraryProjection:
                     "SELECT value FROM v4_meta WHERE key='current_library_generation'"
                 ).fetchone()
                 previous_generation_id = previous_generation[0] if previous_generation else None
+                if work_ids is not None and previous_generation_id is None:
+                    work_ids = None
+                if work_ids is not None:
+                    generation_id = previous_generation_id
+                scope_sql = '' if work_ids is None else ' AND w.work_id IN (' + ','.join('?' for _ in work_ids) + ')'
                 rows = conn.execute(
                     f"""
                     WITH visible_bindings AS (
@@ -218,6 +266,12 @@ class V4LibraryProjection:
                         w.card_type,
                         CASE WHEN w.work_type = 'series' THEN 'tv' WHEN w.work_type = 'movie' THEN 'movie' ELSE 'unknown' END AS media_type,
                         latest_scrapes.revision_id AS revision_id,
+                        (SELECT sr.content_scope FROM visible_bindings rb
+                         JOIN import_revisions ir ON ir.revision_id=rb.revision_id
+                         JOIN source_roots sr ON sr.root_id=ir.root_id
+                         WHERE rb.work_id=w.work_id AND ir.status='confirmed' AND sr.retired_at=''
+                         AND sr.content_scope IN ('ongoing','completed')
+                         ORDER BY CASE sr.content_scope WHEN 'ongoing' THEN 0 ELSE 1 END LIMIT 1) AS content_scope,
                         CASE WHEN w.work_type != 'movie' THEN (
                             SELECT COUNT(DISTINCT rb.episode_id)
                             FROM visible_bindings rb
@@ -295,8 +349,9 @@ class V4LibraryProjection:
                             JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
                         WHERE rb.work_id = w.work_id AND ir.status = 'confirmed'
                     )
+                    {scope_sql}
                     ORDER BY title COLLATE NOCASE, w.work_id
-                    """
+                    """, work_ids or (),
                 ).fetchall()
                 cards_list = []
                 from app.media_v4.projection.collections import collection_metadata, title_identity_guards
@@ -331,39 +386,9 @@ class V4LibraryProjection:
                         ]
                         metadata["reason"] = "部分图片产物缺失，可重新下载"
                     elif binding_status == "confirmed" and meta_state == "ready":
-                        # P-001 7.8 R8：投影重建复查 artifact 文件，不信任 JSON。
-                        from app.media_v4.jobs.completeness import (
-                            artwork_only_reasons,
-                            assess_persisted_completeness,
-                        )
-
-                        complete, artifact_reasons = assess_persisted_completeness(
-                            self.database,
-                            revision_id=str(row["revision_id"]),
-                            work_id=str(row["work_id"]),
-                            metadata=metadata,
-                        )
-                        if complete:
-                            state = "ready"
-                            metadata["artifact_state"] = "ready"
-                        elif artwork_only_reasons(artifact_reasons):
-                            # 只缺图片：作品仍是 ready，只把产物标成 degraded，
-                            # 不再从媒体墙消失。
-                            state = "ready"
-                            metadata["artifact_state"] = "degraded"
-                            metadata["artifact_reasons"] = [str(item) for item in artifact_reasons]
-                            metadata["reason"] = "部分图片产物缺失，可重新下载"
-                        else:
-                            # 缺 NFO 等物化失败仍按原判处理。
-                            state = "failed"
-                            metadata["artifact_state"] = "incomplete"
-                            metadata["reason"] = "投影复查发现元数据产物缺失或损坏"
+                        state = "ready"
                     elif binding_status in {"waiting_metadata", "waiting_review", "source_unavailable", "failed"}:
-                        recovered = self._recover_previous_ready(row, metadata)
-                        if recovered is None:
-                            state = binding_status
-                        else:
-                            state, metadata = recovered
+                        state = binding_status
                     elif binding_status == "not_required":
                         state = "not_required"
                     elif binding_status == "confirmed":
@@ -376,6 +401,14 @@ class V4LibraryProjection:
                     retained_metadata = referenced_metadata(conn, str(row['work_id']))
                     if retained_metadata is not None:
                         metadata = {**metadata, **retained_metadata}
+                    elif state == 'ready':
+                        # 未引用的历史成功绑定不是已发布快照，不能形成隐藏资料恢复链。
+                        metadata = {
+                            'sources': metadata['sources'], 'regular_season_count': regular_season_count,
+                            'special_season_count': special_season_count,
+                            'latest_episode_number': row['latest_episode_number'],
+                            'metadata_state': 'waiting_metadata',
+                        }
                     from app.media_v4.jobs.metadata_quality import current_episode_metadata
                     if retained_metadata is None:
                         metadata = current_episode_metadata(conn, None, str(row['work_id']), metadata)
@@ -383,6 +416,7 @@ class V4LibraryProjection:
                     card_type = str(row["card_type"] or "")
                     metadata["show_type"] = show_type
                     metadata["card_type"] = card_type
+                    metadata['content_scope'] = row['content_scope'] or ''
                     metadata.update(local_collections.get(str(row["work_id"]), {
                         "collections": [], "collection_related_works": [],
                     }))
@@ -405,6 +439,11 @@ class V4LibraryProjection:
                         "metadata": metadata,
                     })
                 cards = tuple(cards_list)
+                from app.media_v4.projection.details import build_work_detail
+
+                detail_rows = [(generation_id, card['work_id'], json.dumps(
+                    build_work_detail(conn, str(card['work_id']), dict(card['metadata'])),
+                    ensure_ascii=False, sort_keys=True)) for card in cards]
                 digest = hashlib.sha256(
                     json.dumps(cards, ensure_ascii=False, sort_keys=True).encode("utf-8")
                 ).hexdigest()
@@ -426,10 +465,37 @@ class V4LibraryProjection:
                     if current_snapshot is not None:
                         conn.commit()
                         return current_snapshot
-                conn.execute(
-                    "INSERT INTO library_generations(generation_id, digest, created_at) VALUES (?, ?, ?)",
-                    (generation_id, digest, now),
-                )
+                previous_cards = {card['work_id']: card for card in (
+                    self._read_current(conn, work_ids=work_ids).cards if current_generation_id else ())}
+                detail_scope = '' if work_ids is None else ' AND work_id IN (' + ','.join('?' for _ in work_ids) + ')'
+                previous_details = {row['work_id']: row['detail_json'] for row in conn.execute(
+                    'SELECT work_id,detail_json FROM library_details WHERE generation_id=?' + detail_scope,
+                    (current_generation_id, *(work_ids or ())))}
+                next_details = {row[1]: row[2] for row in detail_rows}
+                changed_ids = set()
+                from app.media_v4.projection.changes import record_change
+
+                for card in cards:
+                    if card != previous_cards.pop(card['work_id'], None) or next_details.get(card['work_id']) != previous_details.get(card['work_id']):
+                        changed_ids.add(card['work_id'])
+                        record_change(conn, 'work_upsert', str(card['work_id']))
+                for work_id in previous_cards:
+                    changed_ids.add(work_id)
+                    record_change(conn, 'work_remove', work_id)
+                if work_ids is None:
+                    conn.execute("INSERT INTO library_generations(generation_id, digest, created_at) VALUES (?, ?, ?)",
+                                 (generation_id, digest, now))
+                else:
+                    previous_digest = conn.execute('SELECT digest FROM library_generations WHERE generation_id=?',
+                                                   (generation_id,)).fetchone()[0]
+                    digest = hashlib.sha256((previous_digest + digest + repr(work_ids)).encode()).hexdigest() if changed_ids else previous_digest
+                    conn.execute('UPDATE library_generations SET digest=? WHERE generation_id=?', (digest, generation_id))
+                    conn.executemany('DELETE FROM library_cards WHERE generation_id=? AND work_id=?',
+                                     [(generation_id, work_id) for work_id in changed_ids])
+                    conn.executemany('DELETE FROM library_details WHERE generation_id=? AND work_id=?',
+                                     [(generation_id, work_id) for work_id in changed_ids])
+                    card_rows = [row for row in card_rows if row[1] in changed_ids]
+                    detail_rows = [row for row in detail_rows if row[1] in changed_ids]
                 conn.executemany(
                     """
                     INSERT INTO library_cards(
@@ -439,6 +505,8 @@ class V4LibraryProjection:
                     """,
                     card_rows,
                 )
+                conn.executemany('INSERT INTO library_details(generation_id,work_id,detail_json) VALUES (?,?,?)',
+                                 detail_rows)
                 conn.execute(
                     "UPDATE library_generations SET status = 'published', published_at = ? WHERE generation_id = ?",
                     (now, generation_id),
@@ -448,11 +516,10 @@ class V4LibraryProjection:
                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                     (generation_id,),
                 )
-                hidden = {row['work_id'] for row in conn.execute(
-                    "SELECT work_id FROM work_overrides WHERE json_valid(override_json) "
-                    "AND json_extract(override_json,'$.hidden')=1")}
-                visible_count = sum(card['work_id'] not in hidden and card['metadata'].get('metadata_state')
-                                    in {'ready', 'not_required'} for card in cards)
+                visible_count = conn.execute('SELECT COUNT(*) FROM library_cards c WHERE generation_id=? AND NOT EXISTS ('
+                                             "SELECT 1 FROM work_overrides o WHERE o.work_id=c.work_id "
+                                             "AND json_valid(o.override_json) AND json_extract(o.override_json,'$.hidden')=1)",
+                                             (generation_id,)).fetchone()[0]
                 conn.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_published_summary',?)",
                              (json.dumps({'generation_id': generation_id, 'work_count': visible_count}),))
                 if changed_during_build:
@@ -462,7 +529,13 @@ class V4LibraryProjection:
                         (now,),
                     )
                 else:
-                    conn.execute("DELETE FROM v4_meta WHERE key = 'library_projection_dirty'")
+                    if work_ids is None:
+                        conn.execute("DELETE FROM v4_meta WHERE key='library_projection_full_dirty' OR key LIKE 'library_dirty_work:%'")
+                    else:
+                        conn.executemany('DELETE FROM v4_meta WHERE key=?',
+                                         [('library_dirty_work:' + work_id,) for work_id in work_ids])
+                    if not conn.execute("SELECT 1 FROM v4_meta WHERE key LIKE 'library_dirty_work:%' LIMIT 1").fetchone():
+                        conn.execute("DELETE FROM v4_meta WHERE key = 'library_projection_dirty'")
                 conn.execute(
                     "INSERT INTO v4_meta(key,value) VALUES ('library_presentation_policy',?) "
                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (PRESENTATION_POLICY_VERSION,),
@@ -471,59 +544,24 @@ class V4LibraryProjection:
                     "DELETE FROM library_generations WHERE generation_id != ?",
                     (generation_id,),
                 )
+                from app.media_v4.projection.changes import latest_sequence
+                sequence = latest_sequence(conn)
                 conn.commit()
-                return LibrarySnapshot(generation_id, digest, cards)
+                return LibrarySnapshot(generation_id, digest, cards, sequence)
             except Exception:
                 conn.rollback()
                 raise
 
-    def _recover_previous_ready(self, row, current_metadata: dict) -> tuple[str, dict] | None:
-        """最新一次资料刷新失败时，回退到同一作品上一次成功且产物完整的快照。
-
-        已发布作品不能因为一次瞬时失败（限流、超时、服务端 5xx）就从媒体墙消失、
-        连标题与海报一起丢——这与 `_retain_successful_details` / `_artifact_view`
-        的既有意图一致。上次结果不是 ready、或复查发现产物已损坏时不回退，
-        避免把真正坏掉的作品伪装成正常（只读判断，不写回任何事实）。
-        """
-
-        previous_revision = str(row["previous_ready_revision_id"] or "")
-        if not previous_revision:
-            return None
-        try:
-            previous_metadata = json.loads(row["previous_ready_metadata_json"] or "{}")
-        except (TypeError, ValueError):
-            return None
-        if not isinstance(previous_metadata, dict):
-            return None
-        if str(previous_metadata.get("metadata_state") or "") != "ready":
-            return None
-        from app.media_v4.jobs.completeness import assess_persisted_completeness
-
-        complete, _reasons = assess_persisted_completeness(
-            self.database,
-            revision_id=previous_revision,
-            work_id=str(row["work_id"]),
-            metadata=previous_metadata,
-        )
-        if not complete:
-            return None
-        refresh_error = str(current_metadata.get("reason") or "").strip() or (
-            str(current_metadata.get("reason_code") or "").strip() or "最近一次资料刷新失败"
-        )
-        merged = dict(previous_metadata)
-        merged["sources"] = current_metadata.get("sources") or []
-        merged["regular_season_count"] = current_metadata.get("regular_season_count") or 0
-        merged["special_season_count"] = current_metadata.get("special_season_count") or 0
-        merged["metadata_state"] = "ready"
-        # 明确标注"当前显示的是上一次成功结果"，避免用户误以为这是最新资料。
-        merged["metadata_refresh_error"] = refresh_error
-        return "ready", merged
 
     @staticmethod
     def _decode_card(card: dict) -> dict:
         try:
             card["metadata"] = json.loads(card.pop("metadata_json") or "{}")
             card['latest_episode_number'] = card['metadata'].get('latest_episode_number')
+            for key in ('show_type', 'card_type'):
+                card[key] = card['metadata'].get(key) or ''
+            for key in ('regular_season_count', 'special_season_count'):
+                card[key] = int(card['metadata'].get(key) or 0)
         except (TypeError, ValueError):
             card.pop("metadata_json", None)
             card["metadata"] = {}

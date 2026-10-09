@@ -36,11 +36,11 @@ test('无桌面令牌的显式开发模式保持原地址', () => {
 });
 
 
-test('远程图片只允许受信任 CDN 通过本地鉴权代理', () => {
+test('图片只读取带会话身份的已发布资源，不调用远程代理', () => {
   const source = readFileSync(new URL('../src/api/assets.ts', import.meta.url), 'utf8');
 
-  assert.match(source, /image\.tmdb\.org/);
-  assert.match(source, /s4\\\.anilist\\\.co/);
-  assert.match(source, /API_BASE \+ '\/api\/assets\/remote\?url='/);
+  assert.match(source, /withApiSessionToken\(API_BASE \+ path\)/);
+  assert.match(source, /assets\\\/artwork/);
+  assert.doesNotMatch(source, /\/remote\?url=|image\.tmdb\.org|anilist\.co|normalizeRemoteImageUrl/);
   assert.match(source, /return ''/);
 });

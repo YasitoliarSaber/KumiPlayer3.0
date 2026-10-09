@@ -13,7 +13,7 @@ test('海报卡始终渲染标题占位：未解码或失败时不出现空白�
   )
 })
 
-test('缩略图失败后不得重复请求原图（后端生成失败时已返回原图）', () => {
+test('资源加载失败后不得回退原图重复请求', () => {
   assert.doesNotMatch(
     card,
     /setUseOriginalImage\(true\)/,
@@ -21,11 +21,12 @@ test('缩略图失败后不得重复请求原图（后端生成失败时已返�
   )
 })
 
-test('横图也使用按尺寸生成的缩略图（不因 isHorizontal 跳过）', () => {
+test('横图和竖图都按展示尺寸选择已发布的缩略图', () => {
   assert.doesNotMatch(
     card,
     /thumbnailWidth > 0 && !isHorizontal/,
     '横图此前跳过缩略图，等于把大背景图塞进小卡',
   )
-  assert.match(card, /thumbnailWidth > 0 \? \{ thumbnailWidth \}/, '应按尺寸传 thumbnailWidth')
+  assert.match(card, /preferredArtworkPath\(work, artworkKind, thumbnailWidth \|\| undefined\)/, '应从已发布资源中按尺寸选择')
+  assert.doesNotMatch(card, /cacheOnly:|\/thumbnail\?|prepareThumbnail/, '展示不触发临时缩图或准备请求')
 })

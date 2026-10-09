@@ -40,15 +40,4 @@ export const systemApi = {
     });
   },
 
-  async openMirrorFolder(workId: string, episodeId?: string, open = true): Promise<OpenFolderResult> {
-    return fetchJson(`${API_BASE}/open-folder`, {
-      method: 'POST',
-      body: JSON.stringify({
-        work_id: workId,
-        episode_id: episodeId || '',
-        folder_type: 'mirror',
-        open,
-      }),
-    });
-  },
 };

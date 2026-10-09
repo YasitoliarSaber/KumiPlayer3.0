@@ -229,7 +229,8 @@ describe('SettingsPage 信息架构', () => {
     expect(within(navigation).getByRole('button', { name: /外观/ })).toBeVisible();
     expect(within(navigation).queryByRole('button', { name: /应用与支持/ })).not.toBeInTheDocument();
     expect(document.getElementById('settings-panel-sources')).toHaveTextContent('115 挂载根路径');
-    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('镜像目录');
+    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('播放路径');
+    expect(document.getElementById('settings-panel-sources')).not.toHaveTextContent('镜像目录');
     expect(document.getElementById('settings-panel-sources')).toHaveTextContent('重新进入初始引导');
     expect(document.getElementById('settings-panel-scrape')).toHaveTextContent('网络代理');
   });
@@ -265,25 +266,20 @@ describe('SettingsPage 信息架构', () => {
     expect(labels.findIndex((label) => label.includes('外观'))).toBeLessThan(labels.findIndex((label) => label.includes('媒体来源')));
   });
 
-  test('图片策略下拉选择只改草稿，切换分类后保存仍只修改对应字段', async () => {
+  test('图片缓存独立于来源，不提供远程图片运行模式且不重写历史配置', async () => {
     api.getConfig.mockResolvedValue({ ...config, artwork_storage_mode: 'local' });
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '元数据与图片' }));
-    const dropdown = screen.getByRole('combobox', { name: '图片策略' });
-    expect(dropdown).toHaveTextContent('优先使用本地图片');
+    expect(screen.queryByRole('combobox', { name: '图片策略' })).not.toBeInTheDocument();
+    expect(screen.getByText(/独立的本地图片库/)).toBeVisible();
     api.patchConfig.mockClear();
-    fireEvent.click(dropdown);
-    fireEvent.click(screen.getByRole('option', { name: '本地优先，缺失时联网' }));
-    expect(dropdown).toHaveTextContent('本地优先，缺失时联网');
     expect(api.patchConfig).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '外观', exact: true }));
     expect(screen.getByRole('button', { name: /雾蓝云母/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /深邃影院/ })).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(screen.getByRole('button', { name: '元数据与图片' }));
-    const restored = screen.getByRole('combobox', { name: '图片策略' });
-    expect(restored).toHaveTextContent('本地优先，缺失时联网');
-    fireEvent.click(within(restored.closest('.settings-config-row')!).getByRole('button', { name: '保存' }));
-    expect(api.patchConfig).toHaveBeenCalledWith({ artwork_storage_mode: 'auto' });
+    expect(screen.getByText(/独立的本地图片库/)).toBeVisible();
+    expect(api.patchConfig).not.toHaveBeenCalled();
   });
 
   test('隐藏构建与赞助信息，并将播放器状态收敛为用户可理解的结果', async () => {
@@ -361,7 +357,7 @@ describe('SettingsPage 信息架构', () => {
     vi.mocked(pickFolder).mockResolvedValueOnce(null);
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
-    for (const name of ['115 挂载根路径', '百度网盘挂载位置', '夸克网盘挂载位置', '本地媒体根路径', '目录树文件目录', '镜像目录']) {
+    for (const name of ['115 挂载根路径', '百度网盘挂载位置', '夸克网盘挂载位置', '本地媒体根路径', '目录树文件目录']) {
       expect(screen.getByRole('button', { name: `选择${name}` })).toBeVisible();
     }
     const input = screen.getByRole('textbox', { name: '115 挂载根路径' });

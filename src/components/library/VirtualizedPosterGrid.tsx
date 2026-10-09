@@ -16,14 +16,14 @@ interface VirtualizedPosterGridProps {
   presentationKey?: string;
 }
 
-// 视口上下各预渲染的行数。第一版固定值：不做滚动速度预测与动态 overscan。
+// 下限行数配合两视口驻留，横图行高较小时不会过早卸载刚看过的图片。
 const OVERSCAN_ROWS = 6;
 
 // 卡片宽度与屏幕缩放共同决定固定档位。
 function pickThumbnailWidth(cssWidth: number, horizontal: boolean): number {
-  const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
   const deviceWidth = Math.ceil(cssWidth * dpr)
-  if (horizontal) return deviceWidth <= 512 ? 512 : 768
+  if (horizontal) return deviceWidth <= 512 ? 512 : deviceWidth <= 768 ? 768 : 1280
   if (deviceWidth <= 256) return 256
   if (deviceWidth <= 384) return 384
   return 512
@@ -47,6 +47,7 @@ export default function VirtualizedPosterGrid({
   const [columnWidth, setColumnWidth] = useState(0);
   const [rowHeight, setRowHeight] = useState(0);
   const [gridGap, setGridGap] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   // 作品墙顶部在滚动容器内容坐标中的位置（标题、数量、排序工具之后）。
   const [gridOffset, setGridOffset] = useState(0);
   const [focusedWorkId, setFocusedWorkId] = useState<string | null>(null);
@@ -98,6 +99,7 @@ export default function VirtualizedPosterGrid({
         setGridOffset(Math.max(0, rect.top - containerRect.top + scrollContainer.scrollTop));
       }
       imageLifecycle.configure(scrollContainer, currentViewportHeight());
+      setViewportHeight(currentViewportHeight());
     };
 
     const requestMeasure = () => {
@@ -144,7 +146,7 @@ export default function VirtualizedPosterGrid({
     count: rowCount,
     getScrollElement: () => scrollElementRef.current,
     estimateSize: () => rowHeight,
-    overscan: OVERSCAN_ROWS,
+    overscan: Math.max(OVERSCAN_ROWS, rowHeight > 0 ? Math.ceil(viewportHeight * 2 / rowHeight) : 0),
     rangeExtractor,
     scrollMargin: gridOffset,
     // 挂载时滚动容器可能已经在别处（返回分类页恢复位置），必须按真实 scrollTop 起步。

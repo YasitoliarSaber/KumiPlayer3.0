@@ -1,140 +1,64 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { StrictMode } from 'react';
 import DecodedImage from '../../src/components/ui/DecodedImage';
 
-test('图片在浏览器解码完成前保持隐藏，完成后再一次性显示', async () => {
-  let finishDecode: (() => void) | undefined;
-  const decode = vi.fn(() => new Promise<void>((resolve) => {
-    finishDecode = resolve;
-  }));
-  Object.defineProperty(HTMLImageElement.prototype, 'decode', {
-    configurable: true,
-    value: decode,
-  });
-
-  render(<DecodedImage src="http://127.0.0.1/poster.jpg" alt="测试海报" />);
-  const image = screen.getByRole('img', { name: '测试海报' });
-
+test('浏览器 load 终态显示图片，不启动额外 decode 批次', () => {
+  const decode = vi.fn();
+  Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode });
+  const onDecoded = vi.fn(); const onStateChange = vi.fn();
+  render(<DecodedImage src="/api/assets/artwork/id/v1/384" alt="海报" onDecoded={onDecoded} onStateChange={onStateChange} />);
+  const image = screen.getByRole('img');
   expect(image).toHaveAttribute('data-image-state', 'loading');
-  fireEvent.load(image);
-  expect(decode).toHaveBeenCalled();
-  expect(image).toHaveAttribute('data-image-state', 'loading');
-
-  finishDecode?.();
-  await waitFor(() => expect(image).toHaveAttribute('data-image-state', 'ready'));
-});
-
-test('图片完成解码后才通知调用方参与界面切换', async () => {
-  let finishDecode: (() => void) | undefined;
-  const onDecoded = vi.fn();
-  Object.defineProperty(HTMLImageElement.prototype, 'decode', {
-    configurable: true,
-    value: vi.fn(() => new Promise<void>((resolve) => {
-      finishDecode = resolve;
-    })),
-  });
-
-  render(
-    <DecodedImage
-      src="http://127.0.0.1/fanart.jpg"
-      alt="轮播背景"
-      onDecoded={onDecoded}
-    />,
-  );
-  const image = screen.getByRole('img', { name: '轮播背景' });
-
-  fireEvent.load(image);
-  expect(onDecoded).not.toHaveBeenCalled();
-
-  finishDecode?.();
-  await waitFor(() => expect(onDecoded).toHaveBeenCalledTimes(1));
-});
-
-test('详情缩略图加载完成后立即显示，但解码回调仍等待真正完成', async () => {
-  let finishDecode: (() => void) | undefined;
-  const onDecoded = vi.fn();
-  Object.defineProperty(HTMLImageElement.prototype, 'decode', {
-    configurable: true,
-    value: vi.fn(() => new Promise<void>((resolve) => {
-      finishDecode = resolve;
-    })),
-  });
-
-  render(
-    <DecodedImage
-      src="http://127.0.0.1/episode.jpg"
-      alt="剧集缩略图"
-      revealOnLoad
-      onDecoded={onDecoded}
-    />,
-  );
-  const image = screen.getByRole('img', { name: '剧集缩略图' });
-
   fireEvent.load(image);
   expect(image).toHaveAttribute('data-image-state', 'ready');
-  expect(onDecoded).not.toHaveBeenCalled();
-
-  finishDecode?.();
-  await waitFor(() => expect(onDecoded).toHaveBeenCalledTimes(1));
+  expect(onDecoded).toHaveBeenCalledOnce();
+  expect(decode).not.toHaveBeenCalled();
+  expect(onStateChange.mock.calls.map(([state]) => state)).toEqual(['loading', 'ready']);
 });
 
-test('图片加载失败时保留稳定占位，不暴露浏览器破图或白底', () => {
-  render(<DecodedImage src="http://127.0.0.1/missing.jpg" alt="失效海报" />);
-  const image = screen.getByRole('img', { name: '失效海报', hidden: true });
-
-  fireEvent.error(image);
-
-  expect(image).toHaveAttribute('data-image-state', 'error');
-  expect(image).not.toHaveClass('is-ready');
+test('load 完成回调保留轮播切换功能，错误显示稳定占位', () => {
+  const ready = vi.fn();
+  const { rerender } = render(<DecodedImage src="/api/assets/artwork/c/v1/1280" alt="背景" onDecoded={ready} />);
+  fireEvent.load(screen.getByRole('img'));
+  expect(ready).toHaveBeenCalledOnce();
+  rerender(<DecodedImage src="/api/assets/artwork/c/v2/1280" alt="背景" onDecoded={ready} />);
+  fireEvent.error(screen.getByRole('img'));
+  expect(screen.getByRole('img')).toHaveAttribute('data-image-state', 'error');
+  expect(screen.getByRole('img')).not.toHaveClass('is-ready');
+  expect(ready).toHaveBeenCalledOnce();
 });
 
-test('缓存命中也等待解码完成，每次状态变化只通知单卡一次', async () => {
-  const onStateChange = vi.fn();
-  const decode = vi.fn().mockResolvedValue(undefined);
+test('地址切换不取消正在传输的预算，旧终态不能将新图标记 ready', () => {
+  const ready = vi.fn();
+  const { rerender } = render(<DecodedImage src="/api/assets/artwork/stale/v1/384" alt="切换" onDecoded={ready} />);
+  const node = screen.getByRole('img');
+  rerender(<DecodedImage src="/api/assets/artwork/stale/v2/384" alt="切换" onDecoded={ready} />);
+  expect(node).toHaveAttribute('src', '/api/assets/artwork/stale/v1/384');
+  fireEvent.load(node);
+  expect(node).toHaveAttribute('src', '/api/assets/artwork/stale/v2/384');
+  expect(node).toHaveAttribute('data-image-state', 'loading');
+  expect(ready).not.toHaveBeenCalled();
+  fireEvent.load(node);
+  expect(node).toHaveAttribute('data-image-state', 'ready');
+  expect(ready).toHaveBeenCalledOnce();
+});
+
+test('缓存 complete 与 load 重复到达，每个记录只通知一次 ready', () => {
   vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true);
   vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(384);
-  Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode });
-
-  render(<DecodedImage src="http://127.0.0.1/cached.jpg" alt="缓存海报" onStateChange={onStateChange} />);
-  await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('data-image-state', 'ready'));
-  expect(decode).toHaveBeenCalledTimes(1);
-  expect(onStateChange.mock.calls.map(([state]) => state)).toEqual(['loading', 'ready']);
-
-  await act(async () => { fireEvent.load(screen.getByRole('img')); });
-  expect(decode).toHaveBeenCalledTimes(1);
-  expect(onStateChange.mock.calls.map(([state]) => state)).toEqual(['loading', 'ready']);
-});
-
-test('地址切换后旧图片的异步解码不得覆盖新图片加载状态', async () => {
-  const resolutions: Array<() => void> = [];
-  Object.defineProperty(HTMLImageElement.prototype, 'decode', {
-    configurable: true,
-    value: vi.fn(() => new Promise<void>((resolve) => resolutions.push(resolve))),
-  });
-  const onStateChange = vi.fn();
-  const { rerender } = render(<DecodedImage src="http://127.0.0.1/old.jpg" alt="海报" onStateChange={onStateChange} />);
-  fireEvent.load(screen.getByRole('img'));
-  rerender(<DecodedImage src="http://127.0.0.1/new.jpg" alt="海报" onStateChange={onStateChange} />);
-  fireEvent.load(screen.getByRole('img'));
-
-  await act(async () => { resolutions[0](); });
-  expect(screen.getByRole('img')).toHaveAttribute('data-image-state', 'loading');
-  expect(onStateChange).not.toHaveBeenCalledWith('ready');
-
-  await act(async () => { resolutions[1](); });
+  const ready = vi.fn();
+  render(<DecodedImage src="/api/assets/artwork/cache/v1/384" alt="缓存" onDecoded={ready} />);
   expect(screen.getByRole('img')).toHaveAttribute('data-image-state', 'ready');
-  expect(onStateChange.mock.calls.map(([state]) => state)).toEqual(['loading', 'ready']);
+  fireEvent.load(screen.getByRole('img'));
+  expect(ready).toHaveBeenCalledOnce();
 });
 
-test('StrictMode 重放挂载效果时同一缓存地址仍只解码一次', async () => {
-  const decode = vi.fn().mockResolvedValue(undefined);
-  vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true);
-  vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(384);
-  Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode });
-  render(<StrictMode><DecodedImage src="http://127.0.0.1/cached.jpg" alt="缓存海报" revealOnLoad /></StrictMode>);
-  await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('data-image-state', 'ready'));
-  expect(decode).toHaveBeenCalledTimes(1);
-  fireEvent.load(screen.getByRole('img'));
-  expect(decode).toHaveBeenCalledTimes(1);
+test('StrictMode 重放保留缓存展示，未开始请求卸载后不再赋值', () => {
+  render(<StrictMode><DecodedImage src="/api/assets/artwork/strict/v1/384" alt="重放" revealOnLoad /></StrictMode>);
+  const node = screen.getByRole('img');
+  fireEvent.load(node);
+  // 重放的旧监听器释放后新记录开始；再次 load 是新记录的终态。
+  fireEvent.load(node);
+  expect(node).toHaveAttribute('data-image-state', 'ready');
 });

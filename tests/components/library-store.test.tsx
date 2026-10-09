@@ -3,14 +3,16 @@ import { fireEvent } from '@testing-library/react';
 import { isScrollRecentlyActive, resetScrollGestureForTests } from '../../src/utils/scrollGesture';
 import type { WorkIndex } from '../../src/api/types';
 
-const { getLibrary, getWorkDetail, getHistory } = vi.hoisted(() => ({
+const { getLibrary, getWorkDetail, getHistory, getChanges, getCards } = vi.hoisted(() => ({
   getLibrary: vi.fn(),
   getWorkDetail: vi.fn(),
   getHistory: vi.fn(),
+  getChanges: vi.fn(),
+  getCards: vi.fn(),
 }));
 
 vi.mock('../../src/api/library', () => ({
-  libraryApi: { getLibrary, getWorkDetail },
+  libraryApi: { getLibrary, getWorkDetail, getChanges, getCards },
 }));
 
 vi.mock('../../src/api/playback', () => ({
@@ -72,6 +74,8 @@ beforeEach(() => {
   getLibrary.mockReset();
   getWorkDetail.mockReset();
   getHistory.mockReset();
+  getChanges.mockReset();
+  getCards.mockReset();
   localStorage.clear();
   useLibraryStore.setState({
     works: [],
@@ -79,6 +83,7 @@ beforeEach(() => {
     loading: false,
     error: null,
     loaded: false,
+    changeSequence: null,
     selectedWorkDetail: null,
     detailLoading: false,
     detailError: null,
@@ -86,7 +91,7 @@ beforeEach(() => {
 });
 afterEach(() => resetScrollGestureForTests());
 
-test('详情请求在滚动期间返回时，不再启动大背景解码；点击打开仍加载背景', async () => {
+test('详情预热和点击导航只取数据，DOM 图片统一预算加载，不显式解码', async () => {
   const decode = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode });
   const response = deferred<WorkIndex>();
@@ -98,7 +103,128 @@ test('详情请求在滚动期间返回时，不再启动大背景解码；点�
   await pending;
   expect(decode).not.toHaveBeenCalled();
   await useLibraryStore.getState().openWorkDetail('delayed');
-  expect(decode).toHaveBeenCalledTimes(1);
+  expect(decode).not.toHaveBeenCalled();
+});
+
+test('单张图片事件只取对应卡片，保留其他对象引用并废弃对应详情缓存', async () => {
+  const first = work('art-1'); const second = work('art-2');
+  useLibraryStore.setState({ works: [first, second], loaded: true, changeSequence: 10 });
+  getWorkDetail.mockResolvedValue({ ...first, plot: 'detail retained' });
+  await useLibraryStore.getState().getWorkDetail(first.work_id);
+  getChanges.mockResolvedValue({ changes: [{ sequence: 11, kind: 'artwork', work_id: first.work_id }], next_sequence: 11, has_more: false, reset_required: false });
+  const artwork = { poster: { resource_id: 'id', content_version: 'v2', state: 'ready', variants: { '384': '/api/assets/artwork/id/v2/384' } } };
+  getCards.mockResolvedValue({ works: [{ ...first, artwork }] });
+  expect(await useLibraryStore.getState().syncChanges()).toBe(true);
+  expect(getLibrary).not.toHaveBeenCalled();
+  expect(useLibraryStore.getState().works[1]).toBe(second);
+  expect(useLibraryStore.getState().peekWorkDetail(first.work_id)?.plot).toBe('');
+  expect(useLibraryStore.getState().peekWorkDetail(first.work_id)?.artwork).toEqual(artwork);
+  await useLibraryStore.getState().getWorkDetail(first.work_id);
+  expect(getWorkDetail).toHaveBeenCalledTimes(2);
+  expect(useLibraryStore.getState().changeSequence).toBe(11);
+});
+
+test('选中作品的图片变化读取单作品详情，更新分集、演员和关联图片', async () => {
+  const first = work('selected-art'); const stable = work('untouched-art');
+  const oldDetail = { ...first, plot: 'metadata remains valid' };
+  useLibraryStore.setState({ works: [first, stable], selectedWorkDetail: oldDetail, loaded: true, changeSequence: 11 });
+  const refreshed = { ...oldDetail, episodes: [{ episode_id: 'ep', thumb_path: '/api/assets/artwork/ep/v2/384' }],
+    cast: [{ name: 'actor', profile_path: '/api/assets/artwork/actor/v2/384' }],
+    related_works: [{ title: 'related', poster_path: '/api/assets/artwork/related/v2/384' }] } as WorkIndex;
+  getChanges.mockResolvedValue({ changes: [{ sequence: 12, kind: 'artwork', work_id: first.work_id }], next_sequence: 12, has_more: false });
+  getCards.mockResolvedValue({ works: [first] });
+  getWorkDetail.mockResolvedValue(refreshed);
+  expect(await useLibraryStore.getState().syncChanges()).toBe(true);
+  expect(getLibrary).not.toHaveBeenCalled();
+  expect(getWorkDetail).toHaveBeenCalledExactlyOnceWith(first.work_id);
+  expect(useLibraryStore.getState().selectedWorkDetail).toBe(refreshed);
+  expect(useLibraryStore.getState().works[1]).toBe(stable);
+  expect(useLibraryStore.getState().changeSequence).toBe(12);
+  expect(await useLibraryStore.getState().getWorkDetail(first.work_id)).toBe(refreshed);
+  expect(getWorkDetail).toHaveBeenCalledOnce();
+});
+
+test('图片详情刷新失败保留当前详情与游标，重试成功后仅更新该作品', async () => {
+  const first = work('failed-art');
+  useLibraryStore.setState({ works: [first], selectedWorkDetail: first, loaded: true, changeSequence: 15 });
+  getChanges.mockResolvedValue({ changes: [{ sequence: 16, kind: 'artwork', work_id: first.work_id }], next_sequence: 16, has_more: false });
+  getCards.mockResolvedValue({ works: [first] });
+  getWorkDetail.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ ...first, plot: 'valid' });
+  expect(await useLibraryStore.getState().syncChanges()).toBe(false);
+  expect(useLibraryStore.getState().selectedWorkDetail).toBe(first);
+  expect(useLibraryStore.getState().changeSequence).toBe(15);
+  expect(await useLibraryStore.getState().syncChanges()).toBe(true);
+  expect(useLibraryStore.getState().selectedWorkDetail?.plot).toBe('valid');
+  expect(getChanges).toHaveBeenLastCalledWith(15);
+  expect(getLibrary).not.toHaveBeenCalled();
+});
+
+test('图片详情刷新途中切换作品不覆盖新的选择', async () => {
+  const first = work('navigation-art'); const second = work('navigation-other');
+  const response = deferred<WorkIndex>();
+  useLibraryStore.setState({ works: [first, second], selectedWorkDetail: first, loaded: true, changeSequence: 17 });
+  getChanges.mockResolvedValue({ changes: [{ sequence: 18, kind: 'artwork', work_id: first.work_id }], next_sequence: 18, has_more: false });
+  getCards.mockResolvedValue({ works: [first] });
+  getWorkDetail.mockImplementationOnce(() => response.promise);
+  const pending = useLibraryStore.getState().syncChanges();
+  await vi.waitFor(() => expect(getWorkDetail).toHaveBeenCalledWith(first.work_id));
+  useLibraryStore.setState({ selectedWorkDetail: second });
+  response.resolve({ ...first, plot: 'updated' });
+  await pending;
+  expect(useLibraryStore.getState().selectedWorkDetail).toBe(second);
+});
+
+test('手工修改后的刷新废弃旧详情请求，迟到响应不能覆盖当前版本', async () => {
+  const first = work('manual-art'); const stale = deferred<WorkIndex>();
+  const updated = { ...first, local_poster_path: '/api/assets/artwork/manual/v2/384' };
+  useLibraryStore.setState({ works: [first], selectedWorkDetail: first });
+  getWorkDetail.mockImplementationOnce(() => stale.promise).mockResolvedValueOnce(updated);
+  const oldRequest = useLibraryStore.getState().getWorkDetail(first.work_id);
+  await useLibraryStore.getState().refreshWork(first.work_id);
+  stale.resolve({ ...first, local_poster_path: '/api/assets/artwork/manual/v1/384' });
+  expect(await oldRequest).toBe(updated);
+  expect(await useLibraryStore.getState().getWorkDetail(first.work_id)).toBe(updated);
+  expect(useLibraryStore.getState().selectedWorkDetail).toBe(updated);
+  expect(getWorkDetail).toHaveBeenCalledTimes(2);
+});
+
+test('分页卡片失败不应用部分变化，不推进游标，下次从原游标重试', async () => {
+  const old = work('page-1');
+  useLibraryStore.setState({ works: [old], loaded: true, changeSequence: 20 });
+  getChanges.mockResolvedValueOnce({ changes: [{ sequence: 21, kind: 'work_upsert', work_id: old.work_id }], next_sequence: 21, has_more: true })
+    .mockResolvedValueOnce({ changes: [{ sequence: 22, kind: 'artwork', work_id: 'page-2' }], next_sequence: 22, has_more: false });
+  getCards.mockResolvedValueOnce({ works: [{ ...old, title: 'updated' }] }).mockRejectedValueOnce(new Error('offline'));
+  expect(await useLibraryStore.getState().syncChanges()).toBe(false);
+  expect(useLibraryStore.getState().works[0]).toBe(old);
+  expect(useLibraryStore.getState().changeSequence).toBe(20);
+  getChanges.mockResolvedValue({ changes: [], next_sequence: 20, has_more: false });
+  await useLibraryStore.getState().syncChanges();
+  expect(getChanges).toHaveBeenLastCalledWith(20);
+});
+
+test('分页合并新增与移除，只影响指定作品，空变化保留列表引用', async () => {
+  const removed = work('gone'); const stable = work('stable'); const added = work('added');
+  useLibraryStore.setState({ works: [removed, stable], loaded: true, changeSequence: 30 });
+  getChanges.mockResolvedValueOnce({ changes: [{ sequence: 31, kind: 'work_remove', work_id: removed.work_id }], next_sequence: 31, has_more: true })
+    .mockResolvedValueOnce({ changes: [{ sequence: 32, kind: 'work_upsert', work_id: added.work_id }], next_sequence: 32, has_more: false });
+  getCards.mockResolvedValueOnce({ works: [] }).mockResolvedValueOnce({ works: [added] });
+  expect(await useLibraryStore.getState().syncChanges()).toBe(true);
+  expect(useLibraryStore.getState().works).toEqual([stable, added]);
+  expect(useLibraryStore.getState().works[0]).toBe(stable);
+  const list = useLibraryStore.getState().works;
+  getChanges.mockResolvedValue({ changes: [], next_sequence: 32, has_more: false });
+  await useLibraryStore.getState().syncChanges();
+  expect(useLibraryStore.getState().works).toBe(list);
+});
+
+test('只有过期/reset 才全同步，并从新库快照取得游标', async () => {
+  useLibraryStore.setState({ works: [work('reset-old')], loaded: true, changeSequence: 1 });
+  getChanges.mockResolvedValue({ changes: [], next_sequence: 99, has_more: false, reset_required: true });
+  getLibrary.mockResolvedValue({ works: [work('reset-new')], change_sequence: 99 });
+  getHistory.mockResolvedValue({ items: [] });
+  expect(await useLibraryStore.getState().syncChanges()).toBe(true);
+  expect(getLibrary).toHaveBeenCalledOnce();
+  expect(useLibraryStore.getState().changeSequence).toBe(99);
 });
 
 test('媒体库缓存的序列化在空闲回调里进行，不占用响应应用的同步路径', async () => {

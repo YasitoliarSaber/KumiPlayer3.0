@@ -110,7 +110,7 @@ export interface MpvValidationResult {
 
 export interface SetupCompletePayload {
   mpv_path?: string
-  mirror_dir: string
+  mirror_dir?: string
   pan115_root?: string
   baidu_root?: string
   local_root?: string

@@ -1,4 +1,4 @@
-"""Assets API 测试"""
+"""旧文件路径端点退役；保留可信图片 URL 的安全 helper 回归。"""
 
 
 import pytest
@@ -21,7 +21,7 @@ def mirror_dir(tmp_path, monkeypatch):
     """使用临时 mirror 目录"""
     mirror = tmp_path / "mirror"
     mirror.mkdir()
-    monkeypatch.setattr("app.api.assets.get_mirror_root", lambda: mirror)
+    monkeypatch.setattr("app.api.assets.get_mirror_root", lambda: pytest.fail("retired GET must not inspect files"))
     return mirror
 
 
@@ -29,32 +29,30 @@ def mirror_dir(tmp_path, monkeypatch):
 # GET /api/assets
 # ============================================================
 
-class TestGetAsset:
-    """测试获取资源文件"""
+class TestRetiredGetAsset:
+    """各种旧文件引用都不再公开，不访问镜像查找文件。"""
 
-    def test_returns_image(self, client, mirror_dir):
-        """应能返回图片文件"""
+    def test_does_not_return_mirror_image(self, client, mirror_dir):
+        """已存在图片也不复活旧文件端点。"""
         # 创建测试图片
         poster = mirror_dir / "115" / "CLANNAD"
         poster.mkdir(parents=True)
         (poster / "poster.jpg").write_bytes(b"\xff\xd8\xff\xe0fake-jpg")
 
         resp = client.get("/api/assets?path=115/CLANNAD/poster.jpg")
-        assert resp.status_code == 200
-        assert resp.headers["content-type"] == "image/jpeg"
-        assert resp.content == b"\xff\xd8\xff\xe0fake-jpg"
+        assert resp.status_code == 404
+        assert resp.content != b"\xff\xd8\xff\xe0fake-jpg"
 
-    def test_returns_nfo(self, client, mirror_dir):
-        """应能返回 NFO 文件"""
+    def test_does_not_return_nfo(self, client, mirror_dir):
+        """NFO 不再属于应用图片接口。"""
         nfo_dir = mirror_dir / "115" / "CLANNAD"
         nfo_dir.mkdir(parents=True)
         nfo_content = '<?xml version="1.0"?><tvshow><title>CLANNAD</title></tvshow>'
         (nfo_dir / "tvshow.nfo").write_text(nfo_content, encoding="utf-8")
 
         resp = client.get("/api/assets?path=115/CLANNAD/tvshow.nfo")
-        assert resp.status_code == 200
-        assert "xml" in resp.headers["content-type"]
-        assert resp.text == nfo_content
+        assert resp.status_code == 404
+        assert resp.text != nfo_content
 
     def test_returns_404_for_missing_file(self, client, mirror_dir):
         """文件不存在时应返回 404"""
@@ -64,21 +62,21 @@ class TestGetAsset:
     def test_rejects_path_traversal(self, client, mirror_dir):
         """应拒绝路径遍历"""
         resp = client.get("/api/assets?path=../etc/passwd")
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
-    def test_allows_filename_containing_dots(self, client, mirror_dir):
-        """文件名中包含连续点号但不是 .. 路径组件时不应被误伤"""
+    def test_retired_route_rejects_normal_filename_with_dots(self, client, mirror_dir):
+        """普通旧文件名同样不开放兼容读取。"""
         asset_dir = mirror_dir / "115" / "CLANNAD"
         asset_dir.mkdir(parents=True)
         (asset_dir / "poster...v1.jpg").write_bytes(b"fake-jpg")
 
         resp = client.get("/api/assets?path=115/CLANNAD/poster...v1.jpg")
-        assert resp.status_code == 200
+        assert resp.status_code == 404
 
     def test_rejects_absolute_outside_mirror(self, client, mirror_dir):
         """应拒绝 mirror 外的绝对路径"""
         resp = client.get("/api/assets?path=C:/Windows/System32/config/SAM")
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     def test_rejects_disallowed_extension(self, client, mirror_dir):
         """应拒绝不允许的扩展名"""
@@ -87,15 +85,15 @@ class TestGetAsset:
         (video_dir / "video.mkv").write_bytes(b"fake-video")
 
         resp = client.get("/api/assets?path=115/CLANNAD/video.mkv")
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
-    def test_rejects_empty_path(self, client, mirror_dir):
-        """空路径应返回 400 或 422"""
+    def test_retired_route_rejects_empty_path(self, client, mirror_dir):
+        """退役接口不再解析文件参数。"""
         resp = client.get("/api/assets?path=")
-        assert resp.status_code in (400, 422)  # FastAPI 参数校验
+        assert resp.status_code == 404
 
-    def test_accepts_allowed_image_types(self, client, mirror_dir):
-        """应接受所有允许的图片类型"""
+    def test_no_old_image_extension_revives_route(self, client, mirror_dir):
+        """所有旧图片格式都必须使用新已发布资源索引。"""
         img_dir = mirror_dir / "test"
         img_dir.mkdir()
 
@@ -103,27 +101,27 @@ class TestGetAsset:
             filename = f"image{ext}"
             (img_dir / filename).write_bytes(b"fake-image")
             resp = client.get(f"/api/assets?path=test/{filename}")
-            assert resp.status_code == 200, f"应接受 {ext}"
+            assert resp.status_code == 404, f"旧路径端点不再返回 {ext}"
 
-    def test_absolute_path_under_mirror(self, client, mirror_dir):
-        """mirror 下的绝对路径应能访问"""
+    def test_no_absolute_mirror_path_is_public(self, client, mirror_dir):
+        """镜像绝对路径不再是展示资源契约。"""
         poster = mirror_dir / "115" / "CLANNAD"
         poster.mkdir(parents=True)
         (poster / "poster.jpg").write_bytes(b"fake-jpg")
 
         abs_path = str(poster / "poster.jpg")
         resp = client.get(f"/api/assets?path={abs_path}")
-        assert resp.status_code == 200
+        assert resp.status_code == 404
 
-    def test_cache_control_header(self, client, mirror_dir):
-        """应设置 Cache-Control 头"""
+    def test_retired_route_has_no_image_cache_header(self, client, mirror_dir):
+        """不存在的路由不提供图片缓存响应。"""
         poster = mirror_dir / "test"
         poster.mkdir()
         (poster / "poster.jpg").write_bytes(b"fake-jpg")
 
         resp = client.get("/api/assets?path=test/poster.jpg")
-        assert resp.status_code == 200
-        assert "Cache-Control" in resp.headers
+        assert resp.status_code == 404
+        assert "Cache-Control" not in resp.headers
 
 
 @pytest.mark.parametrize("url", [

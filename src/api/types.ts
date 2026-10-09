@@ -64,6 +64,7 @@ export interface SourceSummary {
 }
 
 export interface WorkIndex {
+  artwork?: Partial<Record<'poster' | 'fanart' | 'clearlogo', ArtworkResource>>
   /** 来源明确选择的导入范围，与用户的观看状态分开。 */
   content_scope?: 'completed' | 'ongoing'
   work_id: string
@@ -122,6 +123,13 @@ export interface WorkIndex {
     favorite: boolean
     updated_at: string
   }
+}
+
+export interface ArtworkResource {
+  resource_id: string
+  content_version: string
+  state: 'ready'
+  variants: Record<string, string>
 }
 
 export interface SeasonIndex {

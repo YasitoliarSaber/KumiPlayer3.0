@@ -6,7 +6,6 @@ import { matchesSourceFilter } from '../utils/sourceFilter'
 import type { WorkIndex, PlaybackHistoryItem } from '../api/types'
 import { mainEpisodeCount } from '../utils/workStats'
 import { isWorkInLibraryView } from '../utils/libraryCategories'
-import { buildAssetUrl } from '../api/assets'
 import { recordScrollDiagnostic } from '../utils/scrollDiagnostics'
 import { isScrollRecentlyActive } from '../utils/scrollGesture'
 
@@ -14,7 +13,6 @@ const LIBRARY_CACHE_KEY = 'kumiplayer-library-cache-v4'
 const LIBRARY_CACHE_MAX_AGE = 1000 * 60 * 60 * 24 * 7
 const LIBRARY_CACHE_MAX_BYTES = 1_500_000
 const LIBRARY_CACHE_MAX_WORKS = 500
-const DETAIL_ARTWORK_WAIT_MS = 120
 
 interface LibraryCachePayload {
   savedAt: number
@@ -27,6 +25,7 @@ interface LibraryState {
   loading: boolean
   error: string | null
   loaded: boolean
+  changeSequence: number | null
 
   selectedWorkDetail: WorkIndex | null
   detailLoading: boolean
@@ -38,6 +37,7 @@ interface LibraryState {
   librarySummary: () => { workCount: number; episodeCount: number }
 
   loadLibrary: (options?: { force?: boolean }) => Promise<boolean>
+  syncChanges: () => Promise<boolean>
   openWorkDetail: (workId: string) => Promise<void>
   closeWorkDetail: () => void
   refreshHistory: () => Promise<void>
@@ -50,7 +50,8 @@ interface LibraryState {
 
 const detailCache = new Map<string, WorkIndex>()
 const detailRequests = new Map<string, Promise<WorkIndex>>()
-const detailArtworkRequests = new Map<string, Promise<void>>()
+const detailVersions = new Map<string, number>()
+let changeRequest: Promise<boolean> | null = null
 let detailNavigationRequest = 0
 let libraryLoadRequest = 0
 let libraryCacheGeneration = 0
@@ -91,41 +92,13 @@ function commitDetailNavigation(workId: string) {
   documentWithTransition.startViewTransition(update)
 }
 
-function decodeDetailArtwork(work: WorkIndex): Promise<void> {
-  const path = work.fanart_path || work.poster_path || ''
-  if (!path || typeof Image === 'undefined') return Promise.resolve()
-
-  const url = buildAssetUrl(path, { kind: 'detailBackdrop' })
-  const existing = detailArtworkRequests.get(url)
-  if (existing) return existing
-
-  const image = new Image()
-  image.decoding = 'async'
-  const startedAt = performance.now()
-  recordScrollDiagnostic('detail-artwork-start')
-  image.src = url
-  const request = image.decode().catch(() => undefined).then(() => {
-    recordScrollDiagnostic('detail-artwork-done', { ms: Math.round(performance.now() - startedAt) })
-  })
-  detailArtworkRequests.set(url, request)
-  return request
-}
-
-async function waitForDetailArtwork(work: WorkIndex, timeoutMs: number) {
-  let timeoutId = 0
-  const timeout = new Promise<void>((resolve) => {
-    timeoutId = window.setTimeout(resolve, timeoutMs)
-  })
-  await Promise.race([decodeDetailArtwork(work), timeout])
-  window.clearTimeout(timeoutId)
-}
-
 export const useLibraryStore = create<LibraryState>((set, get) => ({
   works: [],
   history: [],
   loading: false,
   error: null,
   loaded: false,
+  changeSequence: null,
   selectedWorkDetail: null,
   detailLoading: false,
   detailError: null,
@@ -216,6 +189,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       hydrateLibraryCache(set, get)
     } else {
       detailCache.clear()
+      for (const id of detailRequests.keys()) detailVersions.set(id, (detailVersions.get(id) || 0) + 1)
+      detailRequests.clear()
     }
 
     const hasUsableContent = get().works.length > 0
@@ -231,6 +206,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         loaded: true,
         loading: false,
         error: null,
+        changeSequence: libraryRes.change_sequence ?? 0,
       })
       saveLibraryCache(works)
       recordScrollDiagnostic('works-applied', { works: works.length })
@@ -260,6 +236,69 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     }
   },
 
+  syncChanges: async () => {
+    if (changeRequest) return changeRequest
+    if (get().changeSequence === null || get().loading) return false
+    const generation = libraryLoadRequest
+    const run = async () => {
+      let cursor = get().changeSequence!
+      const changed = new Map<string, 'work_upsert' | 'work_remove' | 'artwork' | 'watch'>()
+      const cards = new Map<string, WorkIndex>()
+      try {
+        let hasMore = true
+        while (hasMore) {
+          const page = await libraryApi.getChanges(cursor)
+          if (generation !== libraryLoadRequest) return false
+          if (page.reset_required || page.changes.some((event) => !['work_upsert', 'work_remove', 'artwork', 'watch'].includes(event.kind))) return get().loadLibrary({ force: true })
+          const ids = [...new Set(page.changes.map((event) => event.work_id).filter(Boolean))]
+          if (ids.length) {
+            const response = await libraryApi.getCards(ids)
+            if (generation !== libraryLoadRequest) return false
+            const currentCards = new Map(response.works.map((work) => [work.work_id, work]))
+            for (const event of page.changes) {
+              if (event.kind === 'reset') continue
+              // 结构变化不能被后续图片通知降为仅图片更新。
+              const prior = changed.get(event.work_id)
+              changed.set(event.work_id, prior && prior !== 'artwork' ? prior : event.kind)
+              const card = currentCards.get(event.work_id)
+              if (card) cards.set(event.work_id, card)
+              else cards.delete(event.work_id)
+            }
+          }
+          if (page.next_sequence < cursor || (page.has_more && page.next_sequence === cursor)) throw new Error('Invalid library change cursor')
+          cursor = page.next_sequence
+          hasMore = page.has_more
+        }
+        if (generation !== libraryLoadRequest) return false
+        const selectedId = get().selectedWorkDetail?.work_id
+        // 分集、演员及关联图片不在精简卡片内，任何资源变化都需废弃该作品详情缓存。
+        for (const id of changed.keys()) get().invalidateWork(id)
+        const refreshedDetail = selectedId && changed.has(selectedId) && cards.has(selectedId)
+          ? await get().getWorkDetail(selectedId) : null
+        if (generation !== libraryLoadRequest) return false
+        const state = get()
+        const works = state.works.filter((work) => !changed.has(work.work_id) || cards.has(work.work_id))
+          .map((work) => {
+            const next = cards.get(work.work_id)
+            return next && JSON.stringify(work) !== JSON.stringify(next) ? next : work
+          })
+        const existing = new Set(works.map((work) => work.work_id))
+        for (const card of cards.values()) if (!existing.has(card.work_id)) works.push(card)
+        let detail = state.selectedWorkDetail
+        for (const id of changed.keys()) {
+          const card = cards.get(id)
+          if (detail?.work_id === id && (!card || id === selectedId)) detail = card ? refreshedDetail : null
+        }
+        set({ works: changed.size ? works : state.works, selectedWorkDetail: detail, changeSequence: cursor })
+        if (changed.size) saveLibraryCache(works)
+        if ([...changed.values()].includes('watch') || state.history.some((item) => changed.has(item.work_id))) void get().refreshHistory()
+        return true
+      } catch { return false }
+    }
+    changeRequest = run()
+    try { return await changeRequest } finally { changeRequest = null }
+  },
+
   openWorkDetail: async (workId) => {
     const requestId = ++detailNavigationRequest
     set({ detailError: null, detailLoading: true })
@@ -267,9 +306,6 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     try {
       const work = await get().getWorkDetail(workId)
       if (requestId !== detailNavigationRequest) return
-      await waitForDetailArtwork(work, DETAIL_ARTWORK_WAIT_MS)
-      if (requestId !== detailNavigationRequest) return
-
       set({ selectedWorkDetail: work, detailLoading: false })
       commitDetailNavigation(workId)
 
@@ -318,10 +354,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   getWorkDetail: async (workId: string) => {
     const cached = detailCache.get(workId)
-    if (cached) {
-      if (!isScrollRecentlyActive()) void decodeDetailArtwork(cached)
-      return cached
-    }
+    if (cached) return cached
+    const version = detailVersions.get(workId) || 0
 
     let request = detailRequests.get(workId)
     if (!request) {
@@ -331,14 +365,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
     try {
       const work = await request
-      detailRequests.delete(workId)
-      detailCache.set(workId, work)
-      // 悬停请求可能在开始滚动后才返回；此时保留详情数据，跳过非必要的大背景解码。
-      // 点击导航仍由 waitForDetailArtwork 显式加载，不受这项预热退避影响。
-      if (!isScrollRecentlyActive()) void decodeDetailArtwork(work)
+      if (detailRequests.get(workId) === request) detailRequests.delete(workId)
+      if (version !== (detailVersions.get(workId) || 0)) return get().getWorkDetail(workId)
+      if (version === (detailVersions.get(workId) || 0)) detailCache.set(workId, work)
       return work
     } catch (e) {
-      detailRequests.delete(workId)
+      if (detailRequests.get(workId) === request) detailRequests.delete(workId)
+      if (version !== (detailVersions.get(workId) || 0)) return get().getWorkDetail(workId)
       throw e
     }
   },
@@ -346,13 +379,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   invalidateWork: (workId) => {
     detailCache.delete(workId)
     detailRequests.delete(workId)
+    detailVersions.set(workId, (detailVersions.get(workId) || 0) + 1)
   },
 
   refreshWork: async (workId) => {
-    detailCache.delete(workId)
-    detailRequests.delete(workId)
-    const work = await libraryApi.getWorkDetail(workId)
-    detailCache.set(workId, work)
+    get().invalidateWork(workId)
+    const work = await get().getWorkDetail(workId)
     const works = [...get().works]
     const index = works.findIndex((item) => item.work_id === workId)
     if (index >= 0) works[index] = mergeWorkDetailIntoCompact(works[index], work)

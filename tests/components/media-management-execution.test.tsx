@@ -46,7 +46,7 @@ function makeProgress(units: Array<Record<string, unknown>>, overrides: Record<s
     revision_status: 'confirmed',
     overall_status: 'running',
     stage_summary: {
-      mirror: { status: 'running', total: 40, queued: 39, running: 1, succeeded: 0, failed: 0, cancelled: 0 },
+      artwork: { status: 'running', total: 40, queued: 39, running: 1, succeeded: 0, failed: 0, cancelled: 0 },
       metadata: { status: 'queued', total: 40, queued: 40, running: 0, succeeded: 0, failed: 0, cancelled: 0 },
       projection: { status: 'queued', total: 1, queued: 1, running: 0, succeeded: 0, failed: 0, cancelled: 0 },
     },
@@ -63,11 +63,33 @@ function workUnit(workId: string, title: string, overallStatus: string, extra: R
     episode_count: 12,
     asset_count: 13,
     overall_status: overallStatus,
-    mirror: { job_id: `mirror-${workId}`, status: overallStatus === 'completed' ? 'succeeded' : overallStatus === 'failed' ? 'failed' : 'queued', attempts: 1, last_error: overallStatus === 'failed' ? '磁盘写入失败' : '' },
-    metadata: { job_id: `meta-${workId}`, status: overallStatus === 'completed' ? 'succeeded' : 'queued', attempts: 0, last_error: '' },
+    metadata: { job_id: `meta-${workId}`, status: overallStatus === 'completed' ? 'succeeded' : overallStatus === 'failed' ? 'failed' : 'queued', attempts: 0, last_error: overallStatus === 'failed' ? '资料服务请求失败' : '' },
     ...extra,
   }
 }
+
+test('图片失败独立显示，不阻塞已发布作品，也不需要镜像进度字段', async () => {
+  const progress = makeProgress([workUnit('published', '已发布作品', 'completed', {
+    metadata_state: 'ready', artifact_state: 'degraded',
+    artwork: { status: 'failed', total: 1, counts: { failed: 1 } },
+  })], {
+    overall_status: 'completed',
+    stage_summary: {
+      metadata: { status: 'succeeded', total: 1, queued: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
+      projection: { status: 'succeeded', total: 1, queued: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
+      artwork: { status: 'failed', total: 1, queued: 0, running: 0, succeeded: 0, failed: 1, cancelled: 0 },
+    },
+  })
+  const retryImages = vi.fn()
+  render(<V4ExecutionProgress progress={progress as never} busyRetryId="" onRetry={vi.fn()}
+    resolvingWorkId="" onResolveMetadata={vi.fn()} onRetryArtifacts={retryImages} />)
+  expect(screen.getByText('媒体库已建立')).toBeVisible()
+  expect(screen.getByText('已发布作品')).toBeVisible()
+  expect(screen.getByRole('progressbar', { name: '总体进度' })).toHaveAttribute('aria-valuenow', '1')
+  expect(screen.queryByText('生成镜像文件')).not.toBeInTheDocument()
+  fireEvent.click(await screen.findByRole('button', { name: '重新下载媒体图片' }))
+  expect(retryImages).toHaveBeenCalledWith('published')
+})
 
 beforeEach(() => {
   localStorage.clear()
@@ -141,7 +163,7 @@ test('确认成功后第二步卸载并切换到独立执行阶段', async () =>
   expect(screen.getByRole('button', { name: '确认并建立媒体库' })).toBeEnabled()
   api.status.mockResolvedValue({
     revision_id: 'rev-exec', status: 'confirmed', jobs: [],
-    progress: makeProgress([workUnit('w1', '测试作品', 'running_mirror')]),
+    progress: makeProgress([workUnit('w1', '测试作品', 'running_metadata')]),
   })
   fireEvent.click(screen.getByRole('button', { name: '确认并建立媒体库' }))
   await waitFor(() => expect(screen.getByRole('heading', { name: '建立媒体库' })).toBeVisible())
@@ -179,7 +201,7 @@ test('识别预览聚合作品摘要，不逐集平铺', async () => {
 })
 
 test('执行进度只显示三个总体阶段与作品单元，不出现内部 UUID', async () => {
-  const units = Array.from({ length: 40 }, (_, index) => workUnit(`w${index}`, `作品${index}`, index === 0 ? 'running_mirror' : 'waiting_metadata'))
+  const units = Array.from({ length: 40 }, (_, index) => workUnit(`w${index}`, `作品${index}`, index === 0 ? 'running_metadata' : 'waiting_metadata'))
   api.status.mockResolvedValue({
     revision_id: 'rev-exec', status: 'confirmed', jobs: [],
     progress: makeProgress(units),
@@ -204,7 +226,8 @@ test('执行进度只显示三个总体阶段与作品单元，不出现内部 U
 
   await waitFor(() => expect(screen.getByText('作品0')).toBeVisible())
   // 每个用户阶段只出现一次。
-  expect(screen.getAllByText('生成镜像文件')).toHaveLength(1)
+  expect(screen.getAllByText('准备本地图片')).toHaveLength(1)
+  expect(screen.queryByText('生成镜像文件')).not.toBeInTheDocument()
   expect(screen.getAllByText('获取媒体信息')).toHaveLength(1)
   expect(screen.getAllByText('更新媒体库')).toHaveLength(1)
   // 40 个作品单元。
@@ -213,7 +236,7 @@ test('执行进度只显示三个总体阶段与作品单元，不出现内部 U
   expect(screen.queryByText(/mirror-w0/)).not.toBeInTheDocument()
   expect(screen.queryByText(/materialize_mirror/)).not.toBeInTheDocument()
   // 后端持久标题与状态文案。
-  expect(screen.getByText('正在生成镜像')).toBeVisible()
+  expect(screen.getByText('正在获取媒体信息')).toBeVisible()
   expect(screen.getAllByText('等待获取媒体信息').length).toBe(39)
 })
 
@@ -224,7 +247,7 @@ test('失败作品显示原因并可精确重试', async () => {
   ]
   api.status.mockResolvedValue({
     revision_id: 'rev-exec', status: 'confirmed', jobs: [
-      { job_id: 'mirror-w-bad', job_type: 'materialize_mirror', revision_id: 'rev-exec', work_id: 'w-bad', status: 'failed', idempotency_key: 'ik', attempts: 1, last_error: '磁盘写入失败' },
+      { job_id: 'meta-w-bad', job_type: 'scrape_work', revision_id: 'rev-exec', work_id: 'w-bad', status: 'failed', idempotency_key: 'ik', attempts: 1, last_error: '资料服务请求失败' },
     ],
     progress: makeProgress(units, { overall_status: 'needs_attention' }),
   })
@@ -249,11 +272,11 @@ test('失败作品显示原因并可精确重试', async () => {
   await waitFor(() => expect(screen.getByText('失败作品')).toBeVisible())
   const failedCard = screen.getByText('失败作品').closest('article')!
   // 错误原因与重试在展开后的作品单元里，不进入普通主列表。
-  expect(within(failedCard).queryByText('磁盘写入失败')).not.toBeInTheDocument()
+  expect(within(failedCard).queryByText('资料服务请求失败')).not.toBeInTheDocument()
   fireEvent.click(within(failedCard).getByRole('button', { name: /失败作品/ }))
-  expect(await within(failedCard).findByText('磁盘写入失败')).toBeVisible()
+  expect(await within(failedCard).findByText('资料服务请求失败')).toBeVisible()
   fireEvent.click(within(failedCard).getByRole('button', { name: /重试/ }))
-  await waitFor(() => expect(tasks.retry).toHaveBeenCalledWith('mirror-w-bad'))
+  await waitFor(() => expect(tasks.retry).toHaveBeenCalledWith('meta-w-bad'))
 })
 
 test('完成作品保留可见的作品摘要，避免完成页只剩总数', async () => {
@@ -267,7 +290,7 @@ test('完成作品保留可见的作品摘要，避免完成页只剩总数', as
     ? { ...detail, next_episode_offset: null, episodes: [{ episode_id: 'ep-next', season_number: 1, episode_number: 2, display_title: '下一页剧集' }] }
     : detail))
   const units = [
-    workUnit('w-run', '运行中作品', 'running_mirror'),
+    workUnit('w-run', '运行中作品', 'running_metadata'),
     workUnit('w-done', '已完成作品', 'completed'),
   ]
   api.status.mockResolvedValue({
@@ -684,7 +707,7 @@ test('非阻断提示不阻止确认：按钮可点且恰好发一次 confirm �
   })
   fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
 
-  const confirmButton = await screen.findByRole('button', { name: '确认并建立媒体库' })
+  const confirmButton = await screen.findByRole('button', { name: '确认并建立媒体库' }, { timeout: 3000 })
   expect(confirmButton).toBeEnabled()
   expect(await screen.findByText(/条不确定信息，不影响建立媒体库/)).toBeVisible()
   fireEvent.click(confirmButton)

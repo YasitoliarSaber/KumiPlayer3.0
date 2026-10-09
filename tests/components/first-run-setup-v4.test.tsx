@@ -69,6 +69,7 @@ describe('FirstRunSetup V4 引导', () => {
     await waitFor(() => expect(api.completeSetup).toHaveBeenCalledWith(expect.objectContaining({ local_root: 'D:\\Anime', pan115_root: 'H:\\Media' })));
     expect(api.completeSetup.mock.calls[0][0]).not.toHaveProperty('tmdb_bearer_token');
     expect(api.completeSetup.mock.calls[0][0]).not.toHaveProperty('bangumi_access_token');
+    expect(api.completeSetup.mock.calls[0][0]).not.toHaveProperty('mirror_dir');
   });
 
   test('文件夹选择失败时可见报错，手动输入仍然可用', async () => {
@@ -81,8 +82,7 @@ describe('FirstRunSetup V4 引导', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('目录选择不可用');
     fireEvent.change(screen.getByRole('textbox', { name: '本地媒体根目录' }), { target: { value: 'D:\\Anime' } });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
-    fireEvent.change(screen.getByRole('textbox', { name: '镜像目录（必填）' }), { target: { value: 'D:\\Mirror' } });
+    expect(screen.queryByRole('textbox', { name: '镜像目录（必填）' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '继续' })).toBeEnabled();
   });
 

@@ -55,11 +55,44 @@ def prepare(tmp_path, monkeypatch, *, provider_hint=False):
     return database, mirror
 
 
+def seed_legacy_artifacts(database, mirror, revision_id):
+    """显式历史夹具；新执行链不负责生成或继承这些文件。"""
+    import uuid
+
+    from app.media_v4.jobs.metadata_artifacts import publish_metadata_artifacts
+
+    with database.connect() as conn:
+        snapshot = dict(conn.execute(
+            'SELECT ms.* FROM revision_metadata_refs mr JOIN metadata_snapshots ms '
+            'ON ms.snapshot_id=mr.snapshot_id WHERE mr.revision_id=?', (revision_id,),
+        ).fetchone())
+        work = dict(conn.execute('SELECT * FROM works WHERE work_id=?', (snapshot['work_id'],)).fetchone())
+        episodes = [dict(row) for row in conn.execute(
+            'SELECT e.*,s.local_season_number,s.season_kind FROM episodes e '
+            'JOIN seasons s ON s.season_id=e.season_id WHERE s.work_id=?', (work['work_id'],),
+        )]
+    artifact_ids = publish_metadata_artifacts(
+        database, revision_id=revision_id, work_id=work['work_id'], target={**work, 'episodes': episodes},
+        metadata=json.loads(snapshot['metadata_json']), mirror_root=mirror, snapshot_id=snapshot['snapshot_id'],
+    )
+    with database.connect() as conn:
+        for artifact_id in artifact_ids:
+            row = conn.execute('SELECT artifact_type,target_path FROM artifacts WHERE artifact_id=?', (artifact_id,)).fetchone()
+            role = 'work_metadata' if row['artifact_type'] == 'nfo' else 'episode_metadata'
+            subject = work['work_id'] if role == 'work_metadata' else episodes[0]['episode_id']
+            conn.execute(
+                'INSERT INTO artifact_references(reference_id,artifact_id,revision_id,work_id,snapshot_id,role,subject_id,created_at) '
+                'VALUES (?,?,?,?,?,?,?,?)',
+                (str(uuid.uuid4()), artifact_id, revision_id, work['work_id'], snapshot['snapshot_id'], role, subject, 'fixture'),
+            )
+
+
 def test_rescan_retains_success_and_unchanged_import_makes_no_request(tmp_path, monkeypatch):
     """CHECK-008A: superseded creation revision does not invalidate a success."""
     database, mirror = prepare(tmp_path, monkeypatch)
     assert V4LibraryProjection(database).current().cards[0]['title'] == 'Online title'
-    files = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in mirror.rglob('*') if p.is_file()}
+    with database.connect() as conn:
+        original_snapshot = dict(conn.execute('SELECT * FROM metadata_snapshots').fetchone())
     confirm(database, 'r2')
     card = V4LibraryProjection(database).ensure_current().cards[0]
     assert card['title'] == 'Online title'
@@ -69,8 +102,9 @@ def test_rescan_retains_success_and_unchanged_import_makes_no_request(tmp_path, 
         raise AssertionError('unchanged import must reuse successful snapshot')
 
     V4JobRunner(database, metadata_provider=no_request).process_available(mirror_root=mirror)
-    assert all(p.exists() and (p.read_bytes(), p.stat().st_mtime_ns) == old for p, old in files.items())
+    assert not mirror.exists()
     with database.connect() as conn:
+        assert dict(conn.execute('SELECT * FROM metadata_snapshots').fetchone()) == original_snapshot
         assert conn.execute('SELECT COUNT(*) FROM metadata_snapshots').fetchone()[0] == 1
         assert conn.execute('SELECT COUNT(*) FROM revision_metadata_refs').fetchone()[0] == 2
         outcome = json.loads(conn.execute("SELECT result_json FROM jobs WHERE revision_id='r2' AND job_type='scrape_work'").fetchone()[0])
@@ -135,10 +169,11 @@ def test_historical_numbered_local_members_keep_work_usable_without_online_mappi
     assert V4LibraryProjection(database).ensure_current().cards[0]['metadata']['metadata_state'] == 'ready'
 
 
-def test_append_failed_refresh_keeps_success_files_and_current_members(tmp_path, monkeypatch):
-    """CHECK-008A/B: new episode + failed provider cannot erase old NFO."""
+def test_append_failed_refresh_keeps_success_snapshot_and_current_members(tmp_path, monkeypatch):
+    """新增成员与资料刷新失败不擦除已成功的 SQLite 快照。"""
     database, mirror = prepare(tmp_path, monkeypatch)
-    files = {p: p.read_bytes() for p in mirror.rglob('*') if p.is_file()}
+    with database.connect() as conn:
+        original_snapshot = dict(conn.execute('SELECT * FROM metadata_snapshots').fetchone())
     confirm(database, 'r2', (1, 2))
     V4JobRunner(database, metadata_provider=lambda target: {
         'provider': 'tmdb', 'provider_id': '123', 'metadata_state': 'source_unavailable',
@@ -149,22 +184,35 @@ def test_append_failed_refresh_keeps_success_files_and_current_members(tmp_path,
     assert card['title'] == 'Online title'
     assert card['metadata']['refresh_status'] == 'failed'
     assert card['metadata']['episode_mapping_status'] == 'partial'
-    assert all(p.exists() and p.read_bytes() == old for p, old in files.items())
     with database.connect() as conn:
-        results = [json.loads(r[0]) for r in conn.execute("SELECT result_json FROM jobs WHERE job_type='cleanup_superseded_artifacts'")]
-        assert results and all(r['outcome'] == 'deferred_cleanup' for r in results)
+        assert dict(conn.execute('SELECT * FROM metadata_snapshots').fetchone()) == original_snapshot
+        assert conn.execute("SELECT COUNT(*) FROM jobs WHERE job_type IN ('cleanup_superseded_artifacts','materialize_mirror')").fetchone()[0] == 0
+        assert conn.execute('SELECT COUNT(*) FROM metadata_snapshots').fetchone()[0] == 1
+        assert conn.execute('SELECT COUNT(*) FROM artifacts').fetchone()[0] == 0
+    assert not mirror.exists()
 
 
 def test_artifact_preview_preserves_source_and_personal_state(tmp_path, monkeypatch):
     """CHECK-008B: cleanup operation is separate from source retirement."""
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.maintenance.service import compute_delete_preview, confirm_delete_preview
+    from app.media_v4.tracking.store import V4TrackingStore
     database, mirror = prepare(tmp_path, monkeypatch)
+    seed_legacy_artifacts(database, mirror, 'r1')
     confirm(database, 'r2')
     with database.connect() as conn:
         work_id = conn.execute("SELECT work_id FROM revision_bindings WHERE revision_id='r2'").fetchone()[0]
+        cover = tmp_path / 'manual-cover.png'
+        cover.write_bytes(b'user original')
+        override = {'title': 'User title', 'local_poster_path': str(cover)}
+        conn.execute('INSERT INTO work_overrides VALUES (?,?,?,?)', (work_id, json.dumps(override), 'fixture', 'fixture'))
+    V4TrackingStore(database).save_state(work_id, 'local', provider_id='', last_watched_episode=1,
+                                       metadata={'favorite': True})
+    with database.connect() as conn:
+        tracking_before = dict(conn.execute('SELECT * FROM tracking_states WHERE work_id=?', (work_id,)).fetchone())
     V4ScrapeService(database).requeue_work('r2', work_id)
     V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
+    seed_legacy_artifacts(database, mirror, 'r2')
     preview = compute_delete_preview(database, provider='all', mirror_root=mirror,
                                      operation_kind='superseded_artifacts', revision_id='r2')
     assert preview['artifact_count'] > 0
@@ -172,6 +220,9 @@ def test_artifact_preview_preserves_source_and_personal_state(tmp_path, monkeypa
     with database.connect() as conn:
         assert conn.execute("SELECT status FROM import_revisions WHERE revision_id='r2'").fetchone()[0] == 'confirmed'
         assert conn.execute('SELECT retired_at FROM source_roots').fetchone()[0] == ''
+        assert json.loads(conn.execute('SELECT override_json FROM work_overrides WHERE work_id=?', (work_id,)).fetchone()[0]) == override
+        assert dict(conn.execute('SELECT * FROM tracking_states WHERE work_id=?', (work_id,)).fetchone()) == tracking_before
+    assert cover.read_bytes() == b'user original'
     assert V4LibraryProjection(database).ensure_current().cards[0]['title'] == 'Online title'
 
 
@@ -195,9 +246,11 @@ def test_same_revision_refresh_keeps_snapshot_audit_artifact_members(tmp_path, m
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.metadata_lifecycle import snapshot_artifacts
     database, mirror = prepare(tmp_path, monkeypatch)
+    seed_legacy_artifacts(database, mirror, 'r1')
     with database.connect() as conn:
         snapshot = conn.execute('SELECT snapshot_id,work_id FROM metadata_snapshots').fetchone()
         original = {r['artifact_id'] for r in snapshot_artifacts(conn, snapshot['snapshot_id'])}
+        assert original
     V4ScrapeService(database).requeue_work('r1', snapshot['work_id'])
     V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
     with database.connect() as conn:
@@ -212,12 +265,14 @@ def test_cleanup_preview_becomes_stale_before_confirmation(tmp_path, monkeypatch
     from app.media_v4.maintenance.service import compute_delete_preview, confirm_delete_preview
     from app.media_v4.persistence.metadata_lifecycle import attach_snapshot_refs, snapshot_artifacts
     database, mirror = prepare(tmp_path, monkeypatch)
+    seed_legacy_artifacts(database, mirror, 'r1')
     with database.connect() as conn:
         old = dict(conn.execute('SELECT * FROM metadata_snapshots').fetchone())
         old['artifacts'] = snapshot_artifacts(conn, old['snapshot_id'])
     confirm(database, 'r2')
     V4ScrapeService(database).requeue_work('r2', old['work_id'])
     V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
+    seed_legacy_artifacts(database, mirror, 'r2')
     preview = compute_delete_preview(database, provider='all', mirror_root=mirror,
                                      operation_kind='superseded_artifacts', revision_id='r2')
     assert preview['artifact_count'] > 0
@@ -256,7 +311,7 @@ def test_cleanup_preview_becomes_stale_before_confirmation(tmp_path, monkeypatch
         assert outside.is_file() and mirror.resolve() not in protected.resolve().parents
 
 
-def test_failed_generation_cannot_borrow_previous_generation_artifacts(tmp_path, monkeypatch):
+def test_failed_snapshot_publication_preserves_previous_reference(tmp_path, monkeypatch):
     from app.media_v4.jobs.scrape import V4ScrapeService
     database, mirror = prepare(tmp_path, monkeypatch)
     with database.connect() as conn:
@@ -264,7 +319,7 @@ def test_failed_generation_cannot_borrow_previous_generation_artifacts(tmp_path,
     V4ScrapeService(database).requeue_work('r1', before['work_id'])
     def fail(*args, **kwargs):
         raise OSError('fixture write failed')
-    monkeypatch.setattr('app.media_v4.jobs.metadata_artifacts._artifact_digest', fail)
+    monkeypatch.setattr('app.media_v4.persistence.metadata_lifecycle.publish_snapshot', fail)
     with pytest.raises(OSError, match='fixture write failed'):
         V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
     with database.connect() as conn:
@@ -281,12 +336,14 @@ def test_cleanup_resume_rechecks_source_root_protection(tmp_path, monkeypatch):
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.maintenance.service import compute_delete_preview, confirm_delete_preview, resume_operation
     database, mirror = prepare(tmp_path, monkeypatch)
+    seed_legacy_artifacts(database, mirror, 'r1')
     with database.connect() as conn:
         work_id = conn.execute('SELECT work_id FROM metadata_snapshots').fetchone()[0]
         protected = Path(conn.execute("SELECT target_path FROM artifacts WHERE artifact_type='nfo'").fetchone()[0])
     confirm(database, 'r2')
     V4ScrapeService(database).requeue_work('r2', work_id)
     V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
+    seed_legacy_artifacts(database, mirror, 'r2')
     preview = compute_delete_preview(database, provider='all', mirror_root=mirror,
         operation_kind='superseded_artifacts', revision_id='r2')
     original_unlink = Path.unlink
@@ -338,11 +395,12 @@ def test_changed_provider_does_not_reuse_previous_snapshot(tmp_path, monkeypatch
     confirm(database, 'r2')
     with database.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM revision_metadata_refs WHERE revision_id='r2'").fetchone()[0] == 0
-    assert list(mirror.rglob('work.nfo'))
+        assert conn.execute('SELECT COUNT(*) FROM metadata_snapshots').fetchone()[0] == 1
+    assert not mirror.exists()
 
 
-def test_explicit_legacy_success_is_adopted_only_on_new_confirmation(tmp_path, monkeypatch):
-    """C-008 legacy fixture uses real artifact publication, not a runner-success substitute."""
+def test_confirmation_does_not_adopt_unreferenced_legacy_success(tmp_path, monkeypatch):
+    """旧文件与 scrape_binding 不能绕过当前快照发布链。"""
     from app.core.config import AppConfig
     from app.media_v4.jobs.metadata_artifacts import publish_metadata_artifacts
     config = AppConfig(artwork_storage_mode='remote')
@@ -365,8 +423,20 @@ def test_explicit_legacy_success_is_adopted_only_on_new_confirmation(tmp_path, m
         assert conn.execute('SELECT COUNT(*) FROM metadata_snapshots').fetchone()[0] == 0
     confirm(database, 'new')
     with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM revision_metadata_refs WHERE revision_id='new'").fetchone()[0] == 0
+        assert conn.execute('SELECT COUNT(*) FROM metadata_snapshots').fetchone()[0] == 0
+    requested = []
+
+    def current_provider(target):
+        requested.append(target['work_id'])
+        return provider(target)
+
+    V4JobRunner(database, metadata_provider=current_provider).process_available()
+    assert requested == [work['work_id']]
+    with database.connect() as conn:
+        snapshot = json.loads(conn.execute('SELECT metadata_json FROM metadata_snapshots').fetchone()[0])
+        assert 'legacy_binding_id' not in snapshot
         assert conn.execute("SELECT COUNT(*) FROM revision_metadata_refs WHERE revision_id='new'").fetchone()[0] == 1
-        assert json.loads(conn.execute('SELECT metadata_json FROM metadata_snapshots').fetchone()[0])['legacy_binding_id'] == 'legacy'
 
 
 def test_shared_work_uses_current_members_and_successes_from_both_roots(tmp_path, monkeypatch):

@@ -12,7 +12,6 @@ import copy
 import json
 import subprocess
 import sys
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -25,7 +24,7 @@ from app.core.config import (
     load_config,
     save_config,
 )
-from app.core.runtime import get_default_mirror_dir, get_mpv_config_dir, get_mpv_runtime_dir
+from app.core.runtime import get_mpv_config_dir, get_mpv_runtime_dir
 from app.integrations.bangumi import BangumiClient, BangumiError
 from app.playback.mpv_runtime import check_mpv_runtime, inspect_external_mpv, resolve_external_mpv_path
 from app.scrape.tmdb_client import TMDBClient
@@ -105,7 +104,7 @@ class SetupCompleteRequest(BaseModel):
 
     # mpv_path 仅保留数据兼容；首次引导不再要求用户选择外部 MPV，播放默认使用内置干净 MPV。
     mpv_path: str = ""
-    mirror_dir: str
+    mirror_dir: str | None = None
     pan115_root: str = ""
     baidu_root: str = ""
     local_root: str = ""
@@ -172,35 +171,7 @@ def get_config():
     """获取脱敏后的配置"""
     config = load_config()
     public = config.to_public_dict()
-    if not public["setup_completed"] and not public["mirror_dir"]:
-        public["mirror_dir"] = str(get_default_mirror_dir())
     return public
-
-
-def _ensure_writable_directory(path: Path) -> None:
-    """创建目录并执行一次无残留的写入验证。"""
-    probe_path: Path | None = None
-    try:
-        path.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            mode="wb",
-            prefix=".kumiplayer-write-test-",
-            dir=path,
-            delete=False,
-        ) as probe:
-            probe.write(b"ok")
-            probe_path = Path(probe.name)
-    except OSError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"镜像目录无法创建或不可写，请选择其他文件夹：{exc}",
-        ) from exc
-    finally:
-        if probe_path is not None:
-            try:
-                probe_path.unlink(missing_ok=True)
-            except OSError:
-                pass
 
 
 @router.patch("")
@@ -353,7 +324,6 @@ def get_setup_status():
         "setup_completed": config.setup_completed,
         "setup_version": config.setup_version,
         "mpv_configured": runtime_status["available"],
-        "mirror_configured": bool(config.mirror_dir),
         "source_configured": any((
             config.pan115_root,
             config.baidu_root,
@@ -390,8 +360,6 @@ def complete_setup(req: SetupCompleteRequest):
         if not runtime_status["configuration_available"]:
             raise HTTPException(status_code=400, detail="KumiPlayer 播放配置不完整，无法完成设置")
 
-    mirror_dir = Path(req.mirror_dir).expanduser()
-
     source_roots = {
         "115 网盘": req.pan115_root.strip(),
         "百度网盘": req.baidu_root.strip(),
@@ -420,7 +388,6 @@ def complete_setup(req: SetupCompleteRequest):
     requested_mpv_path = req.mpv_path.strip()
     if requested_mpv_path:
         config.mpv_path = requested_mpv_path
-    config.mirror_dir = str(mirror_dir)
     config.pan115_root = req.pan115_root.strip()
     config.baidu_root = req.baidu_root.strip()
     config.local_root = req.local_root.strip()
@@ -449,7 +416,6 @@ def complete_setup(req: SetupCompleteRequest):
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Bangumi 验证异常: {exc}") from exc
         config.bangumi_access_token = bangumi_access_token
-    _ensure_writable_directory(mirror_dir)
     config.setup_completed = True
     config.setup_version = 1
     save_config(config)

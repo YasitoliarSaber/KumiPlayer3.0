@@ -103,12 +103,12 @@ describe('sortWorkUnits', () => {
   test('运行中 > 需要处理 > 等待 > 完成', () => {
     const units = [
       { work_id: 'done', title: '完成', overall_status: 'completed' },
-      { work_id: 'run', title: '运行', overall_status: 'running_mirror' },
+      { work_id: 'run', title: '运行', overall_status: 'running_metadata' },
       { work_id: 'wait', title: '等待', overall_status: 'waiting_metadata' },
       { work_id: 'fail', title: '失败', overall_status: 'failed' },
     ]
     const sorted = sortWorkUnits(units).map((unit) => unit.overall_status)
-    expect(sorted).toEqual(['running_mirror', 'failed', 'waiting_metadata', 'completed'])
+    expect(sorted).toEqual(['running_metadata', 'failed', 'waiting_metadata', 'completed'])
   })
 })
 

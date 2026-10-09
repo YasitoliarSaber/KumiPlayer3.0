@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 
-V4_SCHEMA_VERSION = 26
+V4_SCHEMA_VERSION = 27
 
 
 def create_schema_v4(conn: sqlite3.Connection) -> None:
@@ -806,6 +806,71 @@ def create_schema_v4(conn: sqlite3.Connection) -> None:
     migrate_schema_v23_to_v24(conn)
     migrate_schema_v24_to_v25(conn)
     migrate_schema_v25_to_v26(conn)
+    migrate_schema_v26_to_v27(conn)
+
+
+def migrate_schema_v26_to_v27(conn: sqlite3.Connection) -> None:
+    """独立图片索引及增量展示事件；不读取或改写任何媒体文件。"""
+    conn.execute("""CREATE TABLE IF NOT EXISTS artwork_resources (
+        resource_id TEXT PRIMARY KEY,
+        source_url TEXT NOT NULL DEFAULT '',
+        local_source TEXT NOT NULL DEFAULT '',
+        content_digest TEXT NOT NULL DEFAULT '',
+        original_path TEXT NOT NULL DEFAULT '',
+        state TEXT NOT NULL DEFAULT 'pending'
+            CHECK(state IN ('pending','running','retry','ready','failed','cancelled')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        retry_at REAL NOT NULL DEFAULT 0,
+        lease_until REAL NOT NULL DEFAULT 0,
+        lease_token TEXT NOT NULL DEFAULT '',
+        error_kind TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_artwork_resources_queue "
+                 "ON artwork_resources(state,retry_at,lease_until)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS artwork_bindings (
+        subject_type TEXT NOT NULL CHECK(subject_type IN ('work','episode','metadata')),
+        subject_id TEXT NOT NULL,
+        work_id TEXT NOT NULL REFERENCES works(work_id) ON DELETE CASCADE,
+        role TEXT NOT NULL CHECK(role IN ('poster','fanart','clearlogo','episode_thumb','profile','related_poster')),
+        candidate_id TEXT NOT NULL REFERENCES artwork_resources(resource_id),
+        published_id TEXT REFERENCES artwork_resources(resource_id),
+        automatic_id TEXT REFERENCES artwork_resources(resource_id),
+        priority INTEGER NOT NULL DEFAULT 0,
+        revision_id TEXT NOT NULL DEFAULT '',
+        snapshot_id TEXT NOT NULL DEFAULT '',
+        member_signature TEXT NOT NULL DEFAULT '',
+        automatic_revision_id TEXT NOT NULL DEFAULT '',
+        automatic_snapshot_id TEXT NOT NULL DEFAULT '',
+        automatic_member_signature TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY(subject_type,subject_id,role)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_artwork_bindings_candidate ON artwork_bindings(candidate_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_artwork_bindings_work ON artwork_bindings(work_id)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS artwork_variants (
+        content_digest TEXT NOT NULL,
+        recipe_version TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        relative_path TEXT NOT NULL,
+        pixel_width INTEGER NOT NULL CHECK(pixel_width>0),
+        pixel_height INTEGER NOT NULL CHECK(pixel_height>0),
+        byte_size INTEGER NOT NULL CHECK(byte_size>0),
+        etag TEXT NOT NULL,
+        PRIMARY KEY(content_digest,recipe_version,width)
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS library_changes (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        work_id TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_library_changes_work ON library_changes(work_id,sequence)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS library_details (
+        generation_id TEXT NOT NULL REFERENCES library_generations(generation_id) ON DELETE CASCADE,
+        work_id TEXT NOT NULL REFERENCES works(work_id) ON DELETE CASCADE,
+        detail_json TEXT NOT NULL,
+        PRIMARY KEY(generation_id,work_id)
+    )""")
 
 
 def migrate_schema_v25_to_v26(conn: sqlite3.Connection) -> None:

@@ -18,7 +18,7 @@ def client():
 def mirror_dir(tmp_path, monkeypatch):
     mirror = tmp_path / "mirror"
     mirror.mkdir()
-    monkeypatch.setattr("app.api.assets.get_mirror_root", lambda: mirror)
+    monkeypatch.setattr("app.api.assets.get_mirror_root", lambda: pytest.fail("retired GET must not inspect files"))
     monkeypatch.setattr("app.core.paths.get_mirror_root", lambda: mirror)
     return mirror
 
@@ -149,8 +149,8 @@ class TestThumbnailGeneration:
             assert img.width <= 512
 
 
-class TestThumbnailEndpoint:
-    """缩略图 API 端点"""
+class TestRetiredThumbnailEndpoint:
+    """旧缩略图端点已退役，不再现场读原图或领取准备任务。"""
 
     def test_cold_get_never_encodes_or_returns_original_in_category_mode(self, client, mirror_dir, monkeypatch):
         source = mirror_dir / "poster.jpg"
@@ -162,18 +162,18 @@ class TestThumbnailEndpoint:
         assert response.status_code == 404
         assert response.headers["content-type"].startswith("application/json")
         compatible = client.get("/api/assets/thumbnail", params={"path": "poster.jpg", "width": 256})
-        assert compatible.content == source.read_bytes()
+        assert compatible.status_code == 404
+        assert compatible.content != source.read_bytes()
 
-    def test_prepare_batch_validates_size_and_path(self, client, mirror_dir):
+    def test_prepare_batch_does_not_accept_any_old_shape(self, client, mirror_dir):
         response = client.post("/api/assets/thumbnails/prepare", json={"items": [{"path": "../outside.jpg", "width": 384}]})
-        assert response.status_code == 200
-        assert response.json() == {"states": ["unavailable"]}
+        assert response.status_code == 404
         too_many = client.post("/api/assets/thumbnails/prepare", json={"items": [{"path": "poster.jpg", "width": 384}] * 65})
-        assert too_many.status_code == 422
+        assert too_many.status_code == 404
         unsupported = client.post("/api/assets/thumbnails/prepare", json={"items": [{"path": "poster.jpg", "width": 999}]})
-        assert unsupported.status_code == 422
+        assert unsupported.status_code == 404
 
-    def test_returns_thumbnail(self, client, mirror_dir, monkeypatch):
+    def test_preexisting_thumbnail_does_not_revive_route(self, client, mirror_dir, monkeypatch):
         cache_dir = mirror_dir.parent / "cache"
         monkeypatch.setattr("app.core.paths.get_cache_dir", lambda: cache_dir)
         monkeypatch.setattr(thumb, "get_cache_dir", lambda: cache_dir)
@@ -183,11 +183,10 @@ class TestThumbnailEndpoint:
 
         thumb.prepare_artwork(source)
         resp = client.get("/api/assets/thumbnail?path=115/TestWork/poster.jpg&width=384")
-        assert resp.status_code == 200
-        assert resp.headers["content-type"] == "image/webp"
-        assert "max-age=86400" in resp.headers["cache-control"]
+        assert resp.status_code == 404
+        assert resp.headers["content-type"].startswith("application/json")
 
-    def test_falls_back_to_original_on_corrupt(self, client, mirror_dir, monkeypatch):
+    def test_corrupt_image_cannot_trigger_original_fallback(self, client, mirror_dir, monkeypatch):
         cache_dir = mirror_dir.parent / "cache"
         monkeypatch.setattr("app.core.paths.get_cache_dir", lambda: cache_dir)
         monkeypatch.setattr(thumb, "get_cache_dir", lambda: cache_dir)
@@ -197,9 +196,8 @@ class TestThumbnailEndpoint:
         source.write_bytes(b"corrupt-data")
 
         resp = client.get("/api/assets/thumbnail?path=115/TestWork/poster.jpg&width=384")
-        assert resp.status_code == 200
-        assert resp.headers["content-type"] == "image/jpeg"
-        assert resp.content == b"corrupt-data"
+        assert resp.status_code == 404
+        assert resp.content != b"corrupt-data"
 
     def test_404_for_missing_file(self, client, mirror_dir):
         resp = client.get("/api/assets/thumbnail?path=115/missing/poster.jpg&width=384")
@@ -215,9 +213,9 @@ class TestThumbnailEndpoint:
         (video_dir / "video.mkv").write_bytes(b"fake")
 
         resp = client.get("/api/assets/thumbnail?path=115/TestWork/video.mkv&width=384")
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
-    def test_invalid_width_falls_back_to_original(self, client, mirror_dir, monkeypatch):
+    def test_invalid_width_cannot_trigger_original_fallback(self, client, mirror_dir, monkeypatch):
         cache_dir = mirror_dir.parent / "cache"
         monkeypatch.setattr("app.core.paths.get_cache_dir", lambda: cache_dir)
         monkeypatch.setattr(thumb, "get_cache_dir", lambda: cache_dir)
@@ -226,5 +224,5 @@ class TestThumbnailEndpoint:
         _make_test_image(source)
 
         resp = client.get("/api/assets/thumbnail?path=115/TestWork/poster.jpg&width=999")
-        assert resp.status_code == 200
-        assert resp.headers["content-type"] == "image/jpeg"
+        assert resp.status_code == 404
+        assert resp.headers["content-type"].startswith("application/json")

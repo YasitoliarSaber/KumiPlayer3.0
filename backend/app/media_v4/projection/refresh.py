@@ -30,8 +30,4 @@ class ProjectionRefreshScheduler:
         self._retry_at = 0
         if snapshot is None:
             return False
-        # 旧图片补齐只在后台发布后执行；可见图片仍由有界准备接口提权。
-        from app.api.assets import queue_library_artwork
-
-        queue_library_artwork([card.get('metadata', {}) for card in snapshot.cards])
         return True

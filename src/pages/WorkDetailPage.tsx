@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, ChevronLeft, ChevronRight, Circle, Ellipsis, FolderOpen, FolderSymlink, Grid2X2, Heart, Image, Pencil, Play, ScanLine, SlidersHorizontal, Star, Trash2, Upload, X } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Circle, Ellipsis, FolderOpen, Grid2X2, Heart, Image, Pencil, Play, ScanLine, SlidersHorizontal, Star, Trash2, Upload, X } from 'lucide-react';
 import { useLibraryStore } from '../stores/library';
 import { useBangumiStore } from '../stores/bangumi';
 import { useUiStore, type CategoryKey } from '../stores/ui';
@@ -113,6 +113,7 @@ function scrollEpisodeIntoView(
 export default function WorkDetailPage() {
   const { selectedWorkId, activeCategory, goCategory, selectedSeasonNumber, selectSeason, rememberWorkSeason, setActiveCategory } = useUiStore();
   const works = useLibraryStore((state) => state.works);
+  const publishedDetail = useLibraryStore((state) => state.selectedWorkDetail?.work_id === selectedWorkId ? state.selectedWorkDetail : null);
   const peekWorkDetail = useLibraryStore((state) => state.peekWorkDetail);
   const getWorkDetail = useLibraryStore((state) => state.getWorkDetail);
   const openWorkDetail = useLibraryStore((state) => state.openWorkDetail);
@@ -194,7 +195,6 @@ export default function WorkDetailPage() {
   const bangumiSearchInputRef = useRef<HTMLInputElement>(null);
   const episodeStripFrameRef = useRef<number | null>(null);
   const autoRevealedEpisodeKeyRef = useRef('');
-  const warmedDetailImagesRef = useRef<Set<string>>(new Set());
   const previousBangumiSessionStatusRef = useRef(bangumiSessionStatus);
 
   const dismissBangumiPanel = () => {
@@ -301,6 +301,7 @@ export default function WorkDetailPage() {
         if (!cancelled) {
           const initialSeason = resolveInitialSeason(workData, selectedWorkId);
           setWork(workData);
+          useLibraryStore.setState({ selectedWorkDetail: workData });
           setFavorite(Boolean(workData.watch_status?.favorite));
           if (useUiStore.getState().activeCategory !== 'seasonal' && isCategoryKey(workData.show_type)) setActiveCategory(workData.show_type);
           selectSeason(initialSeason?.season_number ?? null);
@@ -331,6 +332,13 @@ export default function WorkDetailPage() {
       window.clearTimeout(progressTimer);
     };
   }, [selectedWorkId, getWorkDetail, selectSeason, setActiveCategory]);
+
+  useEffect(() => {
+    if (!publishedDetail || publishedDetail.work_id !== selectedWorkId) return;
+    // 局部发布更新内容，不重启进入详情的流程或重置当前季度、菜单和滚动位置。
+    setWork(publishedDetail);
+    setFavorite(Boolean(publishedDetail.watch_status?.favorite));
+  }, [publishedDetail, selectedWorkId]);
 
   useEffect(() => {
     if (!work || loading) return;
@@ -858,23 +866,8 @@ export default function WorkDetailPage() {
     .sort((left, right) => right.score - left.score || Number(right.item.rating || 0) - Number(left.item.rating || 0))
     .slice(0, 6)
     .map(({ item }) => item);
-  const preloadDetailImage = (imageUrl: string) => {
-    if (!imageUrl || warmedDetailImagesRef.current.has(imageUrl)) return;
-    if (warmedDetailImagesRef.current.size >= 24) {
-      const oldest = warmedDetailImagesRef.current.values().next().value;
-      if (oldest) warmedDetailImagesRef.current.delete(oldest);
-    }
-    warmedDetailImagesRef.current.add(imageUrl);
-    const image = document.createElement('img');
-    image.decoding = 'async';
-    image.src = imageUrl;
-    void image.decode().catch(() => undefined);
-  };
-  const prewarmDetailNavigation = (workId: string, imageUrl = '') => {
-    preloadDetailImage(imageUrl);
-    void getWorkDetail(workId)
-      .then((nextWork) => preloadDetailImage(assetUrl(nextWork.fanart_path || nextWork.poster_path || '', 'detailBackdrop')))
-      .catch(() => undefined);
+  const prewarmDetailNavigation = (workId: string, _imageUrl = '') => {
+    void getWorkDetail(workId).catch(() => undefined);
   };
   const navigateToWorkDetail = (workId: string) => {
     prewarmDetailNavigation(workId);
@@ -1201,15 +1194,6 @@ export default function WorkDetailPage() {
     }
   };
 
-  const handleOpenMirrorFolder = async (episodeId = '', source = '') => {
-    try {
-      const result = await systemApi.openMirrorFolder(work.work_id, episodeId);
-      if (!result.exists) alert(`${source ? `${workSourceLabel(source)}：` : ''}镜像文件夹不存在`);
-    } catch (err) {
-      alert(`${source ? `${workSourceLabel(source)}：` : ''}${(err as Error).message}`);
-    }
-  };
-
   const searchScrapeCandidates = async () => {
     if (scrapeBusy) return;
     setScrapeBusy(true);
@@ -1228,7 +1212,7 @@ export default function WorkDetailPage() {
         );
         setScrapeTarget(target);
       }
-      if (!target) throw new Error('未找到可刮削目标，请先在设置页生成镜像或重扫媒体库');
+      if (!target) throw new Error('未找到已确认的资料目标，请先检查导入确认结果');
       const query = (scrapeQuery || work.title || target.scrape_title || '').trim();
       const parsedYear = scrapeYear.trim() ? Number(scrapeYear.trim()) : undefined;
       if (parsedYear !== undefined && !Number.isFinite(parsedYear)) throw new Error('年份必须是数字，或者留空');
@@ -1499,11 +1483,6 @@ export default function WorkDetailPage() {
                 <button key={`video-${source}`} role="menuitem" onClick={() => { setMoreMenuOpen(false); void handleOpenFolder(episodeId, source); }}><FolderOpen size={16} />打开{workSourceLabel(source)}文件夹</button>
               )) : (
                 <button role="menuitem" onClick={() => { setMoreMenuOpen(false); void handleOpenFolder(); }}><FolderOpen size={16} />打开视频文件夹</button>
-              ))}
-              {workDetailV4Capabilities.mirrorFolder && (hasMultipleSources && sourceFolderEpisodes.length > 0 ? sourceFolderEpisodes.map(({ source, episodeId }) => (
-                <button key={`mirror-${source}`} role="menuitem" onClick={() => { setMoreMenuOpen(false); void handleOpenMirrorFolder(episodeId, source); }}><FolderSymlink size={16} />打开{workSourceLabel(source)}镜像文件夹</button>
-              )) : (
-                <button role="menuitem" onClick={() => { setMoreMenuOpen(false); void handleOpenMirrorFolder(); }}><FolderSymlink size={16} />打开镜像文件夹</button>
               ))}
               {workDetailV4Capabilities.manualScrape && <button role="menuitem" onClick={() => {
                 setScrapeScope('work');

@@ -9,19 +9,20 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.api.media_v4 import get_database
-from app.core.paths import get_mirror_root
-from app.media_v4.jobs.paths import work_directory_name
+from app.media_v4.path_validation import validate_playback_locator_syntax
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
 
 class OpenFolderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     work_id: str
     episode_id: str = ""
-    folder_type: Literal["video", "mirror"] = "video"
+    folder_type: Literal["video"] = "video"
     open: bool = True
 
 
@@ -33,28 +34,15 @@ def open_folder(req: OpenFolderRequest):
     only V4 Work/Episode/Asset rows are consulted.
     """
 
-    if req.folder_type == "mirror":
-        if not _work_is_active(req.work_id):
-            raise HTTPException(status_code=404, detail="作品不存在或已从媒体库移除")
-        folder = Path(get_mirror_root()).expanduser() / work_directory_name(req.work_id)
-        source_path = folder
-    else:
-        asset = _find_asset(req.work_id, req.episode_id)
-        if asset is None:
-            raise HTTPException(status_code=404, detail="作品或剧集没有关联 Asset")
-
-        locator = asset["playback_locator"] or asset["source_locator"]
-        if not locator or "://" in locator:
-            return {
-                "ok": True,
-                "opened": False,
-                "exists": False,
-                "folder_path": "",
-                "source_path": locator or "",
-            }
-
-        source_path = Path(locator).expanduser()
-        folder = source_path if source_path.is_dir() else source_path.parent
+    asset = _find_asset(req.work_id, req.episode_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="作品或剧集没有当前已确认的媒体文件")
+    locator = str(asset["playback_locator"] or "")
+    valid, reason = validate_playback_locator_syntax(locator)
+    if not valid:
+        raise HTTPException(status_code=400, detail=reason)
+    source_path = Path(locator)
+    folder = source_path.parent
     exists = folder.is_dir()
     if req.open and not exists:
         raise HTTPException(status_code=404, detail=f"文件夹不存在: {folder}")
@@ -71,42 +59,28 @@ def open_folder(req: OpenFolderRequest):
 
 def _find_asset(work_id: str, episode_id: str) -> dict | None:
     with get_database().connect() as conn:
-        if episode_id:
-            row = conn.execute(
-                """
-                SELECT a.source_locator, a.playback_locator
-                FROM episodes e
-                JOIN episode_assets ea ON ea.episode_id = e.episode_id
-                JOIN assets a ON a.asset_id = ea.asset_id
-                WHERE e.work_id = ? AND e.episode_id = ?
-                ORDER BY ea.preference_rank, a.asset_id
-                LIMIT 1
-                """,
-                (work_id, episode_id),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                """
-                SELECT a.source_locator, a.playback_locator
-                FROM episodes e
-                JOIN episode_assets ea ON ea.episode_id = e.episode_id
-                JOIN assets a ON a.asset_id = ea.asset_id
-                WHERE e.work_id = ?
-                ORDER BY e.season_id, e.local_episode_number, ea.preference_rank, a.asset_id
-                LIMIT 1
-                """,
-                (work_id,),
-            ).fetchone()
-    return dict(row) if row is not None else None
-
-
-def _work_is_active(work_id: str) -> bool:
-    with get_database().connect() as conn:
         row = conn.execute(
-            "SELECT 1 FROM works WHERE work_id = ? AND status = 'active'",
-            (work_id,),
+            """
+            SELECT se.playback_locator
+            FROM revision_bindings rb
+            JOIN import_revisions ir ON ir.revision_id = rb.revision_id AND ir.status = 'confirmed'
+            JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = ''
+            JOIN works w ON w.work_id = rb.work_id AND w.status = 'active'
+            JOIN assets a ON a.asset_id = rb.asset_id AND a.availability_state = 'available'
+            JOIN source_evidence se ON se.evidence_id = rb.evidence_id
+            LEFT JOIN episodes e ON e.episode_id = rb.episode_id AND e.work_id = rb.work_id
+            LEFT JOIN episode_assets ea ON ea.asset_id = rb.asset_id AND ea.episode_id = rb.episode_id
+            LEFT JOIN work_assets wa ON wa.asset_id = rb.asset_id AND wa.work_id = rb.work_id
+            WHERE rb.work_id = ? AND (? = '' OR rb.episode_id = ?)
+              AND ((rb.episode_id IS NULL AND wa.asset_id IS NOT NULL)
+                   OR (e.episode_id IS NOT NULL AND ea.asset_id IS NOT NULL))
+            ORDER BY COALESCE(ea.preference_rank, wa.preference_rank, 0),
+                     ir.confirmed_at DESC, rb.binding_id
+            LIMIT 1
+            """,
+            (work_id, episode_id, episode_id),
         ).fetchone()
-    return row is not None
+    return dict(row) if row is not None else None
 
 
 def _open_folder(folder: Path) -> None:

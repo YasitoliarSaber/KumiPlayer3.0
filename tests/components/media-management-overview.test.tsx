@@ -185,7 +185,7 @@ test('来源已退役但文件回收失败时仅显示维护入口，重试预�
   expect(screen.queryByRole('button', { name: '检查更新' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '删除来源卡：115 动画' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '重试清理' }))
-  expect(await screen.findByText(/媒体库已移除；尚有/)).toHaveTextContent('2 个镜像文件和 5 条产物记录待核对')
+  expect(await screen.findByText(/该来源的媒体库已移除/)).toHaveTextContent('真实媒体文件和已保存图片保留')
   expect(screen.queryByText(/部作品离开媒体库/)).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: '确认继续清理' })).toBeEnabled()
 })
@@ -347,7 +347,7 @@ test('已完成来源卡可以移除卡片入口，不触碰媒体库数据', as
   expect(await screen.findByRole('dialog', { name: '移除来源卡？' })).toBeVisible()
   expect(screen.getByRole('dialog', { name: '移除来源卡？' }).className).toContain('media-v4-source-card-delete-dialog')
   expect(screen.getByRole('dialog', { name: '移除来源卡？' }).querySelector('.media-v4-source-card-dialog-actions')).toBeInTheDocument()
-  expect(screen.getByText(/不会删除媒体库、镜像、资料或观看状态/)).toBeVisible()
+  expect(screen.getByText(/不会删除媒体库、资料、图片或观看状态/)).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: '移除', exact: true }))
 
   await waitFor(() => expect(api.hideSourceLibraryCard).toHaveBeenCalledWith('root-115'))

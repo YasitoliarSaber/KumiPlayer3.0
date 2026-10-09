@@ -210,7 +210,7 @@ def plan_source_deletion(
     database,
     root_id: str,
     *,
-    mirror_root: str | Path = "",
+    mirror_root: str | Path | None = None,
     sample_limit: int = 8,
 ) -> dict:
     """只读预览：当前媒体库会失去多少作品、可能回收多少镜像内产物。
@@ -248,6 +248,8 @@ def plan_source_deletion(
                 if not target:
                     continue
                 plan.artifacts_total += 1
+                if mirror is None:
+                    continue
                 path = Path(target)
                 if mirror is not None:
                     try:
@@ -271,7 +273,7 @@ def delete_source_library(
     database,
     root_id: str,
     *,
-    mirror_root: str | Path,
+    mirror_root: str | Path | None = None,
     batch_size: int = 200,
     progress=None,
     should_cancel=None,
@@ -296,7 +298,7 @@ def delete_source_library(
     - 绝不触碰镜像根之外的任何文件（来源真实媒体）。纯 SQL + 文件操作，不重跑识别。
     """
 
-    mirror = Path(mirror_root).resolve(strict=False)
+    mirror = Path(mirror_root).resolve(strict=False) if mirror_root else None
     removed_files = 0
     removed_artifacts = 0
     skipped_outside = 0
@@ -324,8 +326,13 @@ def delete_source_library(
             "enabled = 0, retired_reason = '用户按来源删除媒体库', updated_at = ? WHERE root_id = ?",
             (now, now, root_id),
         )
+        from app.media_v4.projection.library import mark_projection_dirty
 
-    for offset in range(0, len(leaving), max(1, batch_size)):
+        mark_projection_dirty(conn, leaving + shared)
+
+    # 没有已配置的旧镜像根时只退役 SQLite 来源，绝不猜测删除范围。
+    cleanup_work_ids = leaving if mirror is not None else []
+    for offset in range(0, len(cleanup_work_ids), max(1, batch_size)):
         batch = leaving[offset : offset + max(1, batch_size)]
         placeholders = ",".join("?" for _ in batch)
         with database.connect() as conn:

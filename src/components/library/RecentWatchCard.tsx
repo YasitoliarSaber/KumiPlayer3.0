@@ -31,7 +31,7 @@ export default function RecentWatchCard({ work, history, episodeLabel, statusLab
   const title = cleanDisplayTitle(work.title || work.original_title || history.title_snapshot || '') || '未命名作品';
   const movie = work.media_type === 'movie';
   const path = history.thumb_path || (movie ? preferredArtworkPath(work, 'fanart') : '');
-  const imageUrl = buildAssetUrl(path, { kind: 'episode', thumbnailWidth: 640 });
+  const imageUrl = buildAssetUrl(path, { kind: 'episode', thumbnailWidth: 768 });
   const position = Number(history.position);
   const duration = Number(history.duration);
   const percent = history.completed ? 100

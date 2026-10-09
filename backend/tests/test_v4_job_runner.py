@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 
 def _entry():
     from app.media_v4.domain.models import ParsedFacts, SourceEvidence
@@ -13,8 +15,8 @@ def _entry():
         source_key="runner",
         relative_path="Runner/Runner.S01E01.mkv",
         entry_kind="video",
-        source_locator="local://runner/Runner.S01E01.mkv",
-        playback_locator="local://runner/Runner.S01E01.mkv",
+        source_locator="C:/mounted/Runner/Runner.S01E01.mkv",
+        playback_locator="C:/mounted/Runner/Runner.S01E01.mkv",
     )
     facts = ParsedFacts(
         parsed_fact_id="facts-runner",
@@ -30,7 +32,7 @@ def _entry():
     return evidence, facts
 
 
-def test_runner_materializes_scrapes_and_publishes_projection(tmp_path):
+def test_runner_scrapes_snapshots_and_publishes_without_mirror_files(tmp_path):
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -54,7 +56,6 @@ def test_runner_materializes_scrapes_and_publishes_projection(tmp_path):
     results = runner.process_available(mirror_root=tmp_path / "mirror")
 
     assert [result.job_type for result in results] == [
-        "materialize_mirror",
         "scrape_work",
         "refresh_projection",
     ]
@@ -65,13 +66,13 @@ def test_runner_materializes_scrapes_and_publishes_projection(tmp_path):
             for row in conn.execute("SELECT job_type, status FROM jobs WHERE revision_id = 'rev-runner'")
         }
     assert statuses == {
-        "materialize_mirror": "succeeded",
         "scrape_work": "succeeded",
         "refresh_projection": "succeeded",
     }
-    assert list((tmp_path / "mirror").rglob("*.strm"))
-    assert list((tmp_path / "mirror").rglob("work.nfo"))
-    assert list((tmp_path / "mirror").rglob("episode-*.nfo"))
+    with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM metadata_snapshots").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM artifacts").fetchone()[0] == 0
+    assert not (tmp_path / "mirror").exists()
     card = runner.projection.current().cards[0]
     assert card["title"] == "Runner Online"
     assert card["metadata"]["plot"] == "metadata reached the projection"
@@ -99,8 +100,8 @@ def test_independent_scrape_jobs_use_bounded_parallel_workers(tmp_path):
             evidence_id=f"ev-parallel-{number}",
             source_key=f"runner-{number}",
             relative_path=f"{title}/{title}.S01E01.mkv",
-            source_locator=f"local://runner/{number}.mkv",
-            playback_locator=f"local://runner/{number}.mkv",
+            source_locator=f"C:/mounted/Runner/{number}.mkv",
+            playback_locator=f"C:/mounted/Runner/{number}.mkv",
         )
         facts = replace(
             facts,
@@ -143,9 +144,7 @@ def test_independent_scrape_jobs_use_bounded_parallel_workers(tmp_path):
     assert all(result.status == "succeeded" for result in results)
 
 
-def test_successful_scrape_marks_projection_dirty_and_becomes_visible_before_final_job(tmp_path, monkeypatch):
-    from types import SimpleNamespace
-
+def test_successful_scrape_is_published_by_background_refresh_before_final_job(tmp_path):
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -155,11 +154,6 @@ def test_successful_scrape_marks_projection_dirty_and_becomes_visible_before_fin
     service = V4RevisionService(database)
     service.create_draft("rev-incremental", [_entry()])
     service.confirm("rev-incremental")
-    def remote_artwork():
-        return SimpleNamespace(artwork_storage_mode="remote")
-
-    monkeypatch.setattr("app.media_v4.jobs.completeness.load_config", remote_artwork)
-    monkeypatch.setattr("app.media_v4.jobs.metadata_artifacts.load_config", remote_artwork)
     runner = V4JobRunner(
         database,
         metadata_provider=lambda _target: {
@@ -178,13 +172,12 @@ def test_successful_scrape_marks_projection_dirty_and_becomes_visible_before_fin
     )
     before = runner.projection.rebuild()
     jobs = service.list_jobs("rev-incremental")
-    mirror = next(item for item in jobs if item["job_type"] == "materialize_mirror")
     scrape = next(item for item in jobs if item["job_type"] == "scrape_work")
 
-    runner.process_job(mirror["job_id"], mirror_root=tmp_path / "mirror")
     runner.process_job(scrape["job_id"], mirror_root=tmp_path / "mirror")
-
-    after = runner.projection.ensure_current()
+    assert runner.projection.current().digest == before.digest
+    runner.projection.refresh_if_needed()
+    after = runner.projection.current()
     assert after.digest != before.digest
     assert after.cards[0]["metadata"]["metadata_state"] == "ready"
     assert after.cards[0]["title"] == "Runner Online"
@@ -196,7 +189,7 @@ def test_successful_scrape_marks_projection_dirty_and_becomes_visible_before_fin
     assert final_job["status"] == "queued"
 
 
-def test_failed_scrape_blocks_projection_until_the_failed_job_is_retried(tmp_path):
+def test_failed_scrape_does_not_block_publishing_confirmed_local_media(tmp_path):
     import pytest
 
     from app.media_v4.jobs.runner import V4JobRunner
@@ -225,10 +218,11 @@ def test_failed_scrape_blocks_projection_until_the_failed_job_is_retried(tmp_pat
             )
         }
     assert statuses == {
-        "materialize_mirror": "succeeded",
         "scrape_work": "failed",
         "refresh_projection": "succeeded",
     }
+    assert runner.projection.current().cards[0]['title'] == 'Runner'
+    assert not (tmp_path / 'mirror').exists()
 
 
 def test_episode_nfo_omits_plot_but_work_nfo_keeps_overall_plot():
@@ -298,8 +292,8 @@ def test_runner_uses_configured_metadata_provider_for_scrape(tmp_path):
             VALUES ('rev', 'root', 'scan', 'fixture', 'confirmed', 'now');
             INSERT INTO works(work_id, identity_key, work_type, preferred_title, created_at, updated_at)
             VALUES ('work', 'runner', 'series', 'Runner', 'now', 'now');
-            INSERT INTO jobs(job_id, job_type, revision_id, work_id, idempotency_key, created_at, updated_at)
-            VALUES ('job', 'scrape_work', 'rev', 'work', 'scrape:rev', 'now', 'now');
+            INSERT INTO jobs(job_id, job_type, revision_id, work_id, idempotency_key, created_at, updated_at, result_json)
+            VALUES ('job', 'scrape_work', 'rev', 'work', 'scrape:rev', 'now', 'now', '{"runtime_policy":"sqlite-artwork-v1"}');
             """
         )
 
@@ -318,7 +312,7 @@ def test_runner_uses_configured_metadata_provider_for_scrape(tmp_path):
     assert called and called[0]["revision_id"] == "rev"
 
 
-def test_superseded_artifacts_are_cleaned_only_after_empty_revision_is_published(tmp_path):
+def test_empty_revision_does_not_schedule_legacy_cleanup_or_delete_existing_artifacts(tmp_path):
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -337,6 +331,20 @@ def test_superseded_artifacts_are_cleaned_only_after_empty_revision_is_published
         },
     )
     mirror_root = tmp_path / "mirror"
+    mirror_root.mkdir()
+    historical_file = mirror_root / 'historical.strm'
+    historical_file.write_text('C:/mounted/Runner/Runner.S01E01.mkv', encoding='utf-8')
+    with database.connect() as conn:
+        work_id = conn.execute('SELECT work_id FROM works').fetchone()[0]
+        conn.execute(
+            "INSERT INTO artifacts(artifact_id,revision_id,work_id,artifact_type,target_path,status,created_at,updated_at) "
+            "VALUES ('historical','rev-old',?,'strm',?,'published','now','now')",
+            (work_id, str(historical_file)),
+        )
+        conn.execute(
+            "INSERT INTO artifact_references(reference_id,artifact_id,revision_id,work_id,role,subject_id,created_at) "
+            "VALUES ('historical-ref','historical','rev-old',?,'playback','historical','now')", (work_id,),
+        )
     runner.process_available(mirror_root=mirror_root)
     assert list(mirror_root.rglob("*.*"))
 
@@ -351,9 +359,8 @@ def test_superseded_artifacts_are_cleaned_only_after_empty_revision_is_published
 
     assert [result.job_type for result in results] == [
         "refresh_projection",
-        "cleanup_superseded_artifacts",
     ]
-    assert list(mirror_root.rglob("*.strm"))
+    assert historical_file.read_text(encoding='utf-8') == 'C:/mounted/Runner/Runner.S01E01.mkv'
     with database.connect() as conn:
         # C-006：后台任务无删除授权，即使成员清空也保留文件和产物记录。
         assert conn.execute(
@@ -379,28 +386,27 @@ def test_cancelling_a_revision_requests_safe_stop_for_running_job_and_cancels_de
     revisions.create_draft("rev-cancel", [_entry()])
     revisions.confirm("rev-cancel")
     with database.connect() as conn:
-        mirror_job = conn.execute(
-            "SELECT job_id FROM jobs WHERE revision_id = ? AND job_type = 'materialize_mirror'",
+        metadata_job = conn.execute(
+            "SELECT job_id FROM jobs WHERE revision_id = ? AND job_type = 'scrape_work'",
             ("rev-cancel",),
         ).fetchone()["job_id"]
         conn.execute(
             "UPDATE jobs SET status = 'running' WHERE job_id = ?",
-            (mirror_job,),
+            (metadata_job,),
         )
 
     result = V4JobRunner(database).cancel_revision("rev-cancel")
 
     assert result["revision_id"] == "rev-cancel"
     assert result["running"] == 1
-    assert result["cancelled"] == 2
+    assert result["cancelled"] == 1
     with database.connect() as conn:
         rows = {
             row["job_type"]: dict(row)
             for row in conn.execute("SELECT job_type, status, cancel_requested FROM jobs WHERE revision_id = ?", ("rev-cancel",))
         }
-    assert rows["materialize_mirror"]["status"] == "running"
-    assert rows["materialize_mirror"]["cancel_requested"] == 1
-    assert rows["scrape_work"]["status"] == "cancelled"
+    assert rows["scrape_work"]["status"] == "running"
+    assert rows["scrape_work"]["cancel_requested"] == 1
     assert rows["refresh_projection"]["status"] == "cancelled"
 
 
@@ -417,7 +423,7 @@ def test_stale_running_job_is_recoverable_instead_of_blocking_a_source_forever(t
     with database.connect() as conn:
         conn.execute(
             "UPDATE jobs SET status = 'running', heartbeat_at = '2000-01-01T00:00:00+00:00' "
-            "WHERE revision_id = ? AND job_type = 'materialize_mirror'",
+            "WHERE revision_id = ? AND job_type = 'scrape_work'",
             ("rev-stale",),
         )
 
@@ -426,7 +432,7 @@ def test_stale_running_job_is_recoverable_instead_of_blocking_a_source_forever(t
     assert recovered == 1
     with database.connect() as conn:
         row = conn.execute(
-            "SELECT status, last_error FROM jobs WHERE revision_id = ? AND job_type = 'materialize_mirror'",
+            "SELECT status, last_error FROM jobs WHERE revision_id = ? AND job_type = 'scrape_work'",
             ("rev-stale",),
         ).fetchone()
     assert row["status"] == "failed"
@@ -445,7 +451,7 @@ def test_cancel_requested_queued_job_is_never_claimed_for_file_writes(tmp_path):
     revisions.confirm("rev-before-claim")
     with database.connect() as conn:
         job_id = conn.execute(
-            "SELECT job_id FROM jobs WHERE revision_id = ? AND job_type = 'materialize_mirror'",
+            "SELECT job_id FROM jobs WHERE revision_id = ? AND job_type = 'scrape_work'",
             ("rev-before-claim",),
         ).fetchone()["job_id"]
         conn.execute("UPDATE jobs SET cancel_requested = 1 WHERE job_id = ?", (job_id,))
@@ -468,18 +474,55 @@ def test_process_available_settles_a_queued_cancel_requested_job(tmp_path):
     revisions.confirm("rev-cancel-available")
     with database.connect() as conn:
         job_id = conn.execute(
-            "SELECT job_id FROM jobs WHERE revision_id = ? AND job_type = 'materialize_mirror'",
+            "SELECT job_id FROM jobs WHERE revision_id = ? AND job_type = 'scrape_work'",
             ("rev-cancel-available",),
         ).fetchone()["job_id"]
         conn.execute("UPDATE jobs SET cancel_requested = 1 WHERE job_id = ?", (job_id,))
 
     results = V4JobRunner(database).process_available(mirror_root=tmp_path / "mirror")
 
-    assert [(result.job_id, result.status) for result in results] == [(job_id, "cancelled")]
+    assert results[0].job_id == job_id
+    assert [(result.job_type, result.status) for result in results] == [
+        ('scrape_work', 'cancelled'), ('refresh_projection', 'succeeded'),
+    ]
     with database.connect() as conn:
         row = conn.execute("SELECT status FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
     assert row["status"] == "cancelled"
     assert not list((tmp_path / "mirror").rglob("*.strm")) if (tmp_path / "mirror").exists() else True
+
+
+@pytest.mark.parametrize('job_type', ['materialize_mirror', 'cleanup_superseded_artifacts'])
+@pytest.mark.parametrize('entrypoint', ['direct', 'queue'])
+def test_historical_file_jobs_are_cancelled_without_reentering_runtime(tmp_path, job_type, entrypoint):
+    from app.media_v4.jobs.runner import V4JobRunner
+    from app.media_v4.persistence.database import V4Database
+    from app.media_v4.revisions.service import V4RevisionService
+
+    database = V4Database(tmp_path / 'historical.db')
+    database.initialize()
+    revisions = V4RevisionService(database)
+    revisions.create_draft('rev-historical', [_entry()])
+    revisions.confirm('rev-historical')
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO jobs(job_id,job_type,revision_id,idempotency_key,status,created_at,updated_at) "
+            "VALUES ('historical',?,'rev-historical','historical','queued','now','now')", (job_type,),
+        )
+    runner = V4JobRunner(database, metadata_provider=lambda target: {
+        'provider': 'local', 'provider_id': target['work_id'], 'title': target['preferred_title'],
+    })
+    unused_directory = tmp_path / 'unused-mirror'
+    if entrypoint == 'direct':
+        assert runner.process_job('historical', mirror_root=unused_directory).status == 'cancelled'
+    else:
+        results = runner.process_available(mirror_root=unused_directory)
+        assert all(result.job_type not in {'materialize_mirror', 'cleanup_superseded_artifacts'} for result in results)
+    with database.connect() as conn:
+        row = conn.execute("SELECT status,attempts FROM jobs WHERE job_id='historical'").fetchone()
+        assert row['status'] == 'cancelled'
+        assert row['attempts'] == 0
+        assert conn.execute('SELECT COUNT(*) FROM artifacts').fetchone()[0] == 0
+    assert not unused_directory.exists()
 
 
 def test_running_cleanup_honors_a_termination_request_before_deleting_artifacts(tmp_path):

@@ -13,7 +13,6 @@ import CategoryPage from './pages/CategoryPage';
 import SearchPage from './pages/SearchPage';
 import LoadingState from './components/ui/loading-state';
 import { configApi, type PublicConfig } from './api/config';
-import { libraryApi } from './api/library';
 import { recordScrollDiagnostic } from './utils/scrollDiagnostics';
 import { FluentProvider } from '@fluentui/react-components';
 import { getKumiFluentTheme } from './design/fluentTheme';
@@ -37,6 +36,7 @@ export default function App() {
   const setPosterSize = useUiStore((state) => state.setPosterSize);
   const goManageView = useUiStore((state) => state.goManageView);
   const loadLibrary = useLibraryStore((state) => state.loadLibrary);
+  const syncChanges = useLibraryStore((state) => state.syncChanges);
   const restoreSession = useBangumiStore((state) => state.restoreSession);
   const verifySession = useBangumiStore((state) => state.verifySession);
   // App 只需要稳定动作；健康/账户状态由各自组件订阅，避免后台轮询重渲染整页。
@@ -86,28 +86,18 @@ export default function App() {
     if (!appConfig?.setup_completed) return undefined;
     let disposed = false;
     let timer = 0;
-    let lastDigest = '';
-    // P-006：全局刷新桥梁——轮询 V4 Projection digest，新投影发布时自动刷新媒体库；
-    // 应用不可见时降低频率；同一 digest 不重复刷新；失败不清空旧库。
-    // 这里只取轻量 digest 端点（不再每 5 秒传输并解析完整投影载荷）；
-    // 只有刷新成功才确认该 digest，失败保留旧快照并在下一轮重试，
-    // 避免“请求已失败但 digest 已确认”导致同 digest 更新被永久跳过。
+    // 变化游标只合并相关卡片；图片发布不会强刷全库或清空全部详情。
     const check = async () => {
       const startedAt = performance.now();
       try {
-        const { digest } = await libraryApi.getDiagnostics();
-        const changed = Boolean(!disposed && digest && digest !== lastDigest);
+        const changed = await syncChanges();
         recordScrollDiagnostic('library-check', {
           ms: Math.round(performance.now() - startedAt),
           changed,
         });
-        if (changed) {
-          const refreshed = await loadLibrary({ force: true });
-          if (!disposed && refreshed) lastDigest = digest;
-        }
       } catch {
         recordScrollDiagnostic('library-check-error', { ms: Math.round(performance.now() - startedAt) });
-        // 网络失败保留现有媒体库快照；digest 未被确认，下一轮继续重试。
+        // 网络失败不推进游标，下一轮重试。
       }
       if (!disposed) {
         const delay = document.visibilityState === 'visible' ? 5000 : 30000;
@@ -119,7 +109,7 @@ export default function App() {
       disposed = true;
       window.clearTimeout(timer);
     };
-  }, [appConfig?.setup_completed, loadLibrary]);
+  }, [appConfig?.setup_completed, syncChanges]);
 
   useEffect(() => {
     if (!appConfig?.setup_completed) return;

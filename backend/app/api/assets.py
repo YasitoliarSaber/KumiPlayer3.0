@@ -1,13 +1,6 @@
-"""Assets API 端点
+"""已发布图片资源 GET；文件路径、NFO、远程代理及准备端点均已退役。
 
-GET /api/assets?path=<path>  返回 mirror 目录下的图片/NFO 文件
-
-安全要求：
-- 只允许访问 mirror root 下的文件
-- 拒绝 ../ 路径遍历
-- 拒绝 mirror root 外的绝对路径
-- 拒绝源盘真实视频路径
-- 只允许特定扩展名
+历史维护 helper 保留但不注册路由，普通展示只读取 SQLite 登记的本地派生。
 """
 
 import asyncio
@@ -40,6 +33,36 @@ from app.media_v4.assets.thumbnails import (
 )
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
+
+
+@router.get("/artwork/{resource_id}/{content_version}/{width}")
+def get_published_artwork(request: Request, resource_id: str, content_version: str, width: int):
+    """只读取已发布的派生索引；不访问原图、扫描或准备图片。"""
+    from app.api.media_v4 import get_database
+    from app.media_v4.assets.catalog import ALL_WIDTHS, RECIPE_VERSION
+
+    if width not in ALL_WIDTHS or len(resource_id) != 64 or any(c not in '0123456789abcdef' for c in resource_id):
+        raise HTTPException(status_code=404, detail="图片资源未发布")
+    with get_database().connect() as conn:
+        row = conn.execute("""SELECT v.relative_path,v.byte_size,v.etag,r.content_digest FROM artwork_resources r
+            JOIN artwork_variants v ON v.content_digest=r.content_digest
+            WHERE r.resource_id=? AND v.recipe_version=? AND v.width=?
+            AND EXISTS (SELECT 1 FROM artwork_bindings b WHERE b.published_id=r.resource_id)""",
+                           (resource_id, RECIPE_VERSION, width)).fetchone()
+    if row is None or content_version != f'{row["content_digest"]}-{RECIPE_VERSION}':
+        raise HTTPException(status_code=404, detail="图片资源未发布")
+    # 路径由后台配方生成，重新约束受管派生目录，绝不接受客户端文件路径。
+    relative = Path(row['relative_path'])
+    if relative.is_absolute() or '..' in relative.parts or relative.parts[:2] != ('cache', 'artwork_variants'):
+        raise HTTPException(status_code=404, detail="图片资源未发布")
+    etag = f'"{row["etag"]}"'
+    headers = {'Cache-Control': 'private, max-age=31536000, immutable', 'ETag': etag,
+               'Content-Length': str(row['byte_size'])}
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers=headers)
+    return FileResponse(get_data_dir() / relative, media_type='image/webp', headers=headers)
+
+
 _REMOTE_FAILURES: dict[str, float] = {}
 _REMOTE_FAILURE_TTL = 60.0
 # 相同远程 URL 的并发请求共用同一把下载锁：详情页首屏几十个并发消费者
@@ -127,7 +150,6 @@ def _local_file_response(file_path: Path, content_type: str, *, max_age: int, re
     return FileResponse(path=str(file_path), media_type=content_type, headers=headers)
 
 
-@router.get("")
 def get_asset(
     request: Request,
     path: str = Query(..., description="文件路径（绝对路径或 mirror 相对路径）"),
@@ -320,7 +342,6 @@ def _image_response(
     return FileResponse(path=str(path), media_type=media_type, headers=headers)
 
 
-@router.get("/remote")
 async def proxy_remote_asset(
     request: Request,
     url: str = Query(..., description="Trusted metadata image URL"),
@@ -440,7 +461,6 @@ def _resolve_local_asset_path(path: str) -> Path | None:
     return file_path
 
 
-@router.get("/thumbnail")
 def get_thumbnail(
     request: Request,
     path: str = Query(..., description="文件路径（绝对路径或 mirror 相对路径）"),
@@ -496,7 +516,6 @@ class ThumbnailBatch(BaseModel):
     items: list[ThumbnailItem] = Field(min_length=1, max_length=64)
 
 
-@router.post("/thumbnails/prepare")
 def prepare_thumbnails(batch: ThumbnailBatch):
     """验证后批量排队并查询状态；不在请求中编码，也不泄露目标路径。"""
     states = []

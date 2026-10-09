@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { useUiStore } from '../../stores/ui';
 import { useLibraryStore } from '../../stores/library';
 import { cleanDisplayTitle } from '../../utils/title';
-import { buildAssetUrl, isRemoteAssetPath } from '../../api/assets';
+import { buildAssetUrl } from '../../api/assets';
 import { isScrollRecentlyActive } from '../../utils/scrollGesture';
 import { recordScrollDiagnostic } from '../../utils/scrollDiagnostics';
 import { preferredArtworkPath } from '../../utils/artwork';
@@ -26,7 +26,6 @@ function PosterCard({
   showType = 'default',
   recentLabel = '',
   thumbnailWidth = 0,
-  localArtworkOnly = false,
   deferImage = false,
   preloadImage = false,
   managedImage = false,
@@ -76,23 +75,12 @@ function PosterCard({
 
   const isHorizontal = showType === 'recent' || seriesCardImageMode === 'fanart';
   const artworkKind = showType === 'recent' || seriesCardImageMode === 'fanart' ? 'fanart' : 'poster';
-  // 分类本地模式不隐式访问远程；其他页面仍可使用受限远程图片代理。
-  const preferredImagePath = preferredArtworkPath(work, artworkKind);
-  const selectedImagePath = localArtworkOnly && isRemoteAssetPath(preferredImagePath) ? '' : preferredImagePath;
-  const originalImageUrl = buildAssetUrl(selectedImagePath, {
+  // 普通卡片只使用后台已发布的展示尺寸。
+  const preferredImagePath = preferredArtworkPath(work, artworkKind, thumbnailWidth || undefined);
+  const selectedImagePath = preferredImagePath;
+  const imageUrl = buildAssetUrl(selectedImagePath, {
     kind: isHorizontal ? 'backdrop' : 'poster',
   });
-  // 远程图已按尺寸档归一化，不生成本地派生缩略图 URL；本地图继续走缩略图管线。
-  // 第 6 步（规格 §4.5）：横图**也要**用按尺寸生成的缩略图；此前 `!isHorizontal`
-  // 让横图直接取原图，等于把大背景图塞进小卡。
-  const thumbnailImageUrl = isRemoteAssetPath(selectedImagePath)
-    ? originalImageUrl
-    : buildAssetUrl(selectedImagePath, {
-        kind: isHorizontal ? 'backdrop' : 'poster',
-        ...(thumbnailWidth > 0 ? { thumbnailWidth } : {}),
-        cacheOnly: managedImage,
-      });
-  const imageUrl = thumbnailImageUrl;
 
   const mediaClassName = `poster-media ${isHorizontal ? 'poster-media-horizontal' : 'poster-media-vertical'}`;
 
@@ -125,7 +113,7 @@ function PosterCard({
         </div>
         {!deferImage && imageUrl && (managedImage ? (
           <PosterImage path={selectedImagePath} width={thumbnailWidth} src={imageUrl}
-            alt={displayTitle} local={!isRemoteAssetPath(selectedImagePath)} />
+            alt={displayTitle} local />
         ) : (
           <DecodedImage
             src={imageUrl}

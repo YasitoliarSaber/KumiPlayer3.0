@@ -2,7 +2,7 @@
  * P-003 第三步：V4 执行进度 = 总体阶段 + 作品单元。
  *
  * 消费后端 execution progress DTO（V4ExecutionProgress）。每部作品一个进度框，
- * 状态由 mirror + metadata jobs 组合推导；完成项默认折叠。原始 job_id 只作为
+ * 状态由资料与发布任务推导，图片独立反馈；完成项默认折叠。原始 job_id 只作为
  * 重试命令参数，普通界面不展示 UUID 文本。
  */
 
@@ -23,7 +23,7 @@ export interface V4ExecutionProgressProps {
   fetchWorkDetail?: (revisionId: string, workId: string, episodeOffset?: number) => Promise<V4WorkExecutionDetail>
 }
 
-const STAGE_KEYS = ['mirror', 'metadata', 'projection'] as const
+const STAGE_KEYS = ['metadata', 'artwork', 'projection'] as const
 const COMPLETED_PREVIEW_COUNT = 4
 const EXECUTION_STATUS_LABELS: Record<V4ExecutionProgress['overall_status'], string> = {
   queued: '正在准备任务',
@@ -48,6 +48,7 @@ function attentionSummary(unit: V4WorkProgressUnit): string {
 
 function StageSummary({ stageKey, progress }: { stageKey: (typeof STAGE_KEYS)[number]; progress: V4ExecutionProgress }) {
   const summary = progress.stage_summary[stageKey]
+  if (!summary) return null
   const done = summary.succeeded + summary.failed + summary.cancelled
   const attention = summary.needs_attention ?? 0
   return (
@@ -141,12 +142,12 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
     if (unit.overall_status === 'needs_attention' || unit.artifact_state === 'degraded') setExpanded(true)
   }, [unit.overall_status, unit.artifact_state])
   const failedJob = unit.overall_status === 'failed'
-    ? (unit.mirror.status === 'failed' ? unit.mirror : unit.metadata.status === 'failed' ? unit.metadata : null)
+    ? (unit.metadata.status === 'failed' ? unit.metadata : null)
     : null
-  const workIsPending = ['waiting_mirror', 'running_mirror', 'waiting_metadata', 'running_metadata'].includes(unit.overall_status)
+  const workIsPending = ['waiting_metadata', 'running_metadata'].includes(unit.overall_status)
   // 3.1：展开非进行中作品时按需读取执行详情；缓存键包含任务状态，
   // 重新执行该作品后状态变化自然使缓存失效并重新读取。
-  const detailCacheKey = unit.detail_version || `${unit.mirror.status}:${unit.metadata.status}`
+  const detailCacheKey = unit.detail_version || `${unit.metadata.status}:${unit.artwork?.status ?? ''}`
   const detail = !workIsPending && expanded ? getWorkDetail(unit.work_id, detailCacheKey) : undefined
   // 请求触发放在 effect：渲染期间只读取缓存，不修改父组件状态。
   useEffect(() => {
@@ -377,10 +378,6 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
                   </div>}
                 </div>
               )}
-              {/* 用户反馈：镜像结果不需要展示——"知道生成了就行"。镜像失败仍会显示错误。 */}
-              {detail.detail.mirror.error && (
-                <div className="media-v4-job-error" role="alert">{detail.detail.mirror.error}</div>
-              )}
               {/* 用户反馈：没有剧集结果时不要展示空块（失败作品尤其没必要）。 */}
               {detailEpisodes.length > 0 && (
               <div className="media-v4-work-detail-section">
@@ -507,8 +504,9 @@ export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingW
   const completed = sorted.filter((unit) => unit.overall_status === 'completed')
   const counts = summarizeExecutionWorks(progress)
   const visibleCompleted = completedOpen ? completed : completed.slice(0, COMPLETED_PREVIEW_COUNT)
-  const mirrorTotal = progress.stage_summary.mirror.total
-  const mirrorDone = progress.stage_summary.mirror.succeeded + progress.stage_summary.mirror.failed + progress.stage_summary.mirror.cancelled
+  const publicationStages = [progress.stage_summary.metadata, progress.stage_summary.projection]
+  const publicationTotal = publicationStages.reduce((total, stage) => total + stage.total, 0)
+  const publicationDone = publicationStages.reduce((total, stage) => total + stage.succeeded + stage.failed + stage.cancelled, 0)
   const projectionFailed = progress.stage_summary.projection.status === 'failed' || progress.stage_summary.projection.status === 'cancelled'
   const projectionJob = projectionFailed ? progress.work_units[0] : null
   void projectionJob
@@ -535,14 +533,14 @@ export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingW
       <div className="media-v4-execution-head">
         <strong className="media-v4-execution-status">{EXECUTION_STATUS_LABELS[progress.overall_status]}</strong>
       </div>
-      <ProgressBar value={mirrorTotal > 0 ? mirrorDone / mirrorTotal : 0} max={1} aria-label="总体进度" />
+      <ProgressBar value={publicationTotal > 0 ? publicationDone / publicationTotal : 0} max={1} aria-label="总体进度" />
       <div className="media-v4-stage-pills" role="group" aria-label="用户阶段">
         {STAGE_KEYS.map((stageKey) => <StageSummary key={stageKey} stageKey={stageKey} progress={progress} />)}
       </div>
       {projectionFailed && (
         <div className="media-v4-projection-error" role="alert">
           <ErrorCircle24Regular aria-hidden="true" />
-          <span>媒体库更新阶段未能完成，请检查镜像与媒体信息任务后重试。</span>
+          <span>媒体库更新阶段未能完成，请检查资料和发布任务后重试。</span>
         </div>
       )}
       <div className="media-v4-work-progress-list" aria-label="作品进度">

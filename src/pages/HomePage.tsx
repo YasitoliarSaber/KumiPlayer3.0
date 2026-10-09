@@ -172,13 +172,13 @@ export default function HomePage() {
                 onFocus={() => void getWorkDetail(work.work_id).catch(() => undefined)}
               >
                 <DecodedImage
-                  src={image}
+                  src={active || index === normalizedFeatureIndex ? image : ''}
                   alt=""
                   aria-hidden="true"
                   className="home-feature-bg"
                 />
                 <DecodedImage
-                  src={image}
+                  src={active || index === normalizedFeatureIndex ? image : ''}
                   alt={work.title}
                   className="home-feature-art"
                   onDecoded={() => markFeatureReady(index)}

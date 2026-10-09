@@ -217,7 +217,7 @@ def list_source_cards(database: V4Database) -> list[dict]:
         active_job = next(
             (row for row in jobs_by_revision.get(revision_id, [])
              if str(row["status"]) in {"running", "queued"}
-             and str(row["job_type"]) != "cleanup_superseded_artifacts"),
+             and str(row["job_type"]) in {"scrape_work", "recover_work_aliases", "refresh_projection", "prepare_artwork", "delete_source_library"}),
             None,
         )
         deletion_jobs = [row for row in jobs_by_revision.get(revision_id, []) if str(row["job_type"]) == "delete_source_library"]
@@ -401,7 +401,9 @@ def list_source_cards(database: V4Database) -> list[dict]:
         )
         resume_by_scan = scan_active or scan_failed or scan_interrupted or scan_paused
         can_resume = resume_by_scan or _can_resume(progress) or deletion_retry_required or draft is not None
-        active_task = None if scan_interrupted else _active_task(scan, active_job, revision_id, card_progress)
+        active_task = None if scan_interrupted else _active_task(
+            scan, active_job, revision_id, {**progress, "percent": card_progress.get("percent")},
+        )
         if phase == "scan":
             attention_count = int(scan_status == "failed" or scan_interrupted or scan_paused)
         elif draft_graph is not None:
@@ -412,7 +414,7 @@ def list_source_cards(database: V4Database) -> list[dict]:
             overall_status = "needs_attention"
             card_progress.update(state=overall_status, message="有任务需要处理")
         import_jobs = [job for job in jobs_by_revision.get(revision_id, [])
-                       if job["job_type"] in {"materialize_mirror", "scrape_work", "recover_work_aliases", "refresh_projection"}]
+                       if job["job_type"] in {"scrape_work", "recover_work_aliases", "refresh_projection"}]
         import_completed_at = max((str(job["finished_at"] or "") for job in import_jobs), default="") if (
             import_jobs and all(job["status"] == "succeeded" and job["finished_at"] for job in import_jobs)
         ) else ""
@@ -701,13 +703,18 @@ def _active_task(scan, job, revision_id: str, progress: dict) -> dict | None:
     job_type = str(job["job_type"])
     status = "cancelling" if bool(job["cancel_requested"]) else str(job["status"])
     labels = {
-        "materialize_mirror": "正在准备播放文件",
+        "prepare_artwork": "正在准备本地图片",
         "scrape_work": "正在获取媒体信息",
         "recover_work_aliases": "正在核对作品名称",
         "refresh_projection": "正在更新媒体库",
-        "cleanup_superseded_artifacts": "正在整理旧文件",
         "delete_source_library": "正在删除该来源的媒体库",
     }
+    percent = progress.get("percent")
+    if job_type == "prepare_artwork":
+        summary = (progress.get("stage_summary") or {}).get("artwork") or {}
+        total = int(summary.get("total") or 0)
+        done = sum(int(summary.get(key) or 0) for key in ("succeeded", "failed", "cancelled"))
+        percent = round(done / total * 100) if total else None
     return {
         "kind": "execution",
         "revision_id": revision_id,
@@ -715,7 +722,7 @@ def _active_task(scan, job, revision_id: str, progress: dict) -> dict | None:
         "stage": job_type,
         "label": "正在终止任务" if status == "cancelling" else labels.get(job_type, "正在处理媒体库任务"),
         # 删除作业不能使用上一次导入的百分比；退役后已进入不可中断的回收阶段。
-        "percent": None if job_type == "delete_source_library" else progress.get("percent"),
+        "percent": None if job_type == "delete_source_library" else percent,
         "can_cancel": status == "queued" if job_type == "delete_source_library" else status in {"queued", "running"},
         "cancel_requested": status == "cancelling",
     }
@@ -899,7 +906,7 @@ def _friendly_error(value: str) -> str:
 
 def _first_error(progress: dict) -> str:
     for unit in progress.get("work_units") or []:
-        for slot in ("mirror", "metadata"):
+        for slot in ("metadata", "projection"):
             job = unit.get(slot) or {}
             if job.get("last_error"):
                 return str(job["last_error"])
@@ -907,9 +914,6 @@ def _first_error(progress: dict) -> str:
 
 
 def _progress_stage(progress: dict) -> str:
-    stage = (progress.get("stage_summary") or {}).get("mirror") or {}
-    if stage.get("status") == "running":
-        return "mirror"
     metadata = (progress.get("stage_summary") or {}).get("metadata") or {}
     if metadata.get("status") == "running":
         return "metadata"
@@ -921,14 +925,14 @@ def _progress_stage(progress: dict) -> str:
 
 def _current_work_id(progress: dict) -> str:
     for unit in progress.get("work_units") or []:
-        if unit.get("overall_status") in {"running_mirror", "running_metadata"}:
+        if unit.get("overall_status") == "running_metadata":
             return str(unit["work_id"])
     return ""
 
 
 def _current_work_title(progress: dict) -> str:
     for unit in progress.get("work_units") or []:
-        if unit.get("overall_status") in {"running_mirror", "running_metadata"}:
+        if unit.get("overall_status") == "running_metadata":
             return str(unit.get("title") or "")
     return ""
 
@@ -948,7 +952,7 @@ def _progress_message(progress: dict) -> str:
     overall = progress.get("overall_status")
     if overall == "running":
         stage = _progress_stage(progress)
-        label = {"mirror": "正在生成镜像", "metadata": "正在获取媒体信息", "projection": "正在更新媒体库"}.get(stage, "处理中")
+        label = {"metadata": "正在获取媒体信息", "projection": "正在更新媒体库"}.get(stage, "处理中")
         return label
     if overall == "needs_attention":
         return "有任务需要处理"

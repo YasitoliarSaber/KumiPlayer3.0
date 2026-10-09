@@ -115,7 +115,8 @@ test('来源卡删除确认框具有独立遮罩与不透明实体表面', () =>
   assert.match(styles, /\.media-v4-source-card-delete-dialog\s*\{[^}]*z-index:[^}]*border:[^}]*background:\s*var\(--surface-raised\)[^}]*box-shadow:\s*var\(--shadow-flyout\)/s)
 })
 
-test('作品墙轮询首次拿到投影摘要时也刷新数据', () => {
+test('作品墙轮询使用持久变化游标，不为图片变化强刷整库', () => {
   assert.doesNotMatch(app, /if \(lastDigest !== ''\) loadLibrary\(\)/)
-  assert.match(app, /loadLibrary\(\{ force: true \}\)/)
+  assert.match(app, /await syncChanges\(\)/)
+  assert.doesNotMatch(app, /loadLibrary\(\{ force: true \}\)/)
 })

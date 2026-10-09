@@ -114,32 +114,24 @@ class TestGetConfig:
         assert resp.json()["mpv_path"] == ""
         assert json.loads(temp_config.read_text(encoding="utf-8"))["mpv_path"] == ""
 
-    @patch("app.api.config.get_default_mirror_dir")
-    def test_empty_mirror_path_prefills_install_default_without_saving_it(self, get_default, client, temp_config, tmp_path):
-        default_mirror = tmp_path / "Installed" / "mirror"
-        get_default.return_value = default_mirror
-
+    def test_empty_mirror_path_stays_empty_without_saving_it(self, client, temp_config):
         resp = client.get("/api/config")
 
         assert resp.status_code == 200
-        assert resp.json()["mirror_dir"] == str(default_mirror)
+        assert resp.json()["mirror_dir"] == ""
         assert not temp_config.exists()
 
-    @patch("app.api.config.get_default_mirror_dir")
-    def test_existing_mirror_path_is_not_overwritten_by_install_default(self, get_default, client, temp_config, tmp_path):
+    def test_existing_mirror_path_is_preserved_without_core_default(self, client, temp_config, tmp_path):
         custom_mirror = tmp_path / "custom-mirror"
         save_config(AppConfig(mirror_dir=str(custom_mirror)))
-        get_default.return_value = tmp_path / "Installed" / "mirror"
 
         resp = client.get("/api/config")
 
         assert resp.status_code == 200
         assert resp.json()["mirror_dir"] == str(custom_mirror)
 
-    @patch("app.api.config.get_default_mirror_dir")
-    def test_completed_legacy_profile_without_mirror_keeps_existing_fallback(self, get_default, client, temp_config, tmp_path):
+    def test_completed_profile_without_mirror_stays_empty(self, client, temp_config):
         save_config(AppConfig(setup_completed=True, setup_version=1, mirror_dir=""))
-        get_default.return_value = tmp_path / "Installed" / "mirror"
 
         resp = client.get("/api/config")
 
@@ -185,7 +177,7 @@ class TestFirstRunSetup:
         assert saved["mpv_path"] == str(mpv_path)
 
     @patch("app.api.config.check_mpv_runtime")
-    def test_setup_complete_creates_missing_mirror_directory(self, mock_run, client, temp_config, tmp_path):
+    def test_setup_complete_does_not_create_requested_mirror_directory(self, mock_run, client, temp_config, tmp_path):
         mpv_path = tmp_path / "mpv.exe"
         mpv_path.write_bytes(b"exe")
         mirror_dir = tmp_path / "Installed" / "mirror"
@@ -200,28 +192,24 @@ class TestFirstRunSetup:
         })
 
         assert response.status_code == 200
-        assert mirror_dir.is_dir()
-        assert json.loads(temp_config.read_text(encoding="utf-8"))["mirror_dir"] == str(mirror_dir)
+        assert not mirror_dir.exists()
+        assert json.loads(temp_config.read_text(encoding="utf-8"))["mirror_dir"] == ""
 
     @patch("app.api.config.check_mpv_runtime")
-    def test_setup_complete_reports_unwritable_mirror_directory(self, mock_run, client, temp_config, tmp_path):
+    def test_setup_complete_ignores_invalid_historical_mirror_path(self, mock_run, client, temp_config, tmp_path):
         mpv_path = tmp_path / "mpv.exe"
         mpv_path.write_bytes(b"exe")
-        mirror_dir = tmp_path / "protected" / "mirror"
         media_root = tmp_path / "media"
         media_root.mkdir()
         mock_run.return_value = {"available": True, "manifest_valid": True, "files_valid": True, "configuration_available": True, "message": "内置播放器已就绪"}
 
-        with patch("app.api.config.Path.mkdir", side_effect=PermissionError("denied")):
-            response = client.post("/api/config/setup/complete", json={
-                "mpv_path": str(mpv_path),
-                "mirror_dir": str(mirror_dir),
-                "local_root": str(media_root),
-            })
-
-        assert response.status_code == 400
-        assert "无法创建或不可写" in response.json()["detail"]
-        assert not temp_config.exists()
+        response = client.post("/api/config/setup/complete", json={
+            "mpv_path": str(mpv_path),
+            "mirror_dir": "invalid://historical-mirror",
+            "local_root": str(media_root),
+        })
+        assert response.status_code == 200
+        assert response.json()["mirror_dir"] == ""
 
     @patch("app.api.config.check_mpv_runtime")
     def test_setup_complete_requires_at_least_one_media_source(self, mock_run, client, temp_config, tmp_path):

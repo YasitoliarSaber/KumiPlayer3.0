@@ -161,22 +161,21 @@ def test_title_change_on_same_source_lineage_keeps_work_identity(tmp_path):
     assert works[0]["preferred_title"] == "New Title"
 
 
-def test_projection_uses_latest_scrape_metadata_and_real_sources(tmp_path, monkeypatch):
+def test_projection_publishes_metadata_before_independent_artwork(tmp_path, monkeypatch):
     import base64
-    from pathlib import Path
-    from types import SimpleNamespace
 
     import httpx
 
-    from app.media_v4.jobs import completeness, metadata_artifacts
+    from app.core.config import AppConfig
+    from app.media_v4.assets import service as artwork_service
+    from app.media_v4.assets.catalog import get_work_artwork
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.projection.library import V4LibraryProjection
     from app.media_v4.revisions.service import V4RevisionService
 
-    config = SimpleNamespace(artwork_storage_mode="local", tmdb_timeout=5, proxy_url=None)
-    monkeypatch.setattr(metadata_artifacts, "load_config", lambda: config)
-    monkeypatch.setattr(completeness, "load_config", lambda: config)
+    config = AppConfig(tmdb_timeout=5)
+    monkeypatch.setattr(artwork_service, "load_config", lambda: config)
     image = base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII="
     )
@@ -187,7 +186,7 @@ def test_projection_uses_latest_scrape_metadata_and_real_sources(tmp_path, monke
         requested_images.append(str(request.url))
         return httpx.Response(200, content=image, headers={"content-type": "image/png"})
 
-    monkeypatch.setattr(metadata_artifacts, "_artwork_client", lambda _config: httpx.Client(
+    monkeypatch.setattr(artwork_service, "_artwork_client", lambda _config: httpx.Client(
         transport=httpx.MockTransport(artwork_response),
     ))
     monkeypatch.setattr("app.core.url_guard.socket.getaddrinfo", lambda *_a, **_k: [
@@ -233,20 +232,28 @@ def test_projection_uses_latest_scrape_metadata_and_real_sources(tmp_path, monke
     assert card["metadata"]["metadata_state"] == "ready"
     assert card["metadata"]["episode_mapping_status"] == "complete"
     assert card["metadata"]["episode_mappings"][0]["title"] == "Online Episode"
+    assert requested_images == [], "资料发布与投影维护不下载图片"
+    with database.connect() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM artifacts').fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM artwork_resources WHERE state='pending'").fetchone()[0] == 3
+    generation_id = V4LibraryProjection(database).current().generation_id
+    assert artwork_service.ArtworkService(database, tmp_path / 'image-store').process_available() == 3
     assert set(requested_images) == {
         "https://image.tmdb.org/t/p/w780/poster.jpg",
         "https://image.tmdb.org/t/p/original/fanart.jpg",
         "https://image.tmdb.org/t/p/w500/still.jpg",
     }
     with database.connect() as conn:
-        artifacts = conn.execute(
-            "SELECT artifact_type, target_path FROM artifacts WHERE status = 'published'",
-        ).fetchall()
-    assert {row["artifact_type"] for row in artifacts} >= {"nfo", "episode_nfo", "poster", "fanart", "episode_thumb"}
-    assert all(Path(row["target_path"]).is_file() for row in artifacts)
+        artwork = get_work_artwork(conn, card['work_id'])
+        assert set(artwork) >= {'poster', 'fanart'}
+        assert all(resource['state'] == 'ready' for resource in artwork.values())
+        assert conn.execute('SELECT COUNT(*) FROM artifacts').fetchone()[0] == 0
+    assert list((tmp_path / 'image-store').rglob('*.webp'))
+    assert not (tmp_path / 'mirror').exists()
+    assert V4LibraryProjection(database).current().generation_id == generation_id
 
 
-def test_projection_checks_completeness_against_selected_scrape_revision(tmp_path, monkeypatch):
+def test_projection_does_not_check_files_for_selected_scrape_revision(tmp_path, monkeypatch):
     from app.media_v4.domain.models import ParsedFacts, SourceEvidence
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.projection.library import V4LibraryProjection
@@ -278,6 +285,8 @@ def test_projection_checks_completeness_against_selected_scrape_revision(tmp_pat
             group_type="season",
             season_candidate=1,
             episode_candidate=1,
+            tmdb_hint_id=1,
+            tmdb_hint_type='tv',
         )
         return evidence, facts
 
@@ -322,6 +331,13 @@ def test_projection_checks_completeness_against_selected_scrape_revision(tmp_pat
             ),
         )
 
+    with database.connect() as conn:
+        from app.media_v4.persistence.metadata_lifecycle import publish_snapshot
+
+        publish_snapshot(conn, revision_id='rev-a', work_id=work_id, snapshot_id='selected-a',
+                         metadata={'provider': 'tmdb', 'provider_id': '1', 'title': 'A', 'metadata_state': 'ready'},
+                         artifact_ids=[])
+
     checked: list[str] = []
 
     def capture(_database, *, revision_id, work_id, metadata):
@@ -337,11 +353,11 @@ def test_projection_checks_completeness_against_selected_scrape_revision(tmp_pat
     card = V4LibraryProjection(database).rebuild().cards[0]
 
     assert card["metadata"]["title"] == "A"
-    assert checked == ["rev-a"]
+    assert checked == []
 
 
 def test_transient_refresh_failure_keeps_the_last_published_result(tmp_path, monkeypatch):
-    """一次瞬时刷新失败不能让已发布作品从媒体墙消失：回退到上一次成功且产物完整的快照。"""
+    """瞬时刷新失败保留身份适用的已发布 SQLite 快照。"""
 
     from app.media_v4.projection.library import V4LibraryProjection
 
@@ -363,24 +379,25 @@ def test_transient_refresh_failure_keeps_the_last_published_result(tmp_path, mon
     assert card["metadata"]["metadata_state"] == "ready", "刷新失败不应把已发布作品移出媒体墙"
     assert card["metadata"]["title"] == "A", "应显示上一次成功结果的资料"
     assert card["metadata"]["metadata_refresh_error"], "必须标注当前显示的是上一次成功结果"
-    assert checked == ["rev-a"], "产物复查针对上一次成功的 revision"
+    assert checked == [], "保留有效快照不检查镜像/NFO/图片"
 
 
-def test_refresh_failure_still_hides_a_work_whose_previous_artifacts_are_broken(tmp_path, monkeypatch):
-    """反证：上一次结果的产物已损坏时不回退，不能把真正坏掉的作品伪装成正常。"""
+def test_refresh_failure_keeps_metadata_when_previous_files_are_broken(tmp_path, monkeypatch):
+    """图片或历史 NFO 故障不能反向废弃已确认且有效的资料。"""
 
     from app.media_v4.projection.library import V4LibraryProjection
 
     database = _two_bindings(tmp_path, failure_newer=True)
     monkeypatch.setattr(
         "app.media_v4.jobs.completeness.assess_persisted_completeness",
-        lambda *_args, **_kwargs: (False, ["缺少或损坏 1 个剧集 NFO"]),
+        lambda *_args, **_kwargs: pytest.fail('投影不得检查历史文件'),
     )
 
     card = V4LibraryProjection(database).rebuild().cards[0]
 
-    assert card["metadata"]["metadata_state"] == "failed"
-    assert "metadata_refresh_error" not in card["metadata"]
+    assert card["metadata"]["metadata_state"] == "ready"
+    assert card['metadata']['title'] == 'A'
+    assert card['metadata']['metadata_refresh_error']
 
 
 def test_older_failure_does_not_override_a_newer_success(tmp_path, monkeypatch):
@@ -402,7 +419,7 @@ def test_older_failure_does_not_override_a_newer_success(tmp_path, monkeypatch):
 
 
 def _two_bindings(tmp_path, *, failure_newer: bool):
-    """构造同一作品的两条 confirmed revision 绑定：一条 ready、一条 failed。"""
+    """同一来源连续确认后的真实旧成功快照与当前刷新状态。"""
 
     from app.media_v4.domain.models import ParsedFacts, SourceEvidence
     from app.media_v4.persistence.database import V4Database
@@ -416,13 +433,14 @@ def _two_bindings(tmp_path, *, failure_newer: bool):
         evidence = SourceEvidence(
             evidence_id=f"ev-{suffix}",
             scan_id=scan_id,
-            root_id=root_id,
-            source_key=f"Show/{suffix}.mkv",
-            relative_path=f"Show/{suffix}.mkv",
+            root_id='root-refresh',
+            source_key='Show/Show.S01E01.mkv',
+            relative_path='Show/Show.S01E01.mkv',
             entry_kind="video",
             provider="local",
-            source_locator=f"local://{suffix}",
-            fingerprint=f"sha256:{suffix}",
+            source_locator='Z:/fixture/Show/Show.S01E01.mkv',
+            playback_locator='Z:/fixture/Show/Show.S01E01.mkv',
+            fingerprint='sha256:fixture-same-content',
         )
         facts = ParsedFacts(
             parsed_fact_id=f"facts-{suffix}",
@@ -435,6 +453,8 @@ def _two_bindings(tmp_path, *, failure_newer: bool):
             group_type="season",
             season_candidate=1,
             episode_candidate=1,
+            tmdb_hint_id=1,
+            tmdb_hint_type='tv',
         )
         return evidence, facts
 
@@ -448,6 +468,7 @@ def _two_bindings(tmp_path, *, failure_newer: bool):
     else:
         ready_at, failed_at = "2026-09-09T04:00:00+00:00", "2026-09-09T03:00:00+00:00"
     with database.connect() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM works').fetchone()[0] == 1
         work_id = str(conn.execute("SELECT work_id FROM works").fetchone()[0])
         conn.execute(
             """
@@ -485,6 +506,17 @@ def _two_bindings(tmp_path, *, failure_newer: bool):
                 failed_at,
             ),
         )
+        from app.media_v4.persistence.metadata_lifecycle import attach_snapshot_refs, publish_snapshot
+
+        metadata = json.loads(conn.execute("SELECT metadata_json FROM scrape_bindings WHERE binding_id='binding-a'").fetchone()[0])
+        metadata.update(provider='tmdb', provider_id='1', media_type='tv')
+        snapshot = publish_snapshot(conn, revision_id='rev-a', work_id=work_id, snapshot_id='snapshot-ready-a',
+                                    metadata=metadata, artifact_ids=[])
+        attach_snapshot_refs(conn, 'rev-b', work_id, snapshot)
+        conn.execute("UPDATE revision_metadata_refs SET created_at=? WHERE revision_id='rev-a'", (ready_at,))
+        conn.execute("UPDATE revision_metadata_refs SET created_at=? WHERE revision_id='rev-b'", (failed_at,))
+        conn.execute("UPDATE jobs SET status=?,last_error=?,updated_at=? WHERE revision_id='rev-b' AND job_type='scrape_work'",
+                     ('failed' if failure_newer else 'succeeded', 'fixture temporary failure' if failure_newer else '', failed_at))
     return database
 
 

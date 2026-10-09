@@ -60,7 +60,7 @@ class V4TrackingStore:
             )
             from app.media_v4.projection.library import bump_display_version
 
-            bump_display_version(conn)
+            bump_display_version(conn, work_id, kind='watch')
 
     def get_state(self, work_id: str, provider: str) -> dict:
         with self.database.connect() as conn:

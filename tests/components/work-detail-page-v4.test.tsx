@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { playbackApi } from '../../src/api/playback';
 import { useLibraryStore } from '../../src/stores/library';
 import { useUiStore } from '../../src/stores/ui';
@@ -21,10 +21,10 @@ const work = {
   card_type: 'main_series',
   poster_path: '',
   fanart_path: '',
-  local_poster_path: 'D:/mirror/测试动画/poster.jpg',
-  local_fanart_path: 'D:/mirror/测试动画/fanart.jpg',
+  local_poster_path: '/api/assets/artwork/poster/v1/384',
+  local_fanart_path: '/api/assets/artwork/fanart/v1/1280',
   clearlogo_path: 'https://image.tmdb.org/t/p/original/logo.png',
-  local_clearlogo_path: 'D:/mirror/测试动画/clearlogo.png',
+  local_clearlogo_path: '/api/assets/artwork/logo/v1/512',
   dir_path: '',
   tags: [],
   related_works: [],
@@ -39,7 +39,7 @@ const work = {
       season_number: 1,
       episode_number: 1,
       title: '启程',
-      thumb_path: 'https://image.tmdb.org/t/p/w300/still.jpg',
+      thumb_path: '/api/assets/artwork/still/v1/384',
       group_type: 'season',
       kind: 'episode',
       source: 'baidu',
@@ -52,7 +52,19 @@ const work = {
   ],
 };
 
+// JSDOM 不传输图片；为卸载后仍占预算的节点模拟浏览器完成事件。
+const startedImages = new Set<HTMLImageElement>();
+const nativeSource = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src')!.set!;
+afterEach(() => {
+  act(() => { for (const image of startedImages) fireEvent.load(image); });
+  startedImages.clear();
+});
+
 beforeEach(() => {
+  vi.spyOn(HTMLImageElement.prototype, 'src', 'set').mockImplementation(function (this: HTMLImageElement, value: string) {
+    startedImages.add(this);
+    nativeSource.call(this, value);
+  });
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
     configurable: true,
     value: vi.fn(),
@@ -65,6 +77,7 @@ beforeEach(() => {
   });
   useLibraryStore.setState({
     works: [work as never],
+    selectedWorkDetail: null,
     history: [],
     getWorkDetail: vi.fn().mockResolvedValue(work),
     updateWorkWatchStatus: vi.fn(),
@@ -72,6 +85,20 @@ beforeEach(() => {
   vi.spyOn(playbackApi, 'getProgress').mockResolvedValue({ items: [] });
   vi.spyOn(playbackApi, 'getHistory').mockResolvedValue({ items: [] });
   vi.spyOn(playbackApi, 'getStatus').mockResolvedValue({ status: 'idle', session: null });
+});
+
+test('单作品图片发布更新当前详情，不重新请求详情或重置当前季度', async () => {
+  const { container } = render(<WorkDetailPage />);
+  await screen.findByText('启程');
+  const getDetail = useLibraryStore.getState().getWorkDetail;
+  expect(getDetail).toHaveBeenCalledOnce();
+  const updated = { ...work, episodes: [{ ...work.episodes[0], thumb_path: '/api/assets/artwork/still/v2/384' }],
+    cast: [{ name: '新演员', role: '角色', profile_path: '/api/assets/artwork/actor/v2/384' }] };
+  act(() => useLibraryStore.setState({ selectedWorkDetail: updated as never }));
+  expect(container.querySelector('.episode-thumb img')).not.toBeNull();
+  expect(screen.getByText('新演员')).toBeVisible();
+  expect(useUiStore.getState().selectedSeasonNumber).toBe(1);
+  expect(getDetail).toHaveBeenCalledOnce();
 });
 
 test('按旧版沉浸式结构展示 V4 季度和剧集信息', async () => {
@@ -295,10 +322,10 @@ test('详情首屏优先复用本地图片，不重复请求同一张背景图',
   const logo = await screen.findByAltText('测试动画 logo');
   const episodeImage = container.querySelector('.episode-thumb img');
 
-  expect(hero.getAttribute('src')).toContain('D%3A%2Fmirror%2F%E6%B5%8B%E8%AF%95%E5%8A%A8%E7%94%BB%2Ffanart.jpg');
+  expect(hero.getAttribute('src')).toContain('/api/assets/artwork/fanart/v1/1280');
   expect(hero).toHaveAttribute('loading', 'eager');
   expect(container.querySelector('.detail-hero-bg')).toBeNull();
-  expect(logo.getAttribute('src')).toContain('D%3A%2Fmirror%2F%E6%B5%8B%E8%AF%95%E5%8A%A8%E7%94%BB%2Fclearlogo.png');
+  expect(logo.getAttribute('src')).toContain('/api/assets/artwork/logo/v1/512');
   expect(episodeImage).toHaveAttribute('loading', 'eager');
 });
 
@@ -479,16 +506,16 @@ test('全部有图的特别篇也显示原名列表', async () => {
 });
 
 test('关联与推荐优先本地海报，只有横图或图片失败时保留文字占位', async () => {
-  const related = { ...work, work_id: 'related', title: '关联作品甲', local_poster_path: 'D:/mirror/related-poster.jpg', fanart_path: 'https://image.tmdb.org/t/p/original/related-fanart.jpg' };
-  const similar = { ...work, work_id: 'similar', title: '推荐作品乙', local_poster_path: 'D:/mirror/similar-poster.jpg' };
+  const related = { ...work, work_id: 'related', title: '关联作品甲', local_poster_path: '/api/assets/artwork/related/v1/384', fanart_path: 'https://image.tmdb.org/t/p/original/related-fanart.jpg' };
+  const similar = { ...work, work_id: 'similar', title: '推荐作品乙', local_poster_path: '/api/assets/artwork/similar/v1/384' };
   const noPoster = { ...work, work_id: 'no-poster', title: '只有背景图', local_poster_path: '', poster_path: '', fanart_path: 'https://image.tmdb.org/t/p/original/only-fanart.jpg' };
   const detailWork = { ...work, related_works: [{ work_id: related.work_id, title: related.title, poster_path: 'https://image.tmdb.org/t/p/w500/remote.jpg', fanart_path: related.fanart_path }, { work_id: noPoster.work_id, title: noPoster.title, fanart_path: noPoster.fanart_path }] };
   useLibraryStore.setState({ works: [detailWork, related, similar, noPoster] as never, getWorkDetail: vi.fn().mockResolvedValue(detailWork) });
   const { container } = render(<WorkDetailPage />);
   await screen.findByText('关联作品甲');
   const relatedCard = container.querySelector('.detail-related-card')!;
-  expect(relatedCard.querySelector('img')?.getAttribute('src')).toContain(encodeURIComponent(related.local_poster_path));
-  expect(container.querySelector('.detail-similar-card img')?.getAttribute('src')).toContain(encodeURIComponent(similar.local_poster_path));
+  expect(relatedCard.querySelector('img')?.getAttribute('src')).toContain(related.local_poster_path);
+  expect(container.querySelector('.detail-similar-card img')?.getAttribute('src')).toContain(similar.local_poster_path);
   expect(container.querySelectorAll('.detail-related-card')[1].querySelector('img')).toBeNull();
   expect(container.querySelectorAll('.detail-related-card')[1].querySelector('.detail-related-fallback')).toHaveTextContent('暂无海报');
   fireEvent.error(relatedCard.querySelector('img')!);

@@ -27,7 +27,6 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
   const playerLabel = externalPlayer ? '外部播放器' : '内置播放器';
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<SetupCompletePayload>({
-    mirror_dir: initialConfig.mirror_dir || '',
     pan115_root: initialConfig.pan115_root || '',
     baidu_root: initialConfig.baidu_root || '',
     local_root: initialConfig.local_root || '',
@@ -101,10 +100,6 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
       return;
     }
     if (step === 2) {
-      if (!form.mirror_dir?.trim()) {
-        setError('请选择镜像目录');
-        return;
-      }
       if (sourceCount === 0) {
         setError('请至少配置一个媒体来源');
         return;
@@ -201,10 +196,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                   {sourceOptions.map((source) => <Radio key={source.key} value={source.key} label={`${source.name}${form[source.key]?.trim() ? ' · 已配置' : ''}`} />)}
                 </RadioGroup>
                 <SetupPathField label={selectedSource.label} value={form[activeSource] || ''} placeholder={selectedSource.placeholder} onChange={(value) => update(activeSource, value)} onPick={() => chooseDirectory(activeSource, `选择${selectedSource.label}`)} />
-                <div className="first-run-storage-section">
-                  <SetupPathField label="镜像目录（必填）" value={form.mirror_dir} placeholder="选择媒体库资料的保存位置" onChange={(value) => update('mirror_dir', value)} onPick={() => chooseDirectory('mirror_dir', '选择镜像目录')} />
-                  <p>用于保存播放入口、海报和作品资料，不复制原始视频。</p>
-                </div>
+                <p>网盘媒体通过本地挂载播放；目录树和 OpenList 只提供目录信息。作品资料与图片缓存由应用独立保存。</p>
                 <Accordion className="first-run-options" collapsible defaultOpenItems={form.directory_tree_dir ? ['tree'] : []}>
                   <AccordionItem value="tree">
                     <AccordionHeader>导入目录树（可选）{form.directory_tree_dir?.trim() ? ' · 已配置' : ''}</AccordionHeader>
@@ -227,7 +219,6 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                 <p>完成前会检查播放器和目录是否可用。海报与观看同步可以稍后设置。</p>
                 <div className="first-run-summary">
                   <SummaryRow label={playerLabel} value={mpvReady ? '已就绪' : '未就绪'} ok={mpvReady} />
-                  <SummaryRow label="镜像目录" value={form.mirror_dir} ok={Boolean(form.mirror_dir?.trim())} />
                   <SummaryRow label="媒体来源" value={`已配置 ${sourceCount} 个来源`} ok={sourceCount > 0} />
                 </div>
                 <Accordion className="first-run-options" collapsible>
@@ -262,7 +253,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                 <button
                   className="first-run-primary"
                   onClick={goNext}
-                  disabled={(step === 1 && !mpvReady) || (step === 2 && (!form.mirror_dir?.trim() || sourceCount === 0))}
+                  disabled={(step === 1 && !mpvReady) || (step === 2 && sourceCount === 0)}
                 >继续<ChevronRight size={17} /></button>
               ) : (
                 <button className="first-run-primary" onClick={finish} disabled={finishing}>{finishing ? '正在验证…' : '验证并完成'}<CheckCircle2 size={17} /></button>

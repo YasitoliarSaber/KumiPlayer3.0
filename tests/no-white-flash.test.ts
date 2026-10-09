@@ -13,13 +13,16 @@ test('桌面 WebView 和 HTML 启动层使用同一非白色首帧背景', () =>
   assert.match(html, /#kumi-boot-splash\s*\{[^}]*background:\s*var\(--kumi-boot-bg\)/s);
 });
 
-test('主要媒体入口统一等待图片解码，避免半张图和白底逐行出现', () => {
+test('主要媒体入口统一在完整加载后展示，避免重复显式解码', () => {
   const poster = readFileSync(new URL('../src/components/library/PosterCard.tsx', import.meta.url), 'utf8');
   const home = readFileSync(new URL('../src/pages/HomePage.tsx', import.meta.url), 'utf8');
   const detail = readFileSync(new URL('../src/pages/WorkDetailPage.tsx', import.meta.url), 'utf8');
   const decodedImage = readFileSync(new URL('../src/components/ui/DecodedImage.tsx', import.meta.url), 'utf8');
 
-  assert.match(decodedImage, /image\.decode\(\)/);
+  assert.doesNotMatch(decodedImage, /\.decode\(/);
+  assert.match(decodedImage, /defaultImageLifecycle\.register/);
+  assert.match(decodedImage, /state === 'ready' \? 'is-ready' : 'is-pending'/);
+  assert.match(decodedImage, /loading="eager"/);
   assert.match(decodedImage, /data-image-state/);
   assert.match(poster, /<DecodedImage/);
   assert.match(home, /<DecodedImage/g);

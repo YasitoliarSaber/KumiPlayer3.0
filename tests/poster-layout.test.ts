@@ -32,7 +32,9 @@ test('海报墙的图片观察器预加载附近视口，网格不监听逐像�
   const lifecycle = readFileSync(new URL('../src/components/library/posterImageLifecycle.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(grid, /addEventListener\('scroll'/);
   assert.match(lifecycle, /new IntersectionObserver/);
-  assert.match(lifecycle, /height \* 1\.25/);
+  assert.match(lifecycle, /\['visible', 'preload', 'resident'\]/);
+  assert.match(lifecycle, /height \* 0\.5/);
+  assert.match(lifecycle, /height \* 2/);
   assert.match(lifecycle, /image\.removeAttribute\('src'\)/);
 });
 

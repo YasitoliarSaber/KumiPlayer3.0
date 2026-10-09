@@ -327,8 +327,6 @@ export interface V4WorkProgressUnit {
   episode_count: number
   asset_count: number
   overall_status:
-    | 'waiting_mirror'
-    | 'running_mirror'
     | 'waiting_metadata'
     | 'running_metadata'
     | 'needs_attention'
@@ -345,8 +343,12 @@ export interface V4WorkProgressUnit {
   metadata_recovery_hint?: string
   /** 每次本作品任务或刮削快照更新时变化，用于使执行详情缓存失效。 */
   detail_version?: string
-  mirror: { job_id: string; status: string; attempts: number; last_error: string }
   metadata: { job_id: string; status: string; attempts: number; last_error: string }
+  artwork?: {
+    status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | 'not_required'
+    total: number
+    counts: Record<string, number>
+  }
 }
 
 export interface V4WorkExecutionDetail {
@@ -366,13 +368,8 @@ export interface V4WorkExecutionDetail {
     metadata_recovery_action?: V4MetadataRecoveryAction
     metadata_recovery_hint?: string
   }
-  mirror: {
-    status: string
-    error: string
-    artifact_count: number
-    artifacts: Array<{ file_name: string; status: string }>
-  }
   metadata_job_status: string
+  artwork?: V4WorkProgressUnit['artwork']
   name_recovery?: {
     status: string
     steps: Array<{ provider: string; status: string; reason_code: string; cache_status: string; aliases: string[] }>
@@ -469,8 +466,8 @@ export interface V4ExecutionProgress {
   revision_status: string
   overall_status: 'running' | 'needs_attention' | 'queued' | 'cancelled' | 'completed'
   stage_summary: {
-    mirror: V4StageSummary
     metadata: V4StageSummary
+    artwork?: V4StageSummary
     projection: V4StageSummary
   }
   work_units: V4WorkProgressUnit[]
