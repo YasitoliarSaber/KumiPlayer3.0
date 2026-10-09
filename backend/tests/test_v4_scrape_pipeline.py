@@ -445,8 +445,8 @@ def test_missing_episode_artwork_keeps_work_information_but_is_not_completed(tmp
     assert stored["artifact_state"] == "incomplete"
 
 
-def test_legacy_missing_local_thumbnail_is_not_ready_without_rewriting_data(tmp_path, monkeypatch):
-    """历史缺少本地正片图片不能归一为完成，原记录仍只读保留。"""
+def test_legacy_missing_local_thumbnail_preserves_metadata_without_rewriting_data(tmp_path, monkeypatch):
+    """资料与图片状态分离；图片降级仍诚实保留，原记录只读。"""
 
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -482,8 +482,8 @@ def test_legacy_missing_local_thumbnail_is_not_ready_without_rewriting_data(tmp_
         )
 
     detail = revisions.get_work_execution_detail("rev-legacy", work_id)
-    assert detail["work"]["metadata_state"] == "failed"
-    assert detail["work"]["metadata_reason_code"] == "episode_artwork_incomplete"
+    assert detail["work"]["metadata_state"] == "ready"
+    assert detail["work"]["metadata_reason_code"] != "episode_artwork_incomplete"
     assert detail["work"]["artifact_state"] == "degraded"
     assert detail["work"]["artifact_reasons"] == ["海报下载或发布失败"]
     # 只读归一：数据库里的历史失败记录保持原样。

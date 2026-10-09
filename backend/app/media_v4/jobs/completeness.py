@@ -86,7 +86,7 @@ def assess_metadata_completeness(
 
     snapshot_id = metadata.get('metadata_snapshot_id')
     if snapshot_id:
-        from app.media_v4.persistence.metadata_lifecycle import artifacts_valid, snapshot_requirements_valid
+        from app.media_v4.persistence.metadata_lifecycle import artifacts_valid
         with database.connect() as conn:
             rows = [dict(row) for row in conn.execute(
                 "SELECT * FROM artifacts WHERE revision_id=? AND work_id=? AND status='published'",
@@ -96,7 +96,10 @@ def assess_metadata_completeness(
             row['role'] = 'work_metadata' if row['artifact_type'] == 'nfo' else row['artifact_type']
         if not artifacts_valid(rows):
             reasons.append('本次 Work NFO 或资料产物缺失、摘要不一致')
-        elif not snapshot_requirements_valid(metadata, rows):
+        elif load_config().artwork_storage_mode == 'remote':
+            if not all(_valid_remote_artwork_url(str(metadata.get(key) or '')) for key in ('poster_url', 'fanart_url')):
+                reasons.append('本次海报或背景图产物不完整')
+        elif not {'poster', 'fanart'} <= {row['artifact_type'] for row in rows}:
             reasons.append('本次海报或背景图产物不完整')
         return not reasons, reasons
 

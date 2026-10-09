@@ -183,7 +183,7 @@ def test_seasonless_local_episodes_are_not_forced_into_an_online_season():
     assert mappings == [], f"未分季集不得产生任何季集绑定，实际 {mappings}"
 
 
-def test_regular_season_fetch_failure_prevents_false_ready_metadata(monkeypatch):
+def test_regular_season_fetch_failure_preserves_work_metadata_and_mapping_status(monkeypatch):
     from app.media_v4.jobs import metadata as metadata_module
     from app.scrape.tmdb_client import TMDBClientError
 
@@ -229,8 +229,8 @@ def test_regular_season_fetch_failure_prevents_false_ready_metadata(monkeypatch)
         }],
     })
 
-    assert result["metadata_state"] == "failed"
-    assert result["reason_code"] == "episode_artwork_incomplete"
+    assert result["metadata_state"] == "ready"
+    assert result["reason_code"] == "episode_mapping_incomplete"
     assert result["episode_mapping_status"] == "unmapped"
 
 
@@ -282,9 +282,9 @@ def test_partial_season_failure_keeps_work_metadata_and_retry_details(monkeypatc
 
     assert result["provider"] == "tmdb"
     assert result["provider_id"] == "42"
-    assert result["metadata_state"] == "failed"
+    assert result["metadata_state"] == "ready"
     assert result["episode_mapping_status"] == "partial"
-    assert result["reason_code"] == "episode_artwork_incomplete"
+    assert result["reason_code"] == "episode_mapping_incomplete"
     assert result["title"] == "Show"
     assert [item["episode_id"] for item in result["episode_mappings"]] == ["s1e1"]
     assert result["season_results"] == [{

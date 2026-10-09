@@ -61,14 +61,15 @@ def artifacts_valid(rows: list[dict]) -> bool:
         return False
 
 
-def snapshot_requirements_valid(metadata: dict, rows: list[dict]) -> bool:
-    from app.media_v4.jobs.completeness import _valid_remote_artwork_url, load_config
-    if not artifacts_valid(rows):
-        return False
-    if load_config().artwork_storage_mode == 'remote':
-        return all(_valid_remote_artwork_url(str(metadata.get(key) or '')) for key in ('poster_url', 'fanart_url'))
-    kinds = {row['artifact_type'] for row in rows}
-    return {'poster', 'fanart'} <= kinds
+def snapshot_requirements_valid(metadata: dict) -> bool:
+    """资料快照以已确认内容为准；NFO、图片和配置不参与资料有效性。"""
+    return bool(
+        isinstance(metadata, dict)
+        and metadata.get('metadata_state') in {'ready', 'confirmed'}
+        and str(metadata.get('provider') or '').strip() not in {'', 'local'}
+        and str(metadata.get('provider_id') or '').strip()
+        and str(metadata.get('title') or '').strip()
+    )
 
 
 def select_applicable_snapshot(conn, revision_id: str, work_id: str) -> dict | None:
@@ -80,7 +81,7 @@ def select_applicable_snapshot(conn, revision_id: str, work_id: str) -> dict | N
         'ORDER BY ms.created_at DESC,ms.snapshot_id DESC', (work_id, signature),
     ):
         artifacts = snapshot_artifacts(conn, str(row['snapshot_id']))
-        if not snapshot_requirements_valid(json.loads(row['metadata_json']), artifacts):
+        if not snapshot_requirements_valid(json.loads(row['metadata_json'])):
             continue
         result = dict(row)
         result['metadata'] = json.loads(row['metadata_json'])
@@ -193,7 +194,7 @@ def import_legacy_snapshot(conn, work_id: str) -> None:
         )]
         for artifact in artifacts:
             artifact['role'] = 'work_metadata' if artifact['artifact_type'] == 'nfo' else 'artwork'
-        if not snapshot_requirements_valid(metadata, artifacts):
+        if not snapshot_requirements_valid(metadata):
             continue
         episodes = {str(e['episode_id']): dict(e) for e in conn.execute(
             'SELECT DISTINCT e.*,s.local_season_number FROM episodes e JOIN seasons s ON s.season_id=e.season_id '
@@ -231,7 +232,7 @@ def referenced_metadata(conn, work_id: str, revision_id: str | None = None) -> d
     ).fetchone()
     if row is None or row['identity_signature'] != identity_signature(conn, work_id):
         return None
-    if not snapshot_requirements_valid(json.loads(row['metadata_json']), snapshot_artifacts(conn, row['snapshot_id'])):
+    if not snapshot_requirements_valid(json.loads(row['metadata_json'])):
         return None
     metadata = json.loads(row['metadata_json'])
     current = current_episode_signatures(conn, revision_id, work_id)
@@ -248,7 +249,7 @@ def referenced_metadata(conn, work_id: str, revision_id: str | None = None) -> d
             'ORDER BY ms.created_at DESC,ms.snapshot_id DESC', (work_id, row['identity_signature']),
         ):
             data = json.loads(other['metadata_json'])
-            if not snapshot_requirements_valid(data, snapshot_artifacts(conn, other['snapshot_id'])):
+            if not snapshot_requirements_valid(data):
                 continue
             signatures = json.loads(other['episode_signatures_json'])
             for mapping in data.get('episode_mappings', []):

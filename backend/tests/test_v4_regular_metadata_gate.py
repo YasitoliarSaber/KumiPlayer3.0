@@ -41,13 +41,13 @@ def test_missing_optional_special_does_not_hide_complete_regular_metadata():
     assert result['metadata_state'] == 'ready'
 
 
-def test_mapped_regular_episode_without_title_and_still_needs_thumbnail():
+def test_mapped_regular_episode_without_title_and_still_preserves_work_metadata():
     result = finalize_metadata_statuses({'episodes': [{'episode_id': 'e1', 'episode_kind': 'regular'}]}, {
         'provider': 'tmdb', 'provider_id': '42', 'metadata_state': 'ready',
         'episode_mappings': [{'episode_id': 'e1', 'provider_episode_id': '11', 'title': '', 'still_url': ''}],
     })
     assert result['episode_mapping_status'] == 'complete'
-    assert result['metadata_state'] == 'failed'
-    assert result['reason_code'] == 'episode_artwork_incomplete'
+    assert result['metadata_state'] == 'ready'
+    assert result['episode_artwork_status'] == 'pending'
     assert result['episode_metadata_status'] == 'incomplete'
     assert result['missing_episode_title_count'] == result['missing_episode_still_count'] == 1

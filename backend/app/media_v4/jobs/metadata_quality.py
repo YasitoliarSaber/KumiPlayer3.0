@@ -16,8 +16,10 @@ def require_regular_episode_metadata(episodes: list[dict], metadata: dict) -> di
     missing_stills = {key for key in regular if not any(
         str(artwork.get(key, {}).get(field) or '').strip()
         for field in ('still_url', 'local_thumb_path', 'thumb_path'))}
-    result.update(episode_metadata_status='incomplete' if missing or missing_titles or missing_stills else 'complete',
+    result.update(episode_metadata_status='incomplete' if missing or missing_titles else 'complete',
                   missing_episode_title_count=len(missing_titles), missing_episode_still_count=len(missing_stills))
+    # 图片来源缺项单独记录；资料读取不推断下载成功，也不探测图片文件。
+    result.setdefault('episode_artwork_status', 'pending')
     reasons = {str(item.get('episode_id')): str(item.get('reason') or '')
                for item in result.get('unmapped_reasons') or [] if isinstance(item, dict)}
     conflicts = {str(item.get('episode_id')) for item in result.get('mapping_conflicts') or []
@@ -36,12 +38,10 @@ def require_regular_episode_metadata(episodes: list[dict], metadata: dict) -> di
         # 旧门槛保存的失败状态按当前合同重评；不能恢复真实身份或编号冲突。
         result.update(metadata_state='ready', reason='', refresh_status='partial',
                       refresh_reason_code=result['reason_code'])
-    if not (blocked or missing or missing_titles or missing_stills) or result.get('metadata_state') not in {'ready', 'confirmed'}:
+    if not (blocked or missing or missing_titles) or result.get('metadata_state') not in {'ready', 'confirmed'}:
         return result
-    # 不要求在线全集或剧情简介，但已有正片的真实缩略图是完成条件。
+    # 资料质量和图片准备独立；仍拒绝没有事实依据的分季、集号。
     if not blocked:
-        if missing_stills:
-            return _missing_episode_artwork(result, len(missing_stills))
         if missing:
             result['metadata_warning'] = f'{len(missing)} 个本地正片尚无在线分集资料，保留本地编号，可正常浏览与播放。'
             if result.get('refresh_status') not in {'failed', 'cancelled', 'pending'}:
@@ -56,14 +56,6 @@ def require_regular_episode_metadata(episodes: list[dict], metadata: dict) -> di
     )
     result.pop('metadata_warning', None)
     return result
-
-
-def _missing_episode_artwork(metadata: dict, count: int) -> dict:
-    return {**metadata, 'metadata_state': 'failed', 'reason_code': 'episode_artwork_incomplete',
-            'reason': f'{count} 个已有正片的缩略图尚未准备好，请重新获取分集图片。',
-            'failure_stage': 'episode_artwork', 'retryable': True, 'refresh_status': 'partial',
-            'refresh_reason_code': 'episode_artwork_incomplete', 'episode_artwork_status': 'incomplete',
-            'missing_episode_still_count': count}
 
 
 def missing_episode_artwork(episodes: list[dict], metadata: dict, artifacts: list[dict], mode: str) -> int:
@@ -116,16 +108,4 @@ def current_episode_metadata(conn, revision_id: str | None, work_id: str, metada
     )]
     if episode_ids is not None:
         episodes = [item for item in episodes if str(item['episode_id']) in episode_ids]
-    result = require_regular_episode_metadata(episodes, metadata)
-    if result.get('metadata_state') in {'ready', 'confirmed'}:
-        from app.media_v4.jobs.completeness import load_config
-
-        artifacts = [dict(row) for row in conn.execute(
-            "SELECT artifact_type,status,target_path,digest FROM artifacts WHERE work_id=? AND artifact_type='episode_thumb'",
-            (work_id,),
-        )]
-        missing = missing_episode_artwork(episodes, result, artifacts, load_config().artwork_storage_mode)
-        if missing:
-            return _missing_episode_artwork(result, missing)
-        result['episode_artwork_status'] = 'complete'
-    return result
+    return require_regular_episode_metadata(episodes, metadata)

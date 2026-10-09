@@ -1,4 +1,4 @@
-"""已有正片需要真实缩略图；在线全集数量和特别篇不参与图片门槛。"""
+"""分集图片单独评估；图片缺项不使已确认作品资料失效。"""
 import hashlib
 import json
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.core.config import AppConfig
-from app.media_v4.jobs.metadata_quality import require_regular_episode_metadata
+from app.media_v4.jobs.metadata_quality import missing_episode_artwork, require_regular_episode_metadata
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.jobs.scrape import V4ScrapeService
 from app.media_v4.persistence.database import V4Database
@@ -21,13 +21,14 @@ def _regular():
 
 
 @pytest.mark.parametrize('mapped', [True, False])
-def test_missing_local_regular_thumbnail_cannot_be_ready(mapped):
+def test_missing_local_regular_thumbnail_preserves_metadata_ready(mapped):
     metadata = {'metadata_state': 'ready', 'identity_status': 'confirmed', 'work_metadata_status': 'ready',
                 'provider_id': '42', 'episode_mappings':
                 [{'episode_id': 'e1', 'provider_episode_id': '101', 'title': 'E1'}] if mapped else []}
     result = require_regular_episode_metadata(_regular(), metadata)
-    assert result['metadata_state'] == 'failed'
-    assert result['reason_code'] == 'episode_artwork_incomplete'
+    assert result['metadata_state'] == 'ready'
+    assert result['episode_artwork_status'] == 'pending'
+    assert result['episode_metadata_status'] == ('complete' if mapped else 'incomplete')
     assert result['missing_episode_still_count'] == 1
     assert metadata['metadata_state'] == 'ready'
 
@@ -118,8 +119,12 @@ def test_actual_local_thumbnail_download_controls_completion(tmp_path, monkeypat
         else:
             thumb.write_bytes(b'corrupted')
         card = V4LibraryProjection(database).rebuild().cards[0]
-        assert card['metadata']['metadata_state'] != 'ready'
-        assert V4RevisionService(database).get_execution_progress('r1')['work_units'][0]['overall_status'] != 'completed'
+        assert card['metadata']['metadata_state'] == 'ready'
+        # 资料读取不以现场检查撤销成功；图片完整性由显式后台检查单独判定。
+        with database.connect() as conn:
+            artifacts = [dict(row) for row in conn.execute("SELECT * FROM artifacts WHERE artifact_type='episode_thumb'")]
+        assert missing_episode_artwork(
+            [{'episode_id': metadata['episode_mappings'][0]['episode_id']}], metadata, artifacts, 'local') == 1
     # 缺图失败、文件丢失或损坏后，复用已保存的身份和图片地址即可恢复。
     missing_download = False
     result = V4ScrapeService(database).retry_artifacts('r1', unit['work_id'], mirror_root=tmp_path / 'mirror')

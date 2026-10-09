@@ -89,10 +89,11 @@ def test_missing_online_entry_keeps_local_coordinates_but_needs_thumbnail(monkey
     _install_client(monkeypatch, seasons={1: [1]})
     result = metadata_module.default_metadata_provider(
         _target([_episode('e1', season=1, episode=1), _episode('e8', season=1, episode=8)]))
-    assert result['metadata_state'] == 'failed'
+    assert result['metadata_state'] == 'ready'
     assert result['episode_mapping_status'] == 'partial'
     assert result['unmapped_episode_ids'] == ['e8']
-    assert result['reason_code'] == 'episode_artwork_incomplete'
+    assert result.get('reason_code') != 'episode_artwork_incomplete'
+    assert result['missing_episode_still_count'] == 1
     assert result['episode_coordinate_status'] == 'confirmed'
 
 
@@ -100,7 +101,7 @@ def test_season_data_outage_keeps_confirmed_work_and_local_coordinates_usable(mo
     _install_client(monkeypatch, season_errors={1: TMDBClientError('fixture season unavailable')})
     result = metadata_module.default_metadata_provider(
         _target([_episode('e1', season=1, episode=1)]))
-    assert result['metadata_state'] == 'failed'
+    assert result['metadata_state'] == 'ready'
     assert result['identity_status'] == 'confirmed'
     assert result['episode_mapping_status'] == 'unmapped'
     assert result['unmapped_episode_ids'] == ['e1']
@@ -115,7 +116,7 @@ def test_single_episode_fallback_outage_remains_honest_and_retryable(monkeypatch
     monkeypatch.setattr(metadata_module.TMDBClient, 'get_tv_episode_detail', unavailable, raising=False)
     result = metadata_module.default_metadata_provider(
         _target([_episode('e8', season=1, episode=8)]))
-    assert result['metadata_state'] == 'failed'
+    assert result['metadata_state'] == 'ready'
     assert result['unmapped_reason_codes'] == ['provider_unavailable']
     assert result['retryable'] is True
 
