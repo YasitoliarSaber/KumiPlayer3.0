@@ -150,8 +150,8 @@ def test_external_launch_uses_pack_working_directory(monkeypatch, tmp_path):
     exe = tmp_path / "pack" / "mpv.exe"
     exe.parent.mkdir()
     exe.write_bytes(b"mpv")
-    media = tmp_path / "episode.strm"
-    media.write_text("https://example.test/video.mkv", encoding="utf-8")
+    media = tmp_path / "episode.mkv"
+    media.write_bytes(b"video fixture")
     monkeypatch.setattr(mpv, "_resolve_player_executable", lambda: (exe, True))
     monkeypatch.setattr(mpv, "_exited_immediately", lambda _: False)
     monkeypatch.setattr(mpv, "_focus_mpv_window_async", lambda *args: None)

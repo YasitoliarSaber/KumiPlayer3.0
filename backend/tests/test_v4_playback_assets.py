@@ -94,7 +94,7 @@ def test_playback_session_launches_mpv_for_confirmed_asset(tmp_path, monkeypatch
     captured = []
     monkeypatch.setattr(
         "app.media_v4.playback.session.start_mpv",
-        lambda strm_path, **kwargs: captured.append((strm_path, kwargs)) or Process(),
+        lambda media_path, **kwargs: captured.append((media_path, kwargs)) or Process(),
     )
     monkeypatch.setattr("app.media_v4.playback.session.threading.Thread.start", lambda _self: None)
     manager = V4PlaybackManager(database, session_dir=tmp_path / "sessions")
@@ -103,7 +103,8 @@ def test_playback_session_launches_mpv_for_confirmed_asset(tmp_path, monkeypatch
 
     assert session["status"] == "playing"
     assert session["pid"] == 123
-    assert (tmp_path / "sessions" / f"{row['asset_id']}.strm").read_text(encoding="utf-8") == str(media)
+    assert captured[0][0] == str(media)
+    assert not (tmp_path / "sessions").exists()
     assert captured[0][1]["display_title"] == "Show - S01E01"
 
 

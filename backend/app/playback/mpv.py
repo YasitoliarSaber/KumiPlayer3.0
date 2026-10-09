@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.runtime import get_mpv_config_dir, get_mpv_executable
+from app.media_v4.path_validation import validate_playback_locator, validate_playback_locator_syntax
 from app.playback.mpv_runtime import (
     build_mpv_playback_args,
     check_mpv_runtime,
@@ -52,7 +53,7 @@ class PROCESSENTRY32(ctypes.Structure):
 
 
 def start_mpv(
-    strm_path: str,
+    media_path: str,
     mpv_path: str | None = None,
     *,
     playlist_paths: list[str] | None = None,
@@ -60,7 +61,7 @@ def start_mpv(
     start_position: float = 0.0,
     display_title: str = "",
 ) -> subprocess.Popen:
-    """启动 MPV 播放 .strm 文件。
+    """启动 MPV，直接播放已确认的本地媒体路径。
 
     播放模式由配置决定：
     - ``internal``（默认）：KumiPlayer 内置干净 MPV + 自有配置与脚本；
@@ -68,25 +69,34 @@ def start_mpv(
       script/script-opts，整合包的配置、脚本、着色器与界面完全自主。
 
     参数:
-        strm_path: .strm 文件路径
+        media_path: 本地磁盘或已挂载网盘上的绝对媒体路径
         mpv_path: 仅测试注入用；为 None 时按播放模式解析可执行文件。
 
     返回:
         subprocess.Popen 实例
 
     异常:
-        FileNotFoundError: 内置 mpv 缺失或 .strm 不存在
+        ValueError: 媒体路径或播放列表违反本地播放约束
+        FileNotFoundError: 内置 mpv 缺失或选定媒体不可访问
         RuntimeError: 内置运行时校验失败，或外部档未配置有效播放器
         OSError: 启动失败
     """
+    media_paths = list(playlist_paths or [media_path])
+    for path in media_paths:
+        ok, reason = validate_playback_locator_syntax(path)
+        if not ok:
+            raise ValueError(reason)
+    if media_paths[0] != media_path:
+        raise ValueError("播放列表首项与选定媒体不一致")
+    ok, reason = validate_playback_locator(media_path)
+    if not ok:
+        raise FileNotFoundError(reason)
+
     external_mode = False
     if mpv_path:
         executable = Path(mpv_path)
     else:
         executable, external_mode = _resolve_player_executable()
-
-    if not Path(strm_path).is_file():
-        raise FileNotFoundError(f".strm 文件不存在: {strm_path}")
 
     # 完整性门控只针对内置运行时：外部整合包的完整性由用户自己负责。
     if mpv_path is None and not external_mode:
@@ -111,10 +121,6 @@ def start_mpv(
                 f"KumiPlayer 播放配置不完整，无法启动播放: {status['message']}"
             )
 
-    media_paths = list(playlist_paths or [strm_path])
-    if not media_paths:
-        media_paths = [strm_path]
-
     # 使用参数列表，不使用 shell=True。mpv 自己保存同一文件的退出位置，
     # 前端仍只展示“继续播放第 X 集”，不暴露具体时间点。
     kwargs: dict[str, Any] = {
@@ -129,12 +135,12 @@ def start_mpv(
         kwargs["startupinfo"] = startupinfo
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
-    media_title = _clean_display_title(display_title) or Path(strm_path).stem.strip() or "mpv"
+    media_title = _clean_display_title(display_title) or Path(media_path).stem.strip() or "mpv"
     window_title = _build_window_title(media_title)
     process = subprocess.Popen(
         _build_mpv_args(
             executable,
-            strm_path,
+            media_path,
             window_title,
             playlist_paths=media_paths,
             ipc_server=ipc_server,
@@ -148,7 +154,7 @@ def start_mpv(
         process = subprocess.Popen(
             _build_fallback_mpv_args(
                 executable,
-                strm_path,
+                media_path,
                 window_title,
                 playlist_paths=media_paths,
                 ipc_server=ipc_server,
@@ -196,7 +202,7 @@ def _resolve_player_executable() -> tuple[Path, bool]:
 
 def _build_mpv_args(
     mpv_path: Path,
-    strm_path: str,
+    media_path: str,
     window_title: str | None = None,
     *,
     playlist_paths: list[str] | None = None,
@@ -210,16 +216,16 @@ def _build_mpv_args(
         ipc_server=ipc_server,
         start_position=start_position,
         window_title=window_title or "KumiPlayer",
-        media_title=media_title or Path(strm_path).stem,
+        media_title=media_title or Path(media_path).stem,
         playlist_paths=playlist_paths,
-        first_file=strm_path,
+        first_file=media_path,
         external=external,
     )
 
 
 def _build_fallback_mpv_args(
     mpv_path: Path,
-    strm_path: str,
+    media_path: str,
     window_title: str | None = None,
     *,
     playlist_paths: list[str] | None = None,
@@ -233,9 +239,9 @@ def _build_fallback_mpv_args(
         ipc_server=ipc_server,
         start_position=start_position,
         window_title=window_title or "KumiPlayer",
-        media_title=media_title or Path(strm_path).stem,
+        media_title=media_title or Path(media_path).stem,
         playlist_paths=playlist_paths,
-        first_file=strm_path,
+        first_file=media_path,
         fallback=True,
         external=external,
     )

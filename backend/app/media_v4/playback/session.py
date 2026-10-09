@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import subprocess
 import threading
 import time
@@ -15,7 +14,7 @@ from pathlib import Path
 
 from app.core.config import load_config
 from app.core.paths import get_data_dir
-from app.media_v4.path_validation import validate_playback_locator
+from app.media_v4.path_validation import validate_playback_locator, validate_playback_locator_syntax
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.playback.store import V4PlaybackStore
 from app.playback.mpv import start_mpv
@@ -39,9 +38,6 @@ def _normalize_playback_locator(value: object) -> str:
     locator = str(value or "").strip()
     if not locator:
         return ""
-    if re.match(r"^[a-z][a-z0-9+.-]*://", locator, flags=re.IGNORECASE):
-        # URL 的 path 和 query 可能有大小写语义，不能按 Windows 路径折叠。
-        return locator
     return os.path.normpath(locator).replace("/", "\\").casefold()
 
 
@@ -52,14 +48,11 @@ def _resolve_event_playlist_position(event, playlist: list[dict]) -> int | None:
     if media_path:
         positions: dict[str, int] = {}
         for position, asset in enumerate(playlist):
-            for candidate in (asset.get("playback_locator"), asset.get("source_locator")):
-                normalized = _normalize_playback_locator(candidate)
-                if not normalized:
-                    continue
-                previous = positions.get(normalized)
-                # 本地来源常令 source_locator 与 playback_locator 指向同一文件；
-                # 这只是同一 Asset 的两个等价字段，不是跨剧集的身份歧义。
-                positions[normalized] = position if previous in {None, position} else -1
+            normalized = _normalize_playback_locator(asset.get("playback_locator"))
+            if not normalized:
+                continue
+            previous = positions.get(normalized)
+            positions[normalized] = position if previous in {None, position} else -1
         resolved = positions.get(media_path)
         return resolved if resolved is not None and resolved >= 0 else None
 
@@ -80,8 +73,7 @@ class V4PlaybackManager:
 
     def play(self, work_id: str, episode_id: str, asset_id: str = "") -> dict:
         asset = self._resolve_asset(work_id, episode_id, asset_id)
-        self.stop()
-        locator = asset["playback_locator"] or asset["source_locator"]
+        locator = str(asset.get("playback_locator") or "")
         if not locator:
             raise ValueError("Asset 没有可播放定位符")
         ok, reason = validate_playback_locator(locator)
@@ -92,9 +84,7 @@ class V4PlaybackManager:
         bindings = {(str(item.get('episode_id') or episode_id), item['asset_id']):
                     store.capture_session_binding(work_id, str(item.get('episode_id') or episode_id), item['asset_id'])
                     for item in playlist}
-        playlist_locators = [item["playback_locator"] or item["source_locator"] for item in playlist]
-        strm_path = self.session_dir / f"{asset['asset_id']}.strm"
-        self._write_strm(strm_path, locator)
+        playlist_locators = [item["playback_locator"] for item in playlist]
         session_id = f"sess_{uuid.uuid4().hex[:16]}"
         ipc_server = make_ipc_server_name(session_id)
         try:
@@ -105,8 +95,10 @@ class V4PlaybackManager:
         if progress and not progress.get("completed"):
             start_position = float(progress.get("position") or 0)
         title = self._display_title(asset)
+        # 新请求通过路径和身份检查后才结束旧会话，坏映射不能打断正在播放的媒体。
+        self.stop()
         process = start_mpv(
-            str(strm_path),
+            locator,
             playlist_paths=playlist_locators,
             ipc_server=ipc_server,
             start_position=start_position,
@@ -280,6 +272,49 @@ class V4PlaybackManager:
         asset.update(dict(row))
 
     @staticmethod
+    def _snapshot_titles(conn, work_id: str) -> dict:
+        """播放只读取数据库中的有效标题，不检查 NFO、原图或缩略图。
+
+        作品身份与剧集签名仍由 V4 判定；多来源资料只补充签名一致的标题。
+        """
+        from app.media_v4.persistence.metadata_lifecycle import current_episode_signatures, identity_signature
+
+        signature = identity_signature(conn, work_id)
+        current = current_episode_signatures(conn, None, work_id)
+        titles: dict = {"title": "", "episodes": {}, "referenced": False}
+        for row in conn.execute(
+            "SELECT ms.metadata_json, ms.episode_signatures_json, ms.identity_signature FROM revision_metadata_refs mr "
+            "JOIN metadata_snapshots ms ON ms.snapshot_id=mr.snapshot_id "
+            "JOIN import_revisions ir ON ir.revision_id=mr.revision_id "
+            "JOIN source_roots sr ON sr.root_id=ir.root_id "
+            "WHERE mr.work_id=? AND ir.status='confirmed' AND sr.retired_at='' "
+            "ORDER BY mr.created_at DESC,mr.revision_id DESC,ms.snapshot_id DESC",
+            (work_id,),
+        ):
+            titles["referenced"] = True
+            if row["identity_signature"] != signature:
+                continue
+            try:
+                metadata = json.loads(row["metadata_json"])
+                signatures = json.loads(row["episode_signatures_json"])
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(metadata, dict) or not isinstance(signatures, dict):
+                continue
+            if metadata.get("metadata_state") not in {"ready", "confirmed"}:
+                continue
+            if not titles["title"]:
+                titles["title"] = str(metadata.get("title") or "").strip()
+            for mapping in metadata.get("episode_mappings") or []:
+                if not isinstance(mapping, dict):
+                    continue
+                episode_id = str(mapping.get("episode_id") or "")
+                title = str(mapping.get("title") or "").strip()
+                if title and episode_id in current and signatures.get(episode_id) == current[episode_id]:
+                    titles["episodes"].setdefault(episode_id, title)
+        return titles
+
+    @staticmethod
     def _playback_work_title(conn, work_id: str, fallback: str) -> str:
         """播放标题跟随用户覆盖或已确认刮削标题，不回退到导入文件名。"""
 
@@ -296,26 +331,32 @@ class V4PlaybackManager:
             if title:
                 return title
 
-        from app.media_v4.persistence.metadata_lifecycle import referenced_metadata
-        retained = referenced_metadata(conn, work_id)
-        if retained and retained.get('title'):
-            return str(retained['title'])
-        scrape_row = conn.execute(
+        retained = V4PlaybackManager._snapshot_titles(conn, work_id)
+        if retained["title"]:
+            return retained["title"]
+        # 已发布过快照时，失效资料不能经 scrape_bindings 的副本绕过签名检查。
+        if retained["referenced"]:
+            return fallback or "KumiPlayer"
+        scrape_rows = conn.execute(
             """
             SELECT sb.metadata_json
             FROM scrape_bindings sb
             JOIN import_revisions ir ON ir.revision_id = sb.revision_id
-            WHERE sb.work_id = ? AND sb.status = 'confirmed' AND ir.status = 'confirmed'
+            JOIN source_roots sr ON sr.root_id = ir.root_id
+            WHERE sb.work_id = ? AND sb.status = 'confirmed' AND ir.status = 'confirmed' AND sr.retired_at = ''
+              AND NOT EXISTS (SELECT 1 FROM provider_bindings pb WHERE pb.work_id=sb.work_id
+                  AND pb.provider=sb.provider AND pb.provider_id!=sb.provider_id)
             ORDER BY sb.updated_at DESC, sb.binding_id DESC
-            LIMIT 1
             """,
             (work_id,),
-        ).fetchone()
-        if scrape_row is not None:
+        ).fetchall()
+        for scrape_row in scrape_rows:
             try:
                 metadata = json.loads(str(scrape_row["metadata_json"] or "{}"))
             except (TypeError, ValueError):
                 metadata = {}
+            if not isinstance(metadata, dict) or metadata.get("metadata_snapshot_id") or metadata.get("retained_snapshot_id"):
+                continue
             title = str(metadata.get("title") or "").strip()
             if title:
                 return title
@@ -325,21 +366,25 @@ class V4PlaybackManager:
     def _playback_episode_title(conn, work_id: str, episode_id: str) -> str:
         """优先使用已确认刮削映射中的完整剧集名；本地标题只作降级。"""
 
-        from app.media_v4.persistence.metadata_lifecycle import referenced_metadata
-        retained = referenced_metadata(conn, work_id)
-        if retained:
-            for mapping in retained.get('episode_mappings', []):
-                if str(mapping.get('episode_id')) == episode_id and mapping.get('title'):
-                    return str(mapping['title'])
+        retained = V4PlaybackManager._snapshot_titles(conn, work_id)
+        if episode_id in retained["episodes"]:
+            return retained["episodes"][episode_id]
+        if retained["referenced"]:
+            return ""
         rows = conn.execute(
             """
             SELECT sb.metadata_json
             FROM scrape_bindings sb
             JOIN import_revisions ir ON ir.revision_id = sb.revision_id
-            WHERE sb.work_id = ? AND sb.status = 'confirmed' AND ir.status = 'confirmed'
+            JOIN source_roots sr ON sr.root_id = ir.root_id
+            WHERE sb.work_id = ? AND sb.status = 'confirmed' AND ir.status = 'confirmed' AND sr.retired_at = ''
+              AND NOT EXISTS (SELECT 1 FROM provider_bindings pb WHERE pb.work_id=sb.work_id
+                  AND pb.provider=sb.provider AND pb.provider_id!=sb.provider_id)
+              AND EXISTS (SELECT 1 FROM revision_bindings rb WHERE rb.revision_id=sb.revision_id
+                  AND rb.work_id=sb.work_id AND rb.episode_id=?)
             ORDER BY sb.updated_at DESC, sb.binding_id DESC
             """,
-            (work_id,),
+            (work_id, episode_id),
         ).fetchall()
         # 同一 Work 可能在不同来源或后续 revision 中有多份已确认刮削。
         # 最新记录若只覆盖部分剧集，不能遮蔽旧记录中当前 Episode 已有的
@@ -349,6 +394,8 @@ class V4PlaybackManager:
             try:
                 metadata = json.loads(str(row["metadata_json"] or "{}"))
             except (TypeError, ValueError):
+                continue
+            if not isinstance(metadata, dict) or metadata.get("metadata_snapshot_id") or metadata.get("retained_snapshot_id"):
                 continue
             for item in metadata.get("episode_mappings") or []:
                 if str(item.get("episode_id") or "") == episode_id:
@@ -360,7 +407,7 @@ class V4PlaybackManager:
     def _build_playlist(self, work_id: str, current: dict) -> list[dict]:
         """按同作品同常规季度建立受控播放队列。
 
-        只附加当前集之后、已确认且可播放的正片剧集；特别篇、电影、MV 等永不被
+        只附加当前集之后、已确认且路径结构合法的正片剧集；特别篇、电影、MV 等永不被
         自动塞进播放列表。每集仍复用 V4 的 Asset 选择排序，因此不会绕过版本和
         可用性规则。
         """
@@ -394,8 +441,8 @@ class V4PlaybackManager:
         for row in rows:
             try:
                 candidate = self._resolve_asset(work_id, str(row["episode_id"]), "")
-                locator = candidate.get("playback_locator") or candidate.get("source_locator")
-                ok, _reason = validate_playback_locator(str(locator or ""))
+                locator = candidate.get("playback_locator")
+                ok, _reason = validate_playback_locator_syntax(str(locator or ""))
                 if ok and candidate['asset_id'] not in {item['asset_id'] for item in playlist}:
                     playlist.append(candidate)
             except (KeyError, ValueError):
@@ -493,16 +540,6 @@ class V4PlaybackManager:
             )
             time.sleep(delay)
         return False
-
-    @staticmethod
-    def _write_strm(path: Path, locator: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-        try:
-            temporary.write_text(locator, encoding="utf-8", newline="\n")
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
 
     @staticmethod
     def _display_title(asset: dict) -> str:
@@ -644,7 +681,7 @@ class V4PlaybackManager:
                             session["playlist_position"] = playlist_position
                             session["episode_id"] = active_asset.get("episode_id") or session["episode_id"]
                             session["asset_id"] = active_asset["asset_id"]
-                            session["playback_locator"] = active_asset.get("playback_locator") or active_asset.get("source_locator") or ""
+                            session["playback_locator"] = active_asset.get("playback_locator") or ""
                             session["position"] = 0.0
                             session["duration"] = 0.0
                             # 跨集后重置节流时钟：新集的第一个采样应立即落盘，

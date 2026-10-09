@@ -98,7 +98,7 @@ def test_mirror_job_is_idempotent_after_success(tmp_path):
     assert len(list((tmp_path / "mirror").rglob("*.strm"))) == 1
 
 
-def test_remote_assets_without_fingerprints_get_distinct_mirror_files(tmp_path):
+def test_mounted_assets_without_fingerprints_get_distinct_mirror_files(tmp_path):
     from app.media_v4.domain.models import ParsedFacts, SourceEvidence
     from app.media_v4.jobs.mirror import V4MirrorMaterializer
     from app.media_v4.persistence.database import V4Database
@@ -107,7 +107,12 @@ def test_remote_assets_without_fingerprints_get_distinct_mirror_files(tmp_path):
     database = V4Database(tmp_path / "mirror-no-fingerprint.db")
     database.initialize()
     pairs = []
-    for evidence_id, locator in (("remote-a", "https://example.invalid/a.mkv"), ("remote-b", "https://example.invalid/b.mkv")):
+    locators = []
+    for evidence_id in ("remote-a", "remote-b"):
+        media = tmp_path / f"{evidence_id}.mkv"
+        media.write_bytes(b"video fixture")
+        locator = str(media)
+        locators.append(locator)
         evidence = SourceEvidence(
             evidence_id=evidence_id,
             scan_id="scan-remote",
@@ -116,7 +121,7 @@ def test_remote_assets_without_fingerprints_get_distinct_mirror_files(tmp_path):
             relative_path=f"Show/{evidence_id}.mkv",
             entry_kind="video",
             provider="pan115",
-            source_locator=locator,
+            source_locator=f"https://example.invalid/{evidence_id}.mkv",
             playback_locator=locator,
         )
         facts = ParsedFacts(
@@ -141,10 +146,7 @@ def test_remote_assets_without_fingerprints_get_distinct_mirror_files(tmp_path):
     files = sorted((tmp_path / "mirror").rglob("*.strm"))
 
     assert len(files) == 2
-    assert {path.read_text(encoding="utf-8") for path in files} == {
-        "https://example.invalid/a.mkv",
-        "https://example.invalid/b.mkv",
-    }
+    assert {path.read_text(encoding="utf-8") for path in files} == set(locators)
 
 
 def test_non_txt_assets_keep_bounded_sampling_without_per_row_disk_probes(tmp_path, monkeypatch):

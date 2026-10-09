@@ -456,11 +456,11 @@ def test_mpv_runtime_health_check_detects_hash_mismatch(tmp_path, monkeypatch):
 # ── 完整性门控与缓存 ──────────────────────────────────────────────────
 
 
-def _make_strm(tmp_path: Path) -> Path:
-    """创建临时 .strm 文件。"""
-    strm = tmp_path / "test.strm"
-    strm.write_text("https://media.example.invalid/test.mkv\n", encoding="utf-8")
-    return strm
+def _make_media(tmp_path: Path) -> Path:
+    """创建本地媒体夹具；启动测试不依赖镜像或远程地址。"""
+    media = tmp_path / "test.mkv"
+    media.write_bytes(b"video fixture")
+    return media
 
 
 def _setup_runtime(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
@@ -494,7 +494,7 @@ def test_start_mpv_raises_runtime_error_when_manifest_missing(tmp_path, monkeypa
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "mpv.exe").write_bytes(b"placeholder-mpv")
     monkeypatch.setenv("KUMIPLAYER_MPV_RUNTIME_DIR", str(runtime_dir))
-    strm = _make_strm(tmp_path)
+    strm = _make_media(tmp_path)
 
     with patch("app.playback.mpv_runtime.read_mpv_version") as mock_version:
         mock_version.return_value = ("mpv v0.41.0", "")
@@ -513,7 +513,7 @@ def test_start_mpv_raises_runtime_error_when_executable_missing(tmp_path, monkey
     _make_manifest(runtime_dir, file_count=1)
     monkeypatch.setenv("KUMIPLAYER_MPV_RUNTIME_DIR", str(runtime_dir))
     # 没有写入 mpv.exe
-    strm = _make_strm(tmp_path)
+    strm = _make_media(tmp_path)
 
     with patch("app.playback.mpv_runtime.read_mpv_version") as mock_version:
         mock_version.return_value = ("mpv v0.41.0", "")
@@ -532,7 +532,7 @@ def test_start_mpv_raises_runtime_error_when_hash_mismatch(tmp_path, monkeypatch
     runtime_dir, config_dir = _setup_runtime(tmp_path, monkeypatch)
     # 篡改 mpv.exe 的内容使其哈希与清单不匹配
     (runtime_dir / "mpv.exe").write_bytes(b"tampered-content")
-    strm = _make_strm(tmp_path)
+    strm = _make_media(tmp_path)
 
     with patch("app.playback.mpv_runtime.read_mpv_version") as mock_version:
         mock_version.return_value = ("mpv v0.41.0", "")
@@ -558,7 +558,7 @@ def test_start_mpv_raises_runtime_error_when_config_missing(tmp_path, monkeypatc
     monkeypatch.setenv("KUMIPLAYER_MPV_RUNTIME_DIR", str(runtime_dir))
     monkeypatch.setenv("KUMIPLAYER_MPV_CONFIG_DIR", str(config_dir))
     monkeypatch.setenv("KUMIPLAYER_MPV_LAYER_DIR", str(tmp_path / "kumiplayer"))
-    strm = _make_strm(tmp_path)
+    strm = _make_media(tmp_path)
 
     with patch("app.playback.mpv_runtime.read_mpv_version") as mock_version:
         mock_version.return_value = ("mpv v0.41.0", "")
@@ -607,7 +607,7 @@ def test_mpv_runtime_cache_invalidates_on_file_tamper(tmp_path, monkeypatch):
     assert status2["files_valid"] is False
 
     # start_mpv 会降级到完整校验，发现哈希不匹配并阻止 Popen
-    strm = _make_strm(tmp_path)
+    strm = _make_media(tmp_path)
     with patch("app.playback.mpv_runtime.read_mpv_version") as mock_version:
         mock_version.return_value = ("mpv v0.41.0", "")
         with patch("subprocess.Popen") as mock_popen:
@@ -842,7 +842,7 @@ def test_start_mpv_blocks_popen_when_dll_is_tampered(tmp_path, monkeypatch):
     (runtime_dir / "libmpv-2.dll").write_bytes(b"tampered-dll")
 
     # start_mpv 必须重新校验并阻止 Popen
-    strm = _make_strm(tmp_path)
+    strm = _make_media(tmp_path)
     with patch("app.playback.mpv_runtime.read_mpv_version") as mock_version:
         mock_version.return_value = ("mpv v0.41.0", "")
         with patch("subprocess.Popen") as mock_popen:
@@ -866,7 +866,7 @@ def test_start_mpv_blocks_popen_when_lua_script_is_missing(tmp_path, monkeypatch
     (tmp_path / "kumiplayer" / "scripts" / "screenshot_to_video_dir.lua").unlink()
 
     # start_mpv 必须重新校验并阻止 Popen（自有层脚本缺失为硬失败）
-    strm = _make_strm(tmp_path)
+    strm = _make_media(tmp_path)
     with patch("app.playback.mpv_runtime.read_mpv_version") as mock_version:
         mock_version.return_value = ("mpv v0.41.0", "")
         with patch("subprocess.Popen") as mock_popen:
