@@ -104,6 +104,26 @@ test('单作品图片发布更新当前详情，不重新请求详情或重置�
   expect(getDetail).toHaveBeenCalledOnce();
 });
 
+test.each(['local-path', 'resource-variants'])('背景加载失败后，%s 发布新图片可以恢复满页背景', async (source) => {
+  // 失败冷却按资源 URL 共享；隔离本用例，不影响后续首屏加载用例。
+  const digest = source === 'local-path' ? '3' : '4';
+  const stale = { ...work, local_fanart_path: artworkPath('b', digest, 1280), local_poster_path: artworkPath('a', digest, 384) };
+  useLibraryStore.setState({ works: [stale as never], getWorkDetail: vi.fn().mockResolvedValue(stale) });
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+  const { container } = render(<WorkDetailPage />);
+  await screen.findByText('启程');
+  fireEvent.error(container.querySelector('.detail-hero-art')!);
+  fireEvent.error(container.querySelector('.detail-hero-art')!);
+  expect(container.querySelector('.detail-hero-art')).toBeNull();
+  const path = artworkPath('b', '2', 1280);
+  const updated = source === 'local-path'
+    ? { ...work, local_fanart_path: path }
+    : { ...work, artwork: { fanart: { state: 'ready', variants: { '1280': path } } } };
+  act(() => useLibraryStore.setState({ selectedWorkDetail: updated as never }));
+  await waitFor(() => expect(container.querySelector('.detail-hero-art')).toHaveAttribute('src', expect.stringContaining(path)));
+  expect(useLibraryStore.getState().getWorkDetail).toHaveBeenCalledOnce();
+});
+
 test('按旧版沉浸式结构展示 V4 季度和剧集信息', async () => {
   const { container } = render(<WorkDetailPage />);
 

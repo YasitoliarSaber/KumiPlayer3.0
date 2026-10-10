@@ -7,9 +7,10 @@ const posterCard = readFileSync(new URL('../src/components/library/PosterCard.ts
 const home = readFileSync(new URL('../src/pages/HomePage.tsx', import.meta.url), 'utf8');
 
 test('详情首屏不重复挂载背景图，并优先消费本地 artwork', () => {
-  assert.match(detail, /preferredArtworkPath\(work, 'fanart'\)/);
+  assert.match(detail, /preferredArtworkPath\(work \|\| \{\}, 'fanart'\)/);
   assert.match(detail, /preferredArtworkPath\(work, 'clearlogo'\)/);
   assert.match(detail, /className="detail-hero-art"[\s\S]*loading="eager"/);
+  assert.match(detail, /className="detail-hero-art"[\s\S]{0,180}visibilityRoot="viewport"/);
   assert.doesNotMatch(detail, /className="detail-hero-bg"/);
 });
 

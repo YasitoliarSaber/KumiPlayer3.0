@@ -223,9 +223,11 @@ export default function WorkDetailPage() {
     setNotice('');
   }, [work?.work_id]);
 
+  const preferredFanartPath = preferredArtworkPath(work || {}, 'fanart');
+  const preferredPosterPath = preferredArtworkPath(work || {}, 'poster');
   useEffect(() => {
     setBackdropMode('preferred');
-  }, [work?.work_id, work?.fanart_path, work?.poster_path]);
+  }, [work?.work_id, preferredFanartPath, preferredPosterPath]);
 
   useEffect(() => {
     setAppendOpen(false);
@@ -838,8 +840,6 @@ export default function WorkDetailPage() {
   const visibleCast: Array<{ person: any; castKey: string }> = (Array.isArray(work.cast) ? work.cast : []).slice(0, 14)
     .map((person: any, index: number) => ({ person, castKey: `${person.id || person.name || 'cast'}-${index}` }))
     .filter(({ person, castKey }: { person: any; castKey: string }) => Boolean(person.profile_path) && !failedCastKeys.has(castKey));
-  const preferredFanartPath = preferredArtworkPath(work, 'fanart');
-  const preferredPosterPath = preferredArtworkPath(work, 'poster');
   const backdropPath = preferredFanartPath || preferredPosterPath;
   const fanartImage = backdropPath ? assetUrl(backdropPath, 'detailBackdrop') : '';
   const posterBackdropImage = preferredPosterPath ? assetUrl(preferredPosterPath, 'detailBackdrop') : '';
@@ -1351,6 +1351,7 @@ export default function WorkDetailPage() {
               src={visibleBackdropImage}
               alt=""
               className="detail-hero-art"
+              visibilityRoot="viewport"
               loading="eager"
               fetchPriority="high"
               onLoad={extractBackdropPalette}
