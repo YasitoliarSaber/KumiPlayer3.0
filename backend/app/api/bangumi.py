@@ -315,13 +315,14 @@ def _cached_remote_image(url: str, cache_name: str, label: str):
         # 用白名单校验后的组件重建请求地址：scheme 固定 https、host 取校验
         # 过的主机名，原始字符串中的解析歧义（反斜杠、@、控制字符）不会
         # 进入请求；拒绝跟随重定向，白名单域不得跳转到其他主机。
-        components = {
+        components: dict[str, str | bytes] = {
             "scheme": "https",
             "host": parsed.hostname,
             "path": parsed.path or "/",
         }
         if parsed.query:
-            components["query"] = parsed.query
+            # HTTPX 的 query 参数要求原始字节；带 r/hd 的头像首次下载不能传 str。
+            components["query"] = parsed.query.encode("ascii")
         with httpx.Client(timeout=10, follow_redirects=False) as client:
             response = client.get(httpx.URL(**components))
         response.raise_for_status()
