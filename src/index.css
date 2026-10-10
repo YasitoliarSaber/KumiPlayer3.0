@@ -13348,19 +13348,32 @@ body > .detail-tool-overlay .candidate-card:is(:hover, :focus-visible) {
 .media-v4-stage-failed strong { color: var(--warning, #c45b52); }
 .media-v4-stage-succeeded strong { color: var(--success, #4e9e5a); }
 .media-v4-projection-error { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 8px; color: var(--warning, #c45b52); background: color-mix(in srgb, var(--warning, #c45b52) 10%, transparent); font-size: 13px; }
-.media-v4-work-progress-list { display: grid; gap: 8px; }
-.media-v4-work-progress { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--border) 76%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-soft) 62%, transparent); }
+.media-v4-work-progress-list { display: grid; gap: 12px; }
+.media-v4-work-progress { display: grid; gap: 10px; min-width: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
+.media-v4-work-progress-needs_attention, .media-v4-work-progress-failed { border-inline-start: 3px solid var(--warning, #c45b52); }
 .media-v4-work-progress-head { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto 18px; gap: 10px; align-items: center; width: 100%; padding: 4px 6px; margin: -4px -6px; border: 0; border-radius: 6px; background: none; text-align: left; cursor: pointer; font: inherit; color: inherit; }
 .media-v4-work-progress-head:hover { background: color-mix(in srgb, var(--border) 28%, transparent); }
 .media-v4-work-progress-head:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
-.media-v4-work-progress-title { font-size: 16px; font-weight: 650; }
-.media-v4-work-progress-meta { color: var(--text-secondary); font-size: 13px; }
-.media-v4-work-progress-status { font-size: 13px; color: var(--text-secondary); }
+.media-v4-work-progress-title { min-width: 0; overflow-wrap: anywhere; font-size: 16px; font-weight: 650; }
+.media-v4-work-progress-meta { color: var(--text-secondary); font-size: 13px; white-space: nowrap; }
+.media-v4-work-progress-status { padding: 3px 8px; border-radius: 4px; background: var(--surface-soft); font-size: 12px; color: var(--text-secondary); }
 .media-v4-work-progress-running_mirror .media-v4-work-progress-status,
 .media-v4-work-progress-running_metadata .media-v4-work-progress-status { color: var(--accent-strong); }
 .media-v4-work-progress-failed .media-v4-work-progress-status { color: var(--warning, #c45b52); }
+.media-v4-work-progress-needs_attention .media-v4-work-progress-status { color: var(--warning, #c45b52); }
+.media-v4-work-progress-completed .media-v4-work-progress-status { color: var(--success, #4e9e5a); }
+.media-v4-work-progress-notice { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 16px; padding-inline-start: 32px; }
+.media-v4-work-progress-issue { min-width: 0; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.media-v4-work-progress-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .media-v4-work-progress-body { display: grid; gap: 10px; align-items: start; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent); }
 .media-v4-work-progress-hint { color: var(--text-secondary); font-size: 12px; }
+@media (max-width: 760px) {
+  .media-v4-work-progress-head { grid-template-columns: 22px minmax(0, 1fr) auto 18px; }
+  .media-v4-work-progress-meta { grid-column: 2; grid-row: 2; white-space: normal; }
+  .media-v4-work-progress-status { grid-column: 3; grid-row: 1; }
+  .media-v4-work-progress-head > svg { grid-column: 4; grid-row: 1; }
+  .media-v4-work-progress-notice { grid-template-columns: minmax(0, 1fr); }
+}
 .media-v4-metadata-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; margin: 12px 0; }
 /* 弹窗固定在视口中央并自持滚动：不受 .app-main 滚动位置或祖先 overflow 裁剪影响。 */
 /* 元数据恢复弹窗与识别弹窗一样：DialogSurface 通过 Portal 挂到页面之外，
@@ -13662,6 +13675,8 @@ body > .detail-tool-overlay .candidate-card:is(:hover, :focus-visible) {
 .media-v4-completed-heading strong { font-size: 15px; }
 /* 3.1：展开后的作品执行详情（作品信息 / 镜像结果 / 剧集结果）。 */
 .media-v4-work-detail { display: grid; gap: 14px; }
+.media-v4-work-detail-summary { display: grid; justify-items: start; gap: 8px; color: var(--text-secondary); font-size: 13px; }
+.media-v4-work-diagnostics { display: grid; gap: 14px; }
 .media-v4-work-detail-section { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-raised) 42%, transparent); }
 .media-v4-work-detail-section h4 { margin: 0; font-size: 15px; font-weight: 650; color: var(--text); }
 .media-v4-work-detail-facts { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; line-height: 1.45; }

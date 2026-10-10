@@ -46,7 +46,7 @@ function retryMetadataLabel(reasonCode: string | undefined, busy: boolean): stri
 
 function attentionSummary(unit: V4WorkProgressUnit): string {
   if (unit.metadata_state === 'ready' && unit.artifact_reasons?.length) return '必需图片未齐，尚未发布到媒体库。'
-  if (unit.metadata_state === 'waiting_review') return '在线作品待确认；本地播放不受影响。'
+  if (unit.metadata_state === 'waiting_review') return '请确认对应的在线作品。'
   if (unit.metadata_reason_code === 'artifact_incomplete') return '部分媒体图片尚未就绪。'
   return unit.metadata_reason || '在线资料待处理。'
 }
@@ -140,18 +140,25 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
   onRetryMetadata?: (workId: string) => void
   onRetryArtifacts?: (workId: string) => void
 }) {
-  // 失败项保留简洁的摘要，避免错误堆满长列表；真正需要用户确认身份的
-  // needs_attention 则直接展开，确保“选择正确作品”的恢复入口不会被藏住。
-  const [expanded, setExpanded] = useState(unit.overall_status === 'needs_attention' || unit.artifact_state === 'degraded')
-  useEffect(() => {
-    if (unit.overall_status === 'needs_attention' || unit.artifact_state === 'degraded') setExpanded(true)
-  }, [unit.overall_status, unit.artifact_state])
+  // 处理入口常驻摘要；详细结果只在用户主动展开时读取。
+  const [expanded, setExpanded] = useState(false)
+  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false)
   const failedJob = unit.overall_status === 'failed'
     ? (unit.metadata.status === 'failed' ? unit.metadata : null)
     : null
   const workIsPending = ['waiting_metadata', 'running_metadata'].includes(unit.overall_status)
   const artworkPreparing = unit.overall_status === 'running_artwork' || (unit.overall_status === 'completed' && isArtworkPreparing(unit))
   const missingArtworkSource = unit.artwork?.reason_codes?.includes('missing_source') ?? false
+  const needsAction = Boolean(failedJob || unit.overall_status === 'needs_attention' || unit.artifact_state === 'degraded')
+  const metadataRetryVisible = unit.overall_status === 'needs_attention'
+    && ['retry_metadata', 'check_settings'].includes(unit.metadata_recovery_action ?? '') && Boolean(onRetryMetadata)
+  const failedReason = failedJob?.last_error?.split(/\r?\n/)[0].slice(0, 140)
+  const metadataNeedsAction = unit.overall_status === 'needs_attention'
+    && unit.metadata_state !== 'ready' && unit.metadata_reason_code !== 'artifact_incomplete'
+  const issueSummary = failedJob ? unit.metadata_reason || failedReason || '获取媒体信息失败，请重试。'
+    : metadataNeedsAction ? attentionSummary(unit)
+      : unit.artifact_reasons?.length ? unit.artifact_reasons.join('；')
+        : unit.artifact_state === 'degraded' ? '媒体图片尚未齐全。' : attentionSummary(unit)
   // 3.1：展开非进行中作品时按需读取执行详情；缓存键包含任务状态，
   // 重新执行该作品后状态变化自然使缓存失效并重新读取。
   const detailCacheKey = unit.detail_version || `${unit.metadata.status}:${unit.artwork?.status ?? ''}`
@@ -213,8 +220,11 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
     })
   const detailPanelId = `media-v4-work-detail-${unit.work_id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
   return (
-    <article className={`media-v4-work-progress media-v4-work-progress-${unit.overall_status}`}>
-      <button type="button" className="media-v4-work-progress-head" aria-expanded={expanded} aria-controls={detailPanelId} onClick={() => setExpanded((value) => !value)}>
+    <article className={`media-v4-work-progress media-v4-work-progress-${unit.overall_status}`} aria-label={unit.title}>
+      <button type="button" className="media-v4-work-progress-head" aria-expanded={expanded} aria-controls={detailPanelId} onClick={() => {
+        if (expanded) setDiagnosticsExpanded(false)
+        setExpanded(!expanded)
+      }}>
         <span className="media-v4-work-progress-state" aria-hidden="true">
           {artworkPreparing ? <SpinnerIosRegular /> : unit.overall_status === 'completed' ? <CheckmarkCircle24Filled />
             : unit.overall_status === 'failed' ? <ErrorCircle24Regular />
@@ -223,31 +233,28 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
             : <SpinnerIosRegular />}
         </span>
         <span className="media-v4-work-progress-title">{unit.title}</span>
-        {/* 主行只保留一句可扫读的数量：文件数与集数一致时不再重复。 */}
+        {/* 主行只显示类型和集数；没有集数时显示文件数量。 */}
         <span className="media-v4-work-progress-meta">
           {unit.media_type === 'movie' ? '电影' : unit.media_type === 'unknown' ? '类型未定' : '剧集'}
-          {unit.episode_count > 0 ? ` · ${unit.media_type === 'unknown' ? `${unit.episode_count} 个条目` : `${unit.episode_count} 集`}` : ''}
-          {unit.asset_count !== unit.episode_count ? ` · ${unit.asset_count} 个文件` : ''}
+          {unit.media_type !== 'movie' && unit.episode_count > 0 ? ` · ${unit.media_type === 'unknown' ? `${unit.episode_count} 个条目` : `${unit.episode_count} 集`}` : ''}
+          {unit.episode_count === 0 && unit.asset_count > 0 ? ` · ${unit.asset_count} 个文件` : ''}
         </span>
-        <span className="media-v4-work-progress-status">{artworkPreparing ? '资料已就绪，图片准备中' : WORK_PROGRESS_LABELS[unit.overall_status] ?? unit.overall_status}</span>
+        <span className="media-v4-work-progress-status">{artworkPreparing ? '图片准备中' : WORK_PROGRESS_LABELS[unit.overall_status] ?? unit.overall_status}</span>
         {expanded ? <ChevronDown24Regular aria-hidden="true" /> : <ChevronRight24Regular aria-hidden="true" />}
       </button>
-      {expanded && (
-        <div id={detailPanelId} className="media-v4-work-progress-body" role="region" aria-label={`${unit.title}执行详情`}>
-          {failedJob?.last_error && <div className="media-v4-job-error" role="alert">{failedJob.last_error}</div>}
+      {needsAction && (
+        <div className="media-v4-work-progress-notice">
+          <div className="media-v4-work-progress-issue" role="status">{issueSummary}</div>
+          <div className="media-v4-work-progress-actions">
           {failedJob && (
             <Button size="small" appearance="secondary" disabled={busyRetryId !== ''} onClick={() => onRetry(failedJob.job_id)}>
               {busyRetryId === failedJob.job_id ? '正在重试…' : '重试'}
             </Button>
           )}
           {unit.overall_status === 'needs_attention' && <>
-            <div className="media-v4-job-error" role="status">
-              {attentionSummary(unit)}
-            </div>
-            {unit.metadata_recovery_hint && !['review_identity', 'choose_candidate'].includes(unit.metadata_recovery_action ?? '') && <div className="media-v4-work-progress-hint">{unit.metadata_recovery_hint}</div>}
-            {['retry_metadata', 'check_settings'].includes(unit.metadata_recovery_action ?? '') && onRetryMetadata && (
+            {metadataRetryVisible && onRetryMetadata && (
               <Button size="small" appearance="secondary" disabled={resolvingWorkId !== ''} onClick={() => onRetryMetadata(unit.work_id)}>
-                {retryMetadataLabel(unit.metadata_reason_code, resolvingWorkId === unit.work_id)}
+                {retryMetadataLabel(missingArtworkSource ? undefined : unit.metadata_reason_code, resolvingWorkId === unit.work_id)}
               </Button>
             )}
             {(unit.metadata_state === 'waiting_review' || unit.metadata_recovery_action === 'review_identity' || unit.metadata_recovery_action === 'choose_candidate') && (
@@ -258,19 +265,23 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
           </>}
           {unit.artifact_state === 'degraded' && (
             <>
-              <div className="media-v4-work-progress-hint" role="status">{unit.artifact_reasons?.length ? unit.artifact_reasons.join('；') : '部分图片未下载成功，可重新下载；不影响浏览和播放。'}</div>
-              {missingArtworkSource && onRetryMetadata && !['retry_metadata', 'check_settings'].includes(unit.metadata_recovery_action ?? '') && (
+              {missingArtworkSource && onRetryMetadata && !metadataRetryVisible && (
                 <Button size="small" appearance="secondary" disabled={resolvingWorkId !== ''} onClick={() => onRetryMetadata(unit.work_id)}>
                   {resolvingWorkId === unit.work_id ? '正在重新获取…' : '重新获取媒体信息'}
                 </Button>
               )}
-              {!missingArtworkSource && onRetryArtifacts && (
+              {!missingArtworkSource && onRetryArtifacts && !(metadataRetryVisible && unit.metadata_reason_code === 'artifact_incomplete') && (
                 <Button size="small" appearance="secondary" disabled={resolvingWorkId !== ''} onClick={() => onRetryArtifacts(unit.work_id)}>
                   {resolvingWorkId === unit.work_id ? '正在重新下载…' : '重新下载媒体图片'}
                 </Button>
               )}
             </>
           )}
+          </div>
+        </div>
+      )}
+      {expanded && (
+        <div id={detailPanelId} className="media-v4-work-progress-body" role="region" aria-label={`${unit.title}执行详情`}>
           {!failedJob && workIsPending && <span className="media-v4-work-progress-hint">任务进行中，完成后自动折叠到“已完成”。</span>}
           {detail?.status === 'loading' && <div className="media-v4-work-detail-loading"><Spinner size="tiny" />正在读取执行详情…</div>}
           {detail?.status === 'error' && (
@@ -284,6 +295,28 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
           )}
           {detail?.status === 'loaded' && detailHasContent && (
             <div className="media-v4-work-detail">
+              <div className="media-v4-work-detail-summary">
+                {scrape?.title && scrape.title !== unit.title && <span>匹配作品：{scrape.title}</span>}
+                {orderedSeasons.length > 0 && <div className="media-v4-work-detail-seasons">
+                  {orderedSeasons.map((season, index) => (
+                    <span key={`${season.season_kind}:${season.season_number}:${index}`}>
+                      {seasonLabel(season)} · {season.episode_count} 集
+                    </span>
+                  ))}
+                </div>}
+                {seasonFailures.length > 0 && <div className={optionalEpisodeGap ? 'media-v4-work-progress-hint' : 'media-v4-work-detail-season-failures'} role="status">
+                  {seasonFailures.map((result, index) => (
+                    <span key={`${result.local_season_number ?? 'unknown'}:${result.reason_code}:${index}`}>
+                      {seasonFailureLabel(result)}：{optionalEpisodeGap && result.reason_code === 'episode_mapping_incomplete' ? '部分在线分集资料待补充' : seasonFailureReason(result)}
+                    </span>
+                  ))}
+                </div>}
+                <Button size="small" appearance="subtle" aria-expanded={diagnosticsExpanded} aria-controls={`${detailPanelId}-diagnostics`} onClick={() => setDiagnosticsExpanded((value) => !value)}>
+                  {diagnosticsExpanded ? '收起诊断详情' : '查看诊断详情'}
+                </Button>
+              </div>
+              {diagnosticsExpanded && <div id={`${detailPanelId}-diagnostics`} className="media-v4-work-diagnostics" role="region" aria-label={`${unit.title}诊断详情`}>
+              {failedJob?.last_error && failedJob.last_error !== issueSummary && <div className="media-v4-job-error" role="alert">{failedJob.last_error}</div>}
               <div className="media-v4-work-detail-section">
                 <h4>作品信息</h4>
                 <div className="media-v4-work-detail-facts">
@@ -371,25 +404,6 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
                   )}
                 </div>
               )}
-              {(orderedSeasons.length > 0 || seasonFailures.length > 0) && (
-                <div className="media-v4-work-detail-section">
-                  <h4>季度结构</h4>
-                  {orderedSeasons.length > 0 && <div className="media-v4-work-detail-seasons">
-                    {orderedSeasons.map((season, index) => (
-                      <span key={`${season.season_kind}:${season.season_number}:${index}`}>
-                        {seasonLabel(season)} · {season.episode_count} 集
-                      </span>
-                    ))}
-                  </div>}
-                  {seasonFailures.length > 0 && <div className={optionalEpisodeGap ? 'media-v4-work-progress-hint' : 'media-v4-work-detail-season-failures'} role="status">
-                    {seasonFailures.map((result, index) => (
-                      <span key={`${result.local_season_number ?? 'unknown'}:${result.reason_code}:${index}`}>
-                        {seasonFailureLabel(result)}：{optionalEpisodeGap && result.reason_code === 'episode_mapping_incomplete' ? '部分在线分集资料待补充' : seasonFailureReason(result)}
-                      </span>
-                    ))}
-                  </div>}
-                </div>
-              )}
               {/* 用户反馈：没有剧集结果时不要展示空块（失败作品尤其没必要）。 */}
               {detailEpisodes.length > 0 && (
               <div className="media-v4-work-detail-section">
@@ -426,6 +440,7 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
                 )}
               </div>
               )}
+              </div>}
             </div>
           )}
         </div>

@@ -103,7 +103,7 @@ test('资料完成但图片待准备时仍在活动列表，总体进度不会�
   })
   render(<V4ExecutionProgress progress={progress as never} busyRetryId="" onRetry={vi.fn()}
     resolvingWorkId="" onResolveMetadata={vi.fn()} />)
-  expect(screen.getByText('资料已就绪，图片准备中')).toBeVisible()
+  expect(screen.getByText('图片准备中')).toBeVisible()
   expect(screen.getByText('资料已就绪，正在准备图片')).toBeVisible()
   expect(screen.queryByText('已完成 1 部')).not.toBeInTheDocument()
   expect(Number(screen.getByRole('progressbar', { name: '总体进度' }).getAttribute('aria-valuenow'))).toBeLessThan(1)
@@ -124,7 +124,7 @@ test('其他图片失败时仍显示剩余图片准备状态', () => {
     resolvingWorkId="" onResolveMetadata={vi.fn()} />)
   expect(screen.getByText('资料已就绪，正在准备图片')).toBeVisible()
   expect(screen.getByText('已完成 1 部')).toBeVisible()
-  expect(screen.getByText('资料已就绪，图片准备中')).toBeVisible()
+  expect(screen.getByText('图片准备中')).toBeVisible()
 })
 
 beforeEach(() => {
@@ -307,10 +307,9 @@ test('失败作品显示原因并可精确重试', async () => {
 
   await waitFor(() => expect(screen.getByText('失败作品')).toBeVisible())
   const failedCard = screen.getByText('失败作品').closest('article')!
-  // 错误原因与重试在展开后的作品单元里，不进入普通主列表。
-  expect(within(failedCard).queryByText('资料服务请求失败')).not.toBeInTheDocument()
-  fireEvent.click(within(failedCard).getByRole('button', { name: /失败作品/ }))
-  expect(await within(failedCard).findByText('资料服务请求失败')).toBeVisible()
+  // 简短原因与重试直接显示，不必展开完整诊断。
+  expect(within(failedCard).getByText('资料服务请求失败')).toBeVisible()
+  expect(within(failedCard).getByRole('button', { name: /失败作品/ })).toHaveAttribute('aria-expanded', 'false')
   fireEvent.click(within(failedCard).getByRole('button', { name: /重试/ }))
   await waitFor(() => expect(tasks.retry).toHaveBeenCalledWith('meta-w-bad'))
 })
@@ -355,6 +354,7 @@ test('完成作品保留可见的作品摘要，避免完成页只剩总数', as
   expect(screen.getByText('已完成 1 部')).toBeVisible()
   expect(await screen.findByText('已完成作品')).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: /已完成作品/ }))
+  fireEvent.click(await screen.findByRole('button', { name: '查看诊断详情' }))
   fireEvent.click(await screen.findByRole('button', { name: /显示更多剧集/ }))
   expect(await screen.findByText('下一页剧集')).toBeVisible()
   expect(screen.getByText('第一页剧集')).toBeVisible()
@@ -393,7 +393,7 @@ test('媒体信息需要人工处理的作品不显示为已完成', async () =>
   expect(screen.queryByText('任务进行中，完成后自动折叠到“已完成”。')).not.toBeInTheDocument()
 })
 
-test('作品运行中转为等待确认时自动展开恢复入口', () => {
+test('作品运行中转为等待确认时保持恢复入口可见', () => {
   const props = {
     busyRetryId: '',
     onRetry: vi.fn(),
@@ -471,7 +471,7 @@ test('图片产物缺失时恢复入口改为重新下载媒体图片', () => {
   expect(retry).toHaveBeenCalledWith('w-artifact')
 })
 
-test('图片产物缺失时显示非阻断提示与重新下载入口', () => {
+test('图片产物缺失时显示简短提示与重新下载入口', () => {
   const artifacts = vi.fn()
   const unit = workUnit('w-degraded', '缺图作品', 'completed', { artifact_state: 'degraded' })
   render(<V4ExecutionProgress
@@ -479,7 +479,7 @@ test('图片产物缺失时显示非阻断提示与重新下载入口', () => {
     busyRetryId="" onRetry={vi.fn()} resolvingWorkId="" onResolveMetadata={vi.fn()} onRetryArtifacts={artifacts}
   />)
 
-  expect(screen.getByText('部分图片未下载成功，可重新下载；不影响浏览和播放。')).toBeVisible()
+  expect(screen.getByText('媒体图片尚未齐全。')).toBeVisible()
   const button = screen.getByRole('button', { name: '重新下载媒体图片' })
   fireEvent.click(button)
   expect(artifacts).toHaveBeenCalledWith('w-degraded')
@@ -497,7 +497,7 @@ test('必需图片准备中不显示完成项，缺失来源提示重新获取�
       artwork: { status: 'failed', total: 14, counts: { ready: 13, failed: 1 }, reason_codes: ['missing_source'] },
     }),
   ]) as never} busyRetryId="" onRetry={vi.fn()} resolvingWorkId="" onResolveMetadata={vi.fn()} onRetryMetadata={retry} />)
-  expect(screen.getByText('资料已就绪，图片准备中')).toBeVisible()
+  expect(screen.getByText('图片准备中')).toBeVisible()
   expect(screen.getByText('正片预览图尚未就绪（1 张）')).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: '重新获取媒体信息' }))
   expect(retry).toHaveBeenCalledWith('no-still')
@@ -515,6 +515,7 @@ test('执行详情保留未知季，并将已知季度排在季号未定之前',
       ], episodes: [], episode_total: 2, has_detail: true })}
   />)
   // STEP-014：季号 null 显示「季号未定」，不映射成第 0 季也不补成第 1 季。
+  fireEvent.click(screen.getByText('未知季作品'))
   await screen.findByText('季号未定 · 1 集')
   expect(container.querySelector('.media-v4-work-detail-seasons')?.textContent).toBe('第 2 季 · 1 集季号未定 · 1 集')
   expect(screen.queryByText('第 0 季 · 1 集')).not.toBeInTheDocument()
@@ -531,7 +532,8 @@ test.each(['check_settings', 'retry_metadata', 'review_identity'])('恢复入口
     busyRetryId="" onRetry={vi.fn()} resolvingWorkId="" onResolveMetadata={resolve} onRetryMetadata={retry}
     fetchWorkDetail={vi.fn().mockResolvedValue({ work, mirror: { status: 'succeeded', artifact_count: 1 }, seasons: [], episodes: [], episode_total: 0, has_detail: true })}
   />)
-  await screen.findByText('作品信息')
+  fireEvent.click(screen.getByText('恢复作品'))
+  await screen.findByRole('button', { name: '查看诊断详情' })
   const buttons = screen.getAllByRole('button', { name: action === 'review_identity' ? '选择正确作品' : '重新获取媒体信息' })
   expect(buttons).toHaveLength(1)
   fireEvent.click(buttons[0])
@@ -583,7 +585,8 @@ test('季度失败摘要保留特别篇并按 choose_candidate 显示恢复入�
     fetchWorkDetail={fetchWorkDetail}
   />)
 
-  expect(await screen.findByText('作品信息')).toBeVisible()
+  fireEvent.click(screen.getByText('季度异常作品'))
+  expect(await screen.findByRole('button', { name: '查看诊断详情' })).toBeVisible()
   expect(screen.getByRole('button', { name: '选择正确作品' })).toBeVisible()
   expect(screen.getByText('特别篇 · 1 集')).toBeVisible()
   expect(screen.getByText('特别篇：在线集数未匹配')).toBeVisible()
@@ -615,6 +618,8 @@ test('作品展开详情显示名称证据缓存与超时原因，不把核对�
     ] },
   })
   renderProgressWithDetail([workUnit('w-name', '待核对作品', 'needs_attention')], {}, fetchWorkDetail)
+  fireEvent.click(screen.getByText('待核对作品'))
+  fireEvent.click(await screen.findByRole('button', { name: '查看诊断详情' }))
   expect(await screen.findByText('名称核对')).toBeVisible()
   expect(screen.getByText('独立作品 副标题')).toBeVisible()
   expect(screen.getByText(/使用已保存的名称证据/)).toBeVisible()
@@ -623,7 +628,7 @@ test('作品展开详情显示名称证据缓存与超时原因，不把核对�
   expect(screen.queryByText('在线资料已完成')).toBeNull()
 })
 
-test('展开已完成作品后读取并显示作品信息、镜像结果与剧集结果', async () => {
+test('展开已完成作品的诊断详情后显示完整结果', async () => {
   const fetchWorkDetail = vi.fn().mockResolvedValue({
     revision_id: 'rev-exec',
     work_id: 'w-done',
@@ -659,12 +664,12 @@ test('展开已完成作品后读取并显示作品信息、镜像结果与剧�
     fetchWorkDetail,
   )
   fireEvent.click(screen.getByRole('button', { name: /完成作品/ }))
+  fireEvent.click(await screen.findByRole('button', { name: '查看诊断详情' }))
 
   expect(await screen.findByText('作品信息')).toBeVisible()
   // 用户反馈：镜像结果不需要展示（"知道生成了就行"），因此该区块已被移除。
   expect(screen.queryByText('镜像结果')).toBeNull()
   expect(screen.getByText(/剧集结果（1 集）/)).toBeVisible()
-  expect(screen.getByText('季度结构')).toBeVisible()
   expect(screen.getByText('第 1 季 · 1 集')).toBeVisible()
   expect(screen.getByText('刮削结果')).toBeVisible()
   expect(screen.getByText('这是作品级刮削简介。')).toBeVisible()
@@ -693,6 +698,7 @@ test('已确认作品的在线分集缺项显示补充提示，保留未映射�
   })
   const { container } = renderProgressWithDetail([workUnit('w-gap', '资料待补充作品', 'completed', { metadata_state: 'ready', metadata_reason_code: 'episode_mapping_incomplete' })], { overall_status: 'completed' }, fetchWorkDetail)
   fireEvent.click(screen.getByRole('button', { name: /资料待补充作品/ }))
+  fireEvent.click(await screen.findByRole('button', { name: '查看诊断详情' }))
   await screen.findByText('作品信息')
   expect(screen.queryAllByText('在线集数未完全匹配')).toHaveLength(0)
   expect(screen.getAllByText('部分在线分集资料待补充').length).toBeGreaterThan(0)
