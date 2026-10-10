@@ -2,6 +2,16 @@
 from __future__ import annotations
 
 
+def complete_episode_detail_ids(metadata: dict) -> set[str]:
+    """有在线身份、标题与剧照来源的分集才能跳过资料补全。"""
+    return {str(item['episode_id']) for item in metadata.get('episode_mappings') or []
+            if isinstance(item, dict) and item.get('episode_id')
+            and all(str(item.get(field) or '').strip()
+                    for field in ('provider_episode_id', 'title'))
+            and any(str(item.get(field) or '').strip()
+                    for field in ('still_url', 'local_thumb_path', 'thumb_path'))}
+
+
 def require_regular_episode_metadata(episodes: list[dict], metadata: dict) -> dict:
     result = dict(metadata)
     regular = {str(item['episode_id']) for item in episodes

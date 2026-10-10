@@ -960,7 +960,10 @@ def _extract_aliases(detail: dict, media_type: str) -> list[str]:
     for value in aliases:
         if value not in seen:
             seen.append(value)
-    return seen[:12]
+    # API 顺序不代表与本地标题的相关性；截前十二项会丢掉后面的中文别名
+    # 及全部 translations，使已获取的完整等值身份被误判为低分候选。
+    # 请求数量仍由 enrich_candidate_aliases 的详情预算控制。
+    return seen
 
 
 def enrich_candidate_aliases(
@@ -1131,9 +1134,28 @@ def _fetch_provider_metadata(target: dict) -> dict:
                 mappings = _build_tv_episode_mappings(client, provider_id, target,
                     season_results=season_results, diagnostics=diagnostics,
                     work_detail=retained.get('provider_work_detail') or {}) if media_type == 'tv' else []
+                from app.media_v4.jobs.metadata_quality import complete_episode_detail_ids
+                required = {str(item['episode_id']) for item in target.get('episodes') or []
+                            if item.get('episode_kind') not in {'special', 'auxiliary', 'movie'}
+                            and item.get('season_kind') != 'special'}
+                incomplete = not required <= complete_episode_detail_ids({'episode_mappings': mappings})
+                current_error = season_results[0] if season_results else {}
+                reason_code = str(current_error.get('reason_code') or '')
+                if not reason_code and incomplete:
+                    if _unmapped_local_ids(target, mappings):
+                        reason_code = 'episode_mapping_incomplete'
+                    elif any(str(item.get('episode_id')) in required and not str(item.get('title') or '').strip()
+                             for item in mappings):
+                        reason_code = 'episode_details_incomplete'
+                    else:
+                        reason_code = 'episode_artwork_source_missing'
                 return {**retained, 'episode_mappings': mappings, '_mapping_diagnostics': diagnostics,
                         'season_results': season_results, 'metadata_state': 'ready',
-                        'refresh_status': REFRESH_STATUS_SUCCEEDED}
+                        'refresh_status': REFRESH_STATUS_PARTIAL if incomplete or season_results else REFRESH_STATUS_SUCCEEDED,
+                        'reason_code': reason_code, 'reason': '', 'refresh_reason_code': reason_code,
+                        'metadata_refresh_error': '',
+                        'failure_stage': str(current_error.get('failure_stage') or ''),
+                        'retryable': any(item.get('retryable') for item in season_results)}
             if tmdb_binding:
                 provider_id = int(tmdb_binding["provider_id"])
                 candidate_decision = {

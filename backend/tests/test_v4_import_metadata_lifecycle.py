@@ -4,12 +4,14 @@ from __future__ import annotations
 import json
 
 import pytest
+
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.library import V4LibraryProjection
 from app.media_v4.revisions.service import V4RevisionService
 from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
+from tests.artwork_fixtures import ready_artwork
 
 
 def confirm(database, revision, numbers=(1,), *, provider_hint=False):
@@ -51,6 +53,10 @@ def prepare(tmp_path, monkeypatch, *, provider_hint=False):
     mirror = tmp_path / 'mirror'
     confirm(database, 'r1', provider_hint=provider_hint)
     V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
+    with database.connect() as conn:
+        for row in conn.execute('SELECT work_id FROM works').fetchall():
+            ready_artwork(conn, row['work_id'])
+    V4LibraryProjection(database).rebuild()
     return database, mirror
 
 
@@ -165,7 +171,9 @@ def test_historical_numbered_local_members_keep_work_usable_without_online_mappi
         return provider(target)
 
     V4JobRunner(database, metadata_provider=fixed_provider).process_available(mirror_root=mirror)
-    assert calls == [], '已有正片缩略图完备时，不为缺少在线分集 ID 强制重抓资料'
+    assert calls == [snapshot['work_id']], '旧快照缺少在线身份时补齐分集，不再永久跳过重试'
+    with database.connect() as conn:
+        ready_artwork(conn, snapshot['work_id'])
     assert V4LibraryProjection(database).rebuild().cards[0]['metadata']['metadata_state'] == 'ready'
 
 
@@ -179,11 +187,14 @@ def test_append_failed_refresh_keeps_success_snapshot_and_current_members(tmp_pa
         'provider': 'tmdb', 'provider_id': '123', 'metadata_state': 'source_unavailable',
         'reason_code': 'provider_unavailable', 'reason': 'fixture timeout', 'retryable': True,
     }).process_available(mirror_root=mirror)
-    card = V4LibraryProjection(database).rebuild().cards[0]
-    assert card['episode_count'] == 2
-    assert card['title'] == 'Online title'
-    assert card['metadata']['refresh_status'] == 'failed'
-    assert card['metadata']['episode_mapping_status'] == 'partial'
+    # 新增正片尚无预览图，保留成功快照但不把未完成的作品放到海报墙。
+    assert V4LibraryProjection(database).rebuild().cards == ()
+    from app.media_v4.persistence.metadata_lifecycle import referenced_metadata
+    with database.connect() as conn:
+        metadata = referenced_metadata(conn, original_snapshot['work_id'])
+    assert metadata['title'] == 'Online title'
+    assert metadata['refresh_status'] == 'failed'
+    assert metadata['episode_mapping_status'] == 'partial'
     with database.connect() as conn:
         assert dict(conn.execute('SELECT * FROM metadata_snapshots').fetchone()) == original_snapshot
         assert conn.execute("SELECT COUNT(*) FROM jobs WHERE job_type IN ('cleanup_superseded_artifacts','materialize_mirror')").fetchone()[0] == 0
@@ -223,6 +234,8 @@ def test_artifact_preview_preserves_source_and_personal_state(tmp_path, monkeypa
         assert json.loads(conn.execute('SELECT override_json FROM work_overrides WHERE work_id=?', (work_id,)).fetchone()[0]) == override
         assert dict(conn.execute('SELECT * FROM tracking_states WHERE work_id=?', (work_id,)).fetchone()) == tracking_before
     assert cover.read_bytes() == b'user original'
+    with database.connect() as conn:
+        ready_artwork(conn, work_id)
     assert V4LibraryProjection(database).rebuild().cards[0]['title'] == 'Online title'
 
 
@@ -237,6 +250,9 @@ def test_append_only_requests_missing_episode_and_composes_snapshot(tmp_path, mo
 
     V4JobRunner(database, metadata_provider=partial).process_available(mirror_root=mirror)
     assert requested == [2]
+    assert V4LibraryProjection(database).rebuild().cards == ()
+    with database.connect() as conn:
+        ready_artwork(conn, conn.execute('SELECT work_id FROM works').fetchone()[0])
     metadata = V4LibraryProjection(database).rebuild().cards[0]['metadata']
     assert metadata['mapped_count'] == metadata['total_count'] == 2
     assert metadata['composed_from_snapshot_id']
@@ -443,7 +459,6 @@ def test_shared_work_uses_current_members_and_successes_from_both_roots(tmp_path
     from dataclasses import replace
 
     from app.core.config import AppConfig
-
     from tests.test_v4_import_identity_roundtrip import _tree_entries
     config = AppConfig(artwork_storage_mode='remote')
     monkeypatch.setattr('app.media_v4.jobs.metadata_artifacts.load_config', lambda: config)
@@ -460,6 +475,9 @@ def test_shared_work_uses_current_members_and_successes_from_both_roots(tmp_path
         service.create_draft(root, entries)
         service.confirm(root)
         V4JobRunner(database, metadata_provider=known_provider).process_available(mirror_root=mirror)
+    with database.connect() as conn:
+        for row in conn.execute('SELECT work_id FROM works').fetchall():
+            ready_artwork(conn, row['work_id'])
     cards = V4LibraryProjection(database).rebuild().cards
     assert len(cards) == 1
     assert cards[0]['episode_count'] == 2

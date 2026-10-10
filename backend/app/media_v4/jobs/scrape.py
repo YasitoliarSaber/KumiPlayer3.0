@@ -699,7 +699,13 @@ class V4ScrapeService:
         refresh_request = json.loads(job['result_json'] or '{}')
         explicit_refresh = bool(refresh_request.get('explicit_refresh'))
         refresh_season = refresh_request.get('season_number') if refresh_request.get('scope') == 'season' else None
-        if retained and retained['covers_members'] and not explicit_refresh and not target['local_specials_only']:
+        from app.media_v4.jobs.metadata_quality import complete_episode_detail_ids
+        covered = complete_episode_detail_ids(retained['metadata']) if retained else set()
+        required = {str(e['episode_id']) for e in target['episodes']
+                    if e.get('episode_kind') not in {'special', 'auxiliary', 'movie'}
+                    and e.get('season_kind') != 'special'}
+        if (retained and retained['covers_members'] and required <= covered
+                and not explicit_refresh and not target['local_specials_only']):
             with self.database.connect() as conn:
                 conn.execute('BEGIN IMMEDIATE')
                 live = conn.execute(
@@ -733,7 +739,6 @@ class V4ScrapeService:
                     raise ValueError('当前季度没有可刮削的已确认剧集')
                 request_target = {**target, 'episodes': selected}
             elif retained and not explicit_refresh:
-                covered = {str(m['episode_id']) for m in retained['metadata'].get('episode_mappings', [])}
                 request_target = {**target, 'episodes': [e for e in target['episodes'] if str(e['episode_id']) not in covered],
                                   'retained_work_metadata': retained['metadata']}
             result = local_special_metadata() if target['local_specials_only'] else provider(request_target)
