@@ -56,6 +56,27 @@ test('窗口未变化的滚动不重建卡片节点，也不逐帧提交 React �
   expect([...document.querySelectorAll('.poster-card')]).toEqual(before);
 });
 
+test('同一批快速跨行滚动只提交最终窗口，不在每个滚动事件强制同步渲染', () => {
+  const onRender = vi.fn();
+  render(<main className="app-main"><Profiler id="grid" onRender={onRender}>
+    <VirtualizedPosterGrid works={Array.from({ length: 400 }, (_, i) => work(i))} columns={4} />
+  </Profiler></main>);
+  const main = document.querySelector<HTMLElement>('.app-main')!;
+  onRender.mockClear();
+  act(() => {
+    for (const top of [3000, 6000, 9000, 12000, 15000]) {
+      main.scrollTop = top;
+      main.dispatchEvent(new Event('scroll'));
+    }
+  });
+  expect(onRender).toHaveBeenCalledTimes(1);
+  const rows = [...document.querySelectorAll<HTMLElement>('.virtual-poster-row')];
+  const rowHeight = Number.parseFloat(rows[0].style.height);
+  const targetRow = Math.floor(15000 / rowHeight);
+  expect(rows.some((row) => Number(row.dataset.rowIndex) === targetRow)).toBe(true);
+  expect(document.querySelectorAll('.poster-card').length).toBeLessThan(100);
+});
+
 test('分类切换时首屏未就绪保持隐藏，只等待视口图片，滚动不重新等待', async () => {
   vi.useFakeTimers();
   const Grid = VirtualizedPosterGrid;

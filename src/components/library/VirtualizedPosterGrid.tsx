@@ -146,6 +146,8 @@ export default function VirtualizedPosterGrid({
 
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
+    // 固定行高与预渲染区允许 React 合并快速跨行事件，避免逐事件 flushSync 阻塞原生滚动。
+    useFlushSync: false,
     getScrollElement: () => scrollElementRef.current,
     estimateSize: () => rowHeight,
     overscan: Math.max(OVERSCAN_ROWS, rowHeight > 0 ? Math.ceil(viewportHeight * 2 / rowHeight) : 0),
