@@ -432,10 +432,9 @@ def test_orphan_work_playback_and_tracking_removed_but_mixed_kept(tmp_path):
 
 
 def test_maintenance_api_contract(tmp_path, monkeypatch):
+    from app.api import media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-
-    from app.api import media_v4
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)

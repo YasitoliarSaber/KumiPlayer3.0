@@ -3,7 +3,6 @@
 from dataclasses import replace
 
 import pytest
-
 from app.integrations.openlist.models import OpenListDirPage, OpenListEntry
 from app.media_v4.domain.models import SourceEvidence
 from app.media_v4.parsing.parser import V4Parser

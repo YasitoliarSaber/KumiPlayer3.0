@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """T01 刮削准备度 Excel 检查表生成脚本
 
 读取 ImportPlan JSON，生成 scrape_review.xlsx。
@@ -718,7 +717,7 @@ def main():
     print(f"输出: {output_path}")
     print(f"视频条目: {len(video_items)}")
     print(f"系列/作品数: {len(series_groups)}")
-    print(f"Excel 工作表: Overview / Scrape Review / Series Summary / Issues")
+    print("Excel 工作表: Overview / Scrape Review / Series Summary / Issues")
 
 
 if __name__ == "__main__":

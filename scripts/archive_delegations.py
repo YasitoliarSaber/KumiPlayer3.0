@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """归档 Proma 已完成委派子会话脚本。
 
 用法（项目根目录执行）：

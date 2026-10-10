@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.persistence.repositories import V4Repository
 from app.media_v4.sources import scan_frontier, scan_handlers
@@ -135,7 +134,6 @@ def test_full_scan_pauses_only_after_auto_cooldown_cap(tmp_path, monkeypatch):
     """兜底仍然存在：连续撞预算超过上限时回到"可继续扫描"。"""
 
     import pytest
-
     from app.media_v4.sources.scanner import SourceScanPaused
 
     database = _database(tmp_path)

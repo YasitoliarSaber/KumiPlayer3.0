@@ -191,7 +191,6 @@ def test_successful_scrape_is_published_by_background_refresh_before_final_job(t
 
 def test_failed_scrape_does_not_block_publishing_confirmed_local_media(tmp_path):
     import pytest
-
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService

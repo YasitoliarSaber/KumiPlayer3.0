@@ -5,14 +5,13 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
-
 from app.api import media_v4, tracking_v4
 from app.core.config import AppConfig
 from app.core.openlist_connections import OpenListConnectionConfig
 from app.integrations.openlist.providers import OpenListRouteConfig
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.sources.scanner import openlist_root_id
+from fastapi import HTTPException
 
 
 def _old_root():

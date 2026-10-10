@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 r"""Normalize AniList artwork filenames to the TMDB/Kodi convention.
 
 Usage:
@@ -12,8 +11,8 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 POSTER_SOURCE_NAMES = {
     "cover",

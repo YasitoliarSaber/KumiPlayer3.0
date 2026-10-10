@@ -38,6 +38,18 @@ def require_regular_episode_metadata(episodes: list[dict], metadata: dict) -> di
         # 旧门槛保存的失败状态按当前合同重评；不能恢复真实身份或编号冲突。
         result.update(metadata_state='ready', reason='', refresh_status='partial',
                       refresh_reason_code=result['reason_code'])
+    mapping_errors = {'episode_mapping_incomplete', 'episode_details_incomplete'}
+    if (not (blocked or missing or missing_titles)
+            and result.get('metadata_state') in {'ready', 'confirmed'}
+            and result.get('reason_code') in mapping_errors
+            and result.get('failure_stage') in {'', None, 'episode_mapping', 'episode_details', 'season_detail'}):
+        # 补齐当前成员后清除旧快照的分集缺项，不抹掉身份或作品资料故障。
+        result.update(reason_code='', reason='', failure_stage='')
+        result.pop('metadata_warning', None)
+        if result.get('refresh_reason_code') in mapping_errors:
+            result['refresh_reason_code'] = ''
+            if result.get('refresh_status') == 'partial':
+                result['refresh_status'] = 'succeeded'
     if not (blocked or missing or missing_titles) or result.get('metadata_state') not in {'ready', 'confirmed'}:
         return result
     # 资料质量和图片准备独立；仍拒绝没有事实依据的分季、集号。

@@ -4,7 +4,6 @@ import hashlib
 
 import httpx
 import pytest
-
 from app.media_v4.jobs import metadata_artifacts as module
 
 JPEG = b"\xff\xd8\xff\xe0fixture"

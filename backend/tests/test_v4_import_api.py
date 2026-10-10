@@ -704,7 +704,6 @@ def test_tree_scan_preserves_quark_as_the_content_provider(tmp_path, monkeypatch
         source="tree",
         tree_file=str(tree),
         provider="quark",
-        source_root=str(tmp_path / "quark-mount"),
     ))
 
     assert result["entries"][0]["provider"] == "quark"
@@ -735,7 +734,6 @@ def test_tree_scan_resolves_the_precise_sub_library_root_from_the_tree_location(
         source="tree",
         tree_file=str(tree),
         provider="baidu",
-        source_root="Z:\\stale-frontend-copy",
     ))
 
     # 总根 / Show 不存在；TXT 父目录（媒体子库）是唯一全部命中候选。

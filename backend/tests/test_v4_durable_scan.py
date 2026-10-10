@@ -149,12 +149,11 @@ def test_durable_full_scan_cancel_discards_result(tmp_path):
 
 
 def test_durable_scan_api_contract(tmp_path, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4
     from app.api.media_v4 import openlist_root_id
     from app.integrations.openlist.providers import OpenListRouteConfig
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -223,11 +222,10 @@ def test_durable_scan_api_contract(tmp_path, monkeypatch):
 
 
 def test_durable_incremental_without_baseline_is_rejected(tmp_path, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4
     from app.integrations.openlist.providers import OpenListRouteConfig
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)

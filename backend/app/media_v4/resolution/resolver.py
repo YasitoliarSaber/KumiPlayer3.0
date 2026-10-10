@@ -334,8 +334,8 @@ def _boundary_work_key(evidence: SourceEvidence, facts: ParsedFacts) -> str:
             return f"title:{_boundary_key_title(series_title)}::{_effective_media_type(facts)}"
         title = _boundary_key_title(_strip_boundary_season_marker(str(context["title"])))
         scoped = bool(context.get("season_scoped"))
-        year = "" if scoped else str(context.get("year") or facts.year_candidate or "")
-        return f"title:{title}:{year}:{_effective_media_type(facts)}"
+        boundary_year = "" if scoped else str(context.get("year") or facts.year_candidate or "")
+        return f"title:{title}:{boundary_year}:{_effective_media_type(facts)}"
     source = provider_to_source(evidence.provider)
     container = _extract_work_container(evidence.relative_path, source)
     if not container or is_generic_container_title(container):
@@ -1522,7 +1522,7 @@ def _derive_structure_boundaries(
     entries: list[tuple[SourceEvidence, ParsedFacts]],
 ) -> list[tuple[SourceEvidence, ParsedFacts]]:
     """只在整批具备共同标题/不同季证据时收口，不反写观察事实。"""
-    families: dict[tuple[str, str], list[ParsedFacts]] = defaultdict(list)
+    families: dict[tuple[str, str], list[tuple[ParsedFacts, dict]]] = defaultdict(list)
     blocked_families: set[tuple[str, str]] = set()
     sibling_titles: dict[tuple[str, str], set[str]] = defaultdict(set)
     for evidence, facts in entries:
@@ -1540,23 +1540,23 @@ def _derive_structure_boundaries(
             if not family or not family[2] or family[0] != scopes[-1]:
                 blocked_families.add(scope)
             else:
-                families[scope].append(facts)
+                families[scope].append((facts, context))
         if context.get("parent_scope") and context.get("series_container"):
             sibling_titles[(evidence.root_id, context["parent_scope"])].add(normalized_title(str(context.get("title") or "")))
     proven_families = {
         scope for scope, members in families.items()
         if scope not in blocked_families
-        and len({normalized_title(structure_decision(facts)["season_family"][2]) for facts in members}) == 1
-        and len({facts.season_candidate for facts in members if facts.season_candidate is not None}) > 1
+        and len({normalized_title(member_context["season_family"][2]) for _, member_context in members}) == 1
+        and len({facts.season_candidate for facts, _ in members if facts.season_candidate is not None}) > 1
     }
     family_decisions = {}
     for scope in proven_families:
         members = families[scope]
-        family = structure_decision(members[0])["season_family"]
-        shared_file_title = sorted(structure_decision(member)["season_family"][2] for member in members)[0]
+        family = members[0][1]["season_family"]
+        shared_file_title = sorted(member_context["season_family"][2] for _, member_context in members)[0]
         shared_base = normalized_title(shared_file_title)
-        child_names_match = any(normalized_title(str(structure_decision(member).get("title") or "")).startswith(shared_base)
-                                for member in members)
+        child_names_match = any(normalized_title(str(member_context.get("title") or "")).startswith(shared_base)
+                                for _, member_context in members)
         parent_title = _parse_work_title_and_year(family[1])[0]
         promote_parent = not child_names_match and bool(re.search(r"(?i)(?:系列|\bseries\b)\s*$", parent_title))
         title = (re.sub(r"(?i)(?:系列|\bseries\b)\s*$", "", parent_title).strip()
@@ -1732,8 +1732,8 @@ class MediaResolver:
             group = _boundary_key_title(facts.series_group)
             if not group or is_generic_container_title(facts.series_group):
                 continue
-            context = structure_decision(facts)
-            container = (str(context.get("container") or "") if context else _extract_work_container(
+            child_context = structure_decision(facts)
+            container = (str(child_context.get("container") or "") if child_context else _extract_work_container(
                 evidence.relative_path, provider_to_source(evidence.provider)
             ))
             if not container:
@@ -1882,9 +1882,9 @@ class MediaResolver:
                 title = _parse_work_title_and_year(str(container))[0]
                 scopes = context.get("collection_scopes", [])
                 chain.append(scopes[index] if index < len(scopes) else _boundary_key_title(title))
-                identity = (evidence.root_id, tuple(chain))
-                collection_members[identity].add(entry_work_keys[evidence.evidence_id])
-                collection_titles[identity] = title
+                collection_identity = (evidence.root_id, tuple(chain))
+                collection_members[collection_identity].add(entry_work_keys[evidence.evidence_id])
+                collection_titles[collection_identity] = title
         def collection_key(identity):
             root, chain = identity
             import hashlib

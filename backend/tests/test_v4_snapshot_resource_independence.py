@@ -4,12 +4,12 @@ from dataclasses import replace
 from uuid import uuid4
 
 import pytest
-from backend.tests.test_v4_revision_confirmation import _entry
-
 from app.media_v4.jobs.metadata_quality import require_regular_episode_metadata
 from app.media_v4.persistence import metadata_lifecycle
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.revisions.service import V4RevisionService
+
+from backend.tests.test_v4_revision_confirmation import _entry
 
 
 def _snapshot(tmp_path):

@@ -13,7 +13,6 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-
 from app.media_v4.persistence.schema_v4 import V4_SCHEMA_VERSION
 
 

@@ -4,11 +4,10 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.core import config as config_module
 from app.core.config import AppConfig, load_config, save_config
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 def create(client, name):
@@ -167,10 +166,9 @@ def test_durable_import_and_restarted_handler_keep_selected_connection(monkeypat
 
 
 def test_stale_connection_snapshot_never_receives_another_account_credentials():
-    from fastapi import HTTPException
-
     from app.api import openlist_v4
     from app.core.openlist_connections import save_selected_connection
+    from fastapi import HTTPException
     client = TestClient(app)
     identity = create(client, '甲')
     save(client, identity)

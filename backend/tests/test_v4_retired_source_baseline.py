@@ -4,13 +4,12 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
-
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.maintenance.source_deletion import delete_source_library
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.persistence.repositories import V4Repository
 from app.media_v4.revisions.service import V4RevisionService
+from fastapi import HTTPException
 
 
 @pytest.fixture

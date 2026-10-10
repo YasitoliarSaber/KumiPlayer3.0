@@ -22,7 +22,6 @@ import json
 
 import httpx
 import pytest
-
 from app.integrations.openlist.client import (
     OpenListClient,
     clear_openlist_client_pool,

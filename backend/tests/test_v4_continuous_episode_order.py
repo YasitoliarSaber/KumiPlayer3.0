@@ -10,7 +10,6 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
-
 from app.media_v4.jobs import metadata
 from app.scrape.tmdb_client import TMDBClientError
 

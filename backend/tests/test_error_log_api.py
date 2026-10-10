@@ -36,10 +36,9 @@ def test_error_log_delete_and_purge_core(tmp_path, monkeypatch):
 
 
 def test_error_log_delete_and_purge_api(tmp_path, monkeypatch):
-    from fastapi.testclient import TestClient
-
     from app.core import error_log
     from app.main import app
+    from fastapi.testclient import TestClient
 
     monkeypatch.setattr(error_log, "_get_error_log_dir", lambda: tmp_path)
     pan_id = error_log.log_error(
@@ -73,9 +72,8 @@ def test_error_log_export_returns_full_text(tmp_path, monkeypatch):
     from app.core import error_log
 
     monkeypatch.setattr(error_log, "_get_error_log_dir", lambda: tmp_path)
-    from fastapi.testclient import TestClient
-
     from app.main import app
+    from fastapi.testclient import TestClient
 
     error_log.log_error(
         "scrape", "scrape_failed", "刮削产物不完整：海报缺失",

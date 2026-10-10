@@ -385,8 +385,8 @@ class V4Parser:
                     is_auxiliary=True,
                 )
             stem = PurePosixPath(evidence.relative_path).stem
-            parsed = _parse_sidecar_nfo(evidence)
-            if parsed is None:
+            sidecar_identity = _parse_sidecar_nfo(evidence)
+            if sidecar_identity is None:
                 # 不可达/不可读的 NFO：只保留标题证据，绝不伪造 provider ID。
                 return ParsedFacts(
                     parsed_fact_id=self._parsed_fact_id(evidence),
@@ -397,7 +397,7 @@ class V4Parser:
                     is_importable=False,
                     is_auxiliary=True,
                 )
-            tmdb_id, title, original_title, tmdb_media_type = parsed
+            tmdb_id, title, original_title, tmdb_media_type = sidecar_identity
             return ParsedFacts(
                 parsed_fact_id=self._parsed_fact_id(evidence),
                 evidence_id=evidence.evidence_id,

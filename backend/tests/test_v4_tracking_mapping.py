@@ -6,11 +6,11 @@ import pytest
 
 
 def test_tracking_state_is_separate_from_episode_number(tmp_path):
-    from backend.tests.test_v4_revision_confirmation import _entry
-
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
     from app.media_v4.tracking.store import V4TrackingStore
+
+    from backend.tests.test_v4_revision_confirmation import _entry
 
     database = V4Database(tmp_path / "tracking.db")
     database.initialize()

@@ -3,7 +3,6 @@ import json
 from dataclasses import replace
 
 import pytest
-
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.source_libraries import list_source_cards
 from app.media_v4.resolution.resolver import MediaResolver

@@ -9,7 +9,7 @@ import re
 import uuid
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -439,10 +439,27 @@ def _configured_tree_roots(config, provider: str) -> list[str]:
                 )
     unique: dict[str, str] = {}
     for root in roots:
-        value = root.strip().rstrip("\\/")
+        raw = root.strip()
+        anchor = PureWindowsPath(raw).anchor or Path(raw).anchor
+        value = raw.rstrip("\\/")
+        if anchor and value == anchor.rstrip("\\/"):
+            value = anchor
         if value:
             unique.setdefault(value.replace("/", "\\").casefold(), value)
     return list(unique.values())
+
+
+def _tree_roots_for_request(request: SourceScanRequest, config, provider: str) -> list[str]:
+    """纯 TXT 使用本次选定挂载；混合来源始终由保存的路由决定。"""
+
+    if request.source == "tree" and request.source_root:
+        from app.media_v4.path_validation import validate_playback_locator_syntax
+
+        ok, reason = validate_playback_locator_syntax(request.source_root)
+        if not ok:
+            raise HTTPException(status_code=400, detail=reason)
+        return [request.source_root]
+    return _configured_tree_roots(config, provider)
 
 
 def _container_name(path: str) -> str:
@@ -832,7 +849,7 @@ def scan_source(request: SourceScanRequest):
             effective_scan_mode = "tree_snapshot"
             root_source_mode = "tree_snapshot"
             config = load_config()
-            configured_roots = _configured_tree_roots(config, content_provider)
+            configured_roots = _tree_roots_for_request(request, config, content_provider)
             if not configured_roots:
                 raise HTTPException(status_code=409, detail="当前内容来源尚未配置本地挂载路径，请先在设置页完成来源映射")
             tree_text = _read_local_tree_text(request.tree_file)
@@ -1617,7 +1634,7 @@ def _start_durable_tree_scan(request: SourceScanRequest) -> dict:
     scan_mode = "tree_baseline" if request.source == "hybrid" else "tree_snapshot"
     route_id = ""
     remote_root = ""
-    configured_roots = _configured_tree_roots(config, content_provider)
+    configured_roots = _tree_roots_for_request(request, config, content_provider)
 
     if request.source == "hybrid":
         from app.api.openlist_v4 import _configured_routes, _remote_root

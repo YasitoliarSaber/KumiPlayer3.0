@@ -35,6 +35,31 @@ def target(title="Child A"):
 DETAIL = {"name": "Parent Family", "seasons": [{"season_number": 1}, {"season_number": 2}]}
 
 
+def test_independent_spinoff_uses_its_own_verified_provider_title():
+    value = target("Heya Camp")
+    value['provider_identity_scope'] = {'confirmed_child': True, 'shared_distinct_tv_ids': []}
+    detail = {'name': '房间露营△', 'original_name': 'へやキャン△',
+              'alternative_titles': {'results': [{'title': 'Heya Camp'}]},
+              'seasons': [{'season_number': 1}]}
+    client = OfflineProvider()
+
+    mappings = metadata._build_tv_episode_mappings(client, 95213, value, work_detail=detail)
+
+    assert len(mappings) == 1
+    assert client.requests == [(95213, 1)]
+    # 同一线上作品已被不同本地身份共享时，别名不能绕开逐集范围核验。
+    value['provider_identity_scope']['shared_distinct_tv_ids'] = ['95213']
+    assert metadata._build_tv_episode_mappings(OfflineProvider(), 95213, value, work_detail=detail) == []
+
+
+def test_retained_spinoff_scope_reuses_saved_provider_titles():
+    value = target("Heya Camp")
+    value['provider_identity_scope'] = {'confirmed_child': True, 'shared_distinct_tv_ids': []}
+    detail = {'name': '房间露营△', 'title_aliases': ['Heya Camp'], 'seasons': [{'season_number': 1}]}
+
+    assert len(metadata._build_tv_episode_mappings(OfflineProvider(), 95213, value, work_detail=detail)) == 1
+
+
 @pytest.mark.parametrize("seasons", [[1], [1, 2]])
 def test_children_do_not_guess_parent_provider_coordinates(seasons):
     client = OfflineProvider()

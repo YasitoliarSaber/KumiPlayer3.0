@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -288,7 +289,7 @@ def test_metadata_confirm_registers_background_refresh_without_provider_call(tmp
                 media_type, title, confidence, status, created_at, updated_at
             ) VALUES ('manual-candidate', 'manual-revision', ?, 'show', 'tmdb', '12345',
                       'tv', 'Show', 'high', 'proposed', ?, ?)""",
-            (work_id, "2026-10-09T00:00:00+00:00", "2026-10-09T00:00:00+00:00"),
+            (work_id, datetime.now(UTC).isoformat(), datetime.now(UTC).isoformat()),
         )
     monkeypatch.setattr(
         "app.media_v4.jobs.metadata.default_metadata_provider",

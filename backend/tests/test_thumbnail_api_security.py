@@ -1,8 +1,7 @@
 """已发布图片 GET 支持桌面查询令牌；准备接口已经退役。"""
 
-from fastapi.testclient import TestClient
-
 from app.main import app
+from fastapi.testclient import TestClient
 
 ASSET_URL = f'/api/assets/artwork/{"a" * 64}/{"b" * 64}-webp-v1/384'
 

@@ -10,7 +10,6 @@ from collections import defaultdict
 from pathlib import Path
 
 import pytest
-
 from app.media_v4.parsing.parser import V4Parser, normalize_batch_parsed_facts
 from app.media_v4.resolution.candidates import merge_graph, plan_work_candidates
 from app.media_v4.resolution.resolver import MediaResolver

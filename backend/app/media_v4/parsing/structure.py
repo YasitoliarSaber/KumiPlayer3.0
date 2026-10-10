@@ -147,7 +147,7 @@ def structure_context(evidence: SourceEvidence, root_container: str = "") -> Str
         if not is_collection_container(directories[parent]) and (
             (leaf_title == parent_title and (leaf_season is not None or leaf_year is None or leaf_year == parent_year))
             or (leaf_season is not None and parent_title and leaf_title.startswith(parent_title)
-                and ((explicit_season and numbered_file and season_marker.start() > 0)
+                and ((explicit_season and numbered_file and season_marker is not None and season_marker.start() > 0)
                      or (repeated_parent and (title_boundary or explicit_season))
                      or filename_matches_parent or _is_series_container(directories[parent])))
         ):

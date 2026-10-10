@@ -2,7 +2,6 @@
 
 import httpx
 import pytest
-
 from app.media_v4.jobs.metadata import _extract_aliases
 from app.scrape.tmdb_client import TMDBClient
 

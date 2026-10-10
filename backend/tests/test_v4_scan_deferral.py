@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
-
 from app.integrations.openlist.models import OpenListEntry, OpenListRateLimitedError
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.sources import scan_frontier, scan_handlers, source_scan_runner

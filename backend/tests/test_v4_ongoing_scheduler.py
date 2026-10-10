@@ -50,10 +50,9 @@ def test_restart_does_not_repeat_the_same_timer_window(tmp_path, monkeypatch):
 
 def test_update_configuration_preserves_legacy_defaults_and_rejects_tight_intervals():
     import pytest
-    from pydantic import ValidationError
-
     from app.api.config import ConfigPatch
     from app.core.config import AppConfig
+    from pydantic import ValidationError
 
     config = AppConfig()
     assert config.ongoing_update_on_startup is False

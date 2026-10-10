@@ -5,12 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-
 from app.api import system
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.revisions.service import V4RevisionService
+from pydantic import ValidationError
 
 
 def _confirmed_asset(database: V4Database, tmp_path, *, movie: bool = False) -> tuple[str, str, Path]:

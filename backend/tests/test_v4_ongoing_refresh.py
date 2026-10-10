@@ -5,11 +5,10 @@ from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from app.api import media_v4, tracking_v4
 from app.media_v4.persistence.database import V4Database
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture

@@ -613,26 +613,32 @@ def plan_work_candidates(
             if binding is None or binding.tmdb_type != work.media_type:
                 continue
             key = ("tmdb", binding.tmdb_type, str(binding.tmdb_id))
-            confirmed.setdefault(
-                key,
-                WorkCandidate(
-                    work_key=work.work_key,
-                    provider="tmdb",
-                    provider_id=str(binding.tmdb_id),
-                    media_type=binding.tmdb_type,
-                    title=binding.canonical_title,
-                    year=work.year,
-                    evidence="verified_path_binding",
-                    confidence="high",
-                    status="confirmed",
-                    # 仅完整命中单标题核验规则才把本地名作为可信别名。
-                    # 路径包含某个 marker 不等于整个路径标题都是该作品别名。
-                    aliases=(work.preferred_title,) if (
-                        len(binding.markers) == 1
-                        and _normalize_title(work.preferred_title) == _normalize_title(binding.markers[0])
-                    ) else (),
-                ),
+            verified_candidate = WorkCandidate(
+                work_key=work.work_key,
+                provider="tmdb",
+                provider_id=str(binding.tmdb_id),
+                media_type=binding.tmdb_type,
+                title=binding.canonical_title,
+                year=work.year,
+                evidence="verified_path_binding",
+                confidence="high",
+                status="confirmed",
+                # 仅完整命中单标题核验规则才把本地名作为可信别名。
+                # 路径包含某个 marker 不等于整个路径标题都是该作品别名。
+                aliases=(work.preferred_title,) if (
+                    len(binding.markers) == 1
+                    and _normalize_title(work.preferred_title) == _normalize_title(binding.markers[0])
+                ) else (),
             )
+            previous = confirmed.get(key)
+            if previous is None:
+                confirmed[key] = verified_candidate
+            else:
+                # 同一个冻结身份不能遮住独立核验的译名，否则重扫会拆开首轮合卡。
+                # 保留既有绑定的身份与证据，仅补本条核验规则提供的完整标题。
+                confirmed[key] = replace(previous, aliases=tuple(dict.fromkeys((
+                    *previous.aliases, verified_candidate.title, *verified_candidate.aliases,
+                ))))
         # 3) 在线/测试搜索候选（含 sidecar NFO 标题输入）。
         nfo_facts = nfo_facts_by_owner.get(work.work_key, [])
         nfo_titles, has_nfo = _nfo_related_titles(work, entries, nfo_ownership, nfo_facts=nfo_facts)

@@ -9,7 +9,6 @@ from __future__ import annotations
 import sqlite3
 
 import pytest
-
 from app.media_v4.persistence.schema_v4 import V4_SCHEMA_VERSION
 
 

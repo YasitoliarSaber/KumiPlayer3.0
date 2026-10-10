@@ -670,6 +670,7 @@ def _episode_mapping_accounting(
             "mapping_basis_counts": {},
             "mapping_conflicts": [],
         }
+    current_ids = set(total_ids)
     unmapped_ids = [episode_id for episode_id in total_ids if episode_id not in mapped_ids]
     unmapped_set = set(unmapped_ids)
     reported: list[dict] = [
@@ -697,7 +698,8 @@ def _episode_mapping_accounting(
         "unmapped_reason_codes": sorted({str(item.get("reason") or "") for item in reported if item.get("reason")}),
         "mapping_basis_counts": basis_counts,
         "mapping_conflicts": [
-            dict(item) for item in diagnostics.get("mapping_conflicts") or [] if isinstance(item, dict)
+            dict(item) for item in diagnostics.get("mapping_conflicts") or []
+            if isinstance(item, dict) and str(item.get("episode_id") or "") in current_ids
         ],
     }
 
@@ -713,8 +715,18 @@ def _finalize_metadata_result(target: dict, result: dict) -> dict:
 
     finalized = dict(result)
     diagnostic_payload = finalized.pop("_mapping_diagnostics", None)
-    diagnostics = diagnostic_payload if isinstance(diagnostic_payload, dict) else {}
-    mapping_scope = bool(finalized.pop("_mapping_scope", True))
+    # Provider 与任务服务都会归一化；第二次仍消费首次公开的诊断证据。
+    # 不能丢失临时网络故障原因，再把它误判成编号冲突或不可重试。
+    diagnostics = diagnostic_payload if isinstance(diagnostic_payload, dict) else {
+        key: finalized.get(key)
+        for key in ("unmapped_reasons", "mapping_conflicts", "mapping_basis_counts")
+    }
+    # 待确认结果首次公开后已移除内部标记，保留其未进入映射的语义。
+    # 其他结果仍按当前成员重算，避免空快照的 0/0 排除后来新增的剧集。
+    mapping_scope = bool(finalized.pop("_mapping_scope", not (
+        finalized.get("metadata_state") == "waiting_review"
+        and finalized.get("episode_mapping_status") == EPISODE_MAPPING_NOT_APPLICABLE
+    )))
     # 分集只保留识别与浏览信息；不采纳剧情简介，也不修改提供器或旧快照对象。
     mappings = [{key: value for key, value in item.items() if key != "plot"}
                 for item in finalized.get("episode_mappings") or [] if isinstance(item, dict)]
@@ -1237,7 +1249,11 @@ def _fetch_provider_metadata(target: dict) -> dict:
                 "clearlogo_file_path": clearlogo,
                 "metadata_state": "ready",
                 "candidate_decision": candidate_decision,
-                "provider_work_detail": {'seasons': detail.get('seasons') or []},
+                "provider_work_detail": {
+                    'seasons': detail.get('seasons') or [],
+                    'name': detail.get('name') or '', 'original_name': detail.get('original_name') or '',
+                    'title_aliases': _extract_aliases(detail, 'tv'),
+                },
             }
             if media_type == "tv":
                 season_results = []
@@ -1462,15 +1478,22 @@ def _provider_child_scope(target: dict, provider_id: int, work_detail: dict | No
     """关系与共享在线身份提供范围证据；仅本地/在线标题不同不构成子作品。"""
     scope = target.get("provider_identity_scope") or {}
     if isinstance(scope, dict):
-        if scope.get("confirmed_child"):
-            return True
         if str(provider_id) in {str(value) for value in scope.get("shared_distinct_tv_ids") or []}:
             return True
-    group = _normalize_title(target.get("series_group"))
+    detail = work_detail or {}
     local = _normalize_title(target.get("preferred_title"))
+    remote_titles = {_normalize_title(detail.get(key)) for key in ("name", "original_name")}
+    remote_titles.update(_normalize_title(value) for value in _extract_aliases(detail, "tv"))
+    remote_titles.update(_normalize_title(value) for value in detail.get("title_aliases") or [])
+    if local and local in remote_titles:
+        # 独立外传有自己的线上作品时，父系列关系不把其编号限制成母作品子区间。
+        # 只认当前 Provider 详情的完整同名，共享身份的范围冲突仍优先保护。
+        return False
+    if isinstance(scope, dict) and scope.get("confirmed_child"):
+        return True
+    group = _normalize_title(target.get("series_group"))
     related = (target.get("card_type") == "standalone"
                or target.get("relation_type") in {"related", "spin_off", "sequel"})
-    remote_titles = {_normalize_title((work_detail or {}).get(key)) for key in ("name", "original_name")}
     return bool(group and local and group != local and related and group in remote_titles)
 
 

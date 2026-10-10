@@ -15,8 +15,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
-
 from app.media_v4.persistence.database import V4Database
 
 

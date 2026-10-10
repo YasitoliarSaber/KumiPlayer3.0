@@ -515,13 +515,12 @@ def test_draft_finalizer_reports_progress_before_first_persistence_batch(tmp_pat
 def test_cancelled_scan_cannot_enter_preview_even_with_tree_validation(tmp_path, monkeypatch):
     """cancelled scan 的验证行不能绕过状态门；preview 必须 409。"""
 
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.persistence.repositories import V4Repository
     from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = V4Database(tmp_path / "cancel-preview.db")
     database.initialize()

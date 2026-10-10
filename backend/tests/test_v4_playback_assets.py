@@ -6,11 +6,11 @@ import pytest
 
 
 def test_playback_progress_is_stored_per_episode_and_asset(tmp_path):
-    from backend.tests.test_v4_revision_confirmation import _entry
-
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.playback.store import V4PlaybackStore
     from app.media_v4.revisions.service import V4RevisionService
+
+    from backend.tests.test_v4_revision_confirmation import _entry
 
     database = V4Database(tmp_path / "playback.db")
     database.initialize()

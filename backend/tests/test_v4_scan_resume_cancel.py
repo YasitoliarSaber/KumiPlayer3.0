@@ -15,12 +15,11 @@ from types import SimpleNamespace
 
 
 def _setup(tmp_path, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4, openlist_v4
     from app.integrations.openlist.providers import OpenListRouteConfig
     from app.media_v4.persistence.database import V4Database
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = V4Database(tmp_path / "resume.db")
     database.initialize()

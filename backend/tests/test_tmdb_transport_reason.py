@@ -2,7 +2,6 @@ from unittest.mock import MagicMock
 
 import httpx
 import pytest
-
 from app.media_v4.revisions.service import metadata_recovery_policy
 from app.media_v4.revisions.transport_reason import transport_failure_reason
 from app.scrape.tmdb_client import TMDBClient, TMDBClientError

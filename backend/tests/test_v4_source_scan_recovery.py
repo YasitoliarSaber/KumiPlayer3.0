@@ -687,12 +687,11 @@ def test_tree_scan_works_after_original_txt_is_deleted(tmp_path, monkeypatch):
     """原 TXT 被删除后，归档仍支撑扫描完成（C3：受控归档是唯一输入依据）。"""
 
 
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.sources.durable_scan import get_durable_scan
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     data_dir = tmp_path / "data"
     monkeypatch.setattr("app.media_v4.sources.input_archive.get_data_dir", lambda: data_dir)

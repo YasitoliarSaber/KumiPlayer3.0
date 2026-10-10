@@ -4,7 +4,6 @@ import json
 
 import httpx
 import pytest
-
 from app.core.config import AppConfig
 
 TARGET = {'preferred_title': '本地作品名', 'work_type': 'series', 'show_type': 'anime_series',
@@ -257,10 +256,9 @@ def test_config_keys_are_secure_and_public_response_contains_only_search_key_sta
 
 
 def test_search_key_api_roundtrip_uses_secure_store_and_blank_keeps_saved_key(monkeypatch, tmp_path):
-    from fastapi.testclient import TestClient
-
     from app.core import config as module
     from app.main import app
+    from fastapi.testclient import TestClient
 
     class Store:
         available = True

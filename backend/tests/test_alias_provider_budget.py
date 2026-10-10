@@ -1,6 +1,5 @@
 import httpx
 import pytest
-
 from app.scrape.anilist_client import AniListClient, AniListRateLimitError
 
 

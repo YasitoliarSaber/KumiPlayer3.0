@@ -11,11 +11,10 @@
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.integrations.openlist.client import join_remote_path, normalize_remote_path
 from app.integrations.openlist.models import OpenListEntry
 from app.main import app
+from fastapi.testclient import TestClient
 
 REMOTE_ROOT = "/大媒体库"
 PER_PAGE = 100

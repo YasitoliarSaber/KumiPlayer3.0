@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
 """4x 超采样 + 圆点并集描边（无折线接缝）渲染图标全套。"""
-import math
 from PIL import Image, ImageDraw, ImageFilter
 
 S = 4
@@ -49,11 +47,14 @@ master = img.resize((1024,1024), Image.LANCZOS)
 base = r"D:\01_Software\KumiPlayer2.0\src-tauri\icons"
 def save(size,name):
     master.resize((size,size), Image.LANCZOS).save(base+"\\"+name,"PNG")
-save(32,"32x32.png"); save(128,"128x128.png"); save(256,"128x128@2x.png")
+save(32,"32x32.png")
+save(128,"128x128.png")
+save(256,"128x128@2x.png")
 ico = master.resize((256,256), Image.LANCZOS)
 ico.save(base+"\\icon.ico", format="ICO", sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(256,256)])
 try:
-    master.save(base+"\\icon.icns", format="ICNS"); print("icns ok")
+    master.save(base+"\\icon.icns", format="ICNS")
+    print("icns ok")
 except Exception as e:
     print("icns skipped:", e)
 print("done")

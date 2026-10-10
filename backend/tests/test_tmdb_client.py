@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-
 from app.scrape.tmdb_client import (
     TMDBAuthError,
     TMDBClient,

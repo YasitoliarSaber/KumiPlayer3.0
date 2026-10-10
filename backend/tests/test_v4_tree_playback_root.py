@@ -9,12 +9,12 @@ from __future__ import annotations
 from pathlib import Path, PureWindowsPath
 
 import pytest
-
 from app.media_v4.sources.scanner import read_directory_tree_text
 from app.media_v4.sources.tree_root import (
     TreePlaybackRootResolver,
     tree_scope_name,
 )
+
 from tests.source_disk_guard import guard_source_disk_io as _guard_source_io
 
 

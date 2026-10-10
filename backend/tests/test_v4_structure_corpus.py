@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 
 import pytest
-from backend.tests.test_v4_structure_context import resolve, semantics
-
 from app.media_v4.resolution.resolver import MediaResolver
+
+from backend.tests.test_v4_structure_context import resolve, semantics
 
 PATHS = json.loads(Path(__file__).with_name("fixtures").joinpath("media_structure_paths.json").read_text(encoding="utf-8"))["paths"]
 

@@ -3,9 +3,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from fastapi import HTTPException
-
 from app.api import openlist_v4 as api
+from fastapi import HTTPException
 
 
 @pytest.fixture

@@ -18,12 +18,11 @@ def _fresh_database(tmp_path):
 def test_local_durable_entrypoint_returns_before_the_directory_scan_finishes(tmp_path, monkeypatch):
     """本地大目录扫描在后台进行，创建任务接口不得等待文件枚举。"""
 
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4
     from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
     from app.media_v4.sources.durable_scan import get_durable_scan
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -94,13 +93,12 @@ def test_local_durable_entrypoint_keeps_online_candidate_search_out_of_scan_enti
 ):
     """来源扫描只做离线识别；联网候选只能在确认后的元数据任务中执行。"""
 
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4
     from app.media_v4.resolution import candidates as candidate_service
     from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
     from app.media_v4.sources.durable_scan import get_durable_scan
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -388,11 +386,10 @@ def test_tree_durable_entrypoint_resolves_identity_before_task_creation(tmp_path
     返回；逐条证据构建与落库仍在后台线程进行，不占用 HTTP 请求。
     """
 
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     from app.api import media_v4
     from app.media_v4.sources.durable_scan import get_durable_scan
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)

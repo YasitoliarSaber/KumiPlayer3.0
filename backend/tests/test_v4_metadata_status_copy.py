@@ -1,5 +1,4 @@
 import pytest
-
 from app.media_v4.revisions.service import metadata_recovery_policy
 
 

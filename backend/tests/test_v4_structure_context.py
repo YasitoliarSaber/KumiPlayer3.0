@@ -3,7 +3,6 @@
 from dataclasses import asdict
 
 import pytest
-
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.resolution.resolver import MediaResolver
 from app.media_v4.sources.adapters import SourceEntry, to_source_evidence

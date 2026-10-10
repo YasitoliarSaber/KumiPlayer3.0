@@ -2,9 +2,8 @@ import threading
 from pathlib import Path
 from unittest.mock import Mock
 
-from PIL import Image
-
 from app.media_v4.assets import thumbnails
+from PIL import Image
 
 
 def test_read_only_lookup_never_encodes_or_creates_cache(tmp_path, monkeypatch):

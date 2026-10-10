@@ -31,7 +31,6 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-
 from app.integrations.openlist.governor import (
     OpenListRequestGovernor,
     get_governor,

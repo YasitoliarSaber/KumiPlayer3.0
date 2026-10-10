@@ -358,7 +358,6 @@ def test_scan_handler_rejects_evidence_from_another_source_root():
     from types import SimpleNamespace
 
     import pytest
-
     from app.media_v4.domain.models import SourceEvidence
     from app.media_v4.sources.scan_handlers import _assert_scan_identity
 

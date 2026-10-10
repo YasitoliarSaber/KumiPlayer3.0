@@ -3,11 +3,10 @@
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException
-
 from app.api import config, system
 from app.core.config import AppConfig
 from app.media_v4.persistence.database import V4Database
+from fastapi import HTTPException
 
 from .test_system_open_folder import _confirmed_asset
 

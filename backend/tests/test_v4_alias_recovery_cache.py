@@ -1,7 +1,6 @@
 """恢复缓存仅保存受限名称证据，不替代媒体事实或身份证据。"""
 
 import pytest
-
 from app.media_v4.jobs.alias_cache import RecoveryCache
 from app.media_v4.jobs.alias_recovery import recover_metadata
 from app.media_v4.persistence.database import V4Database
@@ -100,7 +99,6 @@ def test_cache_eviction_only_removes_cache_namespace(cache):
 
 def test_anilist_name_query_has_no_artwork_people_or_description():
     import httpx
-
     from app.scrape.anilist_client import AniListClient
     queries = []
     def handler(request):
@@ -116,7 +114,6 @@ def test_anilist_name_query_has_no_artwork_people_or_description():
 @pytest.mark.parametrize('status,reason', [(401, 'provider_unauthorized'), (503, 'provider_unavailable')])
 def test_anilist_failure_is_classified_without_response_body(status, reason):
     import httpx
-
     from app.scrape.anilist_client import AniListClient, AniListClientError
     with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(status, text='fixture-private-response'))) as client:
         with pytest.raises(AniListClientError) as error:

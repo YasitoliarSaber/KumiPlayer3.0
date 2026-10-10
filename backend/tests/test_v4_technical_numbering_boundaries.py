@@ -3,7 +3,6 @@
 from pathlib import PurePosixPath
 
 import pytest
-
 from app.media_v4.parsing.evidence_policy import parse_numbering, tokenize_filename
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.sources.adapters import SourceEntry, to_source_evidence

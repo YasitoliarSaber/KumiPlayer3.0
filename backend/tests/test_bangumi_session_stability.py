@@ -59,9 +59,8 @@ def test_cached_avatar_keeps_bangumi_url_whitelist(monkeypatch, tmp_path):
     """缓存命中不绕过 URL 白名单，避免退化为任意本地文件读取入口。"""
     import hashlib
 
-    from fastapi import HTTPException
-
     from app.api import bangumi as bangumi_api
+    from fastapi import HTTPException
 
     raw_url = "https://untrusted.example/avatar.jpg"
     avatar_dir = tmp_path / "cache" / "bangumi_avatars"
@@ -120,9 +119,8 @@ class _FakeCredentialStore:
 
 @pytest.fixture
 def client():
-    from fastapi.testclient import TestClient
-
     from app.main import app
+    from fastapi.testclient import TestClient
 
     return TestClient(app)
 
@@ -521,7 +519,6 @@ class TestRequestDiagnostics:
     def test_request_log_redacts_token_on_failure(self, monkeypatch):
         """401 失败日志：含 status/error_code/retry_after/purpose，绝不含 Token。"""
         import pytest
-
         from app.integrations import bangumi as bg
 
         self._fake_httpx(monkeypatch, [401])
@@ -749,9 +746,8 @@ class TestRuntimeCredentialResolver:
     def test_normal_authenticated_request_uses_recovered_token(self, monkeypatch):
         """config cache 空 + CM 先不可读后恢复 → 同一进程 BangumiClient()
         发起正常业务请求直接携带 recovered token 且成功。"""
-        import httpx
-
         import app.core.config as core_config
+        import httpx
         from app.core.credential_store import CredentialStoreError
         from app.integrations import bangumi as bg
 

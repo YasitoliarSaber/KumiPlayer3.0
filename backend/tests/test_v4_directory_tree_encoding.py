@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.media_v4.sources.scanner import (
     DirectoryTreeReadError,
     build_directory_tree_evidence,

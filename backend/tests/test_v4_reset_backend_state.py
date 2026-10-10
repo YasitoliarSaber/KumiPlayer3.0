@@ -45,7 +45,6 @@ def test_preview_is_non_destructive_and_apply_keeps_credentials_and_runtime_stat
 
 def test_source_root_and_symlink_targets_are_rejected(tmp_path, monkeypatch):
     import pytest
-
     from app.maintenance import reset_backend_state_v4 as reset
 
     data_dir = tmp_path / "data"
@@ -73,7 +72,6 @@ def test_source_root_and_symlink_targets_are_rejected(tmp_path, monkeypatch):
 
 def test_parent_of_source_root_is_never_a_reset_target(tmp_path, monkeypatch):
     import pytest
-
     from app.maintenance import reset_backend_state_v4 as reset
 
     data_dir = tmp_path / "data"
