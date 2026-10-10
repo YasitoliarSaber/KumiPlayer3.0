@@ -326,6 +326,9 @@ def _boundary_work_key(evidence: SourceEvidence, facts: ParsedFacts) -> str:
         return ""
     context = structure_decision(facts)
     if context and context.get("title"):
+        if is_generic_container_title(str(context["title"])):
+            # 双重门禁：旧草稿或装饰目录漏判也不能按 S1/TV版串起不同作品。
+            return ""
         series_title = _main_series_identity_title(facts)
         if (facts.group_type == "special" and series_title
                 and _is_series_container(str(context.get("series_container") or ""))):

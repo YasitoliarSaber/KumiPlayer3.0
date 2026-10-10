@@ -76,6 +76,7 @@ _TECHNICAL_TOKEN_RE = re.compile(
 #: 只保留有边界、有编号或有括号前缀的形态：旧词表里的裸 `OPENING` / `ENDING`
 #: 会误伤正片标题（实测 ``Happy Ending.S01E01.mkv``），属于 F-007 的根因。
 _AUXILIARY_FILE_RES = (
+    re.compile(r"(?i)(?<![A-Za-z])NC(?:OP|ED)(?:EP)?\d*(?![A-Za-z])"),
     re.compile(r"(?i)(?<![A-Za-z])NCOP\d*(?![A-Za-z])"),
     re.compile(r"(?i)(?<![A-Za-z])NCED\d*(?![A-Za-z])"),
     re.compile(r"(?i)(?<![A-Za-z])NON[-\s]?CREDIT\s*(?:OP|ED)"),
@@ -163,13 +164,14 @@ _ROMANIZED_MOVIE_FILE_RE = re.compile(r"(?i)(?<![A-Za-z])Gekij(?:ou|o|ō)ban(?![
 _NUMBERED_EDITION_RE = re.compile(
     r"(?i)[\[【]\s*(\d{1,3})\s*(?:"
     r"director(?:['’‘ʼ]s)?[ ._-]*cut"
+    r"|END|non[ ._-]+trimming[ ._-]+ver\.?"
     r"|\(\s*on[ ._-]?air\s*(?:ver(?:sion)?\.?)?\s*\)"
     r")\s*[\]】]"
 )
 _BARE_NUMBER_RES = (
     _NUMBERED_EDITION_RE,
     # 完整编号位置的 [13] / 【13】 / (13)
-    re.compile(r"[\[【(]\s*(\d{1,3})\s*[\]】)]"),
+    re.compile(r"[\[【(]\s*(\d{1,3})(?:v\d+)?\s*[\]】)]", re.IGNORECASE),
     # 单个缺失闭括号：第二个技术区开括号界定编号终点。
     re.compile(r"[\[【]\s*(\d{1,3})\s*(?=[\[【](?:Ma10p|Hi10p|\d{3,4}p|x26[45]))", re.IGNORECASE),
     # `part-13` / `part13` / `ep13`
@@ -635,7 +637,8 @@ def classify_content(
     )
     attached_hit = next((p.pattern for p in _ATTACHED_FILE_RES if p.search(stem)), "")
     attached_dir = next(
-        (token for token in directory if _segment_token(token.name) in _ATTACHED_DIR_TOKENS),
+        (token for token in directory if _segment_token(token.name) in _ATTACHED_DIR_TOKENS
+         or re.search(r"番外(?:篇)?[:：]", token.name)),
         None,
     )
     classification_prefix = classification_title_prefix(stem)

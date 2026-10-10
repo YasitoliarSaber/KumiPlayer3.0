@@ -189,7 +189,11 @@ def structure_context(evidence: SourceEvidence, root_container: str = "") -> Str
         subwork = ""
         parent_dirs = (work_container,)
     directory_season = _infer_season_from_context(list(parent_dirs))
-    season_scoped = bool(leaf_season is not None and not _looks_like_plain_season_dir(directories[leaf]))
+    season_scoped = bool(
+        (leaf_season is not None and not _looks_like_plain_season_dir(directories[leaf]))
+        or (_is_series_container(work_container)
+            and any(_infer_season_from_context([value]) is not None for value in parent_dirs[1:]))
+    )
     filename_identity = ""
     if collection_indexes and any(normalized_title(work_container) == normalized_title(directories[index])
                                   for index in collection_indexes):

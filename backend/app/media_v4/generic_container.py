@@ -35,6 +35,9 @@ _GENERIC_TOKENS = frozenset({
     "n/a",
     "none",
     "null",
+    "tv",
+    "tv版",
+    "电视版",
     # 中文分类/结构容器
     "动画",
     "新番",
@@ -83,6 +86,8 @@ def is_generic_container_name(value: str) -> bool:
     raw = (value or "").strip().rstrip("/\\")
     if not raw:
         return True
+    # 年份是季度属性，不会把 S1.2017 / [S2] (2022) 变成作品身份。
+    # 只移除尾部独立年份，完整具名标题（含年份重制）仍由下方等值判断保护。
     lower = raw.casefold()
     if lower in _GENERIC_TOKENS:
         return True
@@ -94,7 +99,15 @@ def is_generic_container_name(value: str) -> bool:
         return True
     if _EPISODE_RANGE.fullmatch(lower):
         return True
-    return False
+    decorated = _normalize(re.sub(
+        r"(?:[ ._-]+|\s*\()(?:19|20)\d{2}\)?$", "", _normalize(raw),
+    ))
+    # 装饰规范化只拓展明确季度/发行形式，不把 [86] 等数字片名变成编号容器。
+    return bool(
+        (_SEASON_TOKEN.fullmatch(decorated) and not _PURE_NUMBER.fullmatch(decorated))
+        or _CHINESE_SEASON_TOKEN.fullmatch(decorated)
+        or decorated in {"tv", "tv版", "电视版"}
+    )
 
 
 def is_generic_container_title(value: str) -> bool:

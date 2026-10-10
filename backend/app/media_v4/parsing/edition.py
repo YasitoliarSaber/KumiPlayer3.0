@@ -3,6 +3,7 @@
 import re
 
 _EDITION_TOKENS = (
+    (re.compile(r"(?i)\bnon[ ._-]+trimming\b"), "non_trimming"),
     (re.compile(r"(?i)\(\s*on[ ._-]?air\s*(?:ver(?:sion)?\.?)?\s*\)"), "on-air"),
     (re.compile(r"(?i)(?:director(?:['’‘ʼ]s)?[ ._-]*cut|导演剪辑版)"), "director-cut"),
     (re.compile(r"(?i)(?:extended(?:[ ._-]?edition)?|加长版)"), "extended"),

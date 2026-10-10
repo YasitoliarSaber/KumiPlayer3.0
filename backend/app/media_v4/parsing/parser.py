@@ -453,6 +453,20 @@ class V4Parser:
                           "parent_dirs": context.parent_dirs,
                           "series_container": context.series_container},
         )
+        if guess.year is None:
+            for directory_name in reversed(context.parent_dirs):
+                if is_generic_container_name(directory_name):
+                    _, season_year = _parse_work_title_and_year(directory_name)
+                    if season_year is not None:
+                        guess.year = season_year
+                        break
+        if (context.collections and context.directory_season is not None
+                and guess.group_type == "season"
+                and re.fullmatch(r".{1,24}篇(?:[（(][^）)]+[）)])?", guess.work_title)):
+            # 只有篇章名的目录不能覆盖完整文件片名；不从作者/厂商“系列”造母作品名。
+            file_title, _ = _parse_work_title_and_year(_extract_series_name_from_filename(filename))
+            if file_title and not is_generic_container_name(file_title):
+                guess.work_title = file_title
         if (guess.card_type == "standalone" and context.series_container
                 and context.series_container not in context.collections):
             # 显式 TV+外传结构中的关系词短标题仍须带具体父作品名；共享

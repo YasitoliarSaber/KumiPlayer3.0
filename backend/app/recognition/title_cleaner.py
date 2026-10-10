@@ -412,6 +412,10 @@ def clean_work_title_container(container: str) -> TitleCleanResult:
 
     # 5. 空白归一化
     cleaned = " ".join(cleaned.split()).strip()
+    if (cleaned.endswith(".") and re.search(r"(?i)\.\[S\d+\]", original)
+            and not re.search(r"(?:\b[A-Za-z]\.){2,}$", cleaned)):
+        # 只收掉显式 .[S1] 留下的一个分隔点；D.C. 等片名标点与中文句号保留。
+        cleaned = cleaned[:-1].rstrip()
 
     # 更新结果
     result.title = cleaned
