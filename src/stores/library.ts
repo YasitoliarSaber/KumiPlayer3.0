@@ -24,6 +24,7 @@ interface LibraryState {
   history: PlaybackHistoryItem[]
   loading: boolean
   updating: boolean
+  backgroundActive: boolean
   generationId: string
   error: string | null
   loaded: boolean
@@ -54,6 +55,7 @@ const detailCache = new Map<string, WorkIndex>()
 const detailRequests = new Map<string, Promise<WorkIndex>>()
 const detailVersions = new Map<string, number>()
 let changeRequest: Promise<boolean> | null = null
+let pendingDetailRefreshId: string | null = null
 let detailNavigationRequest = 0
 let libraryLoadRequest = 0
 let libraryCacheGeneration = 0
@@ -99,6 +101,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   history: [],
   loading: false,
   updating: false,
+  backgroundActive: false,
   generationId: '',
   error: null,
   loaded: false,
@@ -186,6 +189,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const force = options?.force === true
     if (get().loading && !force) return false
     const requestId = ++libraryLoadRequest
+    pendingDetailRefreshId = null
     const diagnosticStartedAt = performance.now()
     recordScrollDiagnostic('load-library-start', { force: force ? 1 : 0 })
 
@@ -210,6 +214,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         loaded: true,
         loading: false,
         updating: libraryRes.updating ?? false,
+        backgroundActive: libraryRes.background_active ?? false,
         generationId: libraryRes.generation_id ?? libraryRes.generated_at ?? '',
         error: null,
         changeSequence: libraryRes.change_sequence ?? 0,
@@ -251,12 +256,14 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       const changed = new Map<string, 'work_upsert' | 'work_remove' | 'artwork' | 'watch'>()
       const cards = new Map<string, WorkIndex>()
       let updating = get().updating
+      let backgroundActive = get().backgroundActive
       let generationId = get().generationId
       try {
         let hasMore = true
         while (hasMore) {
           const page = await libraryApi.getChanges(cursor)
           updating = page.updating ?? updating
+          backgroundActive = page.background_active ?? false
           generationId = page.generation_id ?? generationId
           if (generation !== libraryLoadRequest) return false
           if (page.reset_required || page.changes.some((event) => !['work_upsert', 'work_remove', 'artwork', 'watch'].includes(event.kind))) return get().loadLibrary({ force: true })
@@ -283,9 +290,6 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         const selectedId = get().selectedWorkDetail?.work_id
         // 分集、演员及关联图片不在精简卡片内，任何资源变化都需废弃该作品详情缓存。
         for (const id of changed.keys()) get().invalidateWork(id)
-        const refreshedDetail = selectedId && changed.has(selectedId) && cards.has(selectedId)
-          ? await get().getWorkDetail(selectedId) : null
-        if (generation !== libraryLoadRequest) return false
         const state = get()
         const works = state.works.filter((work) => !changed.has(work.work_id) || cards.has(work.work_id))
           .map((work) => {
@@ -297,11 +301,30 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         let detail = state.selectedWorkDetail
         for (const id of changed.keys()) {
           const card = cards.get(id)
-          if (detail?.work_id === id && (!card || id === selectedId)) detail = card ? refreshedDetail : null
+          if (detail?.work_id === id && !card) detail = null
         }
-        set({ works: changed.size ? works : state.works, selectedWorkDetail: detail, changeSequence: cursor, updating, generationId })
+        set({ works: changed.size ? works : state.works, selectedWorkDetail: detail, changeSequence: cursor, updating, backgroundActive, generationId })
         if (changed.size) saveLibraryCache(works)
         if ([...changed.values()].includes('watch') || state.history.some((item) => changed.has(item.work_id))) void get().refreshHistory()
+        // 先提交轻量变化；慢详情不能阻塞海报、游标及下一轮图片通知。
+        if (selectedId && changed.has(selectedId)) pendingDetailRefreshId = cards.has(selectedId) ? selectedId : null
+        if (pendingDetailRefreshId !== get().selectedWorkDetail?.work_id) pendingDetailRefreshId = null
+        if (selectedId && pendingDetailRefreshId === selectedId) {
+          const version = detailVersions.get(selectedId) || 0
+          const navigation = detailNavigationRequest
+          const isCurrent = () => generation === libraryLoadRequest
+            && version === (detailVersions.get(selectedId) || 0)
+            && navigation === detailNavigationRequest
+            && get().selectedWorkDetail?.work_id === selectedId
+          void get().getWorkDetail(selectedId).then((updated) => {
+            if (isCurrent()) {
+              pendingDetailRefreshId = null
+              set({ selectedWorkDetail: updated, detailError: null })
+            }
+          }).catch((cause: unknown) => {
+            if (isCurrent()) set({ detailError: cause instanceof Error ? cause.message : '加载详情失败' })
+          })
+        }
         return true
       } catch { return false }
     }

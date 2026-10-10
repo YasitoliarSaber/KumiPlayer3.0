@@ -14,6 +14,7 @@ export interface LibraryResponse {
   generated_at: string;
   generation_id: string;
   updating: boolean;
+  background_active?: boolean;
   change_sequence: number;
   digest: string;
 }
@@ -57,4 +58,5 @@ export interface LibraryChanges {
   reset_required: boolean;
   generation_id: string;
   updating: boolean;
+  background_active?: boolean;
 }

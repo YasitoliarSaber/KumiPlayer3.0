@@ -86,8 +86,20 @@ export default function App() {
     if (!appConfig?.setup_completed) return undefined;
     let disposed = false;
     let timer = 0;
+    let checking = false;
+    const schedule = () => {
+      window.clearTimeout(timer);
+      if (disposed) return;
+      const state = useLibraryStore.getState();
+      const delay = document.visibilityState !== 'visible' ? 30000
+        : state.backgroundActive || state.updating ? 1000 : 5000;
+      timer = window.setTimeout(() => { void check() }, delay);
+    };
     // 变化游标只合并相关卡片；图片发布不会强刷全库或清空全部详情。
     const check = async () => {
+      if (disposed || checking) return;
+      window.clearTimeout(timer);
+      checking = true;
       const startedAt = performance.now();
       try {
         const changed = await syncChanges();
@@ -99,15 +111,24 @@ export default function App() {
         recordScrollDiagnostic('library-check-error', { ms: Math.round(performance.now() - startedAt) });
         // 网络失败不推进游标，下一轮重试。
       }
-      if (!disposed) {
-        const delay = document.visibilityState === 'visible' ? 5000 : 30000;
-        timer = window.setTimeout(() => { void check() }, delay);
-      }
+      checking = false;
+      schedule();
     };
-    timer = window.setTimeout(() => { void check() }, 5000);
+    const onVisibilityChange = () => {
+      window.clearTimeout(timer);
+      if (document.visibilityState === 'visible') void check();
+      else if (!checking) schedule();
+    };
+    const unsubscribe = useLibraryStore.subscribe((state, previous) => {
+      if (!checking && (state.backgroundActive !== previous.backgroundActive || state.updating !== previous.updating)) schedule();
+    });
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    timer = window.setTimeout(() => { void check() }, 0);
     return () => {
       disposed = true;
       window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      unsubscribe();
     };
   }, [appConfig?.setup_completed, syncChanges]);
 

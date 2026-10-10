@@ -9,7 +9,7 @@ import threading
 import time
 import uuid
 import warnings
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -91,7 +91,7 @@ class ArtworkService:
                          "WHERE resource_id=? AND state IN ('retry','failed','cancelled')", (resource_id,))
 
     def process_available(self, limit: int = 64) -> int:
-        # 一次最多处理64个需求，但每波只领取正在执行的2个，队尾不提前占租约。
+        # 一次最多处理64个需求，只为正在执行的槽位领取租约。
         if not self._process_lock.acquire(blocking=False):
             return 0
         try:
@@ -103,12 +103,22 @@ class ArtworkService:
         self._adopt_manual_page()
         processed = 0
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix='artwork-download') as executor:
-            while processed < limit and not self._stop.is_set():
-                claimed = self._claim(min(2, limit - processed))
-                if not claimed:
+            pending: set[Future[None]] = set()
+            submitted = 0
+            while pending or (submitted < limit and not self._stop.is_set()):
+                while len(pending) < 2 and submitted < limit and not self._stop.is_set():
+                    claimed = self._claim(min(2 - len(pending), limit - submitted))
+                    if not claimed:
+                        break
+                    for item in claimed:
+                        pending.add(executor.submit(self._process, *item))
+                    submitted += len(claimed)
+                if not pending:
                     break
-                list(executor.map(lambda item: self._process(*item), claimed))
-                processed += len(claimed)
+                completed, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in completed:
+                    future.result()
+                    processed += 1
         return processed
 
     def _claim(self, limit: int) -> list[tuple[dict, str]]:
@@ -132,7 +142,17 @@ class ArtworkService:
             rows = conn.execute("""SELECT * FROM artwork_resources r
                 WHERE (state='pending' OR (state='retry' AND retry_at<=?))
                 AND EXISTS (SELECT 1 FROM artwork_bindings b WHERE b.candidate_id=r.resource_id)
-                ORDER BY created_at,resource_id LIMIT ?""", (now, limit)).fetchall()
+                ORDER BY
+                    (SELECT MIN(CASE b.role
+                        WHEN 'poster' THEN 0
+                        WHEN 'clearlogo' THEN 1 WHEN 'fanart' THEN 1
+                        WHEN 'episode_thumb' THEN 2
+                        WHEN 'profile' THEN 3 WHEN 'related_poster' THEN 3
+                        ELSE 4 END)
+                     FROM artwork_bindings b WHERE b.candidate_id=r.resource_id),
+                    (SELECT MAX(CASE WHEN b.priority>=100 THEN 1 ELSE 0 END)
+                     FROM artwork_bindings b WHERE b.candidate_id=r.resource_id) DESC,
+                    created_at,resource_id LIMIT ?""", (now, limit)).fetchall()
             for row in rows:
                 token = uuid.uuid4().hex
                 conn.execute("UPDATE artwork_resources SET state='running',lease_token=?,lease_until=?, "

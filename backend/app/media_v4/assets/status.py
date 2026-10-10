@@ -1,5 +1,25 @@
 """独立图片任务状态，纯 SQLite 汇总，不与资料完成状态相互改写。"""
 
+import time
+
+
+def has_active_artwork(conn) -> bool:
+    """只查询仍有活动来源的需求；完整身份校验由后台发布链执行。"""
+    return bool(conn.execute("""SELECT 1 FROM artwork_resources r
+        WHERE (r.state IN ('pending','running') OR (r.state='retry' AND r.retry_at<=?))
+        AND EXISTS (SELECT 1 FROM artwork_bindings b
+            JOIN works w ON w.work_id=b.work_id AND w.status='active'
+            WHERE b.candidate_id=r.resource_id AND (b.priority>=100 OR EXISTS (
+                SELECT 1 FROM revision_metadata_refs mr
+                JOIN import_revisions ir ON ir.revision_id=mr.revision_id AND ir.status='confirmed'
+                JOIN source_roots sr ON sr.root_id=ir.root_id AND sr.enabled=1 AND sr.retired_at=''
+                WHERE mr.revision_id=b.revision_id AND mr.work_id=b.work_id AND mr.snapshot_id=b.snapshot_id
+                AND EXISTS (SELECT 1 FROM revision_bindings rb
+                    WHERE rb.revision_id=b.revision_id AND rb.work_id=b.work_id)
+                AND NOT EXISTS (SELECT 1 FROM v4_meta cancelled
+                    WHERE cancelled.key='artwork_cancelled_revision:'||b.revision_id||':'||b.work_id))))
+        LIMIT 1""", (time.time(),)).fetchone())
+
 
 def artwork_status(conn, work_id: str) -> dict:
     counts = {row['state']: int(row['count']) for row in conn.execute(

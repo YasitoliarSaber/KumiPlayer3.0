@@ -102,6 +102,21 @@ test('尚未发布与已发布空库有不同状态，普通同步只读发布�
   expect(getLibrary).toHaveBeenCalledTimes(1);
 });
 
+test('空变化仍同步后台图片活动状态，不重载卡片或更换列表引用', async () => {
+  getHistory.mockResolvedValue({ items: [] });
+  getLibrary.mockResolvedValue({ works: [work('preparing-art')], change_sequence: 4, background_active: true });
+  await useLibraryStore.getState().loadLibrary();
+  const list = useLibraryStore.getState().works;
+  expect(useLibraryStore.getState().backgroundActive).toBe(true);
+  getChanges.mockResolvedValue({ changes: [], next_sequence: 4, has_more: false, background_active: false });
+  await useLibraryStore.getState().syncChanges();
+  expect(useLibraryStore.getState().backgroundActive).toBe(false);
+  expect(useLibraryStore.getState().works).toBe(list);
+  expect(getCards).not.toHaveBeenCalled();
+  expect(getWorkDetail).not.toHaveBeenCalled();
+  expect(getLibrary).toHaveBeenCalledOnce();
+});
+
 test('详情预热和点击导航只取数据，DOM 图片统一预算加载，不显式解码', async () => {
   const decode = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode });
@@ -155,18 +170,64 @@ test('选中作品的图片变化读取单作品详情，更新分集、演员�
   expect(getWorkDetail).toHaveBeenCalledOnce();
 });
 
-test('图片详情刷新失败保留当前详情与游标，重试成功后仅更新该作品', async () => {
+test('图片详情刷新失败保留当前详情，卡片与游标照常提交，后续变化重新读取详情', async () => {
   const first = work('failed-art');
+  const changed = { ...first, poster_path: '/api/assets/artwork/failed-art/v2/384' };
   useLibraryStore.setState({ works: [first], selectedWorkDetail: first, loaded: true, changeSequence: 15 });
   getChanges.mockResolvedValue({ changes: [{ sequence: 16, kind: 'artwork', work_id: first.work_id }], next_sequence: 16, has_more: false });
-  getCards.mockResolvedValue({ works: [first] });
+  getCards.mockResolvedValue({ works: [changed] });
   getWorkDetail.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ ...first, plot: 'valid' });
-  expect(await useLibraryStore.getState().syncChanges()).toBe(false);
-  expect(useLibraryStore.getState().selectedWorkDetail).toBe(first);
-  expect(useLibraryStore.getState().changeSequence).toBe(15);
   expect(await useLibraryStore.getState().syncChanges()).toBe(true);
+  expect(useLibraryStore.getState().selectedWorkDetail).toBe(first);
+  expect(useLibraryStore.getState().works[0]).toEqual(changed);
+  expect(useLibraryStore.getState().changeSequence).toBe(16);
+  getChanges.mockResolvedValue({ changes: [{ sequence: 17, kind: 'artwork', work_id: first.work_id }], next_sequence: 17, has_more: false });
+  expect(await useLibraryStore.getState().syncChanges()).toBe(true);
+  await vi.waitFor(() => expect(useLibraryStore.getState().selectedWorkDetail?.plot).toBe('valid'));
   expect(useLibraryStore.getState().selectedWorkDetail?.plot).toBe('valid');
-  expect(getChanges).toHaveBeenLastCalledWith(15);
+  expect(getChanges).toHaveBeenLastCalledWith(16);
+  expect(getLibrary).not.toHaveBeenCalled();
+});
+
+test('慢详情请求不阻塞图片卡片、变化游标与后续同步，旧详情不能覆盖新版本', async () => {
+  const first = work('slow-detail-art');
+  const response = deferred<WorkIndex>();
+  const next = { ...first, poster_path: '/api/assets/artwork/slow/v2/384' };
+  useLibraryStore.setState({ works: [first], selectedWorkDetail: first, loaded: true, changeSequence: 18 });
+  getChanges.mockResolvedValue({ changes: [{ sequence: 19, kind: 'artwork', work_id: first.work_id }], next_sequence: 19, has_more: false, background_active: true });
+  getCards.mockResolvedValue({ works: [next] });
+  getWorkDetail.mockImplementationOnce(() => response.promise).mockResolvedValue({ ...next, plot: 'new detail' });
+  const pending = useLibraryStore.getState().syncChanges();
+  await vi.waitFor(() => expect(getWorkDetail).toHaveBeenCalled());
+  try {
+    expect(useLibraryStore.getState().works[0]).toEqual(next);
+    expect(useLibraryStore.getState().changeSequence).toBe(19);
+    expect(useLibraryStore.getState().backgroundActive).toBe(true);
+    expect(useLibraryStore.getState().selectedWorkDetail).toBe(first);
+    expect(await pending).toBe(true);
+    getChanges.mockResolvedValue({ changes: [{ sequence: 20, kind: 'artwork', work_id: first.work_id }], next_sequence: 20, has_more: false });
+    expect(await useLibraryStore.getState().syncChanges()).toBe(true);
+    await vi.waitFor(() => expect(useLibraryStore.getState().selectedWorkDetail?.plot).toBe('new detail'));
+  } finally {
+    response.resolve({ ...first, plot: 'stale detail' });
+    await pending;
+  }
+  expect(useLibraryStore.getState().selectedWorkDetail?.plot).toBe('new detail');
+  expect(getLibrary).not.toHaveBeenCalled();
+});
+
+test('最后一次图片详情读取失败后，空变化轮询仍补齐详情，不重载卡片', async () => {
+  const first = work('final-art-retry');
+  useLibraryStore.setState({ works: [first], selectedWorkDetail: first, loaded: true, changeSequence: 80 });
+  getChanges.mockResolvedValueOnce({ changes: [{ sequence: 81, kind: 'artwork', work_id: first.work_id }], next_sequence: 81, has_more: false })
+    .mockResolvedValue({ changes: [], next_sequence: 81, has_more: false });
+  getCards.mockResolvedValue({ works: [first] });
+  getWorkDetail.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ ...first, plot: 'recovered' });
+  expect(await useLibraryStore.getState().syncChanges()).toBe(true);
+  await vi.waitFor(() => expect(useLibraryStore.getState().detailError).toBe('offline'));
+  expect(await useLibraryStore.getState().syncChanges()).toBe(true);
+  await vi.waitFor(() => expect(useLibraryStore.getState().selectedWorkDetail?.plot).toBe('recovered'));
+  expect(getCards).toHaveBeenCalledOnce();
   expect(getLibrary).not.toHaveBeenCalled();
 });
 

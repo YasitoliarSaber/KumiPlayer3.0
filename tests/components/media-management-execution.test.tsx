@@ -91,6 +91,42 @@ test('图片失败独立显示，不阻塞已发布作品，也不需要镜像�
   expect(retryImages).toHaveBeenCalledWith('published')
 })
 
+test('资料完成但图片待准备时仍在活动列表，总体进度不会提前显示完成', () => {
+  const progress = makeProgress([workUnit('preparing', '正在准备图片的作品', 'completed', {
+    metadata_state: 'ready', artwork: { status: 'pending', total: 2, counts: { pending: 2 } },
+  })], {
+    stage_summary: {
+      metadata: { status: 'succeeded', total: 1, queued: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
+      projection: { status: 'succeeded', total: 1, queued: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
+      artwork: { status: 'queued', total: 1, queued: 1, running: 0, succeeded: 0, failed: 0, cancelled: 0 },
+    },
+  })
+  render(<V4ExecutionProgress progress={progress as never} busyRetryId="" onRetry={vi.fn()}
+    resolvingWorkId="" onResolveMetadata={vi.fn()} />)
+  expect(screen.getByText('资料已就绪，图片准备中')).toBeVisible()
+  expect(screen.getByText('资料已就绪，正在准备图片')).toBeVisible()
+  expect(screen.queryByText('已完成 1 部')).not.toBeInTheDocument()
+  expect(Number(screen.getByRole('progressbar', { name: '总体进度' }).getAttribute('aria-valuenow'))).toBeLessThan(1)
+})
+
+test('其他图片失败时仍显示剩余图片准备状态', () => {
+  const progress = makeProgress([
+    workUnit('failed-image', '图片失败的作品', 'completed', { artwork: { status: 'failed', total: 1, counts: { failed: 1 } } }),
+    workUnit('pending-image', '图片待准备的作品', 'completed', { artwork: { status: 'pending', total: 1, counts: { pending: 1 } } }),
+  ], {
+    stage_summary: {
+      metadata: { status: 'succeeded', total: 2, queued: 0, running: 0, succeeded: 2, failed: 0, cancelled: 0 },
+      projection: { status: 'succeeded', total: 1, queued: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
+      artwork: { status: 'failed', total: 2, queued: 1, running: 0, succeeded: 0, failed: 1, cancelled: 0 },
+    },
+  })
+  render(<V4ExecutionProgress progress={progress as never} busyRetryId="" onRetry={vi.fn()}
+    resolvingWorkId="" onResolveMetadata={vi.fn()} />)
+  expect(screen.getByText('资料已就绪，正在准备图片')).toBeVisible()
+  expect(screen.getByText('已完成 1 部')).toBeVisible()
+  expect(screen.getByText('资料已就绪，图片准备中')).toBeVisible()
+})
+
 beforeEach(() => {
   localStorage.clear()
   vi.clearAllMocks()

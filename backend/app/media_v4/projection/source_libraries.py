@@ -699,6 +699,14 @@ def _active_task(scan, job, revision_id: str, progress: dict) -> dict | None:
             "cancel_requested": status == "cancelling",
         }
     if job is None:
+        artwork = (progress.get('stage_summary') or {}).get('artwork') or {}
+        if artwork.get('queued') or artwork.get('running'):
+            total = int(artwork.get('total') or 0)
+            done = sum(int(artwork.get(key) or 0) for key in ('succeeded', 'failed', 'cancelled'))
+            return {'kind': 'execution', 'revision_id': revision_id, 'status': 'running',
+                    'stage': 'prepare_artwork', 'label': '正在准备本地图片',
+                    'percent': round(done / total * 100) if total else None,
+                    'can_cancel': False, 'cancel_requested': False}
         return None
     job_type = str(job["job_type"])
     status = "cancelling" if bool(job["cancel_requested"]) else str(job["status"])
@@ -920,6 +928,9 @@ def _progress_stage(progress: dict) -> str:
     projection = (progress.get("stage_summary") or {}).get("projection") or {}
     if projection.get("status") in {"queued", "running"}:
         return "projection"
+    artwork = (progress.get('stage_summary') or {}).get('artwork') or {}
+    if artwork.get('queued') or artwork.get('running'):
+        return 'artwork'
     return "idle"
 
 
@@ -942,6 +953,11 @@ def _completed_count(progress: dict) -> int:
 
 
 def _progress_percent(progress: dict) -> int | None:
+    if _progress_stage(progress) == 'artwork':
+        artwork = (progress.get('stage_summary') or {}).get('artwork') or {}
+        total = int(artwork.get('total') or 0)
+        done = sum(int(artwork.get(key) or 0) for key in ('succeeded', 'failed', 'cancelled'))
+        return round(done / total * 100) if total else None
     units = progress.get("work_units") or []
     if not units:
         return None
@@ -952,7 +968,8 @@ def _progress_message(progress: dict) -> str:
     overall = progress.get("overall_status")
     if overall == "running":
         stage = _progress_stage(progress)
-        label = {"metadata": "正在获取媒体信息", "projection": "正在更新媒体库"}.get(stage, "处理中")
+        label = {"metadata": "正在获取媒体信息", "projection": "正在更新媒体库",
+                 "artwork": "正在准备本地图片"}.get(stage, "处理中")
         return label
     if overall == "needs_attention":
         return "有任务需要处理"

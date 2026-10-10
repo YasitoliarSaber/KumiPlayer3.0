@@ -574,7 +574,8 @@ def _metadata_stage_summary(jobs: list[dict], scrape_rows: dict[str, dict]) -> d
     return summary
 
 
-def _revision_overall_status(work_units: list[dict], stage: dict[str, list[dict]]) -> str:
+def _revision_overall_status(work_units: list[dict], stage: dict[str, list[dict]],
+                             artwork: dict[str, dict] | None = None) -> str:
     """revision 级整体状态：running > needs_attention > queued > cancelled > completed。"""
 
     if any(unit["overall_status"] == "running_metadata" for unit in work_units):
@@ -603,6 +604,8 @@ def _revision_overall_status(work_units: list[dict], stage: dict[str, list[dict]
         for job in stage_jobs
     ):
         return "cancelled"
+    if any(item['status'] in {'pending', 'running'} for item in (artwork or {}).values()):
+        return "running"
     return "completed"
 
 
@@ -3492,6 +3495,7 @@ class V4RevisionService:
                 stage["projection"].append(job)
 
         stage['metadata'] = [pair['metadata'] for pair in jobs_by_work.values() if 'metadata' in pair]
+        binding_counts = {str(row['work_id']): dict(row) for row in binding_rows}
         work_units: list[dict] = []
         for work_id in work_ids:
             work = works.get(work_id, {})
@@ -3519,14 +3523,8 @@ class V4RevisionService:
                 "work_id": work_id,
                 "title": str(work.get("preferred_title") or work_id),
                 "media_type": {'series': 'tv', 'movie': 'movie'}.get(str(work.get('work_type') or ''), 'unknown'),
-                "episode_count": int(next(
-                    (row["episode_count"] for row in binding_rows if row["work_id"] == work_id),
-                    0,
-                ) or 0),
-                "asset_count": int(next(
-                    (row["asset_count"] for row in binding_rows if row["work_id"] == work_id),
-                    0,
-                ) or 0),
+                "episode_count": int(binding_counts.get(work_id, {}).get('episode_count') or 0),
+                "asset_count": int(binding_counts.get(work_id, {}).get('asset_count') or 0),
                 "overall_status": _derive_work_status(metadata_job, scrape_status),
                 'artwork': artwork,
                 "metadata_state": scrape_status,
@@ -3553,7 +3551,7 @@ class V4RevisionService:
         return {
             "revision_id": revision_id,
             "revision_status": str(revision["status"]),
-            "overall_status": _revision_overall_status(work_units, stage),
+            "overall_status": _revision_overall_status(work_units, stage, artwork_map),
             "stage_summary": {
                 'artwork': _stage_summary([{'status': {'ready': 'succeeded', 'not_required': 'succeeded',
                                                       'pending': 'queued'}.get(item['status'], item['status'])}

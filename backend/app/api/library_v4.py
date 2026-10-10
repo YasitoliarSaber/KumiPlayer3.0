@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.api.media_v4 import get_database
+from app.media_v4.assets.status import has_active_artwork
 from app.media_v4.projection.collections import related_works
 from app.media_v4.projection.details import _watch_payload
 from app.media_v4.projection.library import V4LibraryProjection
@@ -165,6 +166,17 @@ def _rows_for_work_ids(sql: str, work_ids: list[str]) -> list:
     return rows
 
 
+def _background_active(publication: dict) -> bool:
+    if publication['updating']:
+        return True
+    with get_database().connect() as conn:
+        return has_active_artwork(conn) or bool(conn.execute("""SELECT 1 FROM jobs j
+            JOIN import_revisions ir ON ir.revision_id=j.revision_id AND ir.status='confirmed'
+            JOIN source_roots sr ON sr.root_id=ir.root_id AND sr.enabled=1 AND sr.retired_at=''
+            WHERE j.status IN ('queued','running') AND j.cancel_requested=0
+            AND j.job_type IN ('scrape_work','recover_work_aliases','refresh_projection') LIMIT 1""").fetchone())
+
+
 @router.get("")
 def get_library(source: str | None = None, work_ids: str | None = None):
     selected = tuple(dict.fromkeys(filter(None, (work_ids or '').split(',')))) if work_ids is not None else None
@@ -226,6 +238,7 @@ def get_library(source: str | None = None, work_ids: str | None = None):
         "generated_at": snapshot.generation_id,
         "generation_id": snapshot.generation_id,
         "updating": publication['updating'] or publication['generation_id'] != snapshot.generation_id,
+        "background_active": _background_active(publication),
         "digest": snapshot.digest,
     }
 
@@ -244,6 +257,7 @@ def get_changes(after: int = 0, limit: int = 128):
     publication = V4LibraryProjection(get_database()).summary()
     changes['generation_id'] = publication['generation_id']
     changes['updating'] = publication['updating']
+    changes['background_active'] = _background_active(publication)
     return changes
 
 

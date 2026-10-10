@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, ProgressBar, Spinner } from '@fluentui/react-components'
 import { CheckmarkCircle24Filled, ChevronDown24Regular, ChevronRight24Regular, DismissCircle24Regular, ErrorCircle24Regular, SpinnerIosRegular, Warning24Regular } from '@fluentui/react-icons'
 import type { V4ExecutionProgress, V4WorkExecutionDetail, V4WorkProgressUnit } from '../../api/mediaV4'
-import { STAGE_LABELS, WORK_PROGRESS_LABELS, sortWorkUnits, summarizeExecutionWorks } from '../../lib/mediaSummary'
+import { STAGE_LABELS, WORK_PROGRESS_LABELS, sortWorkUnits } from '../../lib/mediaSummary'
 
 export interface V4ExecutionProgressProps {
   progress: V4ExecutionProgress
@@ -31,6 +31,10 @@ const EXECUTION_STATUS_LABELS: Record<V4ExecutionProgress['overall_status'], str
   needs_attention: '有任务需要处理',
   completed: '媒体库已建立',
   cancelled: '任务已终止',
+}
+
+function isArtworkPreparing(unit: V4WorkProgressUnit): boolean {
+  return unit.artwork?.status === 'pending' || unit.artwork?.status === 'running'
 }
 
 /** 图片产物缺失属于“本地产物没补齐”，按钮文案必须与“在线资料失败”区分。 */
@@ -145,6 +149,7 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
     ? (unit.metadata.status === 'failed' ? unit.metadata : null)
     : null
   const workIsPending = ['waiting_metadata', 'running_metadata'].includes(unit.overall_status)
+  const artworkPreparing = unit.overall_status === 'completed' && isArtworkPreparing(unit)
   // 3.1：展开非进行中作品时按需读取执行详情；缓存键包含任务状态，
   // 重新执行该作品后状态变化自然使缓存失效并重新读取。
   const detailCacheKey = unit.detail_version || `${unit.metadata.status}:${unit.artwork?.status ?? ''}`
@@ -209,7 +214,7 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
     <article className={`media-v4-work-progress media-v4-work-progress-${unit.overall_status}`}>
       <button type="button" className="media-v4-work-progress-head" aria-expanded={expanded} aria-controls={detailPanelId} onClick={() => setExpanded((value) => !value)}>
         <span className="media-v4-work-progress-state" aria-hidden="true">
-          {unit.overall_status === 'completed' ? <CheckmarkCircle24Filled />
+          {artworkPreparing ? <SpinnerIosRegular /> : unit.overall_status === 'completed' ? <CheckmarkCircle24Filled />
             : unit.overall_status === 'failed' ? <ErrorCircle24Regular />
             : unit.overall_status === 'cancelled' ? <DismissCircle24Regular />
             : unit.overall_status === 'needs_attention' ? <Warning24Regular />
@@ -222,7 +227,7 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
           {unit.episode_count > 0 ? ` · ${unit.media_type === 'unknown' ? `${unit.episode_count} 个条目` : `${unit.episode_count} 集`}` : ''}
           {unit.asset_count !== unit.episode_count ? ` · ${unit.asset_count} 个文件` : ''}
         </span>
-        <span className="media-v4-work-progress-status">{WORK_PROGRESS_LABELS[unit.overall_status] ?? unit.overall_status}</span>
+        <span className="media-v4-work-progress-status">{artworkPreparing ? '资料已就绪，图片准备中' : WORK_PROGRESS_LABELS[unit.overall_status] ?? unit.overall_status}</span>
         {expanded ? <ChevronDown24Regular aria-hidden="true" /> : <ChevronRight24Regular aria-hidden="true" />}
       </button>
       {expanded && (
@@ -500,13 +505,15 @@ export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingW
       })
   }
   const sorted = sortWorkUnits(progress.work_units)
-  const active = sorted.filter((unit) => unit.overall_status !== 'completed')
-  const completed = sorted.filter((unit) => unit.overall_status === 'completed')
-  const counts = summarizeExecutionWorks(progress)
+  const active = sorted.filter((unit) => unit.overall_status !== 'completed' || isArtworkPreparing(unit))
+  const completed = sorted.filter((unit) => unit.overall_status === 'completed' && !isArtworkPreparing(unit))
   const visibleCompleted = completedOpen ? completed : completed.slice(0, COMPLETED_PREVIEW_COUNT)
-  const publicationStages = [progress.stage_summary.metadata, progress.stage_summary.projection]
+  const publicationStages = STAGE_KEYS.map((key) => progress.stage_summary[key]).filter((stage) => stage != null)
   const publicationTotal = publicationStages.reduce((total, stage) => total + stage.total, 0)
   const publicationDone = publicationStages.reduce((total, stage) => total + stage.succeeded + stage.failed + stage.cancelled, 0)
+  const artworkSummary = progress.stage_summary.artwork
+  const artworkPreparing = (artworkSummary?.queued ?? 0) + (artworkSummary?.running ?? 0) > 0
+    && [progress.stage_summary.metadata, progress.stage_summary.projection].every((stage) => stage.queued + stage.running === 0)
   const projectionFailed = progress.stage_summary.projection.status === 'failed' || progress.stage_summary.projection.status === 'cancelled'
   const projectionJob = projectionFailed ? progress.work_units[0] : null
   void projectionJob
@@ -531,7 +538,7 @@ export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingW
   return (
     <div className="media-v4-execution-progress">
       <div className="media-v4-execution-head">
-        <strong className="media-v4-execution-status">{EXECUTION_STATUS_LABELS[progress.overall_status]}</strong>
+        <strong className="media-v4-execution-status">{progress.overall_status === 'running' && artworkPreparing ? '资料已就绪，正在准备图片' : EXECUTION_STATUS_LABELS[progress.overall_status]}</strong>
       </div>
       <ProgressBar value={publicationTotal > 0 ? publicationDone / publicationTotal : 0} max={1} aria-label="总体进度" />
       <div className="media-v4-stage-pills" role="group" aria-label="用户阶段">
@@ -548,7 +555,7 @@ export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingW
       </div>
       {completed.length > 0 && (
         <div className="media-v4-completed-block">
-          <div className="media-v4-completed-heading"><strong>已完成 {counts.completed} 部</strong></div>
+          <div className="media-v4-completed-heading"><strong>已完成 {completed.length} 部</strong></div>
           <div className="media-v4-work-progress-list">
             {visibleCompleted.map((unit) => renderWorkUnit(unit))}
           </div>
