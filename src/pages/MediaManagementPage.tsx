@@ -301,6 +301,7 @@ export default function MediaManagementPage() {
   const [sourceUpdateName, setSourceUpdateName] = useState('')
   const [path, setPath] = useState('')
   const [treeMountRoots, setTreeMountRoots] = useState<Record<string, string>>({})
+  const [treeRootEditors, setTreeRootEditors] = useState<Record<string, boolean>>({})
   const [provider, setProvider] = useState<Exclude<ProviderId, 'local' | 'other'>>('pan115')
   const [remoteRoot, setRemoteRoot] = useState('')
   const [baseConfig, setConfig] = useState<PublicConfig | null>(null)
@@ -561,12 +562,14 @@ export default function MediaManagementPage() {
   const showReset = workflowStage !== 'source' || kind !== 'local' || contentScope !== 'completed' || Boolean(error) || busy === 'scan' || Boolean(scanTask)
 
   function providerRoot(providerId: ProviderId, remotePath = '') {
-    const matchedRoute = routeForPath(routes, remotePath)
-    if (matchedRoute?.provider_id === providerId) return playbackRootForRoute(matchedRoute, remotePath)
+    if (remotePath) {
+      const matchedRoute = routeForPath(routes, remotePath)
+      return matchedRoute?.provider_id === providerId ? playbackRootForRoute(matchedRoute, remotePath) : ''
+    }
     if (providerId === 'pan115') return config?.pan115_root || ''
     if (providerId === 'baidu') return config?.baidu_root || ''
     if (providerId === 'quark' && config?.quark_root) return config.quark_root
-    return routes.find((route) => route.enabled && route.provider_id === providerId && route.local_path)?.local_path || ''
+    return ''
   }
   function treePlaybackRoot() {
     return treeMountRoots[provider] ?? providerRoot(provider)
@@ -653,6 +656,7 @@ export default function MediaManagementPage() {
     setRemoteRoot(config?.openlist_remote_root || '/')
     setProvider('pan115')
     setTreeMountRoots({})
+    setTreeRootEditors({})
     clearResultState()
   }
 
@@ -1678,14 +1682,23 @@ export default function MediaManagementPage() {
                   {parentPath(path) && <span>{parentPath(path)}</span>}
                 </div>}
               </div>
-              <div className="media-v4-mapping-note">
-                <Database24Regular aria-hidden="true" />
-                <div><strong>设置中的默认挂载目录</strong><span>{providerRoot(provider) ? <>默认播放路径来自设置中的 <code title={providerRoot(provider)}>{providerRoot(provider)}</code>，可在下方更改。</> : '当前来源尚未配置默认路径，可直接在下方选择挂载目录。'}</span></div>
-                {!providerRoot(provider) && <Button appearance="subtle" onClick={goSettings}>前往设置</Button>}
-              </div>
               <div className="media-v4-field-block">
-                <div className="media-v4-field-copy"><strong>本次导入的挂载目录</strong><span>选择目录树对应的网盘文件夹，可使用其他盘符；只影响本次导入，不修改设置中的默认路径。</span></div>
-                <FolderPathInput key={provider} label="本次导入的挂载目录" value={treePlaybackRoot()} disabled={busy !== ''} onChange={value => setTreeMountRoots(current => ({ ...current, [provider]: value }))} />
+                <div className="media-v4-field-copy"><strong>本地播放位置</strong></div>
+                {treeRootEditors[provider] || !providerRoot(provider) ? <>
+                  <FolderPathInput key={provider} label="本次导入的挂载目录" value={treePlaybackRoot()} disabled={busy !== ''} onChange={value => setTreeMountRoots(current => ({ ...current, [provider]: value }))} />
+                  <div className="media-v4-command-buttons">
+                    {providerRoot(provider) && <Button appearance="subtle" disabled={busy !== ''} onClick={() => {
+                      setTreeMountRoots(current => { const next = { ...current }; delete next[provider]; return next })
+                      setTreeRootEditors(current => ({ ...current, [provider]: false }))
+                    }}>使用设置中的位置</Button>}
+                    <span>仅用于本次导入；默认位置在媒体来源设置中保存。</span>
+                    {!providerRoot(provider) && <Button appearance="subtle" onClick={goSettings}>配置默认位置</Button>}
+                  </div>
+                </> : <div className="media-v4-mapping-note">
+                  <Database24Regular aria-hidden="true" />
+                  <div><output aria-label="本地播放位置" title={treePlaybackRoot()}>{treePlaybackRoot()}</output><span>{targetRootId ? '使用此来源已保存的位置' : treeMountRoots[provider] !== undefined ? '使用本次选择的位置' : '使用媒体来源设置'}</span></div>
+                  <Button appearance="subtle" disabled={busy !== ''} onClick={() => setTreeRootEditors(current => ({ ...current, [provider]: true }))}>更改播放位置</Button>
+                </div>}
               </div>
               <div className="media-v4-command-row">
                 <div><strong>{path.trim() ? '目录树已就绪' : '尚未选择 TXT 文件'}</strong><span>{path.trim() ? `将按${providerOption.label}来源生成识别结果。` : '选择目录树文件后即可扫描。'}</span></div>

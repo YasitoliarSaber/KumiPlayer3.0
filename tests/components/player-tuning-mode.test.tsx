@@ -37,7 +37,7 @@ test('外部整合包隐藏内置 Anime4K 控件并保留其默认值', async ()
   render(<PlayerTuningPage />)
   await screen.findByLabelText('整合包 MPV 可执行文件')
   expect(screen.queryByRole('combobox', { name: '模式' })).not.toBeInTheDocument()
-  expect(screen.getByText(/Anime4K 由整合包管理/)).toBeVisible()
+  expect(screen.queryByRole('heading', { name: '画面效果与播放联动' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '保存默认设置' }))
   await waitFor(() => expect(config.patchConfig).toHaveBeenCalledWith({ player_mode: 'external', external_mpv_path: 'D:\\Pack\\mpv.exe' }))
 })
@@ -49,12 +49,12 @@ test('读取失败时不能用空白默认值覆盖已保存配置', async () =>
   expect(screen.getByRole('button', { name: '保存默认设置' })).toBeDisabled()
 })
 
-test('内置播放器模式不显示外部路径输入，并说明无需准备', async () => {
+test('内置播放器直接显示画质控件，不显示外部路径输入', async () => {
   config.getConfig.mockResolvedValue(baseConfig())
 
   render(<PlayerTuningPage />)
 
-  expect(await screen.findByText(/不需要你准备任何东西/)).toBeVisible()
+  expect(await screen.findByRole('combobox', { name: '模式' })).toBeVisible()
   expect(screen.queryByLabelText('整合包 MPV 可执行文件')).not.toBeInTheDocument()
 })
 
@@ -67,16 +67,16 @@ test('检测内置播放器时使用内置运行时入口，不检查空白外�
   expect(await screen.findByText('内置播放器已就绪')).toBeVisible()
 })
 
-test('检测范围说明脚本用途，缺少脚本时不显示播放器完全就绪', async () => {
+test('检测范围放在按钮提示中，缺少脚本时不显示播放器完全就绪', async () => {
   config.getConfig.mockResolvedValue(baseConfig())
   config.testMpv.mockResolvedValue({ ok: true, message: '内置播放器已就绪', plugin_available: false })
   render(<PlayerTuningPage />)
-  expect(await screen.findByText(/Anime4K 画质脚本、截图脚本、快捷键及 uosc 菜单联动脚本/)).toBeVisible()
+  expect(await screen.findByRole('button', { name: '检测播放器' })).toHaveAttribute('title', '检测启动、版本与内置脚本')
   fireEvent.click(screen.getByRole('button', { name: '检测播放器' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('内置播放脚本不完整')
 })
 
-test('外部整合包模式保存播放模式与路径，并承诺不修改整合包目录', async () => {
+test('外部整合包模式保留原配置提示，保存播放模式与路径', async () => {
   config.getConfig.mockResolvedValue(baseConfig({
     player_mode: 'external',
     external_mpv_path: 'D:\\Pack\\MPVlite\\mpv\\mpv.exe',
@@ -84,7 +84,7 @@ test('外部整合包模式保存播放模式与路径，并承诺不修改整�
 
   render(<PlayerTuningPage />)
 
-  expect(await screen.findByText(/不会修改该目录中的配置或脚本/)).toBeVisible()
+  expect(await screen.findByRole('radio', { name: '外部 MPV 整合包' })).toHaveAttribute('title', '使用整合包原有配置、画质和快捷键')
   const input = screen.getByLabelText('整合包 MPV 可执行文件')
   expect(input).toHaveValue('D:\\Pack\\MPVlite\\mpv\\mpv.exe')
 

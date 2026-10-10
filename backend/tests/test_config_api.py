@@ -506,6 +506,24 @@ def test_media_paths_endpoint_reports_saved_mount_roots(client, temp_config, tmp
     openlist_item = next(item for item in data["sources"] if item["source"] == "openlist")
     assert openlist_item["ok"] is False
     assert "尚未配置挂载目录" in openlist_item["message"]
+    assert data["ok"] is True  # 未使用的来源不应把已配置目录的检查判为失败。
+
+
+def test_media_paths_without_configured_roots_do_not_report_success(client, temp_config):
+    save_config(AppConfig(pan115_root="", baidu_root="", quark_root="", local_root="", openlist_mount_root=""))
+    data = client.post("/api/config/test/media-paths").json()
+    assert data["ok"] is False
+    assert all(not item["configured_root"] for item in data["sources"])
+
+
+def test_media_paths_configured_missing_root_reports_failure(client, temp_config, tmp_path):
+    available = tmp_path / "available"
+    available.mkdir()
+    save_config(AppConfig(pan115_root=str(available), baidu_root=str(tmp_path / "missing")))
+    data = client.post("/api/config/test/media-paths").json()
+    assert data["ok"] is False
+    assert next(item for item in data["sources"] if item["source"] == "pan115")["ok"] is True
+    assert next(item for item in data["sources"] if item["source"] == "baidu")["ok"] is False
 
 
 def test_media_paths_endpoint_reports_openlist_mount_root(client, temp_config, tmp_path):

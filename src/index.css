@@ -13205,7 +13205,7 @@ body > .detail-tool-overlay .candidate-card:is(:hover, :focus-visible) {
 .media-v4-mapping-note > div { display: grid; gap: 3px; min-width: 0; }
 .media-v4-mapping-note strong { font-size: 12px; }
 .media-v4-mapping-note span { min-width: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
-.media-v4-mapping-note code { display: inline-block; max-width: min(620px, 100%); overflow: hidden; vertical-align: bottom; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+.media-v4-mapping-note code, .media-v4-mapping-note output { display: inline-block; max-width: min(620px, 100%); overflow: hidden; vertical-align: bottom; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
 
 .media-v4-openlist-browser { margin: 16px 18px; padding: 13px; }
 .media-v4-browser-actions { display: flex; gap: 7px; margin-left: auto; }

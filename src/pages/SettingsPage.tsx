@@ -40,7 +40,7 @@ const sectionTabs: Array<{ key: SettingsTab; label: string; icon: LucideIcon }> 
   { key: 'bangumi', label: '账户与同步', icon: UserRound },
   { key: 'appearance', label: '外观', icon: Palette },
   { key: 'sources', label: '媒体来源', icon: Database },
-  { key: 'openlist', label: 'WebDAV 设置', icon: Network },
+  { key: 'openlist', label: 'OpenList 设置', icon: Network },
   { key: 'scrape', label: '元数据与图片', icon: KeyRound },
   { key: 'player', label: '播放', icon: PlaySquare },
 ];
@@ -198,7 +198,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
         if (!cancelled) setRoutesLoaded(true);
       });
     return () => { cancelled = true; };
-  }, [selectedConnectionId, config?.openlist_configured, config?.openlist_server_url, config?.openlist_remote_root]);
+  }, [selectedConnectionId, config?.openlist_configured, config?.openlist_server_url, config?.openlist_remote_root, config?.openlist_mount_root]);
 
   // 已配置连接但没有任何已保存路由时，自动读取一次顶层目录建议；
   // 失败静默（保留手动「刷新来源目录」入口），避免每次重启都要求手动刷新。
@@ -336,10 +336,10 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
     report(result.message);
   });
 
-  const testMediaPaths = () => runAction('验证媒体路径', async () => {
+  const testMediaPaths = () => runAction('检查配置目录', async () => {
     const result = await configApi.testMediaPaths();
     setMediaPathValidation(result);
-    report(result.ok ? '网盘路径验证通过' : '发现不可用或映射不匹配的网盘路径');
+    report(result.ok ? '已配置目录均可访问' : result.sources.some(item => item.configured_root) ? '部分配置目录不可访问' : '尚未配置来源目录');
   });
 
   const updateOpenlistDraft = (key: keyof OpenListDraft, value: string) => {
@@ -403,7 +403,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
             <div className="settings-credential-guide">
               <div>
                 <strong>TMDB 凭据</strong>
-                <span>需要 API 设置页上方较长的“API 读取访问令牌”（Bearer Token），不是 API 密钥。</span>
+                <span>使用 API 读取访问令牌（Bearer Token），不是 API 密钥。</span>
               </div>
               <a href={TMDB_API_SETTINGS_URL} target="_blank" rel="noreferrer">创建或查看令牌 <ExternalLink size={14} /></a>
             </div>
@@ -418,14 +418,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
         <SettingsSection title="网络访问">
           <div className="settings-field-list">
             <ConfigRow label="网络代理" value={config.proxy_url} onSave={(value) => saveConfig({ proxy_url: value })} />
-            <span className="field-help">代理只用于访问 TMDB、AniList 等外部服务；OpenList 的局域网连接在「WebDAV 设置」中单独管理。</span>
-          </div>
-        </SettingsSection>
-      )}
-      {config && (
-        <SettingsSection title="图片策略">
-          <div className="settings-field-list">
-            <span className="field-help">图片由后台下载到独立的本地图片库，并提前准备适合展示的尺寸。浏览时读取本地缓存；图片暂未就绪不影响作品资料和播放。</span>
+            <span className="field-help">仅用于 TMDB、AniList 等资料服务。</span>
           </div>
         </SettingsSection>
       )}
@@ -440,7 +433,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
               placeholder="粘贴应用使用的 Tavily API Key" onSave={(value) => saveConfig({ websearch_api_key: value.trim() })} />
             <ConfigRow label="DeepSeek 密钥" secret value={config.deepseek_configured || config.deepseek_api_key ? 'configured' : ''}
               placeholder="粘贴 DeepSeek API Key" onSave={(value) => saveConfig({ deepseek_api_key: value.trim() })} />
-            <span className="field-help">需同时保存两个密钥并启用开关；密钥保存在本机安全凭据存储中。</span>
+            <span className="field-help">需同时配置 Tavily 与 DeepSeek 密钥。</span>
           </div>
         </SettingsSection>
       )}
@@ -466,8 +459,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
 
   const renderOpenList = () => (
     <PanelStack>
-      <SectionIntro title="WebDAV 设置" />
-      <p className="sources-root-note">使用 OpenList 浏览目录并检查更新。其他 WebDAV 服务暂不支持；挂载网盘请通过目录树 TXT 导入。</p>
+      <SectionIntro title="OpenList 设置" />
       {baseConfig && <div className="settings-connection-toolbar">
         <OpenListConnectionPicker connections={openlistConnections(baseConfig)} value={selectedConnectionId} disabled={Boolean(activeAction || connectionBusy)} onChange={(identity) => {
           setSelectedConnectionId(identity);
@@ -581,32 +573,35 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
         }} />
       </SettingsSection>}
       {config && (
-        <SettingsSection title="来源根目录">
+        <SettingsSection title="目录树播放位置">
           <div className="sources-root-panel">
-            <p className="sources-root-note">选择各网盘在资源管理器中的挂载文件夹，可分别位于 J、K 等不同盘符。目录树导入默认使用这里的路径，也可以为本次导入另选挂载目录。只需配置你使用的来源。</p>
             <div className="settings-field-list">
-              <ConfigRow folder label="115 挂载根路径" value={config.pan115_root} onSave={(value) => saveConfig({ pan115_root: value })} />
+              <ConfigRow folder label="115 网盘挂载位置" value={config.pan115_root} onSave={(value) => saveConfig({ pan115_root: value })} />
               <ConfigRow folder label="百度网盘挂载位置" value={config.baidu_root} onSave={(value) => saveConfig({ baidu_root: value })} />
               <ConfigRow folder label="夸克网盘挂载位置" value={config.quark_root || ''} onSave={(value) => saveConfig({ quark_root: value })} />
-              <ConfigRow folder label="本地媒体根路径" value={config.local_root} onSave={(value) => saveConfig({ local_root: value })} />
-              <ConfigRow folder label="目录树文件目录" value={config.directory_tree_dir} onSave={(value) => saveConfig({ directory_tree_dir: value })} />
             </div>
+            <p className="sources-root-note">网盘必须先挂载到本地；只填写使用的来源。</p>
           </div>
         </SettingsSection>
       )}
-      {config && (
-        <SettingsSection title="播放路径">
+      {config && <SettingsSection title="本地目录">
+        <ConfigRow folder label="本地扫描目录" value={config.local_root} onSave={(value) => saveConfig({ local_root: value })} />
+      </SettingsSection>}
+      {config && <SettingsSection title="TXT 文件选择" collapsible>
+        <ConfigRow folder label="TXT 默认选择目录" value={config.directory_tree_dir} onSave={(value) => saveConfig({ directory_tree_dir: value })} />
+      </SettingsSection>}
+      <SettingsSection title="来源维护" collapsible>
+        {config && <>
           <div className="settings-actions">
-            <GhostButton onClick={testMediaPaths} busy={activeAction === '验证媒体路径'}>验证媒体路径</GhostButton>
-            <span className="field-help">导入时保存本地媒体路径，播放时直接读取。网盘必须先挂载到本地，不会移动原始视频。</span>
+            <GhostButton onClick={testMediaPaths} busy={activeAction === '检查配置目录'}>检查配置目录</GhostButton>
           </div>
           {mediaPathValidation && (
             <div className="media-path-validation" role="status" aria-label="媒体路径验证结果">
               {mediaPathValidation.sources.map((item) => (
-                <div key={item.source} className={`media-path-validation-item ${item.ok ? 'is-ok' : 'is-error'}`}>
+                <div key={item.source} className={`media-path-validation-item ${item.ok ? 'is-ok' : item.configured_root ? 'is-error' : ''}`}>
                   <div>
                     <strong>{sourceLabels[item.source]}</strong>
-                    <span>{item.ok ? '验证通过' : '需要处理'}</span>
+                    <span>{item.ok ? '目录可访问' : item.configured_root ? '需要处理' : '未配置'}</span>
                   </div>
                   <p>{item.message}</p>
                   {item.resolved_root && <code>{item.resolved_root}</code>}
@@ -614,16 +609,13 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
               ))}
             </div>
           )}
-        </SettingsSection>
-      )}
-      <SettingsSection title="重新配置基础来源">
+        </>}
         <div className="settings-support-row">
           <div>
-            <strong>重新检查镜像与媒体根目录</strong>
-            <p>使用当前配置重新进入引导并逐项验证。不会清空现有配置，中途退出也不会影响当前媒体库。</p>
+            <p>不会清空现有配置或媒体库。</p>
           </div>
           <GhostButton onClick={() => onOpenSetup?.()} disabled={!onOpenSetup}>
-            <RotateCcw size={16} aria-hidden="true" />重新进入初始引导
+            <RotateCcw size={16} aria-hidden="true" />打开首次设置
           </GhostButton>
         </div>
       </SettingsSection>
@@ -641,11 +633,10 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
       {config && (
         <SettingsSection title="界面连接监测">
           <div className="settings-field-list">
-            <p className="field-help">界面定期向后台服务发送连接信号（心跳），用于发现界面关闭或连接中断，不用于检测视频是否正在播放。</p>
-            <ToggleRow label="界面连接监测（心跳）" active={config.heartbeat_enabled} onChange={() => saveConfig({ heartbeat_enabled: !config.heartbeat_enabled })} />
+            <ToggleRow label="界面连接监测" active={config.heartbeat_enabled} onChange={() => saveConfig({ heartbeat_enabled: !config.heartbeat_enabled })} />
             <NumberRow label="连接超时等待（秒）" value={config.heartbeat_timeout} onSave={(value) => saveConfig({ heartbeat_timeout: value })} />
             <ToggleRow label="连接超时后退出空闲后台" active={config.auto_shutdown_on_heartbeat_timeout} onChange={() => saveConfig({ auto_shutdown_on_heartbeat_timeout: !config.auto_shutdown_on_heartbeat_timeout })} />
-            <p className="field-help">启用自动退出后，仅在应用窗口已关闭、连接超过等待时间，并且没有播放、导入等后台任务时结束后台服务；窗口仍打开或任务仍在运行时不会退出。</p>
+            {config.auto_shutdown_on_heartbeat_timeout && <p className="field-help">仅在窗口已关闭且无播放、导入任务时退出。</p>}
           </div>
         </SettingsSection>
       )}
@@ -691,7 +682,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
               <div>
                 <span className="settings-account-kicker">推荐方式</span>
                 <strong>连接 Bangumi 账户</strong>
-                <small>在 Bangumi 官方页面创建“个人访问令牌（Access Token）”，再返回 KumiPlayer 完成登录。</small>
+                <small>创建个人访问令牌后登录。</small>
               </div>
             </div>
             <a className="settings-official-login" href={BANGUMI_ACCESS_TOKEN_URL} target="_blank" rel="noreferrer">
@@ -741,7 +732,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
               <Input type="password" aria-label="Bangumi 个人访问令牌" value={bangumiToken} onChange={(_, data) => setBangumiToken(data.value)} className="min-w-0 flex-1" placeholder="粘贴 Bangumi 个人访问令牌" autoComplete="off" />
               <PrimaryButton onClick={loginBangumi} busy={bangumiLoading} disabled={!bangumiToken.trim()}>{authStatus === 'reauth_required' ? '更新登录信息' : '验证并登录'}</PrimaryButton>
             </div>
-            <div className="settings-note">令牌只保存在本机安全存储中，提交前会先通过 Bangumi 当前用户接口验证；授权失效时更新 Token 不会丢失已保存的账户资料。</div>
+            <div className="settings-note">令牌保存在本机；更新令牌不会清除账户资料。</div>
         </SettingsSection>
       )}
 
@@ -819,11 +810,10 @@ function PanelStack({ children }: { children: ReactNode }) {
   return <div className="settings-panel-stack">{children}</div>;
 }
 
-function SectionIntro({ title, description = '' }: { title: string; description?: string }) {
+function SectionIntro({ title }: { title: string }) {
   return (
     <div className="settings-intro">
       <h2>{title}</h2>
-      {description && <p>{description}</p>}
     </div>
   );
 }

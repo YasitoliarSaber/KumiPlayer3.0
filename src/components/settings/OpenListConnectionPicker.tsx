@@ -10,8 +10,8 @@ export default function OpenListConnectionPicker({ connections, value, onChange,
 }) {
   const labelFor = (connection: OpenListConnectionConfig) => `${connection.name}${connection.openlist_configured ? '' : '（未配置）'}`
   const selected = connections.find(connection => connection.connection_id === value)
-  return <Field label="WebDAV 连接" className="settings-connection-field">
-    <Dropdown aria-label="WebDAV 连接" value={selected ? labelFor(selected) : '选择连接'} selectedOptions={[value]} disabled={disabled} inlinePopup
+  return <Field label="OpenList 连接" className="settings-connection-field">
+    <Dropdown aria-label="OpenList 连接" value={selected ? labelFor(selected) : '选择连接'} selectedOptions={[value]} disabled={disabled} inlinePopup
       className="settings-connection-dropdown" positioning={{ position: 'below', align: 'start', offset: 4, matchTargetSize: 'width' }}
       listbox={{ className: 'settings-connection-listbox' }}
       onOptionSelect={(_, data) => { if (data.optionValue) onChange(data.optionValue) }}>

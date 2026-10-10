@@ -344,7 +344,7 @@ export default function OpenListSettingsPanel({
                   contentAfter={<Button type="button" appearance="subtle" size="small" disabled={busy} aria-label={showNewPassword ? '隐藏本次输入密码' : '显示本次输入密码'} title={showNewPassword ? '隐藏本次输入密码' : '显示本次输入密码'} onClick={() => setShowNewPassword((value) => !value)} icon={showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />} />}
                 />
               </SettingsField>
-              <div className="sources-credentials-status">已保存的密码不会回传到界面；更换登录信息时，请同时填写用户名和密码。</div>
+              <div className="sources-credentials-status">已保存的密码不会回传到界面；更换账号需同时填写用户名和密码。</div>
             </div>
             {skipVerificationOffered && (
               <div className="sources-openlist-actions">
@@ -356,24 +356,18 @@ export default function OpenListSettingsPanel({
             )}
           </div>
 
+          <SettingsField label="远端根目录" className="settings-config-row">
+            <Input type="text" value={draft.remote_root} disabled={busy} onChange={(_, data) => handleDraftChange('remote_root', data.value)} placeholder="/" />
+          </SettingsField>
           <SettingsField label="本地挂载位置" className="settings-config-row">
             <FolderPathInput label="本地挂载位置" value={draft.mount_root} disabled={busy} onChange={value => handleDraftChange('mount_root', value)} placeholder="例如 K:\\" />
           </SettingsField>
-          <p className="sources-route-hint">选择当前连接在资源管理器中的挂载根目录，与远端根目录对应。每个连接独立保存，可使用不同盘符；目录树导入使用「媒体来源」中的网盘挂载位置。</p>
-          <details className="sources-advanced">
-            <summary>远端目录与 WebDAV{draft.remote_root !== '/' ? ' · 自定义目录' : ''}</summary>
-            <div className="sources-advanced-body">
-              <SettingsField label="远端根目录" className="settings-config-row">
-                <Input type="text" value={draft.remote_root} disabled={busy} onChange={(_, data) => handleDraftChange('remote_root', data.value)} placeholder="/" />
-              </SettingsField>
-              <p className="sources-route-hint">远端根目录默认使用 /，应与上方挂载位置对应。</p>
-              <div className="sources-webdav-hint"><span>WebDAV：</span><code>{webdav || '填写服务地址后自动生成'}</code></div>
-            </div>
-          </details>
+          <p className="sources-route-hint">与当前连接的远端根目录对应。</p>
 
           <details className="sources-advanced">
             <summary>高级设置</summary>
             <div className="sources-advanced-body">
+              <div className="sources-webdav-hint"><span>WebDAV 挂载地址：</span><code>{webdav || '填写服务地址后自动生成'}</code></div>
               <SettingsField label="目录浏览缓存（分钟）" className="settings-config-row">
                 <Input type="number" min={1} max={43200} value={draft.cache_ttl} disabled={busy} onChange={(_, data) => handleDraftChange('cache_ttl', data.value)} placeholder="1440" />
               </SettingsField>

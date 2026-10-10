@@ -38,7 +38,7 @@ def test_connection_essentials_are_visible_and_misleading_options_are_hidden():
     # 排在「常用连接配置」之后（09-18 的设置页重构如此组织）。
     proxy_pos = page.index('label="网络代理"')
     network_start = page.index('title="网络访问"')
-    network_end = page.index('title="图片策略"')
+    network_end = recovery_start
     assert network_start < proxy_pos < network_end
     assert proxy_pos > advanced_start or proxy_pos > essentials_start
     assert 'label="网络代理"' not in page[essentials_start:network_start]

@@ -61,7 +61,7 @@ def test_settings_can_reenter_setup_without_resetting_first_run_state():
     assert "setupOverride" in app
     assert "onOpenSetup" in app
     assert '"reconfigure"' in app
-    assert "重新进入初始引导" in settings
+    assert "打开首次设置" in settings
     assert "不会清空现有配置" in settings
     assert "onCancel" in setup
     assert "退出引导" in setup
@@ -80,5 +80,5 @@ def test_settings_uses_local_artwork_and_saved_playback_paths():
     settings = (ROOT / "src" / "pages" / "SettingsPage.tsx").read_text(encoding="utf-8")
     assert "config.mirror_dir" not in settings
     assert "config.artwork_storage_mode" not in settings
-    assert "独立的本地图片库" in settings
+    assert 'title="图片策略"' not in settings
     assert "网盘必须先挂载到本地" in settings

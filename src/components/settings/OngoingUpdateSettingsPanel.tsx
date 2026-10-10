@@ -68,7 +68,7 @@ export default function OngoingUpdateSettingsPanel({ config, onSave, externalBus
   };
 
   return <div className="kp-settings-form">
-    <SettingsField label="分类名称" description="最多 24 个字符，留空恢复“新番”；名称只改变这台电脑的分类显示，追更内容也可以是其他剧集。"
+    <SettingsField label="分类名称" description="最多 24 个字符，留空恢复“新番”。"
       action={<Button appearance="secondary" aria-label="保存分类名称" disabled={disabled || !onSaveCategoryName} onClick={saveName}>保存</Button>}>
       <Input value={nameDraft} placeholder="新番" maxLength={48} disabled={disabled}
         onChange={(_, data) => setNameDraft(Array.from(data.value).slice(0, 24).join(''))}
@@ -76,7 +76,7 @@ export default function OngoingUpdateSettingsPanel({ config, onSave, externalBus
     </SettingsField>
       <Switch label="启动时更新新番" checked={config.ongoing_update_on_startup ?? false} disabled={disabled}
         onChange={(_, data) => void save({ ongoing_update_on_startup: data.checked })} />
-    <SettingsField label="新番更新间隔" description="仅更新导入时选择“新番”的来源；纯 TXT 来源需要选择新导出的清单，刷新与识别结果在新番分类查看。">
+    <SettingsField label="新番更新间隔" description="仅更新新番来源；TXT 需手动导入新清单。">
       <Dropdown value={options.find(option => option.value === interval)?.label || ''} selectedOptions={[String(interval)]} disabled={disabled}
         onOptionSelect={(_, data) => { if (data.optionValue !== undefined) void save({ ongoing_update_interval_minutes: Number(data.optionValue) }); }}>
         {options.map(option => <Option value={String(option.value)} key={option.value}>{option.label}</Option>)}

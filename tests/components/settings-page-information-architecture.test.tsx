@@ -135,7 +135,7 @@ describe('SettingsPage 信息架构', () => {
     await waitFor(() => expect(api.patchConfig).toHaveBeenCalledWith({ ongoing_update_interval_minutes: 60 }));
     await waitFor(() => expect(interval).toHaveTextContent('每小时'));
     expect(startup).toBeChecked();
-    expect(screen.getByText(/纯 TXT 来源需要选择新导出的清单/)).toBeVisible();
+    expect(screen.getByText(/TXT 需手动导入新清单/)).toBeVisible();
     expect(document.getElementById('settings-panel-sources')).toContainElement(startup);
     expect(document.getElementById('settings-panel-openlist')).not.toContainElement(startup);
   });
@@ -189,7 +189,7 @@ describe('SettingsPage 信息架构', () => {
   test('OpenList 设置导航定位到既有 OpenList 面板，媒体来源不再重复展示', async () => {
     render(<SettingsPage />);
 
-    const openListNavigation = await screen.findByRole('button', { name: /WebDAV 设置/ });
+    const openListNavigation = await screen.findByRole('button', { name: /OpenList 设置/ });
     const openListSection = document.getElementById('settings-panel-openlist');
     const sourceSection = document.getElementById('settings-panel-sources');
 
@@ -211,8 +211,8 @@ describe('SettingsPage 信息架构', () => {
       { ...config, connection_id: 'legacy', name: '连接甲', openlist_routes: [] }, b,
     ] });
     render(<SettingsPage />);
-    fireEvent.click(await screen.findByRole('button', { name: 'WebDAV 设置' }));
-    fireEvent.click(await screen.findByRole('combobox', { name: 'WebDAV 连接' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'OpenList 设置' }));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'OpenList 连接' }));
     fireEvent.click(await screen.findByRole('option', { name: '连接乙' }));
     expect(await screen.findByText('https://second.example.test')).toBeVisible();
     expect(screen.queryByText('https://openlist.example.test')).not.toBeInTheDocument();
@@ -228,10 +228,10 @@ describe('SettingsPage 信息架构', () => {
     expect(within(navigation).getByRole('button', { name: /播放/ })).toBeVisible();
     expect(within(navigation).getByRole('button', { name: /外观/ })).toBeVisible();
     expect(within(navigation).queryByRole('button', { name: /应用与支持/ })).not.toBeInTheDocument();
-    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('115 挂载根路径');
-    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('播放路径');
+    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('115 网盘挂载位置');
+    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('来源维护');
     expect(document.getElementById('settings-panel-sources')).not.toHaveTextContent('镜像目录');
-    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('重新进入初始引导');
+    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('打开首次设置');
     expect(document.getElementById('settings-panel-scrape')).toHaveTextContent('网络代理');
   });
 
@@ -271,21 +271,21 @@ describe('SettingsPage 信息架构', () => {
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '元数据与图片' }));
     expect(screen.queryByRole('combobox', { name: '图片策略' })).not.toBeInTheDocument();
-    expect(screen.getByText(/独立的本地图片库/)).toBeVisible();
+    expect(screen.queryByRole('heading', { name: '图片策略' })).not.toBeInTheDocument();
     api.patchConfig.mockClear();
     expect(api.patchConfig).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '外观', exact: true }));
     expect(screen.getByRole('button', { name: /雾蓝云母/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /深邃影院/ })).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(screen.getByRole('button', { name: '元数据与图片' }));
-    expect(screen.getByText(/独立的本地图片库/)).toBeVisible();
+    expect(screen.queryByRole('heading', { name: '图片策略' })).not.toBeInTheDocument();
     expect(api.patchConfig).not.toHaveBeenCalled();
   });
 
   test('隐藏构建与赞助信息，并将播放器状态收敛为用户可理解的结果', async () => {
     render(<SettingsPage />);
 
-    await screen.findByRole('button', { name: /WebDAV 设置/ });
+    await screen.findByRole('button', { name: /OpenList 设置/ });
     fireEvent.click(screen.getByRole('button', { name: /^播放$/ }));
 
     expect(screen.queryByText('构建来源')).not.toBeInTheDocument();
@@ -311,14 +311,19 @@ describe('SettingsPage 信息架构', () => {
     await waitFor(() => expect(api.patchConfig).toHaveBeenCalledWith({ player_mode: 'external', external_mpv_path: 'J:/Pack/mpv.exe' }));
     expect(screen.getByRole('radio', { name: '外部 MPV 整合包' })).toBeChecked();
     expect(screen.queryByRole('combobox', { name: '模式' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '画面效果与播放联动' })).not.toBeInTheDocument();
   });
 
-  test('连接监测说明真实作用，修改连续播放不会清掉未保存的播放器选择', async () => {
+  test('连接监测保留操作而不堆叠说明，修改连续播放不会清掉播放器草稿', async () => {
     api.patchConfig.mockImplementation(async patch => ({ ...config, ...patch }));
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '播放' }));
-    expect(screen.getByText(/界面定期向后台服务发送连接信号/)).toBeVisible();
-    expect(screen.getByText(/没有播放、导入等后台任务/)).toBeVisible();
+    expect(screen.getByRole('switch', { name: '界面连接监测' })).toBeEnabled();
+    expect(screen.getByText('界面连接监测', { selector: 'label' })).toBeVisible();
+    expect(screen.getByRole('switch', { name: '连接超时后退出空闲后台' })).toBeEnabled();
+    expect(screen.getByText('连接超时后退出空闲后台', { selector: 'label' })).toBeVisible();
+    expect(screen.queryByText(/界面定期向后台服务发送连接信号/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/选择播放器，再调整它的默认效果/)).not.toBeInTheDocument();
     expect(screen.queryByText('播放心跳')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: '外部 MPV 整合包' }));
     fireEvent.change(screen.getByLabelText('整合包 MPV 可执行文件'), { target: { value: 'J:/Pack/mpv.exe' } });
@@ -333,11 +338,24 @@ describe('SettingsPage 信息架构', () => {
     HTMLElement.prototype.scrollTo = scrollTo;
     render(<div className="app-main"><SettingsPage /></div>);
 
-    fireEvent.click(await screen.findByRole('button', { name: /WebDAV 设置/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /OpenList 设置/ }));
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'auto' });
     expect(document.getElementById('settings-panel-openlist')).toBeVisible();
     expect(document.getElementById('settings-panel-bangumi')).not.toBeVisible();
+  });
+
+  test('来源配置按播放位置、扫描目录、文件选择和维护分组，标题下无描述', async () => {
+    render(<SettingsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
+    const mounts = screen.getByRole('region', { name: '目录树播放位置' });
+    expect(within(mounts).getByRole('textbox', { name: '百度网盘挂载位置' })).toBeVisible();
+    expect(within(mounts).queryByRole('textbox', { name: 'TXT 默认选择目录' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '本地扫描目录' })).toBeVisible();
+    expect(screen.getByLabelText('TXT 默认选择目录')).not.toBeVisible();
+    expect(screen.getByRole('button', { name: '检查配置目录', hidden: true })).not.toBeVisible();
+    expect(screen.queryByRole('heading', { name: '重新配置基础来源' })).not.toBeInTheDocument();
+    expect(document.querySelector('#settings-panel-sources .settings-intro p')).toBeNull();
   });
 
   test('选择夸克挂载文件夹只更新草稿，保存时不改动其他来源', async () => {
@@ -357,14 +375,15 @@ describe('SettingsPage 信息架构', () => {
     vi.mocked(pickFolder).mockResolvedValueOnce(null);
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
-    for (const name of ['115 挂载根路径', '百度网盘挂载位置', '夸克网盘挂载位置', '本地媒体根路径', '目录树文件目录']) {
+    fireEvent.click(screen.getByText('TXT 文件选择', { selector: 'summary h3' }));
+    for (const name of ['115 网盘挂载位置', '百度网盘挂载位置', '夸克网盘挂载位置', '本地扫描目录', 'TXT 默认选择目录']) {
       expect(screen.getByRole('button', { name: `选择${name}` })).toBeVisible();
     }
-    const input = screen.getByRole('textbox', { name: '115 挂载根路径' });
+    const input = screen.getByRole('textbox', { name: '115 网盘挂载位置' });
     fireEvent.change(input, { target: { value: 'J:\\115' } });
-    fireEvent.click(screen.getByRole('button', { name: '选择115 挂载根路径' }));
-    await screen.findByRole('button', { name: '选择115 挂载根路径', disabled: false });
+    fireEvent.click(screen.getByRole('button', { name: '选择115 网盘挂载位置' }));
+    await screen.findByRole('button', { name: '选择115 网盘挂载位置', disabled: false });
     expect(input).toHaveValue('J:\\115');
-    expect(pickFolder).toHaveBeenLastCalledWith('J:\\115', '选择115 挂载根路径');
+    expect(pickFolder).toHaveBeenLastCalledWith('J:\\115', '选择115 网盘挂载位置');
   });
 });

@@ -576,4 +576,5 @@ def test_media_paths():
 
     with ThreadPoolExecutor(max_workers=3) as executor:
         results = list(executor.map(lambda item: validate_source(*item), roots.items()))
-    return {"ok": all(item["ok"] for item in results), "sources": results}
+    configured = [item for item in results if item["configured_root"]]
+    return {"ok": bool(configured) and all(item["ok"] for item in configured), "sources": results}

@@ -65,7 +65,7 @@ describe('OpenListSourceRoutes', () => {
     expect(screen.getByText('115网盘')).toBeTruthy();
     expect(screen.getByText('/115网盘')).toBeTruthy();
     expect(screen.getByRole('combobox', { name: '115网盘的网盘类型' })).toHaveTextContent('115 网盘');
-    expect(screen.queryByText('K:\\115网盘')).toBeNull();
+    expect(screen.getByText('K:\\115网盘')).toBeVisible();
     expect(screen.getByRole('combobox', { name: '夸克网盘的网盘类型' })).toHaveTextContent('夸克网盘');
     expect(screen.getByText('/夸克网盘')).toBeTruthy();
   });
@@ -80,7 +80,7 @@ describe('OpenListSourceRoutes', () => {
     fireEvent.click(screen.getAllByText('编辑')[0]);
     expect(screen.getByText('显示名称')).toBeTruthy();
     expect(screen.getAllByRole('checkbox')).toHaveLength(2);
-    expect(screen.getByText('本地播放路径')).toBeTruthy();
+    expect(screen.getAllByText('本地播放位置')).toHaveLength(2);
     expect(screen.getByText('K:\\115网盘')).toBeTruthy();
   });
 

@@ -189,22 +189,17 @@ export default function PlayerTuningPage({ embedded = false, initialConfig, runt
         </div>
       </div>}
 
-      <p className="player-tuning-note">选择播放器，再调整它的默认效果。保存后对新开始播放的视频生效。</p>
       {loading && <SettingsFeedback busy>正在读取配置…</SettingsFeedback>}
       {!loading && !config && <Button onClick={() => setLoadAttempt((value) => value + 1)}>重新读取</Button>}
       {config && !loading && <>
       <SettingsSection title="选择播放器" headingId={playerModeId}>
         <RadioGroup aria-labelledby={playerModeId} value={playerMode} disabled={busy}
           onChange={(_, data) => { clearFeedback(); setPlayerMode(data.value as PlayerMode); }}>
-          {PLAYER_MODE_OPTIONS.map((item) => <Radio key={item.value} value={item.value} label={item.label} />)}
+          {PLAYER_MODE_OPTIONS.map((item) => <Radio key={item.value} value={item.value} label={item.label}
+            title={item.value === 'external' ? '使用整合包原有配置、画质和快捷键' : undefined} />)}
         </RadioGroup>
-        <p className="player-tuning-note">
-          {playerMode === 'internal'
-            ? '使用 KumiPlayer 自带的 MPV 与播放配置，不需要你准备任何东西。'
-            : '使用你自己的 MPV 整合包，KumiPlayer 不会修改该目录中的配置或脚本。'}
-        </p>
           {playerMode === 'external' && (
-            <SettingsField label="整合包 MPV 可执行文件" description="填写目录后可点击检测，自动定位其中的 mpv.exe。"
+            <SettingsField label="整合包 MPV 可执行文件"
               action={<Button appearance="secondary" disabled={busy} icon={<FolderOpen size={16} />} onClick={() => void chooseExternalPlayer()}>选择</Button>}>
                 <Input
                   value={externalPath}
@@ -215,25 +210,21 @@ export default function PlayerTuningPage({ embedded = false, initialConfig, runt
             </SettingsField>
           )}
         <div className="player-tuning-tools">
-          <Button disabled={busy || (playerMode === 'external' && !externalPath.trim())} icon={testing ? <Spinner size="tiny" /> : undefined} onClick={() => void testPlayer()}>{testing ? '正在检测…' : '检测播放器'}</Button>
-          <Button appearance="subtle" icon={<FolderOpen size={16} />} disabled={busy || selectionChanged} onClick={() => void openConfigDir()}>
+          <Button title={playerMode === 'internal' ? '检测启动、版本与内置脚本' : '检测 MPV 启动与版本'} disabled={busy || (playerMode === 'external' && !externalPath.trim())} icon={testing ? <Spinner size="tiny" /> : undefined} onClick={() => void testPlayer()}>{testing ? '正在检测…' : '检测播放器'}</Button>
+          <Button appearance="subtle" icon={<FolderOpen size={16} />} title={selectionChanged ? '请先保存播放器设置' : undefined} disabled={busy || selectionChanged} onClick={() => void openConfigDir()}>
             {openingConfigDir ? '正在打开…' : '打开 MPV 配置文件夹'}
           </Button>
         </div>
-        <p className="player-tuning-note">{playerMode === 'internal'
-          ? '检测内置 MPV 的启动与版本、运行文件完整性，以及 KumiPlayer 的 Anime4K 画质脚本、截图脚本、快捷键及 uosc 菜单联动脚本是否齐全；文件检查不代表已验证所有插件的实际运行效果。'
-          : '检测所选 MPV 能否启动并读取版本；不会检查或改写外部整合包的插件和配置。'}</p>
         {playerMode === 'internal' && runtimeStatus && !validation && <p className="player-tuning-note" role="status">{runtimeStatus.available && runtimeStatus.manifest_valid && runtimeStatus.files_valid && runtimeStatus.configuration_available && runtimeStatus.scripts_available
           ? '内置播放器已就绪'
           : '内置播放器文件或脚本需要检查，请点击「检测播放器」查看结果。'}</p>}
-        {selectionChanged && <p className="player-tuning-note">播放器或路径已更改，请先保存再打开对应配置文件夹。</p>}
         {validation && <SettingsFeedback intent={validation.ok ? 'success' : 'error'}>
           <span>{validation.message}{validation.version && !validation.message.includes(validation.version) ? ` · ${validation.version}` : ''}</span>
         </SettingsFeedback>}
       </SettingsSection>
 
       {playerMode === 'internal' ? (
-      <SettingsSection title="Anime4K 默认效果" description="默认关闭。开启后可在播放中比较效果，右键菜单的调整仅影响当前视频。">
+      <SettingsSection title="Anime4K 默认效果">
           <div className="player-tuning-fields">
             <SettingsField label="模式">
               <Dropdown value={MODE_OPTIONS.find(item => item.value === mode)?.label || ''} selectedOptions={[mode]} disabled={busy}
@@ -261,10 +252,7 @@ export default function PlayerTuningPage({ embedded = false, initialConfig, runt
         </ul>
         </details>
       </SettingsSection>
-      ) : <SettingsSection title="画面效果与播放联动">
-        <p className="player-tuning-note">Anime4K 由整合包管理，请使用整合包自己的菜单或快捷键调节。</p>
-        <p className="player-tuning-note">KumiPlayer 记录播放进度并支持续播，不追加内置 Anime4K、快捷键或截图脚本。</p>
-      </SettingsSection>}
+      ) : null}
       </>}
 
       {error && <SettingsFeedback intent="error">{error}</SettingsFeedback>}

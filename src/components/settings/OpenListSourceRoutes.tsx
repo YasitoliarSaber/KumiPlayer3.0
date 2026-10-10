@@ -97,10 +97,6 @@ export default function OpenListSourceRoutes({
 
   return (
     <div className="sources-routes-panel sources-route-selection">
-      <div className="sources-openlist-card-head">
-        <span className="sources-route-summary">这里列出当前连接远端根目录下的文件夹。勾选存放媒体的目录，并选择它所属的网盘，让导入时能够区分来源；保存后，前往「媒体管理」选择具体子目录并扫描。这一步只配置来源，不会立即导入或移动文件。未勾选的目录仍可浏览。</span>
-      </div>
-
       {!configured ? (
         <p className="settings-openlist-notice">请先保存 OpenList 连接，再刷新并配置来源目录。</p>
       ) : (
@@ -141,6 +137,10 @@ export default function OpenListSourceRoutes({
                       {isExpanded ? '收起' : '编辑'}
                     </Button>
                   </div>
+                  <div className="settings-config-row settings-openlist-derived">
+                    <span>本地播放位置</span>
+                    <output>{localPath || '保存来源目录后显示'}</output>
+                  </div>
                   {isDirty && (
                     <span className="sources-dirty-hint">
                       {isNewItem ? '新发现的目录，确认网盘类型后保存生效' : '未保存'}
@@ -151,10 +151,6 @@ export default function OpenListSourceRoutes({
                       <SettingsField label="显示名称" className="settings-config-row">
                         <Input type="text" value={route.label} disabled={isBusy} onChange={(_, data) => handleUpdate(route.remote_prefix, { label: data.value })} />
                       </SettingsField>
-                      <div className="settings-config-row settings-openlist-derived">
-                        <span>本地播放路径</span>
-                        <output>{localPath || '填写挂载位置后自动推导'}</output>
-                      </div>
                     </div>
                   )}
                 </div>
