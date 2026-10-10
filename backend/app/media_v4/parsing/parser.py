@@ -21,6 +21,7 @@ from app.media_v4.domain.identity import (
 )
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.generic_container import is_generic_container_name
+from app.media_v4.parsing.edition import edition_tags as parse_edition_tags
 from app.media_v4.parsing.episode_titles import (
     clean_special_episode_title,
     extract_special_episode_number,
@@ -80,13 +81,6 @@ def show_type_from_import_family(import_family: str, media_type: str) -> str:
     return ""
 _QUALITY_TOKENS = re.compile(
     r"(?i)(?<![a-z0-9])(2160p|1080p|1080i|720p|4k|uhd|hdr10\+?|dolby[ ._-]?vision)(?![a-z0-9])"
-)
-_EDITION_TOKENS = (
-    (re.compile(r"(?i)\(\s*on[ ._-]?air\s*(?:ver(?:sion)?\.?)?\s*\)"), "on-air"),
-    (re.compile(r"(?i)(?:director(?:['’‘ʼ]s)?[ ._-]*cut|导演剪辑版)"), "director-cut"),
-    (re.compile(r"(?i)(?:extended(?:[ ._-]?edition)?|加长版)"), "extended"),
-    (re.compile(r"(?i)(?:remaster(?:ed)?|重制版)"), "remastered"),
-    (re.compile(r"(?i)(?:theatrical(?:[ ._-]?cut)?|院线版)"), "theatrical"),
 )
 _RELEASE_GROUP = re.compile(r"-([A-Za-z0-9][A-Za-z0-9_.-]{1,40})$")
 _SPECIAL_TOKEN_RAW = re.compile(
@@ -354,7 +348,7 @@ def _parse_sidecar_nfo(evidence: SourceEvidence) -> tuple[int | None, str, str, 
 class V4Parser:
     """从一个 SourceEvidence 生成一个不可变 ParsedFacts。"""
 
-    VERSION = "v4-parser-16"
+    VERSION = "v4-parser-18"
 
     @classmethod
     def _parsed_fact_id(cls, evidence: SourceEvidence) -> str:
@@ -535,7 +529,7 @@ class V4Parser:
         quality_tags = tuple(
             dict.fromkeys(match.group(1).lower() for match in _QUALITY_TOKENS.finditer(stem))
         )
-        edition_tags = tuple(tag for pattern, tag in _EDITION_TOKENS if pattern.search(stem))
+        edition_tags = parse_edition_tags(stem)
         release_match = _RELEASE_GROUP.search(stem)
         structural_series_group = ""
         if context.subwork_dir and context.directory_season is not None:

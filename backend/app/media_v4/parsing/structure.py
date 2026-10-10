@@ -9,7 +9,8 @@ from pathlib import PurePosixPath
 
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.generic_container import is_generic_container_name
-from app.media_v4.parsing.evidence_policy import parse_numbering, tokenize_filename
+from app.media_v4.parsing.edition import edition_tags
+from app.media_v4.parsing.evidence_policy import _filename_title_head, parse_numbering, tokenize_filename
 from app.recognition.media import (
     _extract_release_movie_title,
     _extract_series_name_from_filename,
@@ -83,6 +84,7 @@ class StructureContext:
     ordering: tuple[str, str, str, bool] | None = None
     parent_scope: str = ""
     season_family: tuple[str, str, str] | None = None
+    numbered_edition_parent: bool = False
 
     def trace_value(self) -> dict:
         title, year = _parse_work_title_and_year(self.work_container)
@@ -91,7 +93,8 @@ class StructureContext:
                 "collections": list(self.collections), "season_scoped": self.season_scoped,
                 "directory_season": self.directory_season, "filename_identity": self.filename_identity,
                 "collection_scopes": list(self.collection_scopes), "ordering": self.ordering,
-                "parent_scope": self.parent_scope, "season_family": self.season_family}
+                "parent_scope": self.parent_scope, "season_family": self.season_family,
+                "numbered_edition_parent": self.numbered_edition_parent}
 
 
 def structure_context(evidence: SourceEvidence, root_container: str = "") -> StructureContext:
@@ -126,6 +129,7 @@ def structure_context(evidence: SourceEvidence, root_container: str = "") -> Str
         return StructureContext(path, "", "", (), "", collections, False, None, filename_identity,
                                 tuple(collection_scope(index) for index in indexes))
     work_index = leaf
+    numbered_edition_parent = False
     leaf_season = _infer_season_from_context([directories[leaf]])
     if len(named) > 1:
         parent = named[-2]
@@ -152,6 +156,18 @@ def structure_context(evidence: SourceEvidence, root_container: str = "") -> Str
                      or filename_matches_parent or _is_series_container(directories[parent])))
         ):
             work_index = parent
+        elif (file_numbering.episode is not None or file_numbering.absolute is not None) and (
+            edition_tags(tokenize_filename(filename).stem)
+            and not is_collection_container(directories[parent])
+            and leaf_title != parent_title
+            and parent_title
+            and normalized_title(clean_work_title_container(
+                _filename_title_head(tokenize_filename(filename))
+            ).title) == parent_title
+        ):
+            # 明确集号、版本标记与父作品标题共同证明版本归属；不猜未知目录名。
+            work_index = parent
+            numbered_edition_parent = True
         elif (directories[leaf].startswith("[")
               and re.search(r"(?i)(?:\b\d{3,4}p\b|\b(?:HEVC|BDRip|x26[45])\b)", directories[leaf])
               and re.search(r"(?i)(?:剧场版|映画|\bmovie\b)", directories[parent])):
@@ -168,8 +184,8 @@ def structure_context(evidence: SourceEvidence, root_container: str = "") -> Str
     work_container = directories[work_index]
     parent_dirs = tuple(directories[work_index:])
     subwork = next((directories[index] for index in named if index > work_index), "")
-    if work_index != leaf and leaf_season is None and directories[leaf].startswith("["):
-        # 已收口的压制版本目录不再参与电影子作品命名。
+    if numbered_edition_parent or (work_index != leaf and leaf_season is None and directories[leaf].startswith("[")):
+        # 已确认归属的版本目录不再参与子作品命名。
         subwork = ""
         parent_dirs = (work_container,)
     directory_season = _infer_season_from_context(list(parent_dirs))
@@ -197,7 +213,8 @@ def structure_context(evidence: SourceEvidence, root_container: str = "") -> Str
                             tuple(directories[index] for index in collection_indexes),
                             season_scoped, directory_season, filename_identity,
                             tuple(collection_scope(index) for index in collection_indexes), ordering,
-                            collection_scope(work_index - 1) if work_index > 0 else "", family)
+                            collection_scope(work_index - 1) if work_index > 0 else "", family,
+                            numbered_edition_parent)
 
 
 def structure_decision(facts: ParsedFacts) -> dict | None:
