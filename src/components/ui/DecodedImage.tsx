@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ImgHTMLAttributes } from 'react';
-import { defaultImageLifecycle } from '../library/posterImageLifecycle';
+import { getSharedImageLifecycle } from '../library/posterImageLifecycle';
 
 export type ImageState = 'loading' | 'ready' | 'error';
 type DecodedImageProps = ImgHTMLAttributes<HTMLImageElement> & {
@@ -20,8 +20,8 @@ export default function DecodedImage({ className = '', decoding = 'async', onDec
     setState(src ? 'loading' : 'error');
     if (!src) return;
     const root = image.closest<HTMLElement>('.app-main');
-    defaultImageLifecycle.configure(root, root?.clientHeight || window.innerHeight);
-    return defaultImageLifecycle.register(image, { url: src, onState: (next) => {
+    const lifecycle = getSharedImageLifecycle(root, root?.clientHeight || window.innerHeight);
+    return lifecycle.register(image, { url: src, onState: (next) => {
       if (next === 'idle') return;
       setState(next);
       callbacks.current.onStateChange?.(next);

@@ -175,3 +175,15 @@ export class PosterImageLifecycle {
 
 export const PosterImageContext = createContext<PosterImageLifecycle | null>(null);
 export const defaultImageLifecycle = new PosterImageLifecycle();
+const scrollRootLifecycles = new WeakMap<HTMLElement, PosterImageLifecycle>();
+
+/** 可见性按滚动根隔离，实际图片请求仍共用全局预算。 */
+export function getSharedImageLifecycle(root: HTMLElement | null, height: number) {
+  let lifecycle = root ? scrollRootLifecycles.get(root) : defaultImageLifecycle;
+  if (!lifecycle) {
+    lifecycle = new PosterImageLifecycle();
+    scrollRootLifecycles.set(root!, lifecycle);
+  }
+  lifecycle.configure(root, height);
+  return lifecycle;
+}

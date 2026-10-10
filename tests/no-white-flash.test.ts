@@ -20,7 +20,8 @@ test('主要媒体入口统一在完整加载后展示，避免重复显式解�
   const decodedImage = readFileSync(new URL('../src/components/ui/DecodedImage.tsx', import.meta.url), 'utf8');
 
   assert.doesNotMatch(decodedImage, /\.decode\(/);
-  assert.match(decodedImage, /defaultImageLifecycle\.register/);
+  assert.match(decodedImage, /getSharedImageLifecycle\(root,/);
+  assert.match(decodedImage, /lifecycle\.register/);
   assert.match(decodedImage, /state === 'ready' \? 'is-ready' : 'is-pending'/);
   assert.match(decodedImage, /loading="eager"/);
   assert.match(decodedImage, /data-image-state/);
