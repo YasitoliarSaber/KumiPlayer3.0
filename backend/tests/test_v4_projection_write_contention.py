@@ -1,11 +1,13 @@
 """媒体墙耗时校验不能占用任务写入锁，也不能清掉并发更新。"""
+import json
+
+from backend.tests.test_v4_library_projection import _entry, _ready_library
+
 from app.media_v4.jobs.control import claim_running, heartbeat
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection import collections
 from app.media_v4.projection.library import V4LibraryProjection
 from app.media_v4.revisions.service import V4RevisionService
-
-from backend.tests.test_v4_library_projection import _entry
 
 
 def _database(tmp_path, monkeypatch):
@@ -14,6 +16,7 @@ def _database(tmp_path, monkeypatch):
     service = V4RevisionService(database)
     service.create_draft('rev-1', [_entry('video')])
     service.confirm('rev-1')
+    _ready_library(database)
     original = V4Database.open_connection
 
     def open_connection(self):
@@ -23,6 +26,16 @@ def _database(tmp_path, monkeypatch):
 
     monkeypatch.setattr(V4Database, 'open_connection', open_connection)
     return database
+
+
+def _update_title(database, title):
+    from app.media_v4.persistence.metadata_lifecycle import publish_snapshot
+
+    with database.connect() as writer:
+        writer.execute('UPDATE works SET preferred_title=?', (title,))
+        snapshot = writer.execute('SELECT work_id,metadata_json FROM metadata_snapshots LIMIT 1').fetchone()
+        publish_snapshot(writer, revision_id='rev-1', work_id=snapshot['work_id'], snapshot_id=f'updated-{title}',
+                         metadata={**json.loads(snapshot['metadata_json']), 'title': title}, artifact_ids=[])
 
 
 def test_job_heartbeat_can_commit_while_projection_is_building(tmp_path, monkeypatch):
@@ -54,8 +67,8 @@ def test_concurrent_authority_update_keeps_projection_dirty(tmp_path, monkeypatc
     def during_build(conn):
         if not changed:
             changed.append(True)
+            _update_title(database, 'Updated Show')
             with database.connect() as writer:
-                writer.execute("UPDATE works SET preferred_title='Updated Show'")
                 writer.execute("INSERT OR REPLACE INTO v4_meta(key,value) VALUES ('library_projection_dirty','update')")
         return original(conn)
 
@@ -78,8 +91,7 @@ def test_older_projection_cannot_replace_a_concurrently_published_generation(tmp
     def during_build(conn):
         if not published:
             published.append(None)
-            with database.connect() as writer:
-                writer.execute("UPDATE works SET preferred_title='Newer Show'")
+            _update_title(database, 'Newer Show')
             published[0] = V4LibraryProjection(database).rebuild()
         return original(conn)
 

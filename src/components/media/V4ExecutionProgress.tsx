@@ -45,6 +45,7 @@ function retryMetadataLabel(reasonCode: string | undefined, busy: boolean): stri
 }
 
 function attentionSummary(unit: V4WorkProgressUnit): string {
+  if (unit.metadata_state === 'ready' && unit.artifact_reasons?.length) return '必需图片未齐，尚未发布到媒体库。'
   if (unit.metadata_state === 'waiting_review') return '在线作品待确认；本地播放不受影响。'
   if (unit.metadata_reason_code === 'artifact_incomplete') return '部分媒体图片尚未就绪。'
   return unit.metadata_reason || '在线资料待处理。'
@@ -149,7 +150,8 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
     ? (unit.metadata.status === 'failed' ? unit.metadata : null)
     : null
   const workIsPending = ['waiting_metadata', 'running_metadata'].includes(unit.overall_status)
-  const artworkPreparing = unit.overall_status === 'completed' && isArtworkPreparing(unit)
+  const artworkPreparing = unit.overall_status === 'running_artwork' || (unit.overall_status === 'completed' && isArtworkPreparing(unit))
+  const missingArtworkSource = unit.artwork?.reason_codes?.includes('missing_source') ?? false
   // 3.1：展开非进行中作品时按需读取执行详情；缓存键包含任务状态，
   // 重新执行该作品后状态变化自然使缓存失效并重新读取。
   const detailCacheKey = unit.detail_version || `${unit.metadata.status}:${unit.artwork?.status ?? ''}`
@@ -256,8 +258,13 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
           </>}
           {unit.artifact_state === 'degraded' && (
             <>
-              <div className="media-v4-work-progress-hint" role="status">部分图片未下载成功，可重新下载；不影响浏览和播放。</div>
-              {onRetryArtifacts && (
+              <div className="media-v4-work-progress-hint" role="status">{unit.artifact_reasons?.length ? unit.artifact_reasons.join('；') : '部分图片未下载成功，可重新下载；不影响浏览和播放。'}</div>
+              {missingArtworkSource && onRetryMetadata && !['retry_metadata', 'check_settings'].includes(unit.metadata_recovery_action ?? '') && (
+                <Button size="small" appearance="secondary" disabled={resolvingWorkId !== ''} onClick={() => onRetryMetadata(unit.work_id)}>
+                  {resolvingWorkId === unit.work_id ? '正在重新获取…' : '重新获取媒体信息'}
+                </Button>
+              )}
+              {!missingArtworkSource && onRetryArtifacts && (
                 <Button size="small" appearance="secondary" disabled={resolvingWorkId !== ''} onClick={() => onRetryArtifacts(unit.work_id)}>
                   {resolvingWorkId === unit.work_id ? '正在重新下载…' : '重新下载媒体图片'}
                 </Button>
@@ -299,7 +306,7 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
                 )}
                 </>}
                 {detail.detail.work.artifact_state === 'degraded' && (
-                  <div className="media-v4-work-progress-hint" role="status">部分图片未下载成功，可重新下载；不影响浏览和播放。</div>
+                  <div className="media-v4-work-progress-hint" role="status">{detail.detail.work.artifact_reasons?.length ? detail.detail.work.artifact_reasons.join('；') : '部分图片未下载成功，可重新下载；不影响浏览和播放。'}</div>
                 )}
               </div>
               {detail.detail.name_recovery && (

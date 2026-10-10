@@ -216,6 +216,8 @@ export function buildWorkSummaries(preview: V4Preview): RecognitionSummary {
 export const WORK_PROGRESS_LABELS: Record<string, string> = {
   waiting_metadata: '等待获取媒体信息',
   running_metadata: '正在获取媒体信息',
+  running_artwork: '正在准备本地图片',
+  waiting_publication: '正在更新媒体库',
   needs_attention: '需要处理',
   failed: '失败',
   cancelled: '已取消',
@@ -224,6 +226,8 @@ export const WORK_PROGRESS_LABELS: Record<string, string> = {
 
 export const WORK_PROGRESS_ORDER: Record<string, number> = {
   running_metadata: 0,
+  running_artwork: 0,
+  waiting_publication: 0,
   needs_attention: 1,
   failed: 1,
   cancelled: 2,

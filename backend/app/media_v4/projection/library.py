@@ -137,6 +137,10 @@ class V4LibraryProjection:
     ) -> LibrarySnapshot | None:
         """在同一读事务内读取 generation 与它的 cards。"""
 
+        policy = conn.execute("SELECT value FROM v4_meta WHERE key='library_presentation_policy'").fetchone()
+        if not for_publication and (policy is None or policy[0] != PRESENTATION_POLICY_VERSION):
+            return None
+
         generation_id_row = conn.execute(
             "SELECT value FROM v4_meta WHERE key = 'current_library_generation'"
         ).fetchone()
@@ -179,8 +183,10 @@ class V4LibraryProjection:
                 FROM v4_meta m JOIN library_generations g ON g.generation_id=m.value AND g.status='published'
                 LEFT JOIN v4_meta s ON s.key='library_published_summary'
                 LEFT JOIN v4_meta v ON v.key='library_display_version'
+                LEFT JOIN v4_meta p ON p.key='library_presentation_policy'
                 WHERE m.key='current_library_generation'
-            """).fetchone()
+                  AND p.value=?
+            """, (PRESENTATION_POLICY_VERSION,)).fetchone()
         if row is None:
             return {'digest': '', 'generation_id': '', 'work_count': 0, 'updating': True}
         try:
@@ -382,8 +388,7 @@ class V4LibraryProjection:
                     from app.media_v4.jobs.completeness import artifact_only_failure
 
                     if artifact_only_failure(metadata):
-                        # 历史记录里“只缺图片”的失败只读归一：作品照常进入媒体库，
-                        # 产物标成 degraded 供 UI 提示，不写回真实数据。
+                        # 历史“只缺图片”失败只读归一为资料 ready；后续仍需通过图片门槛。
                         state = "ready"
                         metadata["artifact_state"] = "degraded"
                         metadata["artifact_reasons"] = [
@@ -417,6 +422,13 @@ class V4LibraryProjection:
                     from app.media_v4.jobs.metadata_quality import current_episode_metadata
                     if retained_metadata is None:
                         metadata = current_episode_metadata(conn, None, str(row['work_id']), metadata)
+                    from app.media_v4.assets.status import required_artwork_status
+
+                    # 资料快照与图片队列独立；展示发布必须等三项必需图片齐全。
+                    if metadata.get('metadata_state') != 'ready' or required_artwork_status(
+                        conn, str(row['work_id']),
+                    )['status'] != 'ready':
+                        continue
                     show_type = str(row["show_type"] or "")
                     card_type = str(row["card_type"] or "")
                     metadata["show_type"] = show_type
@@ -484,6 +496,11 @@ class V4LibraryProjection:
                 next_details = {row[1]: row[2] for row in detail_rows}
                 changed_ids = set()
                 from app.media_v4.projection.changes import record_change
+
+                policy = conn.execute("SELECT value FROM v4_meta WHERE key='library_presentation_policy'").fetchone()
+                if current_generation_id and (policy is None or policy[0] != PRESENTATION_POLICY_VERSION):
+                    # 策略升级时客户端可能读过暂时空列表；即使卡片本身未变也要通知它重读。
+                    record_change(conn, 'reset')
 
                 for card in cards:
                     if card != previous_cards.pop(card['work_id'], None) or next_details.get(card['work_id']) != previous_details.get(card['work_id']):

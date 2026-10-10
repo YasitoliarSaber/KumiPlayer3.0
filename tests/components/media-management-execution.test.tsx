@@ -485,6 +485,24 @@ test('图片产物缺失时显示非阻断提示与重新下载入口', () => {
   expect(artifacts).toHaveBeenCalledWith('w-degraded')
 })
 
+test('必需图片准备中不显示完成项，缺失来源提示重新获取资料', () => {
+  const retry = vi.fn()
+  render(<V4ExecutionProgress progress={makeProgress([
+    workUnit('waiting-images', '等待图片作品', 'running_artwork', {
+      metadata_state: 'ready', artwork: { status: 'pending', total: 14, counts: { ready: 13, pending: 1 } },
+    }),
+    workUnit('no-still', '缺预览图作品', 'needs_attention', {
+      metadata_state: 'ready', artifact_state: 'degraded',
+      artifact_reasons: ['正片预览图尚未就绪（1 张）'],
+      artwork: { status: 'failed', total: 14, counts: { ready: 13, failed: 1 }, reason_codes: ['missing_source'] },
+    }),
+  ]) as never} busyRetryId="" onRetry={vi.fn()} resolvingWorkId="" onResolveMetadata={vi.fn()} onRetryMetadata={retry} />)
+  expect(screen.getByText('资料已就绪，图片准备中')).toBeVisible()
+  expect(screen.getByText('正片预览图尚未就绪（1 张）')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '重新获取媒体信息' }))
+  expect(retry).toHaveBeenCalledWith('no-still')
+})
+
 test('执行详情保留未知季，并将已知季度排在季号未定之前', async () => {
   const work = { title: '未知季作品', media_type: 'unknown', metadata_state: 'waiting_review' }
   const { container } = render(<V4ExecutionProgress

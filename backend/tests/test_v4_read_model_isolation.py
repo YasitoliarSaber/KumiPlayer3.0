@@ -3,11 +3,11 @@
 import json
 
 import pytest
+from backend.tests.test_v4_p006 import _seed_work
+
 from app.api import library_v4, media_v4
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.library import V4LibraryProjection
-
-from backend.tests.test_v4_p006 import _seed_work
 
 
 @pytest.fixture
@@ -20,6 +20,9 @@ def database(tmp_path, monkeypatch):
 
 
 def _published(database, metadata=None):
+    from backend.tests.test_v4_library_projection import _ready_library
+
+    _ready_library(database)
     snapshot = V4LibraryProjection(database).rebuild()
     if metadata:
         with database.connect() as conn:

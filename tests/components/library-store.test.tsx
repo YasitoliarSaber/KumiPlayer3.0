@@ -309,7 +309,18 @@ test('媒体库缓存的序列化在空闲回调里进行，不占用响应应�
   expect(toJSON).not.toHaveBeenCalled();
   idle({ didTimeout: false, timeRemaining: () => 50 });
   expect(toJSON).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(localStorage.getItem('kumiplayer-library-cache-v4')!).works[0].work_id).toBe('cached');
+  expect(JSON.parse(localStorage.getItem('kumiplayer-library-cache-required-artwork-v5')!).works[0].work_id).toBe('cached');
+});
+
+test('不恢复旧发布策略缓存中的缺图卡片', async () => {
+  localStorage.setItem('kumiplayer-library-cache-v4', JSON.stringify({ savedAt: Date.now(), works: [work('unfinished')] }));
+  const pending = deferred<{ works: WorkIndex[] }>();
+  getLibrary.mockReturnValue(pending.promise);
+  getHistory.mockResolvedValue({ items: [] });
+  const loading = useLibraryStore.getState().loadLibrary();
+  expect(useLibraryStore.getState().works).toEqual([]);
+  pending.resolve({ works: [] });
+  await loading;
 });
 
 test('空闲缓存写入触发存储配额异常时，不产生异步未捕获异常', async () => {
@@ -387,7 +398,7 @@ test('删除后的空库刷新会使先前排队的缓存写入失效', async ()
   await useLibraryStore.getState().loadLibrary({ force: true });
   idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 });
 
-  expect(localStorage.getItem('kumiplayer-library-cache-v4')).toBeNull();
+  expect(localStorage.getItem('kumiplayer-library-cache-required-artwork-v5')).toBeNull();
 });
 
 test('详情返回值缺少本地图片字段时保留 compact 卡片的本地路径', async () => {

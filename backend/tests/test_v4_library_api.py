@@ -49,8 +49,11 @@ def _entry(revision_id: str = "rev-library") -> dict:
 
 
 def _publish(database):
+    from backend.tests.test_v4_library_projection import _ready_library
+
     from app.media_v4.projection.library import V4LibraryProjection
 
+    _ready_library(database)
     V4LibraryProjection(database).rebuild()
 
 
@@ -153,7 +156,7 @@ def test_detail_projects_saved_scrape_metadata_without_rewriting_local_identity(
     assert body["episodes"][0]["episode_number"] == 1
     assert body["episodes"][0]["title"] == "刮削后的单集标题"
     assert body["episodes"][0]["plot"] == ""
-    assert body["episodes"][0]["thumb_path"] == ""
+    assert body["episodes"][0]["thumb_path"].startswith('/api/assets/artwork/')
     with database.connect() as conn:
         saved = json.loads(conn.execute(
             "SELECT metadata_json FROM scrape_bindings WHERE binding_id='binding-detail-metadata'"
@@ -419,11 +422,11 @@ def test_library_sources_come_from_each_evidence_not_the_first_root_entry(tmp_pa
     assert client.post("/api/v4/imports/preview", json=payload).status_code == 200
     assert client.post("/api/v4/imports/rev-mixed-provider/confirm").status_code == 200
     _publish(_database)  # 测试应用未启动 lifespan，显式模拟后台发布。
-    # 已确认作品先发布轻量卡片，资料等待不会将其从媒体库隐藏。
+    # 图片和资料准备完毕后，来源信息仍来自每条 evidence。
     response = client.get("/api/library")
     assert response.status_code == 200
     assert len(response.json()["works"]) == 1
-    assert response.json()["works"][0]["metadata_state"] == "waiting_metadata"
+    assert response.json()["works"][0]["metadata_state"] == "ready"
     assert response.json()["works"][0]["sources"] == ["local", "pan115"]
 
 

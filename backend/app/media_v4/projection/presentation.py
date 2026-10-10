@@ -1,6 +1,6 @@
 """当前媒体库展示合同；过滤派生视图，不改写历史 confirmed 或资产。"""
 
-PRESENTATION_POLICY_VERSION = "published-details-artwork-4"
+PRESENTATION_POLICY_VERSION = "required-local-artwork-5"
 
 
 def preserve_identity_title(work_id: str, media_type: str, metadata: dict,

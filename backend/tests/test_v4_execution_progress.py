@@ -88,6 +88,11 @@ def _seed_work(
                 (f"job-{work_id}-{index}", job_type, revision_id, work_id, f"ik-{work_id}-{index}", job_status, attempts, last_error),
             )
         if scrape_status is not None:
+            if scrape_status == 'confirmed':
+                from backend.tests.artwork_fixtures import published_card, ready_artwork
+
+                ready_artwork(conn, work_id)
+                published_card(conn, work_id, title)
             if scrape_status == 'confirmed' and scrape_metadata is None:
                 scrape_metadata = {'episode_mappings': [
                     {'episode_id': key, 'provider_episode_id': str(1000 + index), 'title': 'Episode',
@@ -148,7 +153,7 @@ def test_progress_shape_and_completed_state(tmp_path):
     assert unit["episode_count"] == 2  # 去重：3 个 asset 只绑 2 个 episode
     assert unit["asset_count"] == 3
     assert unit["overall_status"] == "completed"
-    assert unit["artwork"]["status"] == "not_required"
+    assert unit["artwork"]["status"] == "ready"
     assert unit["metadata"]["status"] == "succeeded"
     assert unit["metadata"]["job_id"] == "job-w1-0"
 
@@ -306,10 +311,11 @@ def test_overall_priority_queued_over_completed(tmp_path):
 
 
 def test_execution_progress_api_contract(tmp_path, monkeypatch):
-    from app.api import media_v4
-    from app.media_v4.persistence.database import V4Database
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import media_v4
+    from app.media_v4.persistence.database import V4Database
 
     database = V4Database(tmp_path / "api-progress.db")
     database.initialize()
@@ -332,9 +338,10 @@ def test_execution_progress_api_contract(tmp_path, monkeypatch):
 
 
 def test_unknown_revision_returns_404(tmp_path, monkeypatch):
-    from app.api import media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import media_v4
 
     _database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", _database)

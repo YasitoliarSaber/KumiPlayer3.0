@@ -26,7 +26,7 @@ from app.media_v4.assets.catalog import (
     enqueue_manual,
 )
 from app.media_v4.jobs.metadata_artifacts import _artwork_client, _valid_artwork
-from app.media_v4.projection.library import bump_display_version
+from app.media_v4.projection.library import bump_display_version, mark_projection_dirty
 
 MAX_BYTES = 25 * 1024 * 1024
 MAX_PIXELS = 40_000_000
@@ -334,7 +334,18 @@ class ArtworkService:
                              'WHERE subject_type=? AND subject_id=? AND role=? AND candidate_id=?',
                              (binding['subject_type'], binding['subject_id'], binding['role'], resource_id))
             for work_id in affected:
-                bump_display_version(conn, work_id, kind='artwork')
+                from app.media_v4.assets.status import required_artwork_status
+
+                published = conn.execute(
+                    "SELECT 1 FROM library_cards c JOIN v4_meta m ON m.key='current_library_generation' "
+                    "AND m.value=c.generation_id WHERE c.work_id=?", (work_id,),
+                ).fetchone()
+                manual = any(b['work_id'] == work_id and b['priority'] >= 100 for b in live_bindings)
+                if published or manual:
+                    bump_display_version(conn, work_id, kind='artwork')
+                if not published and required_artwork_status(conn, work_id)['status'] == 'ready':
+                    # 最后一张必需图发布后只重建这部作品；初始缺图不发送空卡事件。
+                    mark_projection_dirty(conn, [work_id])
             if missing_sizes:
                 conn.execute("UPDATE artwork_resources SET state='pending' WHERE resource_id=?", (resource_id,))
             elif not live_bindings:

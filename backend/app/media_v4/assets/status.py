@@ -3,6 +3,58 @@
 import time
 
 
+def required_artwork_status(conn, work_id: str, revision_id: str | None = None) -> dict:
+    """发布门槛只看海报、背景和当前正片预览；不读文件、不请求网络。
+
+    演员、推荐图和 logo 不阻断作品。没有来源的必需图片也是缺项，不能
+    因为没有登记下载任务而误报 not_required。电影无需剧集预览图。
+    """
+    from app.media_v4.assets.catalog import RECIPE_VERSION, ROLE_WIDTHS
+
+    episodes = [row[0] for row in conn.execute(
+        "SELECT DISTINCT e.episode_id FROM revision_bindings rb "
+        "JOIN import_revisions ir ON ir.revision_id=rb.revision_id AND ir.status='confirmed' "
+        "JOIN source_roots sr ON sr.root_id=ir.root_id AND sr.enabled=1 AND sr.retired_at='' "
+        "JOIN episodes e ON e.episode_id=rb.episode_id JOIN seasons s ON s.season_id=e.season_id "
+        "WHERE rb.work_id=? AND rb.asset_id IS NOT NULL "
+        "AND e.episode_kind NOT IN ('special','auxiliary','movie') AND s.season_kind<>'special' "
+        "AND (? IS NULL OR rb.revision_id=?)", (work_id, revision_id, revision_id))]
+    required = [('work', work_id, 'poster'), ('work', work_id, 'fanart')]
+    required.extend(('episode', episode_id, 'episode_thumb') for episode_id in episodes)
+    bindings = {}
+    for row in conn.execute(
+        "SELECT b.subject_type,b.subject_id,b.role,b.candidate_id,b.published_id,r.state,r.error_kind,v.width "
+        "FROM artwork_bindings b LEFT JOIN artwork_resources r ON r.resource_id=b.candidate_id "
+        "LEFT JOIN artwork_variants v ON v.content_digest=r.content_digest AND v.recipe_version=? "
+        "WHERE b.work_id=? AND b.role IN ('poster','fanart','episode_thumb')", (RECIPE_VERSION, work_id)):
+        key = (row['subject_type'], row['subject_id'], row['role'])
+        item = bindings.setdefault(key, {**dict(row), 'widths': set()})
+        if row['width'] is not None:
+            item['widths'].add(row['width'])
+    counts = {}
+    missing = {'poster': 0, 'fanart': 0, 'episode_thumb': 0}
+    error_codes = set()
+    for key in required:
+        item = bindings.get(key)
+        if item and item['published_id'] == item['candidate_id'] and set(ROLE_WIDTHS[key[2]]) <= item['widths']:
+            state = 'ready'
+        else:
+            missing[key[2]] += 1
+            state = (item or {}).get('state') or 'failed'
+            if state == 'retry':
+                state = 'pending'
+            elif state == 'ready':
+                state = 'failed'
+            error_codes.add((item or {}).get('error_kind') or ('missing_source' if not item else 'not_published'))
+        counts[state] = counts.get(state, 0) + 1
+    status = ('running' if counts.get('running') else 'pending' if counts.get('pending') else
+              'failed' if counts.get('failed') else 'cancelled' if counts.get('cancelled') else 'ready')
+    labels = {'poster': '海报', 'fanart': '背景图', 'episode_thumb': '正片预览图'}
+    reasons = [f'{labels[role]}尚未就绪（{count} 张）' for role, count in missing.items() if count]
+    return {'status': status, 'counts': counts, 'total': len(required),
+            'reason_codes': sorted(error_codes), 'reasons': reasons}
+
+
 def has_active_artwork(conn) -> bool:
     """只查询仍有活动来源的需求；完整身份校验由后台发布链执行。"""
     return bool(conn.execute("""SELECT 1 FROM artwork_resources r

@@ -12,7 +12,7 @@ from app.media_v4.assets.status import has_active_artwork
 from app.media_v4.projection.collections import related_works
 from app.media_v4.projection.details import _watch_payload
 from app.media_v4.projection.library import V4LibraryProjection
-from app.media_v4.projection.presentation import display_work_title
+from app.media_v4.projection.presentation import PRESENTATION_POLICY_VERSION, display_work_title
 
 router = APIRouter(prefix="/api/library", tags=["library"])
 
@@ -272,7 +272,8 @@ def get_work_detail(work_id: str):
         conn.execute('BEGIN')
         row = conn.execute("SELECT d.detail_json FROM library_details d JOIN v4_meta m "
                            "ON m.key='current_library_generation' AND m.value=d.generation_id "
-                           "WHERE d.work_id=?", (work_id,)).fetchone()
+                           "JOIN v4_meta p ON p.key='library_presentation_policy' AND p.value=? "
+                           "WHERE d.work_id=?", (PRESENTATION_POLICY_VERSION, work_id)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail='作品展示尚未发布')
         payload = json.loads(row['detail_json'])

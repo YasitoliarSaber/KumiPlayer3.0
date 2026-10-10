@@ -516,14 +516,19 @@ def _safe_candidate_decision(value: object) -> dict | None:
     }
 
 
-def _derive_work_status(metadata: dict | None, scrape_status: str) -> str:
-    """资料执行状态独立于图片准备，确认后的媒体始终可发布和播放。"""
-    if metadata is None:
-        return 'completed' if scrape_status in {'ready', 'confirmed', 'not_required'} else 'waiting_metadata'
+def _derive_work_status(metadata: dict | None, scrape_status: str, artwork: dict | None = None,
+                        *, published: bool = True) -> str:
+    """完成须同时满足资料与必需本地图片，后台图片任务保持独立。"""
     states = {'running': 'running_metadata', 'failed': 'failed', 'cancelled': 'cancelled', 'queued': 'waiting_metadata'}
-    if metadata['status'] in states:
+    if metadata and metadata['status'] in states:
         return states[metadata['status']]
-    return 'completed' if scrape_status in {'ready', 'confirmed', 'not_required'} else 'needs_attention'
+    if scrape_status in {'ready', 'confirmed'}:
+        if artwork and artwork['status'] != 'ready':
+            return 'running_artwork' if artwork['status'] in {'pending', 'running'} else 'needs_attention'
+        return 'completed' if published else 'waiting_publication'
+    if scrape_status == 'not_required':
+        return 'completed'
+    return 'waiting_metadata' if metadata is None else 'needs_attention'
 
 
 def _stage_status(jobs: list[dict]) -> str:
@@ -578,7 +583,7 @@ def _revision_overall_status(work_units: list[dict], stage: dict[str, list[dict]
                              artwork: dict[str, dict] | None = None) -> str:
     """revision 级整体状态：running > needs_attention > queued > cancelled > completed。"""
 
-    if any(unit["overall_status"] == "running_metadata" for unit in work_units):
+    if any(unit["overall_status"] in {'running_metadata', 'running_artwork', 'waiting_publication'} for unit in work_units):
         return "running"
     if any(stage["projection"] and str(job["status"]) == "running" for job in stage["projection"]):
         return "running"
@@ -3302,11 +3307,11 @@ class V4RevisionService:
         metadata_job = next((dict(row) for row in sorted(job_rows, key=lambda row: row['updated_at'], reverse=True)
                              if row["job_type"] in {"scrape_work", "recover_work_aliases"}), None)
 
-        from app.media_v4.assets.status import artwork_status
+        from app.media_v4.assets.status import required_artwork_status
         with self.database.connect() as conn:
-            artwork = artwork_status(conn, work_id)
+            artwork = required_artwork_status(conn, work_id, revision_id)
         artifact_state = {'failed': 'degraded', 'not_required': 'not_required'}.get(artwork['status'], artwork['status'])
-        artifact_reasons = ['图片准备失败，可单独重试'] if artwork['status'] == 'failed' else []
+        artifact_reasons = artwork['reasons']
         from app.media_v4.jobs.recovery_diagnostics import name_recovery_summary
 
         name_recovery = name_recovery_summary(metadata_job)
@@ -3479,9 +3484,12 @@ class V4RevisionService:
                     row['reason_code'] = row['metadata'].get('reason_code', row.get('reason_code', ''))
         jobs_by_work: dict[str, dict] = {}
         stage: dict[str, list[dict]] = {"metadata": [], "projection": []}
-        from app.media_v4.assets.status import artwork_status
+        from app.media_v4.assets.status import required_artwork_status
         with self.database.connect() as conn:
-            artwork_map = {work_id: artwork_status(conn, work_id) for work_id in work_ids}
+            artwork_map = {work_id: required_artwork_status(conn, work_id, revision_id) for work_id in work_ids}
+            published_ids = {row[0] for row in conn.execute(
+                "SELECT work_id FROM library_cards c JOIN v4_meta m "
+                "ON m.key='current_library_generation' AND m.value=c.generation_id")}
         for row in job_rows:
             job = dict(row)
             job_type = str(job["job_type"])
@@ -3508,7 +3516,7 @@ class V4RevisionService:
             normalized_state, artifact_state, artifact_reasons = _artifact_view(scrape.get("metadata"))
             artwork = artwork_map[work_id]
             artifact_state = {'failed': 'degraded'}.get(artwork['status'], artwork['status'])
-            artifact_reasons = ['图片准备失败，可单独重试'] if artwork['status'] == 'failed' else []
+            artifact_reasons = artwork['reasons']
             if normalized_state:
                 scrape_status = normalized_state
             metadata_policy = metadata_recovery_policy(
@@ -3525,7 +3533,7 @@ class V4RevisionService:
                 "media_type": {'series': 'tv', 'movie': 'movie'}.get(str(work.get('work_type') or ''), 'unknown'),
                 "episode_count": int(binding_counts.get(work_id, {}).get('episode_count') or 0),
                 "asset_count": int(binding_counts.get(work_id, {}).get('asset_count') or 0),
-                "overall_status": _derive_work_status(metadata_job, scrape_status),
+                "overall_status": _derive_work_status(metadata_job, scrape_status, artwork, published=work_id in published_ids),
                 'artwork': artwork,
                 "metadata_state": scrape_status,
                 **{key: scrape.get('metadata', {}).get(key) for key in (

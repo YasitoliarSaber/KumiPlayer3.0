@@ -74,9 +74,10 @@ def _seed_work(database, *, work_id, title, provider="pan115", season_count=2, e
 
 
 def test_library_list_cards_include_watch_status_and_latest_episode(tmp_path, monkeypatch):
-    from app.api import library_v4, media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import library_v4, media_v4
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -89,8 +90,11 @@ def test_library_list_cards_include_watch_status_and_latest_episode(tmp_path, mo
             (json.dumps({"status": "watching", "favorite": True}, ensure_ascii=False),),
         )
 
+    from backend.tests.test_v4_library_projection import _ready_library
+
     from app.media_v4.projection.library import V4LibraryProjection
 
+    _ready_library(database)
     V4LibraryProjection(database).rebuild()  # 读取仅消费已发布代次。
 
     application = FastAPI()
@@ -108,10 +112,11 @@ def test_library_list_cards_include_watch_status_and_latest_episode(tmp_path, mo
 
 
 def test_playback_history_is_event_based_and_respects_limit(tmp_path, monkeypatch):
-    from app.api import media_v4, playback_v4
-    from app.media_v4.playback.store import V4PlaybackStore
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import media_v4, playback_v4
+    from app.media_v4.playback.store import V4PlaybackStore
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -136,10 +141,11 @@ def test_playback_history_is_event_based_and_respects_limit(tmp_path, monkeypatc
 
 
 def test_detail_title_and_artwork_and_folder_commands(tmp_path, monkeypatch):
-    from app.api import media_v4
-    from app.media_v4.jobs.scrape import V4ScrapeService
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import media_v4
+    from app.media_v4.jobs.scrape import V4ScrapeService
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -215,9 +221,10 @@ def _seed_tracking_work(database, *, work_id, title, status="watching", last_wat
 
 
 def test_tracking_works_lists_seasonal_with_latest_episode(tmp_path, monkeypatch):
-    from app.api import media_v4, tracking_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import media_v4, tracking_v4
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -240,10 +247,11 @@ def test_tracking_works_lists_seasonal_with_latest_episode(tmp_path, monkeypatch
 
 
 def test_tracking_scan_all_enqueues_incremental_for_openlist_roots(tmp_path, monkeypatch):
-    from app.api import media_v4, tracking_v4
-    from app.integrations.openlist.providers import OpenListRouteConfig
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import media_v4, tracking_v4
+    from app.integrations.openlist.providers import OpenListRouteConfig
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
@@ -288,15 +296,22 @@ def test_tracking_scan_all_enqueues_incremental_for_openlist_roots(tmp_path, mon
 
 
 def test_work_delete_preview_and_confirm_hides_work(tmp_path, monkeypatch):
-    from app.api import library_v4, media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import library_v4, media_v4
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
     monkeypatch.setattr(library_v4, "get_database", lambda: database)
     _seed_work(database, work_id="w1", title="将被删除")
     _seed_work(database, work_id="w2", title="保留作品")
+    from backend.tests.test_v4_library_projection import _ready_library
+
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    _ready_library(database)
+    V4LibraryProjection(database).rebuild()
     with database.connect() as conn:
         conn.execute(
             "INSERT INTO playback_progress(episode_id, asset_id, work_id, position, duration, updated_at) VALUES ('ep-x', 'as-x', 'w1', 1, 10, 'now')"

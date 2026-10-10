@@ -329,6 +329,8 @@ export interface V4WorkProgressUnit {
   overall_status:
     | 'waiting_metadata'
     | 'running_metadata'
+    | 'running_artwork'
+    | 'waiting_publication'
     | 'needs_attention'
     | 'failed'
     | 'cancelled'
@@ -348,6 +350,7 @@ export interface V4WorkProgressUnit {
     status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | 'not_required'
     total: number
     counts: Record<string, number>
+    reason_codes?: string[]
   }
 }
 

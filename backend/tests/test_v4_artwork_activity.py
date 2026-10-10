@@ -49,7 +49,7 @@ def test_completed_metadata_does_not_finish_active_picture_preparation(tmp_path)
         resource = enqueue_manual(conn, work_id='one', role='poster', local_path=str(tmp_path / 'cover.jpg'))
     service = V4RevisionService(database)
     progress = service.get_execution_progress('r')
-    assert all(unit['overall_status'] == 'completed' for unit in progress['work_units'])
+    assert {unit['overall_status'] for unit in progress['work_units']} == {'running_artwork', 'needs_attention'}
     assert progress['overall_status'] == 'running'
     assert _progress_message(progress) == '正在准备本地图片'
     assert _progress_percent(progress) == 50
@@ -65,7 +65,7 @@ def test_completed_metadata_does_not_finish_active_picture_preparation(tmp_path)
     assert _active_task(None, None, 'r', mixed)['stage'] == 'prepare_artwork'
     with database.connect() as conn:
         conn.execute("UPDATE artwork_resources SET state='failed' WHERE resource_id=?", (resource,))
-    assert service.get_execution_progress('r')['overall_status'] == 'completed'
+    assert service.get_execution_progress('r')['overall_status'] == 'needs_attention'
 
 
 @pytest.mark.parametrize('mutation', ['disabled', 'retired', 'superseded', 'snapshot', 'cancelled'])

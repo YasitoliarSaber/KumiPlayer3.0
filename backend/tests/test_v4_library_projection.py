@@ -45,6 +45,33 @@ def _entry(evidence_id: str):
     return evidence, facts
 
 
+def _ready_library(database):
+    """结构/事务用例也需具备真实发布前提：有效资料引用与图片记录。"""
+    from backend.tests.artwork_fixtures import ready_artwork
+
+    from app.media_v4.persistence.metadata_lifecycle import attach_snapshot_refs, publish_snapshot
+
+    with database.connect() as conn:
+        for row in conn.execute('SELECT DISTINCT revision_id,work_id FROM revision_bindings').fetchall():
+            if not conn.execute('SELECT 1 FROM revision_metadata_refs WHERE revision_id=? AND work_id=?', tuple(row)).fetchone():
+                existing = conn.execute('SELECT * FROM metadata_snapshots WHERE work_id=? ORDER BY created_at DESC LIMIT 1', (row['work_id'],)).fetchone()
+                if existing:
+                    attach_snapshot_refs(conn, row['revision_id'], row['work_id'], {**dict(existing), 'artifacts': []})
+                    ready_artwork(conn, row['work_id'])
+                    continue
+                binding = conn.execute('SELECT metadata_json FROM scrape_bindings WHERE revision_id=? AND work_id=?', tuple(row)).fetchone()
+                metadata = json.loads(binding[0]) if binding else {}
+                title = conn.execute('SELECT preferred_title FROM works WHERE work_id=?', (row['work_id'],)).fetchone()[0]
+                metadata = {'provider': 'tmdb', 'provider_id': '42', 'metadata_state': 'ready', 'title': title,
+                            'episode_mappings': [{'episode_id': e[0], 'provider_episode_id': '1', 'title': 'Episode'}
+                                                 for e in conn.execute('SELECT episode_id FROM episodes WHERE work_id=?', (row['work_id'],))], **metadata}
+                for mapping in metadata['episode_mappings']:
+                    mapping.setdefault('provider_episode_id', '1')
+                publish_snapshot(conn, revision_id=row['revision_id'], work_id=row['work_id'],
+                                 snapshot_id=f"fixture-{row['revision_id']}-{row['work_id']}", metadata=metadata, artifact_ids=[])
+            ready_artwork(conn, row['work_id'])
+
+
 def test_projection_exposes_only_explicit_reads_and_background_refresh():
     from app.media_v4.projection.library import V4LibraryProjection
 
@@ -63,6 +90,7 @@ def test_projection_has_one_card_and_counts_all_assets(tmp_path):
     revisions.create_draft("rev-1", [_entry("1080p"), _entry("2160p")])
     revisions.confirm("rev-1")
 
+    _ready_library(database)
     snapshot = V4LibraryProjection(database).rebuild()
 
     assert len(snapshot.cards) == 1
@@ -83,6 +111,7 @@ def test_projection_can_be_deleted_and_rebuilt_from_sqlite_authority(tmp_path):
     revisions.create_draft("rev-1", [_entry("a")])
     revisions.confirm("rev-1")
     projection = V4LibraryProjection(database)
+    _ready_library(database)
     first = projection.rebuild()
     with database.connect() as conn:
         conn.execute("DELETE FROM library_cards")
@@ -171,10 +200,11 @@ def test_title_change_on_same_source_lineage_keeps_work_identity(tmp_path):
     assert works[0]["preferred_title"] == "New Title"
 
 
-def test_projection_publishes_metadata_before_independent_artwork(tmp_path, monkeypatch):
+def test_projection_waits_for_independent_artwork(tmp_path, monkeypatch):
     import base64
 
     import httpx
+
     from app.core.config import AppConfig
     from app.media_v4.assets import service as artwork_service
     from app.media_v4.assets.catalog import get_work_artwork
@@ -233,7 +263,14 @@ def test_projection_publishes_metadata_before_independent_artwork(tmp_path, monk
         mirror_root=tmp_path / "mirror",
     )
 
-    card = V4LibraryProjection(database).rebuild().cards[0]
+    assert V4LibraryProjection(database).rebuild().cards == ()
+    assert requested_images == [], "资料发布与投影维护不下载图片"
+    with database.connect() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM artifacts').fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM artwork_resources WHERE state='pending'").fetchone()[0] == 3
+    generation_id = V4LibraryProjection(database).current().generation_id
+    assert artwork_service.ArtworkService(database, tmp_path / 'image-store').process_available() == 3
+    card = V4LibraryProjection(database).refresh_if_needed().cards[0]
     assert card["title"] == "Online Title"
     assert card["metadata"]["title"] == "Online Title"
     assert card["metadata"]["original_title"] == "Original"
@@ -241,12 +278,6 @@ def test_projection_publishes_metadata_before_independent_artwork(tmp_path, monk
     assert card["metadata"]["metadata_state"] == "ready"
     assert card["metadata"]["episode_mapping_status"] == "complete"
     assert card["metadata"]["episode_mappings"][0]["title"] == "Online Episode"
-    assert requested_images == [], "资料发布与投影维护不下载图片"
-    with database.connect() as conn:
-        assert conn.execute('SELECT COUNT(*) FROM artifacts').fetchone()[0] == 0
-        assert conn.execute("SELECT COUNT(*) FROM artwork_resources WHERE state='pending'").fetchone()[0] == 3
-    generation_id = V4LibraryProjection(database).current().generation_id
-    assert artwork_service.ArtworkService(database, tmp_path / 'image-store').process_available() == 3
     assert set(requested_images) == {
         "https://image.tmdb.org/t/p/w780/poster.jpg",
         "https://image.tmdb.org/t/p/original/fanart.jpg",
@@ -345,8 +376,12 @@ def test_projection_does_not_check_files_for_selected_scrape_revision(tmp_path, 
         from app.media_v4.persistence.metadata_lifecycle import publish_snapshot
 
         publish_snapshot(conn, revision_id='rev-a', work_id=work_id, snapshot_id='selected-a',
-                         metadata={'provider': 'tmdb', 'provider_id': '1', 'title': 'A', 'metadata_state': 'ready'},
+                         metadata={'provider': 'tmdb', 'provider_id': '1', 'title': 'A', 'metadata_state': 'ready',
+                                   'episode_mappings': [{'episode_id': e[0], 'provider_episode_id': '1', 'title': 'Episode'}
+                                                        for e in conn.execute('SELECT episode_id FROM episodes WHERE work_id=?', (work_id,))]},
                          artifact_ids=[])
+
+    _ready_library(database)
 
     checked: list[str] = []
 
@@ -527,6 +562,7 @@ def _two_bindings(tmp_path, *, failure_newer: bool):
         conn.execute("UPDATE revision_metadata_refs SET created_at=? WHERE revision_id='rev-b'", (failed_at,))
         conn.execute("UPDATE jobs SET status=?,last_error=?,updated_at=? WHERE revision_id='rev-b' AND job_type='scrape_work'",
                      ('failed' if failure_newer else 'succeeded', 'fixture temporary failure' if failure_newer else '', failed_at))
+    _ready_library(database)
     return database
 
 
@@ -550,6 +586,7 @@ def test_current_reads_generation_and_cards_from_one_snapshot(tmp_path, monkeypa
     revisions.create_draft("rev-1", [_entry("1080p")])
     revisions.confirm("rev-1")
     projection = V4LibraryProjection(database)
+    _ready_library(database)
     assert projection.rebuild().cards, "前置条件：至少有一张已发布的卡"
     assert projection.current().cards
 

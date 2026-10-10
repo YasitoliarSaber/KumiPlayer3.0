@@ -9,7 +9,7 @@ import { isWorkInLibraryView } from '../utils/libraryCategories'
 import { recordScrollDiagnostic } from '../utils/scrollDiagnostics'
 import { isScrollRecentlyActive } from '../utils/scrollGesture'
 
-const LIBRARY_CACHE_KEY = 'kumiplayer-library-cache-v4'
+const LIBRARY_CACHE_KEY = 'kumiplayer-library-cache-required-artwork-v5'
 const LIBRARY_CACHE_MAX_AGE = 1000 * 60 * 60 * 24 * 7
 const LIBRARY_CACHE_MAX_BYTES = 1_500_000
 const LIBRARY_CACHE_MAX_WORKS = 500
