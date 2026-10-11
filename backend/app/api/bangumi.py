@@ -662,6 +662,11 @@ def sync_completed_episode(database, episode_id: str, req: EpisodeWatchedRequest
     ) if item["episode_id"] == episode_id), None)
     if episode is None:
         raise HTTPException(status_code=404, detail="剧集不属于当前作品或季度")
+    from app.media_v4.playback.watch_state import manual_watch_states
+
+    with database.connect() as conn:
+        if req.type == EPISODE_COLLECTION_DONE and manual_watch_states(conn, req.work_id).get(episode_id) is False:
+            return {"ok": True, "status": "manual_unwatched", "work_id": req.work_id, "episode_id": episode_id}
     match = _get_match(req.work_id, req.season_number, database=database)
     if match is None:
         raise HTTPException(status_code=409, detail="请先确认 Bangumi 条目匹配")
@@ -753,8 +758,15 @@ def _pull_remote_completion(
     synchronized: list[tuple[str, int]] = []
     database = get_database()
     with database.connect() as conn:
+        # 远端请求已结束；在同一短写事务内检查手工选择再回填，避免检查后被未看操作抢先提交。
+        conn.execute("BEGIN IMMEDIATE")
+        from app.media_v4.playback.watch_state import manual_watch_states
+
+        local_choices = manual_watch_states(conn, work_id)
         for item in local_episodes:
             episode_id = str(item["episode_id"])
+            if local_choices.get(episode_id) is False:
+                continue
             remote_id = episode_map.get(episode_id)
             if remote_id is None or int(remote_id) not in remote_watched:
                 continue
@@ -801,11 +813,14 @@ def sync_progress(work_id: str, req: ProgressSyncRequest):
 
     local_episodes = _local_episodes(work_id, req.season_number)
     with get_database().connect() as conn:
+        from app.media_v4.playback.watch_state import manual_watch_states
+
+        local_choices = manual_watch_states(conn, work_id)
         completed_rows = conn.execute(
             "SELECT DISTINCT episode_id FROM playback_progress WHERE work_id = ? AND completed = 1",
             (work_id,),
         ).fetchall()
-        completed_ids = {str(row["episode_id"]) for row in completed_rows}
+        completed_ids = {str(row["episode_id"]) for row in completed_rows if local_choices.get(str(row["episode_id"])) is not False}
 
     pulled, pulled_episodes = _pull_remote_completion(
         work_id,

@@ -12325,34 +12325,18 @@ body,
 }
 
 /* Dismissible detail tools use a quiet elevated layer over immersive artwork. */
-:root[data-theme='fluent'] {
-  --detail-tool-surface: rgb(26 31 35 / .90);
-  --detail-tool-surface-raised: rgb(255 255 255 / .09);
-  --detail-tool-surface-hover: rgb(255 255 255 / .14);
-  --detail-tool-border: rgb(255 255 255 / .16);
-  --detail-tool-ink: rgb(255 255 255 / .94);
-  --detail-tool-muted: rgb(255 255 255 / .66);
-}
-
-:root[data-theme='mica'] {
-  --detail-tool-surface: rgb(18 22 26 / .90);
-  --detail-tool-surface-raised: rgb(255 255 255 / .09);
-  --detail-tool-surface-hover: rgb(255 255 255 / .14);
-  --detail-tool-border: rgb(255 255 255 / .16);
-  --detail-tool-ink: rgb(255 255 255 / .94);
-  --detail-tool-muted: rgb(255 255 255 / .66);
-}
-
-:root[data-theme='cinema'] {
-  --detail-tool-surface: rgb(20 20 20 / .92);
-  --detail-tool-surface-raised: rgb(255 255 255 / .08);
-  --detail-tool-surface-hover: rgb(255 255 255 / .13);
-  --detail-tool-border: rgb(255 255 255 / .14);
-  --detail-tool-ink: rgb(255 255 255 / .94);
-  --detail-tool-muted: rgb(255 255 255 / .64);
+:root {
+  --detail-tool-surface: var(--surface-raised);
+  --detail-tool-surface-raised: var(--control-bg);
+  --detail-tool-surface-hover: var(--surface-soft);
+  --detail-tool-border: var(--border);
+  --detail-tool-ink: var(--text);
+  --detail-tool-muted: var(--text-muted);
 }
 
 body > .detail-tool-overlay {
+  --detail-ink: var(--text);
+  --detail-ink-muted: var(--text-muted);
   position: fixed;
   inset: 40px 0 0;
   z-index: 124;
@@ -12433,7 +12417,7 @@ body > .detail-tool-overlay .settings-input {
   background: var(--detail-tool-surface-raised) !important;
   color: var(--detail-tool-ink) !important;
   box-shadow: none !important;
-  color-scheme: dark;
+  color-scheme: inherit;
 }
 
 body > .detail-tool-overlay .settings-input::placeholder {

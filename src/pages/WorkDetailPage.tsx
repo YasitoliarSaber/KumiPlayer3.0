@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Dropdown, FluentProvider, Option, Spinner, Tooltip } from '@fluentui/react-components';
+import { getKumiFluentTheme } from '../design/fluentTheme';
 import { CheckCircle2, ChevronLeft, ChevronRight, Circle, Ellipsis, FolderOpen, Grid2X2, Heart, Image, Pencil, Play, ScanLine, SlidersHorizontal, Star, Trash2, Upload, X } from 'lucide-react';
 import { useLibraryStore } from '../stores/library';
 import { useBangumiStore } from '../stores/bangumi';
@@ -122,6 +124,7 @@ export default function WorkDetailPage() {
   const loadLibrary = useLibraryStore((state) => state.loadLibrary);
   const updateWorkWatchStatus = useLibraryStore((state) => state.updateWorkWatchStatus);
   const bangumiSessionStatus = useBangumiStore((state) => state.sessionStatus);
+  const appearanceMode = useUiStore((state) => state.appearanceMode);
   const initialWork = selectedWorkId
     ? peekWorkDetail(selectedWorkId)
     : null;
@@ -143,6 +146,10 @@ export default function WorkDetailPage() {
   const [bangumiQuery, setBangumiQuery] = useState('');
   const [bangumiCandidates, setBangumiCandidates] = useState<any[]>([]);
   const [bangumiSearching, setBangumiSearching] = useState(false);
+  const [bangumiBusy, setBangumiBusy] = useState('');
+  const [episodeWatchBusy, setEpisodeWatchBusy] = useState(false);
+  const bangumiBusyRef = useRef(false);
+  const episodeWatchBusyRef = useRef(false);
   const [, setPlayedEpisodeIds] = useState<Set<string>>(new Set());
   const [progressByEpisodeId, setProgressByEpisodeId] = useState<Map<string, PlaybackProgressItem>>(new Map());
   const [completedEpisodeIds, setCompletedEpisodeIds] = useState<Set<string>>(new Set());
@@ -151,6 +158,7 @@ export default function WorkDetailPage() {
   const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatusSnapshot | null>(null);
   const [playbackStarting, setPlaybackStarting] = useState(false);
   const [episodeContextMenu, setEpisodeContextMenu] = useState<EpisodeContextMenu>(null);
+  const [episodeTooltipId, setEpisodeTooltipId] = useState('');
   const [bangumiCollection, setBangumiCollectionState] = useState<any>(null);
   const [auxiliaryReady, setAuxiliaryReady] = useState(false);
   const [notice, setNotice] = useState('');
@@ -207,9 +215,24 @@ export default function WorkDetailPage() {
 
   useEffect(() => {
     if (!notice) return;
+    if (!document.hasFocus()) {
+      setNotice('');
+      return;
+    }
     const timeout = window.setTimeout(() => setNotice(''), 2800);
     return () => window.clearTimeout(timeout);
   }, [notice]);
+
+  useEffect(() => {
+    const dismissTransientFeedback = () => {
+      setNotice('');
+      setEpisodeTooltipId('');
+      setEpisodeContextMenu(null);
+      setMoreMenuOpen(false);
+    };
+    window.addEventListener('blur', dismissTransientFeedback);
+    return () => window.removeEventListener('blur', dismissTransientFeedback);
+  }, []);
 
   useEffect(() => {
     if (!bangumiPanelOpen) return;
@@ -1118,6 +1141,10 @@ export default function WorkDetailPage() {
 
   const handlePlay = async (episodeId?: string) => {
     if (pendingPlaybackIntentRef.current) return;
+    setNotice('');
+    setEpisodeTooltipId('');
+    setEpisodeContextMenu(null);
+    setMoreMenuOpen(false);
     try {
       // 空目标或刷新空档时不得静默回退到全季第一集，保留已有上下文，无法解析时直接报错。
       const targetEpisodeId = episodeId || continueTarget?.episode_id || '';
@@ -1132,6 +1159,7 @@ export default function WorkDetailPage() {
         episode_id: targetEpisodeId,
         asset_id: targetEpisode?.asset_id || undefined,
       });
+      setNotice('');
       if (useUiStore.getState().selectedWorkId !== work.work_id) return;
       // 启动成功立即显示真实会话，同时废弃启动之前发出的状态查询。
       ++playbackStatusRequestRef.current;
@@ -1155,7 +1183,7 @@ export default function WorkDetailPage() {
       activeElement.blur();
     }
     const menuWidth = 168;
-    const menuHeight = 128;
+    const menuHeight = 168;
     const viewportGap = 10;
     const menuGap = 8;
     const opensUpward = anchor.bottom + menuGap + menuHeight > window.innerHeight - viewportGap;
@@ -1173,6 +1201,9 @@ export default function WorkDetailPage() {
   };
 
   const markEpisodeCompleted = async (episode: any, completed: boolean) => {
+    if (episodeWatchBusyRef.current) return;
+    episodeWatchBusyRef.current = true;
+    setEpisodeWatchBusy(true);
     try {
       await playbackApi.markProgress({
         work_id: work.work_id,
@@ -1183,6 +1214,26 @@ export default function WorkDetailPage() {
       await loadAuxiliary({ preferCache: false });
     } catch (err) {
       alert((err as Error).message);
+    } finally {
+      episodeWatchBusyRef.current = false;
+      setEpisodeWatchBusy(false);
+    }
+  };
+
+  const markWatchedThrough = async (episode: any) => {
+    if (episodeWatchBusyRef.current) return;
+    episodeWatchBusyRef.current = true;
+    setEpisodeWatchBusy(true);
+    try {
+      const result = await playbackApi.markThrough({ work_id: work.work_id, episode_id: episode.episode_id });
+      setEpisodeContextMenu(null);
+      await loadAuxiliary({ preferCache: false });
+      setNotice(`已标记本季 ${result.episode_ids.length} 集为已看`);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      episodeWatchBusyRef.current = false;
+      setEpisodeWatchBusy(false);
     }
   };
 
@@ -1267,7 +1318,8 @@ export default function WorkDetailPage() {
   };
 
   const searchBangumi = async () => {
-    if (bangumiSearching) return;
+    if (bangumiBusyRef.current) return;
+    bangumiBusyRef.current = true;
     setBangumiSearching(true);
     setBangumiCandidates([]);
     setNotice('正在搜索 Bangumi 候选...');
@@ -1280,10 +1332,14 @@ export default function WorkDetailPage() {
       alert((err as Error).message);
     } finally {
       setBangumiSearching(false);
+      bangumiBusyRef.current = false;
     }
   };
 
   const confirmBangumiMatch = async (subject: any) => {
+    if (bangumiBusyRef.current) return;
+    bangumiBusyRef.current = true;
+    setBangumiBusy('正在确认匹配');
     try {
       const match = await bangumiApi.confirmMatch(
         work.work_id,
@@ -1298,10 +1354,16 @@ export default function WorkDetailPage() {
       setNotice('Bangumi 条目匹配已确认');
     } catch (err) {
       alert((err as Error).message);
+    } finally {
+      bangumiBusyRef.current = false;
+      setBangumiBusy('');
     }
   };
 
   const removeBangumiMatch = async () => {
+    if (bangumiBusyRef.current) return;
+    bangumiBusyRef.current = true;
+    setBangumiBusy('正在移除匹配');
     try {
       await bangumiApi.removeMatch(work.work_id, selectedSeasonNumber ?? undefined);
       setBangumiMatch(null);
@@ -1321,16 +1383,25 @@ export default function WorkDetailPage() {
       setNotice('Bangumi 匹配已移除');
     } catch (err) {
       alert((err as Error).message);
+    } finally {
+      bangumiBusyRef.current = false;
+      setBangumiBusy('');
     }
   };
 
   const setBangumiCollection = async (type: number) => {
+    if (bangumiBusyRef.current) return;
+    bangumiBusyRef.current = true;
+    setBangumiBusy('正在更新收藏');
     try {
       await bangumiApi.setCollection(work.work_id, type, selectedSeasonNumber ?? undefined);
       await loadAuxiliary({ preferCache: false });
       setNotice('Bangumi 收藏状态已更新');
     } catch (err) {
       alert((err as Error).message);
+    } finally {
+      bangumiBusyRef.current = false;
+      setBangumiBusy('');
     }
   };
 
@@ -1367,7 +1438,7 @@ export default function WorkDetailPage() {
           {activeCategory === 'seasonal' ? '新番' : categoryLabel(work.show_type)}
         </button>
         <span>/</span>
-        <span title={work.title}>{work.title}</span>
+        <span>{work.title}</span>
       </div>
 
       <section className="detail-hero-copy" aria-label="作品概要" style={{ pointerEvents: 'auto' }}>
@@ -1381,19 +1452,19 @@ export default function WorkDetailPage() {
             revealOnLoad
           />
         ) : (
-          <h1 title={work.title}>{work.title}</h1>
+          <h1>{work.title}</h1>
         )}
         {work.original_title && work.original_title !== work.title && <p className="detail-hero-original">{work.original_title}</p>}
         <div className="detail-hero-meta">
           {work.year && <span>{work.year}</span>}
           <span>{categoryLabel(work.show_type)}</span>
           {work.metadata_source === 'retained' && work.refresh_status === 'failed' && <span>资料已保留，刷新失败</span>}
-          {['partial', 'unmapped'].includes(work.episode_mapping_status || '') && <span title="未匹配的剧集没有在线缩略图">分集资料 {work.mapped_count || 0}/{work.total_count || 0}</span>}
+          {['partial', 'unmapped'].includes(work.episode_mapping_status || '') && <span aria-label="未匹配的剧集没有在线缩略图">分集资料 {work.mapped_count || 0}/{work.total_count || 0}</span>}
           {isSeries && <span>{seasons.length} 季</span>}
           {isSeries && <span>{work.episode_count || work.episodes?.length || 0} 集</span>}
           {work.rating > 0 && <span><Star size={15} fill="currentColor" /> {work.rating.toFixed(1)}</span>}
           {work.certification && (
-            <span className="detail-certification" title={`分级地区：${work.certification_country || '未知'}`}>
+            <span className="detail-certification" aria-label={`分级地区：${work.certification_country || '未知'}`}>
               {work.certification_country && <b>{work.certification_country}</b>}
               {work.certification}
             </span>
@@ -1426,7 +1497,6 @@ export default function WorkDetailPage() {
             className={`detail-hero-plot ${plotExpanded ? 'is-expanded' : ''}`}
             aria-expanded={plotExpanded}
             aria-label={plotExpanded ? '收起作品简介' : '展开完整作品简介'}
-            title={plotExpanded ? '点击收起简介' : '点击展开完整简介'}
             onClick={() => setPlotExpanded((expanded) => !expanded)}
           >
             {work.plot}
@@ -1472,7 +1542,7 @@ export default function WorkDetailPage() {
               </span>
             </button>
           </div>
-          <button className={`detail-favorite-btn ${favorite ? 'active' : ''}`} onClick={toggleFavorite} aria-label={favorite ? '取消收藏' : '收藏'} title={favorite ? '取消收藏' : '收藏'}>
+          <button className={`detail-favorite-btn ${favorite ? 'active' : ''}`} onClick={toggleFavorite} aria-label={favorite ? '取消收藏' : '收藏'}>
             <Heart size={24} fill={favorite ? 'currentColor' : 'none'} />
           </button>
           <div className="detail-more-wrap" ref={moreMenuRef}>
@@ -1496,7 +1566,7 @@ export default function WorkDetailPage() {
             </div>}
           </div>
         </div>
-        {notice && createPortal(
+        {notice && document.hasFocus() && createPortal(
           <div className="detail-action-toast" role="status" aria-live="polite">{notice}</div>,
           document.body,
         )}
@@ -1515,7 +1585,7 @@ export default function WorkDetailPage() {
                     : manualScrapeScope}</span>
                 </div>
                 {scrapeTarget && (
-                  <span title={scrapeTarget.scrape_title}>{scrapeTarget.scrape_type === 'movie' ? '电影' : '剧集'} · {scrapeTarget.scrape_title}</span>
+                  <span>{scrapeTarget.scrape_type === 'movie' ? '电影' : '剧集'} · {scrapeTarget.scrape_title}</span>
                 )}
                 <button type="button" className="detail-tool-close" onClick={() => setManualScrapeOpen(false)} aria-label="关闭手动刮削"><X size={18} /></button>
               </div>
@@ -1577,7 +1647,7 @@ export default function WorkDetailPage() {
           , document.body)}
 
           {workDetailV4Capabilities.bangumiBinding && bangumiPanelOpen && createPortal(
-            <div className="detail-tool-overlay">
+            <FluentProvider theme={getKumiFluentTheme(appearanceMode)} className="detail-tool-overlay">
               <div
                 ref={bangumiPanelRef}
                 id="detail-bangumi-panel"
@@ -1585,6 +1655,7 @@ export default function WorkDetailPage() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="detail-bangumi-panel-title"
+                aria-busy={bangumiSearching || !!bangumiBusy}
               >
                 <div className="detail-bangumi-panel-head">
                   <div>
@@ -1615,13 +1686,13 @@ export default function WorkDetailPage() {
                 </div>
                 <div className="settings-inline">
                   <input ref={bangumiSearchInputRef} aria-label="Bangumi 条目名" value={bangumiQuery} onChange={(e) => setBangumiQuery(e.target.value)} className="settings-input min-w-0 flex-1" placeholder="Bangumi 条目名" />
-                  <button className="settings-ghost-btn" onClick={searchBangumi} disabled={bangumiSearching}>
+                  <button className="settings-ghost-btn" onClick={searchBangumi} disabled={bangumiSearching || !!bangumiBusy}>
                     {bangumiSearching ? '搜索中' : '搜索'}
                   </button>
                 </div>
                 {bangumiSearching && (
-                  <div className="candidate-loading" role="status">
-                    <span />
+                  <div className="settings-inline" role="status">
+                    <Spinner size="tiny" aria-hidden="true" />
                     <strong>正在搜索候选</strong>
                   </div>
                 )}
@@ -1633,19 +1704,20 @@ export default function WorkDetailPage() {
                     getMeta={(item) => `${item.date || ''}${item.platform ? ` · ${item.platform}` : ''}`}
                     getImage={(item) => bangumiSubjectImageUrl(item)}
                     onSelect={confirmBangumiMatch}
+                    disabled={!!bangumiBusy}
                   />
                 )}
                 <div className="settings-inline detail-bangumi-status-row">
-                  <select aria-label="Bangumi 收藏状态" className="settings-input min-w-0 flex-1" defaultValue="" onChange={(event) => event.target.value && void setBangumiCollection(Number(event.target.value))}>
-                    <option value="">{bangumiCollection ? `当前：${collectionLabel(bangumiCollection.type)}` : '修改收藏状态'}</option>
+                  <Dropdown aria-label="Bangumi 收藏状态" className="min-w-0 flex-1" value={bangumiCollection ? `当前：${collectionLabel(bangumiCollection.type)}` : '修改收藏状态'} selectedOptions={bangumiCollection ? [String(bangumiCollection.type)] : []} disabled={!bangumiMatch || bangumiSearching || !!bangumiBusy} onOptionSelect={(_event, data) => data.optionValue && void setBangumiCollection(Number(data.optionValue))}>
                     {bangumiCollectionTypes.map((item) => (
-                      <option key={item.value} value={item.value}>{item.label}</option>
+                      <Option key={item.value} value={String(item.value)}>{item.label}</Option>
                     ))}
-                  </select>
-                  <button className="settings-ghost-btn" onClick={removeBangumiMatch} disabled={!bangumiMatch}>移除</button>
+                  </Dropdown>
+                  <button className="settings-ghost-btn" onClick={removeBangumiMatch} disabled={!bangumiMatch || bangumiSearching || !!bangumiBusy}>移除</button>
                 </div>
+                {bangumiBusy && <Spinner size="tiny" label={bangumiBusy} />}
               </div>
-            </div>
+            </FluentProvider>
           , document.body)}
         </section>
       {isSeries && episodes.length > 0 && (
@@ -1667,7 +1739,7 @@ export default function WorkDetailPage() {
             <div className="detail-episode-toolbar" role="toolbar" aria-label="剧集浏览工具">
               <div className="detail-episode-pager" aria-label="剧集翻页">
                 {!useSpecialList && <>
-                <button type="button" className="detail-episode-tool-btn" onClick={() => scrollEpisodeStrip(-1)} aria-label="上一组剧集" title="上一组剧集"><ChevronLeft size={18} /></button>
+                <button type="button" className="detail-episode-tool-btn" onClick={() => scrollEpisodeStrip(-1)} aria-label="上一组剧集"><ChevronLeft size={18} /></button>
                 <input
                   ref={episodeStripSliderRef}
                   className="modern-range episode-strip-slider"
@@ -1678,11 +1750,10 @@ export default function WorkDetailPage() {
                   onInput={(event) => seekEpisodeStrip(Number(event.currentTarget.value))}
                   disabled={!episodeStripScrollable}
                   aria-label="拖动定位剧集"
-                  title="拖动定位剧集"
                 />
-                <button type="button" className="detail-episode-tool-btn" onClick={() => scrollEpisodeStrip(1)} aria-label="下一组剧集" title="下一组剧集"><ChevronRight size={18} /></button>
+                <button type="button" className="detail-episode-tool-btn" onClick={() => scrollEpisodeStrip(1)} aria-label="下一组剧集"><ChevronRight size={18} /></button>
                 </>}
-                <button type="button" className="detail-episode-tool-btn" onClick={() => setEpisodeQuickGridOpen(true)} aria-label="快速选集" title="快速选集"><Grid2X2 size={17} /></button>
+                <button type="button" className="detail-episode-tool-btn" onClick={() => setEpisodeQuickGridOpen(true)} aria-label="快速选集"><Grid2X2 size={17} /></button>
               </div>
             </div>
           </div>
@@ -1729,7 +1800,9 @@ export default function WorkDetailPage() {
                       <span className="detail-special-number" aria-hidden="true">{episode.special_number ?? episode.episode_number ?? episodeIndex + 1}</span>
                       {previewImage && <DecodedImage className="detail-special-thumb" src={previewImage} alt="" loading="lazy" />}
                       <span className="detail-special-copy">
-                        <strong title={rawEpisodeTitle}>{episodeTitle}</strong>
+                        <Tooltip content={episodeTitle} relationship="description" visible={episodeTooltipId === episode.episode_id} onVisibleChange={(_event, data) => setEpisodeTooltipId(data.visible && document.hasFocus() ? episode.episode_id : '')}>
+                          <strong>{episodeTitle}</strong>
+                        </Tooltip>
                         <span className="detail-special-meta">
                           {episode.source && <span>{episodeSourceLabel(episode.source, episode)}</span>}
                           {Number(progressByEpisodeId.get(episode.episode_id)?.duration || 0) > 0 && <span>{Math.ceil(Number(progressByEpisodeId.get(episode.episode_id)?.duration) / 60)} 分钟</span>}
@@ -1763,9 +1836,9 @@ export default function WorkDetailPage() {
                     <span className="text-base font-semibold tabular-nums" style={{ color: 'var(--text-muted)' }}>
                       {episodeNumberLabel(episode)}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-sm" style={{ color: 'var(--text)' }} title={rawEpisodeTitle}>
-                      {episodeTitle}
-                    </span>
+                    <Tooltip content={episodeTitle} relationship="description" visible={episodeTooltipId === episode.episode_id} onVisibleChange={(_event, data) => setEpisodeTooltipId(data.visible && document.hasFocus() ? episode.episode_id : '')}>
+                      <span className="min-w-0 flex-1 truncate text-sm" style={{ color: 'var(--text)' }}>{episodeTitle}</span>
+                    </Tooltip>
                     {episode.source && (work.sources?.length || 0) > 1 && (
                       <span className="episode-source-badge">{episodeSourceLabel(episode.source, episode)}</span>
                     )}
@@ -1798,7 +1871,7 @@ export default function WorkDetailPage() {
                     loading="lazy"
                     onError={() => setFailedCastKeys((keys) => new Set(keys).add(castKey))}
                   />
-                  <strong title={person.name}>{person.name}</strong>
+                  <strong>{person.name}</strong>
                 </article>
               );
             })}
@@ -1819,14 +1892,20 @@ export default function WorkDetailPage() {
             <Play size={15} strokeWidth={2.1} />
             <span>播放</span>
           </button>
-          <button role="menuitem" onClick={() => markEpisodeCompleted(episodeContextMenu.episode, true)}>
+          <button role="menuitem" disabled={episodeWatchBusy} onClick={() => markEpisodeCompleted(episodeContextMenu.episode, true)}>
             <CheckCircle2 size={15} strokeWidth={2.1} />
             <span>已看完</span>
           </button>
-          <button role="menuitem" onClick={() => markEpisodeCompleted(episodeContextMenu.episode, false)}>
+          <button role="menuitem" disabled={episodeWatchBusy} onClick={() => markEpisodeCompleted(episodeContextMenu.episode, false)}>
             <Circle size={15} strokeWidth={2.1} />
             <span>未看</span>
           </button>
+          {!isSpecialEpisode(episodeContextMenu.episode) && Number(episodeContextMenu.episode.episode_number) > 0 && (
+            <button role="menuitem" disabled={episodeWatchBusy} onClick={() => markWatchedThrough(episodeContextMenu.episode)}>
+              <CheckCircle2 size={16} /><span>看到本集</span>
+            </button>
+          )}
+          {episodeWatchBusy && <Spinner size="tiny" label="正在保存观看状态" />}
         </div>,
         document.body,
       )}
@@ -1845,7 +1924,7 @@ export default function WorkDetailPage() {
                   key={episode.episode_id}
                   className={`${continueTarget?.episode_id === episode.episode_id ? 'current' : ''} ${watchedEpisodeIds.has(episode.episode_id) ? 'watched' : ''}`}
                   onClick={() => revealEpisodeInStrip(index)}
-                  title={cleanDisplayTitle(episode.title || '', episodeFallbackTitle(episode), { preserveTitle: isSpecialEpisode(episode) })}
+                  aria-label={`${episodeAriaNumberLabel(episode)}：${cleanDisplayTitle(episode.title || '', episodeFallbackTitle(episode), { preserveTitle: isSpecialEpisode(episode) })}`}
                 >
                   {episodeQuickLabel(episode)}
                 </button>
@@ -1877,7 +1956,7 @@ export default function WorkDetailPage() {
                 onFocus={() => prewarmDetailNavigation(related.work_id, previewImage)}
               >
                 <DetailPosterArtwork key={previewImage} src={previewImage} title={related.title} />
-                <div className="detail-related-copy"><strong title={related.title}>{related.title}</strong>{rating > 0 && <span><Star size={14} fill="currentColor" /> {rating.toFixed(1)}</span>}</div>
+                <div className="detail-related-copy"><strong>{related.title}</strong>{rating > 0 && <span><Star size={14} fill="currentColor" /> {rating.toFixed(1)}</span>}</div>
               </button>
               );
             })}
@@ -1899,7 +1978,7 @@ export default function WorkDetailPage() {
                 className="detail-similar-card"
               >
                 <DetailPosterArtwork key={previewImage} src={previewImage} title={item.title} />
-                <strong title={item.title}>{item.title}</strong>
+                <strong>{item.title}</strong>
                 {Number(item.rating || 0) > 0 && <small><Star size={13} fill="currentColor" /> {Number(item.rating).toFixed(1)}</small>}
               </button>;
             })}
@@ -1960,7 +2039,7 @@ export default function WorkDetailPage() {
             <label><span>目标季度</span><input type="number" min="0" value={appendSeason} onChange={(event) => { setAppendSeason(event.target.value); setAppendItems([]); setAppendPlanId(''); setAppendCanCommit(false); setAppendNotice(null); }} /></label>
             <label><span>视频文件路径</span><textarea rows={5} value={appendPaths} onChange={(event) => { setAppendPaths(event.target.value); setAppendItems([]); setAppendPlanId(''); setAppendCanCommit(false); setAppendNotice(null); }} placeholder={'H:\\新番\\作品A\\第7集.mkv\nH:\\新番\\作品A\\第8集.mkv'} /></label>
             {appendNotice && <div className={`append-dialog-status ${appendNotice.tone}`} role={appendNotice.tone === 'error' ? 'alert' : 'status'} aria-live="polite">{appendNotice.message}</div>}
-            {appendItems.length > 0 && <div className="append-preview-list">{appendItems.map((item) => <div key={item.item_id} className={item.status}><strong>{item.episode_number ? `第 ${item.episode_number} 集` : '未识别'}</strong><span title={item.path}>{item.path}</span><em>{manualEpisodeStatusLabel(item.status)}</em></div>)}</div>}
+            {appendItems.length > 0 && <div className="append-preview-list">{appendItems.map((item) => <div key={item.item_id} className={item.status}><strong>{item.episode_number ? `第 ${item.episode_number} 集` : '未识别'}</strong><span>{item.path}</span><em>{manualEpisodeStatusLabel(item.status)}</em></div>)}</div>}
             <footer><button onClick={previewAppendEpisodes} disabled={managementBusy || !appendPaths.trim()}>识别并预览</button><button className="primary" onClick={commitAppendEpisodes} disabled={managementBusy || !appendCanCommit}>{managementBusy ? '处理中...' : '确认追加'}</button></footer>
           </section>
         </div>, document.body,
@@ -1970,13 +2049,14 @@ export default function WorkDetailPage() {
   );
 }
 
-function CandidatePanel<T>({ title, items, getTitle, getMeta, getImage, onSelect }: {
+function CandidatePanel<T>({ title, items, getTitle, getMeta, getImage, onSelect, disabled = false }: {
   title: string;
   items: T[];
   getTitle: (item: T) => string;
   getMeta: (item: T) => string;
   getImage?: (item: T) => string;
   onSelect: (item: T) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="candidate-panel">
@@ -1990,13 +2070,13 @@ function CandidatePanel<T>({ title, items, getTitle, getMeta, getImage, onSelect
           const itemTitle = getTitle(item);
           const itemMeta = getMeta(item);
           return (
-            <button key={index} className="candidate-card" onClick={() => onSelect(item)} title={itemTitle}>
+            <button key={index} className="candidate-card" disabled={disabled} onClick={() => onSelect(item)} aria-label={itemTitle}>
               <div className="candidate-poster">
-                {image ? <DecodedImage src={image} alt={itemTitle} title={itemTitle} loading="lazy" /> : <span>无图</span>}
+                {image ? <DecodedImage src={image} alt={itemTitle} loading="lazy" /> : <span>无图</span>}
               </div>
               <div className="candidate-copy">
-                <strong title={itemTitle}>{itemTitle}</strong>
-                <span title={itemMeta}>{itemMeta}</span>
+                <strong>{itemTitle}</strong>
+                <span>{itemMeta}</span>
               </div>
             </button>
           );

@@ -18,6 +18,7 @@ class SessionBinding:
     work_id: str
     episode_id: str
     asset_id: str
+    captured_at: str = ""
 
 
 class V4PlaybackStore:
@@ -96,7 +97,7 @@ class V4PlaybackStore:
             ).fetchone()
             if row is None:
                 raise KeyError((work_id, episode_id, asset_id))
-            return SessionBinding(str(row['revision_id']), work_id, episode_id, asset_id)
+            return SessionBinding(str(row['revision_id']), work_id, episode_id, asset_id, _now())
 
     def save_session_progress(self, token: SessionBinding, position: float, duration: float, completed: bool) -> bool:
         """受控会话结束时保留原键最后采样；返回该成员是否仍然活动。"""
@@ -120,11 +121,19 @@ class V4PlaybackStore:
                 "WHERE rb.work_id=? AND rb.asset_id=? AND (rb.episode_id=? OR (rb.episode_id IS NULL AND ?='movie:'||rb.work_id)) "
                 "AND ir.status='confirmed' LIMIT 1", (token.work_id, token.asset_id, token.episode_id, token.episode_id),
             ).fetchone()
+            from app.media_v4.playback.watch_state import preserve_manual_unwatched
+
+            if preserve_manual_unwatched(conn, token.work_id, token.episode_id, token.captured_at):
+                return current is not None
             conn.execute(
                 'INSERT INTO playback_progress(episode_id,asset_id,work_id,position,duration,completed,updated_at) VALUES (?,?,?,?,?,?,?) '
                 'ON CONFLICT(episode_id,asset_id) DO UPDATE SET position=excluded.position,duration=excluded.duration,completed=excluded.completed,updated_at=excluded.updated_at',
                 (token.episode_id, token.asset_id, token.work_id, position, duration, int(completed), _now()),
             )
+            if completed and current is not None:
+                from app.media_v4.playback.watch_state import clear_manual_watch_state
+
+                clear_manual_watch_state(conn, token.work_id, token.episode_id, captured_at=token.captured_at)
             return current is not None
 
     def get_progress(self, episode_id: str, asset_id: str) -> dict:

@@ -61,4 +61,7 @@ export const playbackApi = {
 
   markProgress: (params: { work_id: string; episode_id: string; asset_id?: string; completed: boolean }) =>
     api.post<PlaybackHistoryItem>('/api/playback/progress/mark', params),
+
+  markThrough: (params: { work_id: string; episode_id: string }) =>
+    api.post<{ work_id: string; episode_ids: string[] }>('/api/playback/progress/mark-through', params),
 }

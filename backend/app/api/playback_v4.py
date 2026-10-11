@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from app.api.media_v4 import get_database
 from app.media_v4.playback.session import get_v4_playback_manager
 from app.media_v4.playback.store import V4PlaybackStore
+from app.media_v4.playback.watch_state import manual_watch_states, mark_watch_state
 
 router = APIRouter(prefix="/api/playback", tags=["playback"])
 
@@ -34,6 +35,11 @@ class ProgressMarkRequest(BaseModel):
     episode_id: str = Field(min_length=1)
     asset_id: str = ""
     completed: bool
+
+
+class ProgressThroughRequest(BaseModel):
+    work_id: str = Field(min_length=1)
+    episode_id: str = Field(min_length=1)
 
 
 def _default_asset(episode_id: str, asset_id: str = "", work_id: str = "") -> dict:
@@ -98,16 +104,22 @@ def report_progress(request: ProgressRequest):
 
 @router.post("/progress/mark")
 def mark_progress(request: ProgressMarkRequest):
-    return report_progress(
-        ProgressRequest(
-            work_id=request.work_id,
-            episode_id=request.episode_id,
-            asset_id=request.asset_id,
-            position=0,
-            duration=0,
-            completed=request.completed,
-        )
-    )
+    try:
+        rows = mark_watch_state(get_database(), request.work_id, request.episode_id, request.completed, asset_id=request.asset_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="剧集或 Asset 不存在") from exc
+    return {**rows[0], "manually_unwatched": not request.completed}
+
+
+@router.post("/progress/mark-through")
+def mark_progress_through(request: ProgressThroughRequest):
+    try:
+        rows = mark_watch_state(get_database(), request.work_id, request.episode_id, True, through=True)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="剧集或 Asset 不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"work_id": request.work_id, "episode_ids": list(dict.fromkeys(row["episode_id"] for row in rows))}
 
 
 @router.get("/progress")
@@ -117,7 +129,15 @@ def list_progress(work_id: str | None = None):
             "SELECT * FROM playback_progress WHERE (? IS NULL OR work_id = ?) ORDER BY updated_at DESC",
             (work_id, work_id),
         ).fetchall()
-    return {"items": [dict(row) for row in rows]}
+        states_by_work = {key: manual_watch_states(conn, key) for key in {str(row["work_id"]) for row in rows}}
+    items = []
+    for row in rows:
+        item = dict(row)
+        manual = states_by_work[item["work_id"]].get(item["episode_id"])
+        item["manually_unwatched"] = manual is False
+        item["completed"] = bool(item["completed"]) if manual is None else manual
+        items.append(item)
+    return {"items": items}
 
 
 @router.get("/history")
