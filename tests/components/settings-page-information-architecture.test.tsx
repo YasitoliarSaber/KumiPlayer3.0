@@ -78,6 +78,9 @@ const config = {
   mpv_anime4k_quality: 'balanced',
   poster_size: 180,
   series_card_image_mode: 'poster',
+  heartbeat_enabled: true,
+  heartbeat_timeout: 30,
+  auto_shutdown_on_heartbeat_timeout: false,
   openlist_configured: true,
   openlist_server_url: 'https://openlist.example.test',
   openlist_remote_root: '/',
@@ -227,6 +230,7 @@ describe('SettingsPage 信息架构', () => {
     expect(within(navigation).getByRole('button', { name: /元数据与图片/ })).toBeVisible();
     expect(within(navigation).getByRole('button', { name: /播放/ })).toBeVisible();
     expect(within(navigation).getByRole('button', { name: /外观/ })).toBeVisible();
+    expect(within(navigation).getByRole('button', { name: '应用', exact: true })).toBeVisible();
     expect(within(navigation).queryByRole('button', { name: /应用与支持/ })).not.toBeInTheDocument();
     expect(document.getElementById('settings-panel-sources')).toHaveTextContent('115 网盘挂载位置');
     expect(document.getElementById('settings-panel-sources')).toHaveTextContent('来源维护');
@@ -235,18 +239,20 @@ describe('SettingsPage 信息架构', () => {
     expect(document.getElementById('settings-panel-scrape')).toHaveTextContent('网络代理');
   });
 
-  test('作品墙布局归属外观分类，且不新增设置分类', async () => {
+  test('作品墙布局归属外观分类，窗口设置独立归属应用分类', async () => {
     render(<SettingsPage />);
 
     const navigation = screen.getByRole('navigation', { name: '设置分类' });
     await within(navigation).findByRole('button', { name: /外观/ });
-    expect(within(navigation).getAllByRole('button')).toHaveLength(6);
+    expect(within(navigation).getAllByRole('button')).toHaveLength(7);
 
     api.patchConfig.mockClear();
     fireEvent.click(within(navigation).getByRole('button', { name: /外观/ }));
     const appearance = document.getElementById('settings-panel-appearance')!;
     expect(within(appearance).getByText('作品墙布局')).toBeVisible();
     expect(within(appearance).getByText('应用主题')).toBeVisible();
+    expect(appearance).not.toHaveTextContent('窗口与托盘');
+    expect(appearance).not.toHaveTextContent('界面连接监测');
     // 默认 180 等价于目标 5 列，保留旧偏好而不强行改成预设。
     expect(within(appearance).getByRole('combobox', { name: '封面比例' })).toHaveTextContent('竖版封面');
     expect(within(appearance).getByRole('combobox', { name: '封面大小' })).toHaveTextContent('5 列');
@@ -255,14 +261,15 @@ describe('SettingsPage 信息架构', () => {
     expect(api.patchConfig).not.toHaveBeenCalled();
   });
 
-  test('将外观放在账户之后，便于首次进入设置时快速调整主题', async () => {    render(<SettingsPage />);
+  test('应用与外观位于账户之后，媒体来源之前', async () => {    render(<SettingsPage />);
 
     const navigation = screen.getByRole('navigation', { name: '设置分类' });
     const labels = within(navigation)
       .getAllByRole('button')
       .map((button) => button.textContent || '');
 
-    expect(labels.findIndex((label) => label.includes('账户与同步'))).toBeLessThan(labels.findIndex((label) => label.includes('外观')));
+    expect(labels.indexOf('账户与同步')).toBeLessThan(labels.indexOf('应用'));
+    expect(labels.indexOf('应用')).toBeLessThan(labels.indexOf('外观'));
     expect(labels.findIndex((label) => label.includes('外观'))).toBeLessThan(labels.findIndex((label) => label.includes('媒体来源')));
   });
 
@@ -317,7 +324,13 @@ describe('SettingsPage 信息架构', () => {
   test('连接监测保留操作而不堆叠说明，修改连续播放不会清掉播放器草稿', async () => {
     api.patchConfig.mockImplementation(async patch => ({ ...config, ...patch }));
     render(<SettingsPage />);
-    fireEvent.click(await screen.findByRole('button', { name: '播放' }));
+    const navigation = screen.getByRole('navigation', { name: '设置分类' });
+    fireEvent.click(await within(navigation).findByRole('button', { name: '应用', exact: true }));
+    const application = document.getElementById('settings-panel-application')!;
+    expect(application).toBeVisible();
+    expect(within(application).getByText('窗口与托盘')).toBeVisible();
+    expect(application).not.toHaveTextContent('应用主题');
+    expect(application).not.toHaveTextContent('连续播放');
     expect(screen.getByRole('switch', { name: '界面连接监测' })).toBeEnabled();
     expect(screen.getByText('界面连接监测', { selector: 'label' })).toBeVisible();
     expect(screen.getByRole('switch', { name: '连接超时后退出空闲后台' })).toBeEnabled();
@@ -325,6 +338,11 @@ describe('SettingsPage 信息架构', () => {
     expect(screen.queryByText(/界面定期向后台服务发送连接信号/)).not.toBeInTheDocument();
     expect(screen.queryByText(/选择播放器，再调整它的默认效果/)).not.toBeInTheDocument();
     expect(screen.queryByText('播放心跳')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: '界面连接监测' }));
+    await waitFor(() => expect(api.patchConfig).toHaveBeenCalledWith({ heartbeat_enabled: false }));
+    await waitFor(() => expect(screen.getByRole('switch', { name: '界面连接监测' })).not.toBeChecked());
+    fireEvent.click(within(navigation).getByRole('button', { name: '播放' }));
+    expect(document.getElementById('settings-panel-player')).not.toHaveTextContent('界面连接监测');
     fireEvent.click(screen.getByRole('radio', { name: '外部 MPV 整合包' }));
     fireEvent.change(screen.getByLabelText('整合包 MPV 可执行文件'), { target: { value: 'J:/Pack/mpv.exe' } });
     fireEvent.click(screen.getByRole('switch', { name: '自动播放下一集' }));

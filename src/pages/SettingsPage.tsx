@@ -8,6 +8,7 @@ import {
   Palette,
   PlaySquare,
   RotateCcw,
+  Settings2,
   UserRound,
   type LucideIcon,
 } from 'lucide-react';
@@ -34,11 +35,12 @@ import PosterWallSettingsPanel from '../components/settings/PosterWallSettingsPa
 import WindowSettingsPanel from '../components/settings/WindowSettingsPanel';
 import '../styles/settings-media-sources.css';
 import '../styles/settings-navigation.css';
-type SettingsTab = 'appearance' | 'sources' | 'openlist' | 'scrape' | 'player' | 'bangumi';
+type SettingsTab = 'application' | 'appearance' | 'sources' | 'openlist' | 'scrape' | 'player' | 'bangumi';
 type SourceKey = 'pan115' | 'baidu' | 'quark' | 'local';
 
 const sectionTabs: Array<{ key: SettingsTab; label: string; icon: LucideIcon }> = [
   { key: 'bangumi', label: '账户与同步', icon: UserRound },
+  { key: 'application', label: '应用', icon: Settings2 },
   { key: 'appearance', label: '外观', icon: Palette },
   { key: 'sources', label: '媒体来源', icon: Database },
   { key: 'openlist', label: 'OpenList 设置', icon: Network },
@@ -354,10 +356,26 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
   const openlistLocalPath = (prefix: string) =>
     openlistRoutes.find((route) => route.remote_prefix === prefix)?.local_path ?? '';
 
+  const renderApplication = () => (
+    <PanelStack>
+      <SectionIntro title="应用" />
+      <WindowSettingsPanel />
+      {config && (
+        <SettingsSection title="界面连接监测">
+          <div className="settings-field-list">
+            <ToggleRow label="界面连接监测" active={config.heartbeat_enabled} onChange={() => saveConfig({ heartbeat_enabled: !config.heartbeat_enabled })} />
+            <NumberRow label="连接超时等待（秒）" value={config.heartbeat_timeout} onSave={(value) => saveConfig({ heartbeat_timeout: value })} />
+            <ToggleRow label="连接超时后退出空闲后台" active={config.auto_shutdown_on_heartbeat_timeout} onChange={() => saveConfig({ auto_shutdown_on_heartbeat_timeout: !config.auto_shutdown_on_heartbeat_timeout })} />
+            {config.auto_shutdown_on_heartbeat_timeout && <p className="field-help">仅在窗口已关闭且无播放、导入任务时退出。</p>}
+          </div>
+        </SettingsSection>
+      )}
+    </PanelStack>
+  );
+
   const renderAppearance = () => (
     <PanelStack>
       <SectionIntro title="外观" />
-      <WindowSettingsPanel />
       <SettingsSection title="应用主题">
         <div className="appearance-grid">
           {([
@@ -632,16 +650,6 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
       {config && <SettingsSection title="连续播放">
         <ToggleRow label="自动播放下一集" active={config.auto_play_next_episode} onChange={() => saveConfig({ auto_play_next_episode: !config.auto_play_next_episode })} />
       </SettingsSection>}
-      {config && (
-        <SettingsSection title="界面连接监测">
-          <div className="settings-field-list">
-            <ToggleRow label="界面连接监测" active={config.heartbeat_enabled} onChange={() => saveConfig({ heartbeat_enabled: !config.heartbeat_enabled })} />
-            <NumberRow label="连接超时等待（秒）" value={config.heartbeat_timeout} onSave={(value) => saveConfig({ heartbeat_timeout: value })} />
-            <ToggleRow label="连接超时后退出空闲后台" active={config.auto_shutdown_on_heartbeat_timeout} onChange={() => saveConfig({ auto_shutdown_on_heartbeat_timeout: !config.auto_shutdown_on_heartbeat_timeout })} />
-            {config.auto_shutdown_on_heartbeat_timeout && <p className="field-help">仅在窗口已关闭且无播放、导入任务时退出。</p>}
-          </div>
-        </SettingsSection>
-      )}
     </PanelStack>
   );
 
@@ -743,6 +751,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
   };
 
   const contentByTab: Record<SettingsTab, ReactNode> = {
+    application: renderApplication(),
     appearance: renderAppearance(),
     sources: renderSources(),
     openlist: renderOpenList(),
