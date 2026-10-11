@@ -491,6 +491,55 @@ fn a_start_that_creates_no_process_is_reported_instead_of_silently_succeeding() 
     );
 }
 
+#[test]
+fn cancelled_startup_never_stops_or_launches_a_backend() {
+    let stops = AtomicUsize::new(0);
+    let supervisor = ScriptedSupervisor {
+        stops: &stops,
+        start: Box::new(|| panic!("退出后不得启动后端")),
+        healthy: false,
+        timings: fast_timings(),
+    };
+    let result = supervisor::restart_backend_with_cancel(
+        &BackendProcess::new(None),
+        &test_context(),
+        &supervisor,
+        || true,
+    );
+    assert!(result.unwrap_err().contains("已取消"));
+    assert_eq!(stops.load(Ordering::SeqCst), 0);
+}
+
+#[cfg(windows)]
+#[test]
+fn closing_during_startup_reclaims_the_child_without_waiting_for_health_timeout() {
+    let stops = AtomicUsize::new(0);
+    let cancelled = std::sync::atomic::AtomicBool::new(false);
+    let supervisor = ScriptedSupervisor {
+        stops: &stops,
+        start: Box::new(|| {
+            let child = spawn_sentinel_backend();
+            cancelled.store(true, Ordering::SeqCst);
+            Ok(Some(child))
+        }),
+        healthy: false,
+        timings: RestartTimings {
+            health: HealthTimings::new(Duration::from_secs(30), Duration::from_millis(10)),
+            ..fast_timings()
+        },
+    };
+    let started = Instant::now();
+    let result = supervisor::restart_backend_with_cancel(
+        &BackendProcess::new(None),
+        &test_context(),
+        &supervisor,
+        || cancelled.load(Ordering::SeqCst),
+    );
+    assert!(result.unwrap_err().contains("已取消"));
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert_eq!(stops.load(Ordering::SeqCst), 2);
+}
+
 #[cfg(windows)]
 fn spawn_sentinel_backend() -> ManagedBackend {
     use std::os::windows::process::CommandExt;

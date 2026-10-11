@@ -469,15 +469,34 @@ pub fn restart_backend_with(
     context: &RuntimeContext,
     supervisor: &dyn BackendSupervisor,
 ) -> Result<(), String> {
+    restart_backend_with_cancel(process, context, supervisor, || false)
+}
+
+pub(crate) fn restart_backend_with_cancel(
+    process: &BackendProcess,
+    context: &RuntimeContext,
+    supervisor: &dyn BackendSupervisor,
+    cancelled: impl Fn() -> bool,
+) -> Result<(), String> {
     let _serial = RESTART_LOCK
         .lock()
         .map_err(|_| "后端重启锁已中毒".to_string())?;
     let timings = supervisor.timings();
+    if cancelled() {
+        return Err("后端启动已取消".to_string());
+    }
     supervisor.stop(process)?;
 
     let port_deadline = std::time::Instant::now() + timings.port_release;
     while supervisor.port_in_use() && std::time::Instant::now() < port_deadline {
+        if cancelled() {
+            return Err("后端启动已取消".to_string());
+        }
         std::thread::sleep(Duration::from_millis(100));
+    }
+
+    if cancelled() {
+        return Err("后端启动已取消".to_string());
     }
 
     let child = supervisor
@@ -492,8 +511,12 @@ pub fn restart_backend_with(
     }
 
     if wait_for_health(timings.health, || {
-        supervisor.healthy(context, Some(context.instance_id()))
+        cancelled() || supervisor.healthy(context, Some(context.instance_id()))
     }) {
+        if cancelled() {
+            supervisor.stop(process)?;
+            return Err("后端启动已取消".to_string());
+        }
         return Ok(());
     }
 
@@ -651,6 +674,14 @@ pub fn stop_backend(process: &BackendProcess) -> Result<(), String> {
         backend.shutdown();
     }
     Ok(())
+}
+
+/// 退出与启动/重启共用串行锁，防止关闭期间又产生未托管的后端。
+pub(crate) fn stop_backend_serialized(process: &BackendProcess) -> Result<(), String> {
+    let _serial = RESTART_LOCK
+        .lock()
+        .map_err(|_| "后端重启锁已损坏".to_string())?;
+    stop_backend(process)
 }
 
 #[cfg(windows)]

@@ -1,13 +1,15 @@
 use std::process::Command;
 
-use tauri::{Manager, State};
-use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tauri::State;
 
 mod runtime_identity;
 pub use runtime_identity::{backend_is_compatible, runtime_id_for};
 mod api_session;
 mod backend_job;
+mod desktop;
+mod desktop_lifecycle;
 mod supervisor;
+mod window_preferences;
 pub use supervisor::{
     data_dir_for, existing_backend_error, health_matches, protect_backend, restart_backend_with,
     start_backend, stop_backend, wait_for_health, BackendProcess, BackendSupervisor, HealthTimings,
@@ -23,11 +25,8 @@ fn get_api_token(session: State<'_, ApiSession>) -> String {
 }
 
 #[tauri::command]
-fn restart_backend(
-    process: State<'_, BackendProcess>,
-    context: State<'_, RuntimeContext>,
-) -> Result<(), String> {
-    restart_backend_with(process.inner(), context.inner(), &SystemSupervisor)
+async fn restart_backend(app: tauri::AppHandle) -> Result<(), String> {
+    desktop::restart_backend(app).await
 }
 
 #[tauri::command]
@@ -67,77 +66,5 @@ fn save_diagnostics(content: String, context: State<'_, RuntimeContext>) -> Resu
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // 完整发行包优先使用内置后端；源码目录保留 Python 开发后备链路。
-    // 身份/token 生成失败与后端启动失败共用同一个启动错误对话框，不 panic。
-    let (runtime_context, backend, startup_error) = match RuntimeContext::discover()
-        .and_then(|context| start_backend(&context).map(|child| (context, child)))
-    {
-        Ok((context, child)) => (context, child, None),
-        Err(error) => (
-            RuntimeContext::fallback_for_error_dialog(),
-            None,
-            Some(error),
-        ),
-    };
-    let expected_instance = backend
-        .as_ref()
-        .map(|_| runtime_context.instance_id().to_string());
-    let health_context = runtime_context.clone();
-    let api_token = runtime_context.api_token().to_string();
-
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .manage(BackendProcess::new(backend))
-        .manage(ApiSession(api_token))
-        .manage(runtime_context.clone())
-        .invoke_handler(tauri::generate_handler![
-            get_api_token,
-            restart_backend,
-            open_log_directory,
-            save_diagnostics
-        ])
-        .setup(move |app| {
-            if let Some(error) = startup_error.as_ref() {
-                app.dialog()
-                    .message(format!(
-                        "KumiPlayer 无法启动运行环境。\n\n{error}\n\n普通用户不需要安装 Python，请重新下载完整安装包；源码开发者可检查项目 backend/ 目录。"
-                    ))
-                    .kind(MessageDialogKind::Error)
-                    .title("KumiPlayer 启动失败")
-                    .blocking_show();
-                app.handle().exit(1);
-                return Ok(());
-            }
-            let app_handle = app.handle().clone();
-
-            // 启动期健康检查：等满 STARTUP_HEALTH_TIMINGS 仍不就绪才判定失败。
-            std::thread::spawn(move || {
-                if wait_for_health(STARTUP_HEALTH_TIMINGS, || {
-                    health_matches(&health_context, expected_instance.as_deref())
-                }) {
-                    return;
-                }
-                eprintln!("[KumiPlayer] Backend failed to start within 30s");
-                app_handle
-                    .dialog()
-                    .message(format!(
-                        "内置后端在 30 秒内未能就绪。请重新启动 KumiPlayer；若问题持续存在，请重新下载完整安装包，并检查 {BACKEND_PORT} 端口是否可用。"
-                    ))
-                    .kind(MessageDialogKind::Error)
-                    .title("KumiPlayer 后端启动失败")
-                    .blocking_show();
-                app_handle.exit(1);
-            });
-
-            Ok(())
-        })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                let state = window.state::<BackendProcess>();
-                let _ = stop_backend(state.inner());
-            }
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    desktop::run();
 }

@@ -31,6 +31,7 @@ import { openlistConnections, selectOpenlistConnection } from '../api/openlistCo
 import OpenListSourceRoutes from '../components/settings/OpenListSourceRoutes';
 import OngoingUpdateSettingsPanel from '../components/settings/OngoingUpdateSettingsPanel';
 import PosterWallSettingsPanel from '../components/settings/PosterWallSettingsPanel';
+import WindowSettingsPanel from '../components/settings/WindowSettingsPanel';
 import '../styles/settings-media-sources.css';
 import '../styles/settings-navigation.css';
 type SettingsTab = 'appearance' | 'sources' | 'openlist' | 'scrape' | 'player' | 'bangumi';
@@ -356,6 +357,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
   const renderAppearance = () => (
     <PanelStack>
       <SectionIntro title="外观" />
+      <WindowSettingsPanel />
       <SettingsSection title="应用主题">
         <div className="appearance-grid">
           {([

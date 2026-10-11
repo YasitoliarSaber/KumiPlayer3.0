@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { MouseEvent } from 'react';
 import { ArrowLeft, ArrowRight, Check, ListFilter, PanelLeft, RefreshCcw, Search, X } from 'lucide-react';
-import { isTauri } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useUiStore, type SourceId } from '../../stores/ui';
 import { useLibraryStore } from '../../stores/library';
@@ -43,7 +43,7 @@ export default function DesktopTitleBar() {
   }, []);
 
   const handleMinimize = useCallback(() => {
-    void appWindow?.minimize();
+    if (appWindow) void invoke('minimize_main_window').catch(() => appWindow.minimize());
   }, [appWindow]);
 
   const handleToggleMaximize = useCallback(async () => {
