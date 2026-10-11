@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+/** CSS 注释里会提到属性名（例如构建期前缀折叠的说明），断言前先剥掉注释。 */
+function stripCssComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
 test('竖版封面在窗口缩放与跨屏切换后仍由固定比例容器统一裁切', () => {
   const styles = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
 
@@ -41,11 +46,53 @@ test('海报墙的图片观察器预加载附近视口，网格不监听逐像�
 test('虚拟海报墙不为每张卡片叠加实时背景模糊', () => {
   const styles = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
   const marker = '/* Poster wall scroll performance */';
+  const markerIndex = styles.indexOf(marker);
 
-  assert.match(styles, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  const performanceLayer = styles.split(marker, 2)[1];
+  assert.ok(markerIndex >= 0, '期望保留作品墙性能区块的注释锚点');
+  // 先剥离注释再做规则断言，避免注释里提到的属性名干扰匹配。
+  const performanceLayer = stripCssComments(styles.slice(markerIndex));
   assert.match(performanceLayer, /\.virtual-poster-grid \.poster-media\s*\{[^}]*backdrop-filter:\s*none\s*!important/s);
-  assert.match(performanceLayer, /\.virtual-poster-grid \.rating-badge\s*\{[^}]*backdrop-filter:\s*none\s*!important/s);
+  assert.match(performanceLayer, /\.virtual-poster-grid \.poster-card \.rating-badge\s*\{[^}]*backdrop-filter:\s*none\s*!important/s);
+});
+
+test('海报卡表面不在玻璃拟态列表中申请背景模糊（作品墙滚动卡顿根因）', () => {
+  const blocks = stripCssComments(readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')).split('}');
+
+  // 曾导致 54 张海报卡各建一个 backdrop-filter 合成层：模糊声明必须把 .poster-media 排除在外。
+  const glass = blocks.find((block) => block.includes('backdrop-filter: blur(22px) saturate(1.12) !important'));
+  assert.ok(glass, '期望找到玻璃拟态声明块');
+  assert.doesNotMatch(glass.slice(0, glass.lastIndexOf('{')), /\.poster-media/);
+
+  // 无论以后在哪个位置新增规则，海报卡表面的背景模糊只能是 none。
+  for (const block of blocks) {
+    const brace = block.lastIndexOf('{');
+    if (brace < 0) continue;
+    const selectorText = block.slice(0, brace);
+    if (!/\.poster-media/.test(selectorText)) continue;
+    for (const declaration of block.slice(brace).matchAll(/(?:^|;)\s*(?:-webkit-)?backdrop-filter\s*:\s*([^;]+)/g)) {
+      assert.match(
+        declaration[1].trim(),
+        /^none\b/,
+        `海报卡表面不得申请背景模糊：${selectorText.trim().slice(-80)}`,
+      );
+    }
+  }
+});
+
+test('作品墙性能重置只声明标准属性，避免构建期前缀折叠把重置丢掉', () => {
+  const styles = stripCssComments(readFileSync(new URL('../src/index.css', import.meta.url), 'utf8'));
+
+  // @tailwindcss/vite 的 Lightning CSS 把 backdrop-filter 与 -webkit-backdrop-filter
+  // 视为同一属性、只保留最后一条；成对书写会丢掉标准声明，重置随即失效。
+  for (const selector of [
+    '\\.virtual-poster-grid \\.poster-media',
+    '\\.virtual-poster-grid \\.poster-card \\.rating-badge',
+  ]) {
+    const rule = styles.match(new RegExp(`${selector}\\s*\\{[^}]*\\}`));
+    assert.ok(rule, `期望找到作品墙性能重置规则：${selector}`);
+    assert.match(rule[0], /backdrop-filter:\s*none\s*!important/);
+    assert.doesNotMatch(rule[0], /-webkit-backdrop-filter/);
+  }
 });
 
 test('作品墙沿用外层 .app-main 作为唯一滚动容器，不新增嵌套滚动区域', () => {

@@ -7969,7 +7969,6 @@ body::before {
 
 .home-feature,
 .home-feature-tile,
-.poster-media,
 .category-page .category-toolbar,
 .settings-section,
 .settings-hero,
@@ -7997,6 +7996,17 @@ body::before {
   color: var(--text) !important;
   box-shadow: var(--shadow-card) !important;
   backdrop-filter: blur(22px) saturate(1.12) !important;
+}
+
+/* 海报卡表面（.poster-media）不参与上面的玻璃拟态。海报图会完整覆盖该表面，
+   底色本身也是 92% 不透明，模糊几乎不可见；但逐卡 backdrop-filter 会为每张卡
+   生成独立合成层，滚动时 GPU 需逐帧重新采样背景并重算 22px 模糊，是作品墙
+   掉帧与停顿的主要来源。此处保留边框、底色与阴影，只是不再申请背景模糊。 */
+.poster-media {
+  border: 1px solid var(--border) !important;
+  background: color-mix(in srgb, var(--surface) 92%, transparent) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow-card) !important;
 }
 
 .settings-intro:not(.settings-focused *) {
@@ -12567,14 +12577,15 @@ body > .detail-tool-overlay .candidate-card:is(:hover, :focus-visible) {
 /* Poster wall scroll performance */
 .virtual-poster-grid .poster-media {
   background: var(--surface-soft) !important;
+  /* 只声明标准属性：与 -webkit-backdrop-filter 成对书写时，构建期的 Lightning CSS
+     把两者当作同一属性、只保留最后一条，标准声明会被丢弃，从而被其他低特异性
+     规则重新施加模糊。标准属性单写时构建会自动补前缀，两边都不缺。 */
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
-.virtual-poster-grid .rating-badge {
+.virtual-poster-grid .poster-card .rating-badge {
   /* 作品墙滚动性能：角标保留各主题的半透明底色，但禁用 backdrop blur。 */
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 .virtual-poster-grid .decoded-image.is-ready {
