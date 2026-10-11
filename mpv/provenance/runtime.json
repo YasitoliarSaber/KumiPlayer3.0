@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-10-11",
+  "original_asset": {
+    "url": "https://github.com/mpv-player/mpv/releases/download/v0.41.0/mpv-v0.41.0-x86_64-w64-mingw32.zip",
+    "release_id": 272045823,
+    "asset_id": 331763937,
+    "sha256": "a49811c0752c108b8260636f9c6f6fcb97406641c98b30f1e7b500dfb20177de",
+    "bytes": 39002683,
+    "verification": "independently downloaded; nested ZIP inventory and hashes match all 27 current runtime files",
+    "verified_runtime_files": 27
+  },
+  "mpv_commit": "41f6a645068483470267271e1d09966ca3b9f413",
+  "ffmpeg_commit": "1fcb201ab10cbc98d931e340da6ace292e82b1e1",
+  "dav1d_commit": "43f3b8d33bae5179a134d1cd7c394063b1cebfcb",
+  "luajit_commit": "7152e15489d2077cd299ee23e3d51a4c599ab14f",
+  "luajit_commit_basis": "embedded LuaJIT 2.1.1765228720 matches unique upstream commit timestamp",
+  "actual_build_system": "mpv-player/mpv ci/build-mingw64.sh, not mpv-winbuild-cmake",
+  "workflow_run": "https://github.com/mpv-player/mpv/actions/runs/20414542745",
+  "workflow_job": "https://github.com/mpv-player/mpv/actions/runs/20414542745/job/58656266196",
+  "job_started_at": "2025-12-21T19:13:37Z",
+  "job_completed_at": "2025-12-21T19:20:24Z",
+  "historical_logs": {
+    "status": "unavailable",
+    "http_status": 410,
+    "reason": "GitHub removed historical logs; job steps and artifacts are no longer available"
+  },
+  "binary_inspection": {
+    "mpv": "v0.41.0-dev-g41f6a6450; built Dec 21 2025 19:19:52",
+    "ffmpeg": "git-2025-12-21-1fcb201",
+    "ffmpeg_license": "GPL version 2 or later",
+    "ffmpeg_configuration": "--pkg-config=pkg-config --target-os=mingw32 --enable-gpl --enable-cross-compile --cross-prefix=x86_64-w64-mingw32- --arch=x86_64 --cc='ccache x86_64-w64-mingw32-gcc-posix' --cxx='ccache x86_64-w64-mingw32-g++-posix' --disable-static --enable-shared --disable-doc --disable-programs --enable-muxer=spdif --enable-encoder='mjpeg,png' --enable-libdav1d --enable-vulkan --enable-libshaderc",
+    "dav1d_version": "43f3b8d",
+    "luajit": "LuaJIT 2.1.1765228720",
+    "freetype": "2.14.1",
+    "fribidi": "1.0.16",
+    "harfbuzz": "12.2.0",
+    "libass": "0.17.4; version number does not identify the floating Git checkout",
+    "lcms2": "2.18; version number does not identify the floating Git checkout",
+    "libplacebo": "v7.358.0; version number does not identify the floating Git checkout",
+    "vulkan_loader": "1.4.337 DevBuild; version number does not identify the floating Git checkout",
+    "zlib": "1.3.1",
+    "toolchain": "embedded DWARF mentions gcc-mingw-w64-26.1 and GCC 13; complete package/build records unresolved"
+  },
+  "corresponding_source_complete": false,
+  "source_inputs": "sources/runtime-inputs.json",
+  "unresolved_policy": "Do not identify a historical floating Git checkout merely by nearest preceding date. Obtain original build checkouts/lock records or perform a separately authorized controlled rebuild with fixed dependencies.",
+  "build_recipes": [
+    {
+      "upstream_path": "ci/build-mingw64.sh",
+      "source_archive": "sources/runtime/mpv-41f6a645068483470267271e1d09966ca3b9f413.tar.gz",
+      "sha256": "3987301f65e3a7e86b84c34d2e7f76c352cfdb600c6575df516feeed4f37880c"
+    },
+    {
+      "upstream_path": "ci/build-common.sh",
+      "source_archive": "sources/runtime/mpv-41f6a645068483470267271e1d09966ca3b9f413.tar.gz",
+      "sha256": "57231023e0356b5114b91535c4fac2e031a2cffdeefc2ca43c4f5a55e4a5007a"
+    },
+    {
+      "upstream_path": ".github/workflows/build.yml",
+      "source_archive": "sources/runtime/mpv-41f6a645068483470267271e1d09966ca3b9f413.tar.gz",
+      "sha256": "3197e88f8c1bbf09da29591b40b31e7c522e6c286b553e1495b26ca6ef8af8d9"
+    }
+  ]
+}

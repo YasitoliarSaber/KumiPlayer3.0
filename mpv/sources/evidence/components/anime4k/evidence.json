@@ -1,0 +1,1029 @@
+{
+  "repository": "https://github.com/bloc97/Anime4K",
+  "commit": "4029bf701ecaa15f163cdc49cffe5501c1acf410",
+  "source_archive": "mpv/sources/evidence/components/anime4k/upstream-4029bf701ecaa15f163cdc49cffe5501c1acf410.tar.gz",
+  "source_url": "https://codeload.github.com/bloc97/Anime4K/tar.gz/4029bf701ecaa15f163cdc49cffe5501c1acf410",
+  "archive_sha256": "7021e226e1f3b72b3cab6bac1568f2ebbc1822db72265516c000aa8425abfd1c",
+  "tag": "v4.0.1",
+  "files": [
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_AutoDownscalePre_x2.glsl",
+      "sha256": "8c58291740146bd766a4d73f132775a797fe80f7d07919b5d767e27a5dc85656",
+      "upstream_path": "glsl/Upscale/Anime4K_AutoDownscalePre_x2.glsl",
+      "upstream_sha256": "8c58291740146bd766a4d73f132775a797fe80f7d07919b5d767e27a5dc85656",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_AutoDownscalePre_x4.glsl",
+      "sha256": "5af62d8cd844916dc1126613e13bad3beab195787f93a71200b47c6ec78f2e41",
+      "upstream_path": "glsl/Upscale/Anime4K_AutoDownscalePre_x4.glsl",
+      "upstream_sha256": "5af62d8cd844916dc1126613e13bad3beab195787f93a71200b47c6ec78f2e41",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Clamp_Highlights.glsl",
+      "sha256": "a2a9bf7fbc1d75d09660ca2e701e4d7fb0cf5457b94da47e1825032fa2b3671a",
+      "upstream_path": "glsl/Restore/Anime4K_Clamp_Highlights.glsl",
+      "upstream_sha256": "a2a9bf7fbc1d75d09660ca2e701e4d7fb0cf5457b94da47e1825032fa2b3671a",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_L.glsl",
+      "sha256": "d6efe215e6ee8af1ec560478a91afc1df83fac4ba43b2c806ee61ca2267ed674",
+      "upstream_path": "glsl/Restore/Anime4K_Restore_CNN_L.glsl",
+      "upstream_sha256": "d6efe215e6ee8af1ec560478a91afc1df83fac4ba43b2c806ee61ca2267ed674",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_M.glsl",
+      "sha256": "67ea3ed26539e8de3b7d307688535d2ff17e8d147e11dda0247da7770dbecf41",
+      "upstream_path": "glsl/Restore/Anime4K_Restore_CNN_M.glsl",
+      "upstream_sha256": "67ea3ed26539e8de3b7d307688535d2ff17e8d147e11dda0247da7770dbecf41",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_S.glsl",
+      "sha256": "97c24dc370ab300c108bfaa09db7f175aeff343674842c299cf3940a3d330427",
+      "upstream_path": "glsl/Restore/Anime4K_Restore_CNN_S.glsl",
+      "upstream_sha256": "97c24dc370ab300c108bfaa09db7f175aeff343674842c299cf3940a3d330427",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_L.glsl",
+      "sha256": "8f2a5c73b526c6e4c67bce0366f7dcd7410bfa4a31e718240d86f53660788e63",
+      "upstream_path": "glsl/Restore/Anime4K_Restore_CNN_Soft_L.glsl",
+      "upstream_sha256": "8f2a5c73b526c6e4c67bce0366f7dcd7410bfa4a31e718240d86f53660788e63",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_M.glsl",
+      "sha256": "a78a2c76898e08e09e442a9628c64208c26e8e15789649b8755223f009794c02",
+      "upstream_path": "glsl/Restore/Anime4K_Restore_CNN_Soft_M.glsl",
+      "upstream_sha256": "a78a2c76898e08e09e442a9628c64208c26e8e15789649b8755223f009794c02",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_S.glsl",
+      "sha256": "9f6867f2ef42786729522d86fe24147cb4ea145418e3974df70496acf52dc392",
+      "upstream_path": "glsl/Restore/Anime4K_Restore_CNN_Soft_S.glsl",
+      "upstream_sha256": "9f6867f2ef42786729522d86fe24147cb4ea145418e3974df70496acf52dc392",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_VL.glsl",
+      "sha256": "094334b0e20c1a201fe4941c7c68de72451e5aee9efb5524d7fb82b12dca64b9",
+      "upstream_path": "glsl/Restore/Anime4K_Restore_CNN_Soft_VL.glsl",
+      "upstream_sha256": "094334b0e20c1a201fe4941c7c68de72451e5aee9efb5524d7fb82b12dca64b9",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_VL.glsl",
+      "sha256": "35036722733305cd4d4e57660b883bbe2569ba2914033c254327107d7b77e35e",
+      "upstream_path": "glsl/Restore/Anime4K_Restore_CNN_VL.glsl",
+      "upstream_sha256": "35036722733305cd4d4e57660b883bbe2569ba2914033c254327107d7b77e35e",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_L.glsl",
+      "sha256": "db1fedf7be82f6fd9034e6bf39b64daf2b7576988bb584ec38f24f5236b1cd97",
+      "upstream_path": "glsl/Upscale/Anime4K_Upscale_CNN_x2_L.glsl",
+      "upstream_sha256": "db1fedf7be82f6fd9034e6bf39b64daf2b7576988bb584ec38f24f5236b1cd97",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_M.glsl",
+      "sha256": "716e02098a68f0d648761f2b96b4dd139e1cb09b174bb369fca3aa34328fff7e",
+      "upstream_path": "glsl/Upscale/Anime4K_Upscale_CNN_x2_M.glsl",
+      "upstream_sha256": "716e02098a68f0d648761f2b96b4dd139e1cb09b174bb369fca3aa34328fff7e",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_S.glsl",
+      "sha256": "4c53ec2e287908f7ee7bcb266b0170421626d663576468b7d7dafc62962649a4",
+      "upstream_path": "glsl/Upscale/Anime4K_Upscale_CNN_x2_S.glsl",
+      "upstream_sha256": "4c53ec2e287908f7ee7bcb266b0170421626d663576468b7d7dafc62962649a4",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_VL.glsl",
+      "sha256": "5638fe31c37c151a3443fea3451a3ef91af073f4dbb9615f6c0d1e29db11493d",
+      "upstream_path": "glsl/Upscale/Anime4K_Upscale_CNN_x2_VL.glsl",
+      "upstream_sha256": "5638fe31c37c151a3443fea3451a3ef91af073f4dbb9615f6c0d1e29db11493d",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_L.glsl",
+      "sha256": "6cc4604c9544fd4fd9e3a75fd797511bf5fe1e626e9e1dbcee03302823a63207",
+      "upstream_path": "glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_L.glsl",
+      "upstream_sha256": "6cc4604c9544fd4fd9e3a75fd797511bf5fe1e626e9e1dbcee03302823a63207",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_M.glsl",
+      "sha256": "8c72b042e2301fe66a45c3089720459148e2504cd72af16f9c0d5017ff14181e",
+      "upstream_path": "glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_M.glsl",
+      "upstream_sha256": "8c72b042e2301fe66a45c3089720459148e2504cd72af16f9c0d5017ff14181e",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl",
+      "sha256": "359c48fe5a317fbc6b706ce368401eef496e84ed98abac7a43efebca2b65d79b",
+      "upstream_path": "glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl",
+      "upstream_sha256": "359c48fe5a317fbc6b706ce368401eef496e84ed98abac7a43efebca2b65d79b",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/LICENSE",
+      "sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5",
+      "upstream_path": "LICENSE",
+      "upstream_sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5",
+      "byte_identical": true
+    }
+  ],
+  "license_files": {
+    "LICENSE": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5"
+  },
+  "checked_at": "2026-10-11",
+  "local_source_files": [
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_AutoDownscalePre_x2.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_AutoDownscalePre_x2.glsl",
+      "sha256": "8c58291740146bd766a4d73f132775a797fe80f7d07919b5d767e27a5dc85656"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_AutoDownscalePre_x4.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_AutoDownscalePre_x4.glsl",
+      "sha256": "5af62d8cd844916dc1126613e13bad3beab195787f93a71200b47c6ec78f2e41"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Clamp_Highlights.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Clamp_Highlights.glsl",
+      "sha256": "a2a9bf7fbc1d75d09660ca2e701e4d7fb0cf5457b94da47e1825032fa2b3671a"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_L.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_L.glsl",
+      "sha256": "d6efe215e6ee8af1ec560478a91afc1df83fac4ba43b2c806ee61ca2267ed674"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_M.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_M.glsl",
+      "sha256": "67ea3ed26539e8de3b7d307688535d2ff17e8d147e11dda0247da7770dbecf41"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_S.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_S.glsl",
+      "sha256": "97c24dc370ab300c108bfaa09db7f175aeff343674842c299cf3940a3d330427"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_L.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_L.glsl",
+      "sha256": "8f2a5c73b526c6e4c67bce0366f7dcd7410bfa4a31e718240d86f53660788e63"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_M.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_M.glsl",
+      "sha256": "a78a2c76898e08e09e442a9628c64208c26e8e15789649b8755223f009794c02"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_S.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_S.glsl",
+      "sha256": "9f6867f2ef42786729522d86fe24147cb4ea145418e3974df70496acf52dc392"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_VL.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_VL.glsl",
+      "sha256": "094334b0e20c1a201fe4941c7c68de72451e5aee9efb5524d7fb82b12dca64b9"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_VL.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_VL.glsl",
+      "sha256": "35036722733305cd4d4e57660b883bbe2569ba2914033c254327107d7b77e35e"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_L.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_L.glsl",
+      "sha256": "db1fedf7be82f6fd9034e6bf39b64daf2b7576988bb584ec38f24f5236b1cd97"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_M.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_M.glsl",
+      "sha256": "716e02098a68f0d648761f2b96b4dd139e1cb09b174bb369fca3aa34328fff7e"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_S.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_S.glsl",
+      "sha256": "4c53ec2e287908f7ee7bcb266b0170421626d663576468b7d7dafc62962649a4"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_VL.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_VL.glsl",
+      "sha256": "5638fe31c37c151a3443fea3451a3ef91af073f4dbb9615f6c0d1e29db11493d"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_L.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_L.glsl",
+      "sha256": "6cc4604c9544fd4fd9e3a75fd797511bf5fe1e626e9e1dbcee03302823a63207"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_M.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_M.glsl",
+      "sha256": "8c72b042e2301fe66a45c3089720459148e2504cd72af16f9c0d5017ff14181e"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl",
+      "sha256": "359c48fe5a317fbc6b706ce368401eef496e84ed98abac7a43efebca2b65d79b"
+    },
+    {
+      "path": "mpv/config/kumiplayer/shaders/anime4k-v4.0.1/LICENSE",
+      "archived_path": "mpv/sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/LICENSE",
+      "sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5"
+    }
+  ],
+  "source_only_archive": {
+    "path": "mpv/sources/evidence/components/anime4k/upstream-source-4029bf701ecaa15f163cdc49cffe5501c1acf410.tar.gz",
+    "sha256": "97f04ca1204991f4224a249aba74c015c43a25cdd478b3f63dfd804e1634bcf0",
+    "bytes": 6768835,
+    "included_files": [
+      {
+        "path": ".github/ISSUE_TEMPLATE/bug_report.md",
+        "sha256": "e02e1f2fe84d821805e10f9198a87c205c094017b0a0a8fd7fd4a20d8799a344",
+        "bytes": 790
+      },
+      {
+        "path": ".github/ISSUE_TEMPLATE/feature_request.md",
+        "sha256": "1f48c52f209a971b8e7eae4120144d28fcf8ee38a7778a7b4d8cf1ab356617d2",
+        "bytes": 595
+      },
+      {
+        "path": ".gitignore",
+        "sha256": "667a7a91054ce779bc9ccf82570c9140d7e760ddcc413f57a6d5597985888afd",
+        "bytes": 297
+      },
+      {
+        "path": "CODE_OF_CONDUCT.md",
+        "sha256": "cccb66ebd9b352f2a96969c9a5f8010f2d2398be938b9f9045d64363579c14c1",
+        "bytes": 3357
+      },
+      {
+        "path": "GLSL_Instructions.md",
+        "sha256": "6962524b8b9f3ce722e2b6808ef893b6348d3af35de6fb08d64e8898aa9edba8",
+        "bytes": 15592
+      },
+      {
+        "path": "LICENSE",
+        "sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5",
+        "bytes": 1063
+      },
+      {
+        "path": "README.md",
+        "sha256": "30a0a67bd2f776cfdc7015dba391c482d746b95fa5679184cf26f69ba155b36b",
+        "bytes": 6047
+      },
+      {
+        "path": "glsl/Deblur/Anime4K_Deblur_DoG.glsl",
+        "sha256": "480367048caca7520b6f66d4db731c96103677d0e5bad69d72adf46f58a59532",
+        "bytes": 4552
+      },
+      {
+        "path": "glsl/Deblur/Anime4K_Deblur_Original.glsl",
+        "sha256": "37e96b3225546ea4f2a6ec81cd6fac8f8f1774c62ba62b51ec5f93937d8f9f3d",
+        "bytes": 6409
+      },
+      {
+        "path": "glsl/Denoise/Anime4K_Denoise_Bilateral_Mean.glsl",
+        "sha256": "bdcbc73cecdbc2fda879824cad822c70cc89c9e93d747fa740c1301c3d270dee",
+        "bytes": 2782
+      },
+      {
+        "path": "glsl/Denoise/Anime4K_Denoise_Bilateral_Median.glsl",
+        "sha256": "5f9667ae9c2dbbcc460da5a12c5adfae72e7c72c595fa1cec13aa09cb5bd6f52",
+        "bytes": 4221
+      },
+      {
+        "path": "glsl/Denoise/Anime4K_Denoise_Bilateral_Mode.glsl",
+        "sha256": "1f20a48ff19bf50181ee1ad608defbcb9e5ad3c0d8d6760fd8e1834c194efcb4",
+        "bytes": 3821
+      },
+      {
+        "path": "glsl/Experimental-Effects/Anime4K_Darken_Fast.glsl",
+        "sha256": "d3adffc7249d6fb9c8474f5ac473f97e1d27501e130fd6d91425af6256be4a20",
+        "bytes": 6378
+      },
+      {
+        "path": "glsl/Experimental-Effects/Anime4K_Darken_HQ.glsl",
+        "sha256": "7506e41f3c2b031574897a74fc98a7fa478289747e6131b21d25fbc221460e13",
+        "bytes": 5981
+      },
+      {
+        "path": "glsl/Experimental-Effects/Anime4K_Darken_VeryFast.glsl",
+        "sha256": "a6046bd461026c02d01028c7678b3eee2a74426277dfafcc31b95fa89910c7ca",
+        "bytes": 6442
+      },
+      {
+        "path": "glsl/Experimental-Effects/Anime4K_Thin_Fast.glsl",
+        "sha256": "6a77b7930b84b2fea7bdb4249f7fcdd1b8799803931c0c98f5994fd01f4390ff",
+        "bytes": 6248
+      },
+      {
+        "path": "glsl/Experimental-Effects/Anime4K_Thin_HQ.glsl",
+        "sha256": "026e245fb49b1d7ab549043d75fcfe9c1b6a5e3170323861fa9abfdbad5abe61",
+        "bytes": 5962
+      },
+      {
+        "path": "glsl/Experimental-Effects/Anime4K_Thin_VeryFast.glsl",
+        "sha256": "c7b82480644a1b71b0f519186c58ecffc8cbb629fd87ab952f7e2665a58f810c",
+        "bytes": 6335
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Clamp_Highlights.glsl",
+        "sha256": "a2a9bf7fbc1d75d09660ca2e701e4d7fb0cf5457b94da47e1825032fa2b3671a",
+        "bytes": 2795
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Restore_CNN_L.glsl",
+        "sha256": "d6efe215e6ee8af1ec560478a91afc1df83fac4ba43b2c806ee61ca2267ed674",
+        "bytes": 69921
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Restore_CNN_M.glsl",
+        "sha256": "67ea3ed26539e8de3b7d307688535d2ff17e8d147e11dda0247da7770dbecf41",
+        "bytes": 35916
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Restore_CNN_S.glsl",
+        "sha256": "97c24dc370ab300c108bfaa09db7f175aeff343674842c299cf3940a3d330427",
+        "bytes": 17136
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Restore_CNN_Soft_L.glsl",
+        "sha256": "8f2a5c73b526c6e4c67bce0366f7dcd7410bfa4a31e718240d86f53660788e63",
+        "bytes": 70020
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Restore_CNN_Soft_M.glsl",
+        "sha256": "a78a2c76898e08e09e442a9628c64208c26e8e15789649b8755223f009794c02",
+        "bytes": 36016
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Restore_CNN_Soft_S.glsl",
+        "sha256": "9f6867f2ef42786729522d86fe24147cb4ea145418e3974df70496acf52dc392",
+        "bytes": 17198
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Restore_CNN_Soft_UL.glsl",
+        "sha256": "41d71cad7b2f3af9086852fca70046f763272d2cb49dd83de9647d942866cac8",
+        "bytes": 308873
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Restore_CNN_Soft_VL.glsl",
+        "sha256": "094334b0e20c1a201fe4941c7c68de72451e5aee9efb5524d7fb82b12dca64b9",
+        "bytes": 144204
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Restore_CNN_UL.glsl",
+        "sha256": "81ec48ff700108c8e1571ed82d4527006ee200c05e94f8b7f836c02179169b40",
+        "bytes": 308660
+      },
+      {
+        "path": "glsl/Restore/Anime4K_Restore_CNN_VL.glsl",
+        "sha256": "35036722733305cd4d4e57660b883bbe2569ba2914033c254327107d7b77e35e",
+        "bytes": 144075
+      },
+      {
+        "path": "glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_L.glsl",
+        "sha256": "6cc4604c9544fd4fd9e3a75fd797511bf5fe1e626e9e1dbcee03302823a63207",
+        "bytes": 73584
+      },
+      {
+        "path": "glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_M.glsl",
+        "sha256": "8c72b042e2301fe66a45c3089720459148e2504cd72af16f9c0d5017ff14181e",
+        "bytes": 37714
+      },
+      {
+        "path": "glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_S.glsl",
+        "sha256": "1a45ad3aa20d8368399f2fd46791deed957c2fd0a4afd131cc92516827abab93",
+        "bytes": 18667
+      },
+      {
+        "path": "glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_UL.glsl",
+        "sha256": "38bd11e7e92ff1a615a274be912d6f2cfe67f5b43771f0383a91c6ab3d0f8cb6",
+        "bytes": 290040
+      },
+      {
+        "path": "glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl",
+        "sha256": "359c48fe5a317fbc6b706ce368401eef496e84ed98abac7a43efebca2b65d79b",
+        "bytes": 146811
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_AutoDownscalePre_x2.glsl",
+        "sha256": "8c58291740146bd766a4d73f132775a797fe80f7d07919b5d767e27a5dc85656",
+        "bytes": 1560
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_AutoDownscalePre_x4.glsl",
+        "sha256": "5af62d8cd844916dc1126613e13bad3beab195787f93a71200b47c6ec78f2e41",
+        "bytes": 1568
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_Upscale_CNN_x2_L.glsl",
+        "sha256": "db1fedf7be82f6fd9034e6bf39b64daf2b7576988bb584ec38f24f5236b1cd97",
+        "bytes": 73443
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_Upscale_CNN_x2_M.glsl",
+        "sha256": "716e02098a68f0d648761f2b96b4dd139e1cb09b174bb369fca3aa34328fff7e",
+        "bytes": 37685
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_Upscale_CNN_x2_S.glsl",
+        "sha256": "4c53ec2e287908f7ee7bcb266b0170421626d663576468b7d7dafc62962649a4",
+        "bytes": 18638
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_Upscale_CNN_x2_UL.glsl",
+        "sha256": "fa7cf0ecc1cca84d8291bbff5a42b60f5816d57b4e97d42bc377235ac8db02e8",
+        "bytes": 290257
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_Upscale_CNN_x2_VL.glsl",
+        "sha256": "5638fe31c37c151a3443fea3451a3ef91af073f4dbb9615f6c0d1e29db11493d",
+        "bytes": 146743
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_Upscale_DTD_x2.glsl",
+        "sha256": "b6597cace43fc9a6be57a8eebc540fe20caa8389fae0aad1157a9c15fc410ef3",
+        "bytes": 15450
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_Upscale_Deblur_DoG_x2.glsl",
+        "sha256": "2408b7d334803bae2e463f75d4e293146715609ed576dddfd22e2a76189eb161",
+        "bytes": 4830
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_Upscale_Deblur_Original_x2.glsl",
+        "sha256": "4a88f9a4437aa5cca1e2055a45db533b58cf9c955763fb64cf38033f0f63904f",
+        "bytes": 6313
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_Upscale_DoG_x2.glsl",
+        "sha256": "33dbf76d855575b7a99885885c2c7c692444cf776f22048b4a611dab178e66e3",
+        "bytes": 4016
+      },
+      {
+        "path": "glsl/Upscale/Anime4K_Upscale_Original_x2.glsl",
+        "sha256": "ffb1a4a28c5ce80a3e932e9454917ea48a4ba31dadcf274714048693ce387919",
+        "bytes": 6271
+      },
+      {
+        "path": "results/Comparisons/Bird/RESULTS.txt",
+        "sha256": "1e72391b8073e712443791e4515c34de9dcdc18c368d7998c59e5bae07abd773",
+        "bytes": 1369
+      },
+      {
+        "path": "results/Comparisons/Bird_Denoise/RESULTS.txt",
+        "sha256": "3cef7eebb2c46bc22726b057a8ee441a42af5cd24a96798f45717778c177c01d",
+        "bytes": 203
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/FFmpeg-Generation.bat",
+        "sha256": "b35eda44b95971e7e4db6075db990cd84b537c043b607641cc2d5bd5732392cc",
+        "bytes": 206
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/RESULTS.txt",
+        "sha256": "54495578af405c6209f82aa79be632eaeb00fbd153a2a5173d1fd1da156b81c2",
+        "bytes": 1216
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Source.txt",
+        "sha256": "a111a89e9cfe10ace928d4c7ed0fb896303936e9add301bb00cedd1b372665f2",
+        "bytes": 322
+      },
+      {
+        "path": "tensorflow/Gen_Shader.ipynb",
+        "sha256": "9b2de8e530d03c62c1ffd9ac0674d606cf45ebd1a4dd0932548a795962f3554d",
+        "bytes": 14995
+      },
+      {
+        "path": "tensorflow/Train_Model.ipynb",
+        "sha256": "634dd71f84f68d5af990f4524704c7017f3819b3badd25f41a577982cb78d7af",
+        "bytes": 7904146
+      },
+      {
+        "path": "tensorflow/Upscale_Shader.glsl",
+        "sha256": "aa0369e6d677df6efe563bd2b9e188c2bcb05198359b2036bd36f0ca80a231f9",
+        "bytes": 45772
+      },
+      {
+        "path": "tensorflow/model-checkpoint.h5",
+        "sha256": "61b7c33e763b910ef610d8b1cb6037dcf57b3bcefff6ed9db41409e23f26962d",
+        "bytes": 54632
+      },
+      {
+        "path": "tensorflow/shaderutils.py",
+        "sha256": "e72f2b98293a0c809ed8f318dad39e36656257c726d6d2d546397a33abfdb910",
+        "bytes": 18989
+      },
+      {
+        "path": "tensorflow/utils.py",
+        "sha256": "a546fe922011c75663e806149ad7f697d702a79395b47dc82b333fc33576defc",
+        "bytes": 9037
+      }
+    ],
+    "omitted_files": [
+      {
+        "path": "results/Comparisons/Bird/ACNet.png",
+        "sha256": "f7830b1af2d836106f0d43fb9a510743abb079f5c5c2642ce0e16ecaa6649a7a",
+        "bytes": 843485
+      },
+      {
+        "path": "results/Comparisons/Bird/Anime4K-L.png",
+        "sha256": "f339491736999d26637289557cec6ed85200e9cf1fb653caf35e9af98ca690dc",
+        "bytes": 927948
+      },
+      {
+        "path": "results/Comparisons/Bird/Anime4K-M.png",
+        "sha256": "7b79f53d70aae7837996de7053b17d52ac9c1180fc8ccd011ece040d64fd7d28",
+        "bytes": 921336
+      },
+      {
+        "path": "results/Comparisons/Bird/Anime4K-UL.png",
+        "sha256": "7cb9af800ee4349262f996b175b661e26718d3b5242739bd9312b76592c79621",
+        "bytes": 930519
+      },
+      {
+        "path": "results/Comparisons/Bird/Bicubic.png",
+        "sha256": "e970262a6536877cc072dc6f7daf28b26cca35314b205c70a478f424c59d3ed2",
+        "bytes": 843302
+      },
+      {
+        "path": "results/Comparisons/Bird/Bilinear.png",
+        "sha256": "65062bef3d603199e78ee9d0b6aed95d51b4173bebea01b9e788a2005a349d81",
+        "bytes": 821513
+      },
+      {
+        "path": "results/Comparisons/Bird/Compare.png",
+        "sha256": "fbdbe36d17754972d552696091bc6aabd53c07d12aba19e2b569cca0183240de",
+        "bytes": 2201687
+      },
+      {
+        "path": "results/Comparisons/Bird/FSRCNNX-16.png",
+        "sha256": "97e84aad0526e3b0a8ed0546072d11645042b7eebd2b33b93b5a698ceff74cbf",
+        "bytes": 926438
+      },
+      {
+        "path": "results/Comparisons/Bird/FSRCNNX-56.png",
+        "sha256": "8094f9ddc9bf2c354422ea53c74ff747bf06b3fa3dfc91b4339f534a1eab3719",
+        "bytes": 925760
+      },
+      {
+        "path": "results/Comparisons/Bird/FSRCNNX-8-LineArt.png",
+        "sha256": "bd85b7f00ebf371977e2c7c8dd0ef03f43f6e0a9d570143bfe3c3ba95e374936",
+        "bytes": 930108
+      },
+      {
+        "path": "results/Comparisons/Bird/FSRCNNX-8.png",
+        "sha256": "99791fd4757da04dd7d176a31dafd69882bdd9bdc0baf3ed2614d455066d2f90",
+        "bytes": 944672
+      },
+      {
+        "path": "results/Comparisons/Bird/HR.png",
+        "sha256": "09f9b0b4eaad2451e721e8e53573daae441fe7220722fdf3a4ad11d1c8f494ad",
+        "bytes": 1177086
+      },
+      {
+        "path": "results/Comparisons/Bird/LR.png",
+        "sha256": "393ed4ef443ff010af0ec429b2888c64f9850fae63b4bcc79d1602b64d9f5e0f",
+        "bytes": 292033
+      },
+      {
+        "path": "results/Comparisons/Bird/Lanczos.png",
+        "sha256": "e49dfe51f64d66f046c3050b270ca9c287fcbf017444cb7868dec2a7d55fad4e",
+        "bytes": 861920
+      },
+      {
+        "path": "results/Comparisons/Bird/NGU-Sharp-High.png",
+        "sha256": "885a6b8f74dfad86a48d35b490b34ac4dfcb62b2997ace3a3877dfacff2bb72a",
+        "bytes": 903916
+      },
+      {
+        "path": "results/Comparisons/Bird/NGU-Sharp-Low.png",
+        "sha256": "10157a84cee33659a63ab94f598803c35acabaf842a89cb03a430e43fc255144",
+        "bytes": 890341
+      },
+      {
+        "path": "results/Comparisons/Bird/NGU-Sharp-Medium.png",
+        "sha256": "f0ec36df723b8ddd4299b8efc1c50a83672a07724d168554f8886b01e93af0c7",
+        "bytes": 906819
+      },
+      {
+        "path": "results/Comparisons/Bird/NGU-Sharp-VeryHigh.png",
+        "sha256": "a5a6c3ddba91e120b46014a3f35df7319938296e0ca09f5ae5c10f93aa6b60eb",
+        "bytes": 905964
+      },
+      {
+        "path": "results/Comparisons/Bird/NGU-Soft-VeryHigh.png",
+        "sha256": "ab1dd1b94d7b1d7a715dc85ea701a4e6f82a928ba831e3a2d8fdc5837126a743",
+        "bytes": 823507
+      },
+      {
+        "path": "results/Comparisons/Bird/NGU-Standard-VeryHigh.png",
+        "sha256": "adbf2fa262c714aaec6e436a3b9245fc142ac7011c0fc827643eb65280850271",
+        "bytes": 860673
+      },
+      {
+        "path": "results/Comparisons/Bird/nnedi3-256.png",
+        "sha256": "c66046461f2e8e801eee0bf3ff569e87e854f70a9070f47978c90dbcc378c61b",
+        "bytes": 835534
+      },
+      {
+        "path": "results/Comparisons/Bird/ravu-r4.png",
+        "sha256": "8538cd49a96fa63362f486b5bd56c2d9bb1bc51bfd6c6cb423da7069e91355c8",
+        "bytes": 847412
+      },
+      {
+        "path": "results/Comparisons/Bird/waifu2x-CUNet.png",
+        "sha256": "f8f380e7867293c6683ef167fdf2f423942332fe6f4c195eca592eb1681408ca",
+        "bytes": 971143
+      },
+      {
+        "path": "results/Comparisons/Bird_Denoise/Anime4K-Heavy-L.png",
+        "sha256": "662a940ac7a8d8a01e0652a82979209f63616e2a2036c51e110f64caa2a18566",
+        "bytes": 764584
+      },
+      {
+        "path": "results/Comparisons/Bird_Denoise/Compare.png",
+        "sha256": "23afcd0aa8c9bbd93665617ce8f41a660f4e21b4f26c15a1909fa336a37e7a33",
+        "bytes": 158293
+      },
+      {
+        "path": "results/Comparisons/Bird_Denoise/HR.png",
+        "sha256": "c8fc6fbac9ab9f24299f60c0fcd42a09a6a2c7bf9f1822a72f49bdb384214d0f",
+        "bytes": 1177086
+      },
+      {
+        "path": "results/Comparisons/Bird_Denoise/JPEG-10.jpg",
+        "sha256": "5d875ac82b23ea5c87cc687ece599b4b73cf22f30df142991cb23898f966b9e3",
+        "bytes": 29900
+      },
+      {
+        "path": "results/Comparisons/Bird_Denoise/NGU-14-Medium.png",
+        "sha256": "ee404b7982dee23c17bc42bbbdf5ca45a41532ed13aa9e7d41e4d55e6b837a38",
+        "bytes": 734129
+      },
+      {
+        "path": "results/Comparisons/Bird_Denoise/NGU-14-VeryHigh.png",
+        "sha256": "fc15e85db245d62cc739aeb51b41ac2a892d61b1395498fa42248b03ecfcfdd7",
+        "bytes": 735679
+      },
+      {
+        "path": "results/Comparisons/Bird_Denoise/waifu2x-CUNet-High.png",
+        "sha256": "28c754ad7b40028afe33622ac0ac975f1747d1654c1207ea1d8d166f162cd2d0",
+        "bytes": 828284
+      },
+      {
+        "path": "results/Comparisons/Bird_Denoise/waifu2x-CUNet-Maximum.png",
+        "sha256": "42154f61c338e277c7ede07809efdd8ee6bf1116cbe1d9c55ab973f30ca602f9",
+        "bytes": 818403
+      },
+      {
+        "path": "results/Comparisons/Bird_Denoise/waifu2x-CUNet-Medium.png",
+        "sha256": "ffbbf29749cbfe16eb255f3d7e9aa2c58a015c424db82722fc6f05d4b54a4eee",
+        "bytes": 823798
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/Anime4K-L-Area.png",
+        "sha256": "f339491736999d26637289557cec6ed85200e9cf1fb653caf35e9af98ca690dc",
+        "bytes": 927948
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/Anime4K-L-Bicubic.png",
+        "sha256": "6d97965cd4f4f871bef6214ab30b0d141379d0c4f709b98bb360a9395e4bd393",
+        "bytes": 929794
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/Anime4K-L-Lanczos.png",
+        "sha256": "530757e802a03959c8c54fd0ade0c812908c0f83bee021c0eb1aca01de5b80d4",
+        "bytes": 953565
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/Anime4K-UL-Area.png",
+        "sha256": "7cb9af800ee4349262f996b175b661e26718d3b5242739bd9312b76592c79621",
+        "bytes": 930519
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/Anime4K-UL-Bicubic.png",
+        "sha256": "ff1e4b8be1dcfc38e599b02486e9890e6f81d4b3756be7d622e08895e48a5f8c",
+        "bytes": 931150
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/Anime4K-UL-Lanczos.png",
+        "sha256": "1ea73b652fe34c28b40c176dcf0ace3ccdb6a9e2cb9e8518cdbcadf243fe4409",
+        "bytes": 956002
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/FSRCNNX-8-Area.png",
+        "sha256": "380f21660845b79b3237067bb9f6eda1e110e803b264a65183c01b62c6faa241",
+        "bytes": 994987
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/FSRCNNX-8-Bicubic.png",
+        "sha256": "c2537665921cc135b388a14edb755ce4b90fb014d3fb64262c56ee3aacdc6c7d",
+        "bytes": 948936
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/FSRCNNX-8-Lanczos.png",
+        "sha256": "06a42e8aafb85fc7bb5ece8ecdfed5c1832299480d288db028035385e4476999",
+        "bytes": 975380
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/FSRCNNX-8-LineArt-Area.png",
+        "sha256": "a9a981477437f191d7bea372513788aded4d34cd4018adc9f1c021c4691cd8be",
+        "bytes": 979917
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/FSRCNNX-8-LineArt-Bicubic.png",
+        "sha256": "8af7f47ab31382aec904f4f7394aaba85692722d32614cb8fb54896bee9fe418",
+        "bytes": 944453
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/FSRCNNX-8-LineArt-Lanczos.png",
+        "sha256": "3bafea2057e4cd5f48650ebaeebfbfc2e0bb32ecc5ea00e17a67de812b086d7c",
+        "bytes": 968732
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/HR.png",
+        "sha256": "09f9b0b4eaad2451e721e8e53573daae441fe7220722fdf3a4ad11d1c8f494ad",
+        "bytes": 1177086
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/LR-Area.png",
+        "sha256": "dd7daa4cbc937add6df8847598ce72e48bf6f0829875ac232f6aefd53f82ad63",
+        "bytes": 339871
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/LR-Bicubic.png",
+        "sha256": "e75dd8ca7cf5c6093e7ae8f96863e2dd311e683c573c95411d34845408cb3298",
+        "bytes": 336556
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/LR-Lanczos.png",
+        "sha256": "906a74211727759fda77b0173be10bb52ca6b0614392736df2ee8442fe1ee0b3",
+        "bytes": 339766
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/waifu2x-CUNet-Area.png",
+        "sha256": "67ecf0c7f64f18f0ffd5c6511327f46939ea6476cf47c7cc6c545258ed1e1112",
+        "bytes": 971980
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/waifu2x-CUNet-Bicubic.png",
+        "sha256": "dc9a7ea01b2227118ccc8192ea39cb91799776d4d8730a0ecebbb91ca0764dd1",
+        "bytes": 941671
+      },
+      {
+        "path": "results/Comparisons/Bird_FFmpeg/waifu2x-CUNet-Lanczos.png",
+        "sha256": "0b508ddaac030584da4d2846febf34b9c5ce14111f4286564fec611a298c7348",
+        "bytes": 975042
+      },
+      {
+        "path": "results/Comparisons/Cropped_Screenshots/Maxed.png",
+        "sha256": "0bb8ae1fea7055b8819c70adc2406aa871eea0af7a555dc9186b5891694d6d48",
+        "bytes": 2031792
+      },
+      {
+        "path": "results/Comparisons/Cropped_Screenshots/Slime.png",
+        "sha256": "7049db4b18330973a6dcabd3da395bd44fc73de4951e342a3244cc4124a79967",
+        "bytes": 1540653
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Fate_1080p.jpg",
+        "sha256": "f7b273dad9a1d0a7f697fd045e8f445b9485a864451ea9e6ed5b563f7d472b83",
+        "bytes": 225483
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Fate_1080p_Corrected.png",
+        "sha256": "3f2063780e979bd0e3641790c6e8dfed7db8a02616ac9be7561abcd7119b21c5",
+        "bytes": 2138439
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Fate_Anime4K.png",
+        "sha256": "7eaf459ea3d72b954f1f07dc31ed77709aa532579164f5b4a219a273ced671e2",
+        "bytes": 6157838
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Fate_Anime4K_Fast.png",
+        "sha256": "633f84079b7220de9c7894dcb3a0aeafd68067806d0370501c31c42c925ee8ab",
+        "bytes": 6435583
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Fate_Corrected_Waifu2x.png",
+        "sha256": "d0782ad42f3db2242381f1a18cb980e6e4d7e82f89e05bf90c1b1417a49e28bd",
+        "bytes": 5493242
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Fate_SRGAN.png",
+        "sha256": "fb44876be7b3687a64a5765d8237e361d5abec3fb2d6cc7d01175c5920e506d2",
+        "bytes": 9027631
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Fate_Waifu2x.png",
+        "sha256": "6968303b3d4e3c8c71562b050911aa05008c9f4a1ff31796453f6919aacad9d2",
+        "bytes": 5877404
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Maxed_1080p.jpg",
+        "sha256": "246bfa98353fd1de41dcd6f19e4e4afb725f1eae954ebbe1c4f9a67ca0d29767",
+        "bytes": 374111
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Maxed_1080p_Corrected.png",
+        "sha256": "2335850058895d3008276ea8ede47e805afef33214845d21595be1c72e20d39a",
+        "bytes": 2347055
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Maxed_Anime4K.png",
+        "sha256": "53eea8d3bcb88eed60693eb3910122f51c2647ee9f0731e90373b8d88fe14418",
+        "bytes": 7306762
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Maxed_Anime4K_Fast.png",
+        "sha256": "5c96c90f8ef1ba2ad3f287e6853ef41fbbc33e65a9ecd5990058283ca08f5a18",
+        "bytes": 7649282
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Maxed_Bicubic.png",
+        "sha256": "5f2a67641e2ac38b8e8dcfaca7230e3e449100ae5a9225448469430186a2ac3e",
+        "bytes": 7525292
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Maxed_Corrected_Waifu2x.png",
+        "sha256": "8d189846aa88488bfc096da1b14fb0a5d67a9d108df22220f69eda0373778a27",
+        "bytes": 6118646
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Maxed_SRGAN.png",
+        "sha256": "8296310406076a1d840f9a70b38072828bf14a6740c56c9834a698d52a68af7b",
+        "bytes": 10746179
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Maxed_Waifu2x.png",
+        "sha256": "6fcaa70cb8213bd98197a5d00a59fca16bb1e274208aa93a676aab76a1d9bfc9",
+        "bytes": 6916510
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Quin_1080p.jpg",
+        "sha256": "7bbbc503621896ade8fd398b367bced12ed4e0c0cb4a71eb264365085d6ce8c4",
+        "bytes": 357497
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Quin_1080p_Corrected.png",
+        "sha256": "c43d1763a36e0c5c927c18d094a338dc67478a1b191113e18a97930daa8e23d7",
+        "bytes": 2373076
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Quin_Anime4K.png",
+        "sha256": "55fdf55f64bb2fdc409873253b50dfb8d16304f8ca5a75985b1a3aa6b539da5a",
+        "bytes": 7536513
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Quin_Anime4K_Fast.png",
+        "sha256": "d0232abd13fedd247b3eee540f5c528c13d21a8a574559de5854ee85bb000037",
+        "bytes": 7967509
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Quin_Corrected_Waifu2x.png",
+        "sha256": "e6007890c2963f57ec95c2e7ec4934a8fff46abe2fc7e09e06d926985502f025",
+        "bytes": 6114230
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Quin_SRGAN.png",
+        "sha256": "51fbb9ddccd8c53dc79b406dca31025aa203047642f81a72c7806bbf9b671ecd",
+        "bytes": 10538893
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Quin_Waifu2x.png",
+        "sha256": "b4782a0293b90a85ac6ab11b166a14cae4ac95131fb9a22d42150fe934fddd14",
+        "bytes": 6878952
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Slime_1080p.jpg",
+        "sha256": "4919243a79f823956417759a595e1b52fc6c662c1d30d6cb1cc514384424702d",
+        "bytes": 213256
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Slime_1080p_Corrected.png",
+        "sha256": "2b512ce2b23ff86b0b010ba229c2a9fc969a1ef17f16be4c9e586cedc71397b0",
+        "bytes": 2006510
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Slime_Anime4K.png",
+        "sha256": "453661ce2237d5869070b1dbacb5b8f5c2e120974a1960682e536a94adb25edf",
+        "bytes": 6018011
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Slime_Anime4K_Fast.png",
+        "sha256": "d7d7c5942cc8e8f96bc58fcfc8bac087a0668fdec2d4d01118c08403d045a0ac",
+        "bytes": 6471513
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Slime_Bicubic.png",
+        "sha256": "18b9a14115d0170ec9b2290bb26fb61cbfadb5f84aa61422f917a7bae0ae73df",
+        "bytes": 5692564
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Slime_Corrected_Waifu2x.png",
+        "sha256": "1fee2f194c3db8dd9f605abe0179873d5be4cee780986aa60e85880c27cacfed",
+        "bytes": 5083422
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Slime_SRGAN.png",
+        "sha256": "e77010bd81e06c73e3d340a4d08d37522924d6eb26dd5a607e52e1530ea3350a",
+        "bytes": 9347178
+      },
+      {
+        "path": "results/Comparisons/Screenshots/Slime_Waifu2x.png",
+        "sha256": "d0816a267015bbf45e0ebe0202319dbd0b31e9cc31e21870f2be9cd0cfe77e78",
+        "bytes": 5091748
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/Artifact.png",
+        "sha256": "31fcc99838471bd99128e29490a3859e73094cef785fb71ec1773ae93397b368",
+        "bytes": 99346
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/Blur.png",
+        "sha256": "e145ab8a8a3f2a64782392780b6e849c6eaf89b8401301b2dd5255b78e41a332",
+        "bytes": 90116
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/DT.png",
+        "sha256": "ca198452636fdfa793a6fd1cbfd7c0b4147da5940cf7b0b81d671a065b7a20bb",
+        "bytes": 102743
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/DTD.png",
+        "sha256": "32f119e2a2432bd5d87feb4263fb4bf1f8a12dd275362d8066627bf9e820fd72",
+        "bytes": 94484
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/Dark.png",
+        "sha256": "126beb3e4546a69e4db27b67e5c781d6b3032be6635095e71b30e49b45f5bc58",
+        "bytes": 108700
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/Deblur.png",
+        "sha256": "28b70162516231fcd89d501b262769ccb1d6ae2abc98268345083d95117c860d",
+        "bytes": 95299
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/Denoise.png",
+        "sha256": "b341c333e08e87263500052b2f593b70aeeddb2972cc7bf9ab02772924a5488f",
+        "bytes": 91751
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/HR.png",
+        "sha256": "4b4ff7cb82c64a5e2e0d0d6dd29843ec9a7dde329462a4b74a7da250313ecdd9",
+        "bytes": 103680
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/LR.png",
+        "sha256": "cdb8d9e950c6565ea9bccdb23427ca98e8f74bcfb85126802a9061fc3e4d0435",
+        "bytes": 48038
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/Noise.png",
+        "sha256": "650b9b50ab5ca6eb1bf1da6cf00503295be3992b7e132b18e26330dc18674a5e",
+        "bytes": 94968
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/RA.png",
+        "sha256": "6e7d1dc647704d7e34256b2a5e6d773a3a4190246851510ef6b9d9c742caa394",
+        "bytes": 106140
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/SR.png",
+        "sha256": "29ba02191786b4128ddc3eb435741a13a8ed907fbbf60b74966f1e1a77a4ac5f",
+        "bytes": 98654
+      },
+      {
+        "path": "results/Comparisons/knnw/Crop/Thin.png",
+        "sha256": "71dca7b72bbd2d7ceeca050704f8414871400a2d3025f534744e87e23656c94f",
+        "bytes": 99577
+      },
+      {
+        "path": "results/MPV_Profiler.png",
+        "sha256": "80a90c02f3645a40d2cf81e6813422bc08dbd3d542dc19b34ec4bf1c4125acf6",
+        "bytes": 359245
+      },
+      {
+        "path": "results/Main.png",
+        "sha256": "cade05b2517ff82847d5a581031d66de63b1582fb56c27ecc0c6e6eab82a2b0f",
+        "bytes": 1357875
+      }
+    ],
+    "omission_reason": "Only upstream comparison/demo PNG and JPG files under results/ omitted; not redistributed with KumiPlayer. All shaders, TensorFlow training/generation notebooks, model checkpoint, scripts, license and documents retained byte-for-byte. Original full upstream archive also retained locally."
+  }
+}

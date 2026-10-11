@@ -1,6 +1,16 @@
 KumiPlayer 内置 MPV：对应源码与发布状态
 
 当前 distribution_status 为 development-only，distribution-manifest.json 为 pending。
+2026-10-11 已重下载官方 ZIP，复算与上游摘要相同，27 个运行文件与 ZIP 全部一致。
+MPV/FFmpeg/dav1d 完整提交、LuaJIT 内嵌版本来源及 9 份准确源码输入已经归档。
+实际构建来自该 MPV 提交的 ci/build-mingw64.sh，不是 mpv-winbuild-cmake。
+该构建的部分依赖 clone 未固定提交，历史 GitHub 日志已删除（HTTP 410）；这些
+依赖的准确 checkout、静态依赖闭包与工具链记录仍待补齐，不用日期猜测代替。
+provenance/runtime.json、sources/runtime-inputs.json 保存实际证据与明确缺项。
+sources/mpv-provenance-evidence.zip 是已核对的来源材料归档，内含源码、修改补丁、
+原始许可与构建脚本，明确标记 incomplete，不能当作完整对应源码或公开交付。
+统计脚本已固定精确提交并保存同提交 MIT/README，二者授权文字冲突仍需澄清；
+按照用户意愿保留新版统计功能，不擅自替换为缺少系统 CPU/GPU 统计的旧版。
 这份说明登记真实缺项，不是已完成的 GPL 源码提供承诺；当前内置播放器不得进入公开安装包。
 
 正式发布采用随包提供对应源码归档的方式：runtime/mpv/sources/ 下的归档必须包含
@@ -19,7 +29,7 @@ approved_files 的每项为 path 与 sha256，path 统一使用安装包 MPV 根
 
 上游导航（用于查证，不代替完整对应源码）：
 https://github.com/mpv-player/mpv/tree/v0.41.0
-https://github.com/mpv-player/mpv-winbuild-cmake
+https://github.com/mpv-player/mpv/blob/41f6a645068483470267271e1d09966ca3b9f413/ci/build-mingw64.sh
 https://github.com/FFmpeg/FFmpeg
 
 依据：

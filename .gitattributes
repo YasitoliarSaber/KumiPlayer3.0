@@ -1,0 +1,6 @@
+# Preserve bytes in immutable source/permission evidence and CI recipe copies.
+mpv/provenance/build/** -text
+mpv/sources/evidence/** -text whitespace=cr-at-eol
+mpv/licenses/material-icons-round/LICENSE -text
+# A unified diff uses a single space as its empty context-line marker.
+mpv/sources/evidence/**/*.patch whitespace=-blank-at-eol

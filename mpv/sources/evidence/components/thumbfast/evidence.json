@@ -1,0 +1,40 @@
+{
+  "repository": "https://github.com/po5/thumbfast",
+  "commit": "0f711de3138c9bd6718209d819ac54022c23ded2",
+  "source_archive": "mpv/sources/evidence/components/thumbfast/upstream-0f711de3138c9bd6718209d819ac54022c23ded2.tar.gz",
+  "source_url": "https://codeload.github.com/po5/thumbfast/tar.gz/0f711de3138c9bd6718209d819ac54022c23ded2",
+  "archive_sha256": "2d16e9172750c222f7357e3523e41ee9da8fc148fb1e4c0d5f6ac8a317c3a96e",
+  "files": [
+    {
+      "local_path": "mpv/config/portable_config/scripts/thumbfast.lua",
+      "sha256": "58a6a8ead7d79634f2bcc36b19864035ca50820771b30a89c871f6cf062f877a",
+      "upstream_path": "thumbfast.lua",
+      "upstream_sha256": "a3d08e71eae8b892f6cd39f9593ea219768e709312d176bca883841b156448bf",
+      "byte_identical": false,
+      "text_identical_ignoring_line_endings": false
+    }
+  ],
+  "license": "MPL-2.0; upstream thumbfast.lua SPDX header, full license supplied separately in mpv/licenses/thumbfast/MPL-2.0.txt",
+  "modification_summary": [
+    "KumiPlayer callback generation guards on file changes.",
+    "Optional GPU HDR mapping, one compatibility retry and quiet per-file degradation.",
+    "See unified patch for complete byte-corresponding changed source; source configuration retained separately."
+  ],
+  "checked_at": "2026-10-11",
+  "local_source_files": [
+    {
+      "path": "mpv/config/portable_config/scripts/thumbfast.lua",
+      "archived_path": "mpv/sources/evidence/components/thumbfast/local-source/portable_config/scripts/thumbfast.lua",
+      "sha256": "58a6a8ead7d79634f2bcc36b19864035ca50820771b30a89c871f6cf062f877a"
+    },
+    {
+      "path": "mpv/config/portable_config/script-opts/thumbfast.conf",
+      "archived_path": "mpv/sources/evidence/components/thumbfast/local-source/portable_config/script-opts/thumbfast.conf",
+      "sha256": "9d3affe0c9b0ef40b9ec1d2df8935d6c9c748f4a8bc15b1a98c5504c8b9b1ea4"
+    }
+  ],
+  "modifications_patch": {
+    "path": "mpv/sources/evidence/components/thumbfast/local-modifications.patch",
+    "sha256": "f910bdd165800f13c35ad7e86466e1d1cd6482eb517bd3c004465a7e5973c61d"
+  }
+}

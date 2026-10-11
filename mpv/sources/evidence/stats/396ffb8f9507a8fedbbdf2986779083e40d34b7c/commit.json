@@ -1,0 +1,101 @@
+{
+  "sha": "396ffb8f9507a8fedbbdf2986779083e40d34b7c",
+  "node_id": "C_kwDORbfMCdoAKDM5NmZmYjhmOTUwN2E4ZmVkYmJkZjI5ODY3NzkwODNlNDBkMzRiN2M",
+  "commit": {
+    "author": {
+      "name": "yosh.wang",
+      "email": "162548755+yosh-wang@users.noreply.github.com",
+      "date": "2026-07-05T01:51:25Z"
+    },
+    "committer": {
+      "name": "GitHub",
+      "email": "noreply@github.com",
+      "date": "2026-07-05T01:51:25Z"
+    },
+    "message": "Update README.md",
+    "tree": {
+      "sha": "a5e51a8cc17e7a310aee88d8a0775fd2cb0e643b",
+      "url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/git/trees/a5e51a8cc17e7a310aee88d8a0775fd2cb0e643b"
+    },
+    "url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/git/commits/396ffb8f9507a8fedbbdf2986779083e40d34b7c",
+    "comment_count": 0,
+    "verification": {
+      "verified": true,
+      "reason": "valid",
+      "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJqSbidCRC1aQ7uu5UhlAAAHgQQAE/lIHtYW/P+qOxQuAo4KlaT\nIa4EIeNJbpAmuwee9ZK9zWAAUg7CMSyHnv0DL76jeLj9YdXA3qvtmCWAseNZZkjJ\nwxqcUbSSNfYRPNj5FQv+uUnMqZ0fNeoVNlh3wLOBZwgSJjSbfBSE3kxIrw0EVNDx\nMRROO0OTRuZAWxOK8PZD/Xos0Z5gq/5TzTHMcb+B25SvTiyKXNxnGQzD7Muozem6\nW3Q9IBU6AGBFErY67RzlW16BZIisIkdHGh/qtAsRLa0EJhNBK8laOq+vRgI9Y9OS\ndaLgDbmiKj2UdDmzT5R1W3nOrxvR05M5dfEpz/sjGcsbXz7JTp9fHAMe6TM/tTaf\nRDngOHnDWWDgqnLznOJ3Fq3PKoW6U9ElRZwCvmU4HuhfzIoASrMXZiYQPOiAjtvs\npj/qNeRx5u+Y9ZDVibvACimbb5tyyfM9nbIjlInSukeX55CIv6QoumoO9edvFYSx\ne0VVv1cdBwHJ7Mc9Rz6kCKgkej0kJbm+OySirngJq/NFx+ZpUrl5WNPBhkPxvWLs\n1UmeieDMEQVjvHKbgUQ+Xw+hEz2loTAZ9JRSaUdZP3xe7577uz6N2Wf+H1SZsqiS\nEhjbZsOLgQY4GbgWTaRb9U0I/Sl2PqNzqobhGxHNgegdxuJLQBX6NaK1qE6VyNDq\nbdHBO02VaR/GRwxl1KhE\n=Yv38\n-----END PGP SIGNATURE-----\n",
+      "payload": "tree a5e51a8cc17e7a310aee88d8a0775fd2cb0e643b\nparent 2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4\nauthor yosh.wang <162548755+yosh-wang@users.noreply.github.com> 1783216285 +0800\ncommitter GitHub <noreply@github.com> 1783216285 +0800\n\nUpdate README.md",
+      "verified_at": "2026-07-05T01:51:26Z"
+    }
+  },
+  "url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/commits/396ffb8f9507a8fedbbdf2986779083e40d34b7c",
+  "html_url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/commit/396ffb8f9507a8fedbbdf2986779083e40d34b7c",
+  "comments_url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/commits/396ffb8f9507a8fedbbdf2986779083e40d34b7c/comments",
+  "author": {
+    "login": "yosh-wang",
+    "id": 162548755,
+    "node_id": "U_kgDOCbBMEw",
+    "avatar_url": "https://avatars.githubusercontent.com/u/162548755?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/yosh-wang",
+    "html_url": "https://github.com/yosh-wang",
+    "followers_url": "https://api.github.com/users/yosh-wang/followers",
+    "following_url": "https://api.github.com/users/yosh-wang/following{/other_user}",
+    "gists_url": "https://api.github.com/users/yosh-wang/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/yosh-wang/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/yosh-wang/subscriptions",
+    "organizations_url": "https://api.github.com/users/yosh-wang/orgs",
+    "repos_url": "https://api.github.com/users/yosh-wang/repos",
+    "events_url": "https://api.github.com/users/yosh-wang/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/yosh-wang/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "committer": {
+    "login": "web-flow",
+    "id": 19864447,
+    "node_id": "MDQ6VXNlcjE5ODY0NDQ3",
+    "avatar_url": "https://avatars.githubusercontent.com/u/19864447?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/web-flow",
+    "html_url": "https://github.com/web-flow",
+    "followers_url": "https://api.github.com/users/web-flow/followers",
+    "following_url": "https://api.github.com/users/web-flow/following{/other_user}",
+    "gists_url": "https://api.github.com/users/web-flow/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/web-flow/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/web-flow/subscriptions",
+    "organizations_url": "https://api.github.com/users/web-flow/orgs",
+    "repos_url": "https://api.github.com/users/web-flow/repos",
+    "events_url": "https://api.github.com/users/web-flow/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/web-flow/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "parents": [
+    {
+      "sha": "2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4",
+      "url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/commits/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4",
+      "html_url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/commit/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4"
+    }
+  ],
+  "stats": {
+    "total": 42,
+    "additions": 42,
+    "deletions": 0
+  },
+  "files": [
+    {
+      "sha": "7ee4c8298140179a723fcf39ae93fc5c1464d6dd",
+      "filename": "README.md",
+      "status": "modified",
+      "additions": 42,
+      "deletions": 0,
+      "changes": 42,
+      "blob_url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/blob/396ffb8f9507a8fedbbdf2986779083e40d34b7c/README.md",
+      "raw_url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/raw/396ffb8f9507a8fedbbdf2986779083e40d34b7c/README.md",
+      "contents_url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/contents/README.md?ref=396ffb8f9507a8fedbbdf2986779083e40d34b7c",
+      "patch": "@@ -1,4 +1,19 @@\n \r\n+<p align=\"center\">\r\n+  <img src=\"https://img.shields.io/badge/🎬-mpv中文统计脚本-00ADEF?style=for-the-badge&logo=mpv&logoColor=white\" alt=\"mpv中文统计脚本\">\r\n+</p>\r\n+\r\n+<p align=\"center\">\r\n+  <strong>✨ 完整汉化 · 即装即用 · 与原版功能同步 ✨</strong>\r\n+</p>\r\n+\r\n+> [!IMPORTANT]\r\n+> 🚫 **非商业使用声明**\r\n+>\r\n+> 本项目仅供 **个人学习、研究和非商业用途** 使用，**严禁任何形式的商业使用**。\r\n+>\r\n+> 📄 详见 [LICENSE.md](LICENSE.md)\r\n+\r\n ---\r\n \r\n # 🎬 mpv 中文版统计脚本 (stats.lua) 汉化原创  \r\n@@ -261,3 +276,30 @@ This project is released under the [MIT License](https://github.com/yosh-wang/mp\n <img width=\"1200\" height=\"675\" alt=\"6\" src=\"https://github.com/user-attachments/assets/4de58e57-ac98-4d59-b14d-dc76c77e8a2b\" />\r\n \r\n ---\r\n+\r\n+---\r\n+\r\n+## 📄 许可证\r\n+\r\n+本项目基于 **非商业使用许可** 开源，**严禁商用**。\r\n+\r\n+📖 详见 [LICENSE.md](LICENSE.md)\r\n+\r\n+---\r\n+\r\n+## 🙏 致谢\r\n+\r\n+- [mpv 播放器](https://mpv.io/) — 强大而优雅的媒体播放器\r\n+- [@XSHNDWX](https://github.com/XSHNDWX) — 安卓平台技术支持\r\n+- 所有使用和反馈本脚本的朋友们\r\n+\r\n+---\r\n+\r\n+<p align=\"center\">\r\n+  <sub>Made with ❤️ by <a href=\"https://github.com/yosh-wang\">yosh-wang</a></sub>\r\n+</p>\r\n+\r\n+<p align=\"center\">\r\n+  <sub>⭐ 如果这个项目对您有帮助，请给一个 Star 支持一下！</sub>\r\n+</p>\r\n+```\r"
+    }
+  ]
+}

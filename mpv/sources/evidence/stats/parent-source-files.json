@@ -1,0 +1,98 @@
+[
+  {
+    "repository": "mpv-player/mpv",
+    "commit": "de0f2f943d485ad6623629831e079a1de8be021b",
+    "path": "LICENSE.LGPL",
+    "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
+    "bytes": 26410,
+    "url": "https://github.com/mpv-player/mpv/blob/de0f2f943d485ad6623629831e079a1de8be021b/LICENSE.LGPL"
+  },
+  {
+    "repository": "mpv-player/mpv",
+    "commit": "de0f2f943d485ad6623629831e079a1de8be021b",
+    "path": "LICENSE.GPL",
+    "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+    "bytes": 17984,
+    "url": "https://github.com/mpv-player/mpv/blob/de0f2f943d485ad6623629831e079a1de8be021b/LICENSE.GPL"
+  },
+  {
+    "repository": "mpv-player/mpv",
+    "commit": "de0f2f943d485ad6623629831e079a1de8be021b",
+    "path": "Copyright",
+    "sha256": "bfe9ee4cceabcb8ecbfadf208d04156f73d801e6a57369a5606bb8341e204a23",
+    "bytes": 4096,
+    "url": "https://github.com/mpv-player/mpv/blob/de0f2f943d485ad6623629831e079a1de8be021b/Copyright"
+  },
+  {
+    "repository": "mpv-player/mpv",
+    "commit": "de0f2f943d485ad6623629831e079a1de8be021b",
+    "path": "player/lua/stats.lua",
+    "sha256": "5d8fa3d5a5c9b6c54d723490384f63bac363706abdf36b6fda5103ea1300383e",
+    "bytes": 67656,
+    "url": "https://github.com/mpv-player/mpv/blob/de0f2f943d485ad6623629831e079a1de8be021b/player/lua/stats.lua"
+  },
+  {
+    "repository": "mpv-player/mpv",
+    "commit": "de0f2f943d485ad6623629831e079a1de8be021b",
+    "path": "DOCS/contribute.md",
+    "sha256": "3d3c70d11f051f8b308c42e7d5213444f41a73dbb8bfecd59d058de9837feffd",
+    "bytes": 14058,
+    "url": "https://github.com/mpv-player/mpv/blob/de0f2f943d485ad6623629831e079a1de8be021b/DOCS/contribute.md"
+  },
+  {
+    "repository": "Argon-/mpv-stats",
+    "commit": "750512a96379dd349c2b3b8a70e45bbdd392a3e2",
+    "path": "LICENSE",
+    "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+    "bytes": 26530,
+    "url": "https://github.com/Argon-/mpv-stats/blob/750512a96379dd349c2b3b8a70e45bbdd392a3e2/LICENSE"
+  },
+  {
+    "repository": "Argon-/mpv-stats",
+    "commit": "750512a96379dd349c2b3b8a70e45bbdd392a3e2",
+    "path": "readme.md",
+    "sha256": "c0f72cddd3a2f3ad6e0a3c3da0b988aef06fbd61bfac823a0a81644cf62590ec",
+    "bytes": 3789,
+    "url": "https://github.com/Argon-/mpv-stats/blob/750512a96379dd349c2b3b8a70e45bbdd392a3e2/readme.md"
+  },
+  {
+    "repository": "Argon-/mpv-stats",
+    "commit": "750512a96379dd349c2b3b8a70e45bbdd392a3e2",
+    "path": "stats.lua",
+    "sha256": "e96c375c2ea7fd369e72daef807a369301ccd5940bbf6cc7054e0225bc77c45f",
+    "bytes": 26026,
+    "url": "https://github.com/Argon-/mpv-stats/blob/750512a96379dd349c2b3b8a70e45bbdd392a3e2/stats.lua"
+  },
+  {
+    "repository": "mpv-player/mpv",
+    "commit": "41f6a645068483470267271e1d09966ca3b9f413",
+    "path": "LICENSE.LGPL",
+    "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
+    "bytes": 26410,
+    "url": "https://github.com/mpv-player/mpv/blob/41f6a645068483470267271e1d09966ca3b9f413/LICENSE.LGPL"
+  },
+  {
+    "repository": "mpv-player/mpv",
+    "commit": "41f6a645068483470267271e1d09966ca3b9f413",
+    "path": "LICENSE.GPL",
+    "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+    "bytes": 17984,
+    "url": "https://github.com/mpv-player/mpv/blob/41f6a645068483470267271e1d09966ca3b9f413/LICENSE.GPL"
+  },
+  {
+    "repository": "mpv-player/mpv",
+    "commit": "41f6a645068483470267271e1d09966ca3b9f413",
+    "path": "Copyright",
+    "sha256": "bfe9ee4cceabcb8ecbfadf208d04156f73d801e6a57369a5606bb8341e204a23",
+    "bytes": 4096,
+    "url": "https://github.com/mpv-player/mpv/blob/41f6a645068483470267271e1d09966ca3b9f413/Copyright"
+  },
+  {
+    "repository": "mpv-player/mpv",
+    "commit": "41f6a645068483470267271e1d09966ca3b9f413",
+    "path": "player/lua/stats.lua",
+    "sha256": "567f4cf8cda677ff0d8409c72272862b880f4d48a1dda49dd4b373c28d6eb4c1",
+    "bytes": 67226,
+    "url": "https://github.com/mpv-player/mpv/blob/41f6a645068483470267271e1d09966ca3b9f413/player/lua/stats.lua"
+  }
+]

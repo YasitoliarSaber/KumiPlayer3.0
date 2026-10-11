@@ -1,0 +1,232 @@
+{
+  "repository": "https://github.com/google/material-design-icons",
+  "commit": "1c575764826fa5752ddc2bdc6b31ef7cc3233371",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "upstream_path": "font/MaterialIconsRound-Regular.otf",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/1c575764826fa5752ddc2bdc6b31ef7cc3233371/font/MaterialIconsRound-Regular.otf",
+      "archived_path": "mpv/sources/evidence/components/uosc/material-icons-round/font/MaterialIconsRound-Regular.otf",
+      "sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25"
+    },
+    {
+      "upstream_path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/1c575764826fa5752ddc2bdc6b31ef7cc3233371/LICENSE",
+      "archived_path": "mpv/sources/evidence/components/uosc/material-icons-round/LICENSE",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
+    },
+    {
+      "upstream_path": "font/README.md",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/1c575764826fa5752ddc2bdc6b31ef7cc3233371/font/README.md",
+      "archived_path": "mpv/sources/evidence/components/uosc/material-icons-round/font/README.md",
+      "sha256": "551db2048ba32d09bc41f81ec136077e170a3b368d5efc9eaf2b6ab706436713"
+    },
+    {
+      "upstream_path": "README.md",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/1c575764826fa5752ddc2bdc6b31ef7cc3233371/README.md",
+      "archived_path": "mpv/sources/evidence/components/uosc/material-icons-round/README.md",
+      "sha256": "d51beabf61b701c7d5a33f9fb6c9b6e352c4111ba81da0899a2ea94ae22a8142"
+    }
+  ],
+  "bundled_font": "mpv/config/portable_config/fonts/uosc_icons.otf",
+  "bundled_sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25",
+  "byte_identical_to_google_font": true,
+  "history_checks": [
+    {
+      "commit": "f7bd4f25f3764883717c09a1fd867f560c9a9581",
+      "date": "2022-09-19T22:53:40Z",
+      "sha256": "bad85e5454b6288104ce03806c37323bcd8f145e3094e727860173ac8c91062e",
+      "size": 400092,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "GSUB",
+        "cmap",
+        "head",
+        "hmtx",
+        "maxp",
+        "name"
+      ]
+    },
+    {
+      "commit": "1c575764826fa5752ddc2bdc6b31ef7cc3233371",
+      "date": "2022-08-01T16:56:44Z",
+      "sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25",
+      "size": 400360,
+      "byte_identical": true,
+      "different_tables": []
+    },
+    {
+      "commit": "8825e59fa98ec04a3bd6c7cf0ef7b7abf07c3cec",
+      "date": "2022-06-27T07:23:15Z",
+      "sha256": "e168ae68efffa4e24b81af1e0f4c207e7b235d661e46f68170fae0ad985b2ad6",
+      "size": 400376,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "head",
+        "name"
+      ]
+    },
+    {
+      "commit": "9c7b48a33157fd849c275d05fcf93d0b981f7083",
+      "date": "2022-05-09T15:29:56Z",
+      "sha256": "60f2cf8ac4e72e30456d7bde1fb5f7096655c2aee6fbd6b4bd8f81e7d6b3bcda",
+      "size": 399760,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "GSUB",
+        "cmap",
+        "head",
+        "hmtx",
+        "maxp",
+        "name"
+      ]
+    },
+    {
+      "commit": "f5cdf3a23d3acdd8490fc4879f4f59a705f409ef",
+      "date": "2022-04-21T23:16:33Z",
+      "sha256": "b82d4541f2bda201e753a4eb453685014daf61ad0aa35cd73cdc59912870b1b0",
+      "size": 392148,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "GSUB",
+        "cmap",
+        "head",
+        "hmtx",
+        "maxp",
+        "name"
+      ]
+    },
+    {
+      "commit": "5180e5b6abd202efc6dd2976fe860c9e336b300a",
+      "date": "2022-04-21T20:50:38Z",
+      "error_type": "CalledProcessError"
+    },
+    {
+      "commit": "140c233b4fc1669b9b419471d94f63cc96f0106a",
+      "date": "2022-03-28T20:06:06Z",
+      "sha256": "b82d4541f2bda201e753a4eb453685014daf61ad0aa35cd73cdc59912870b1b0",
+      "size": 392148,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "GSUB",
+        "cmap",
+        "head",
+        "hmtx",
+        "maxp",
+        "name"
+      ]
+    },
+    {
+      "commit": "a293abf7e656e28ade5fc52417cdceb1cd5b06ab",
+      "date": "2022-03-04T19:47:00Z",
+      "sha256": "e99c5e10b6f75aaca636a296a76a1fbabf1301dcbac8f1666b3202a5bb089332",
+      "size": 390360,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "GSUB",
+        "OS/2",
+        "cmap",
+        "head",
+        "hmtx",
+        "maxp",
+        "name"
+      ]
+    },
+    {
+      "commit": "c1eb6286e18cd49bec9f243e5d38a6712fcdbb0b",
+      "date": "2022-01-08T01:24:48Z",
+      "sha256": "59c47605bffe28e3741bb5fa80fd7cbfa4b1e88abfee2639bd491fcebcbf6c27",
+      "size": 384476,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "GSUB",
+        "OS/2",
+        "cmap",
+        "head",
+        "hmtx",
+        "maxp",
+        "name"
+      ]
+    },
+    {
+      "commit": "6ebe181c634f9ced978b526e13db6d7d5cb1c1ba",
+      "date": "2021-11-15T18:38:19Z",
+      "sha256": "ad596bafe1fc9c1a3197c5f7f0d46711ed7d78383c6ae709123ee4e0ecea9af4",
+      "size": 373784,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "GSUB",
+        "OS/2",
+        "cmap",
+        "head",
+        "hmtx",
+        "maxp",
+        "name"
+      ]
+    },
+    {
+      "commit": "ab12f16d050ecb1886b606f08825d24b30acafea",
+      "date": "2021-05-11T19:23:18Z",
+      "sha256": "aa907a9819ec2685305dd8f7bd1c5b3aa2fccf29e9611ce315f58862c154c4c3",
+      "size": 333988,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "GSUB",
+        "OS/2",
+        "cmap",
+        "head",
+        "hhea",
+        "hmtx",
+        "maxp",
+        "name"
+      ]
+    },
+    {
+      "commit": "f5f56570741833bdd36463f1f1b6b7d4edd3f9c1",
+      "date": "2020-08-31T21:17:14Z",
+      "sha256": "47a35b4d52cc77276f43e2d103442faf3b5f4ee900c1adb2f031f900e79658c4",
+      "size": 243844,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "GSUB",
+        "OS/2",
+        "cmap",
+        "head",
+        "hhea",
+        "hmtx",
+        "maxp",
+        "name"
+      ]
+    },
+    {
+      "commit": "18e03aadb91dd655d1e43a5911d82d1d2eeacfd7",
+      "date": "2020-08-19T04:00:06Z",
+      "sha256": "bb5b490e0e291b6a5f17cd8b233491f39757df49c3e77d1e6db039bf98373891",
+      "size": 242172,
+      "byte_identical": false,
+      "different_tables": [
+        "CFF ",
+        "GSUB",
+        "OS/2",
+        "cmap",
+        "head",
+        "hhea",
+        "hmtx",
+        "maxp",
+        "name"
+      ]
+    }
+  ],
+  "limitations": [],
+  "checked_at": "2026-10-11"
+}

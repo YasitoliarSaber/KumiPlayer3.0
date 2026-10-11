@@ -4,12 +4,34 @@
   "reviewed_by": null,
   "reviewed_at": null,
   "source_delivery": "bundled",
-  "source_archive": { "path": null, "sha256": null },
+  "source_archive": {
+    "path": null,
+    "sha256": null,
+    "kind": "complete-corresponding-source"
+  },
   "approved_files": [],
   "blockers": [
-    "原始二进制 ZIP 尚未本地复算 SHA-256；构建短哈希尚未核对为完整提交",
-    "MPV、FFmpeg、动态及静态依赖的准确版本、构建脚本和完整对应源码尚未归档",
-    "mpv-stats-zh 当前脚本和历史 MIT 许可的同一提交证据尚未固定",
-    "修改过的 uosc、thumbfast 与弹幕脚本的版本来源、修改说明和许可义务尚未完成复核"
-  ]
+    "官方 CI 使用浮动 Git 依赖，历史日志 HTTP 410：尚缺 libass、lcms2、libplacebo、shaderc（含 glslang/SPIRV-Tools/Headers）、SPIRV-Cross、nv-codec-headers、Vulkan Headers/Loader 的准确构建提交、mujs WrapDB 修订及工具链记录",
+    "统计脚本 53b087e8 同提交 MIT LICENSE 与禁止商用 README 有冲突；用户要求保留新版功能，授权范围尚待澄清",
+    "已准备的是来源证据归档，不是完整对应源码；完整源码闭包、公开源码交付与最终人工发布复核尚未完成"
+  ],
+  "corresponding_source_complete": false,
+  "runtime_provenance": "mpv/provenance/runtime.json",
+  "source_inputs": "mpv/sources/runtime-inputs.json",
+  "verified_items": [
+    "官方原始 ZIP 已重下载并复算 SHA-256，27 个实际运行文件与其嵌套 ZIP 完全一致",
+    "MPV、FFmpeg、dav1d 完整 Git 提交已解析；LuaJIT 按内嵌版本时间戳追溯",
+    "已归档 9 份已证实源码输入和该 MPV 提交的实际官方 CI 脚本",
+    "uosc、thumbfast、Anime4K 和弹幕源码已固定，修改脚本可由基底加补丁重建",
+    "Material Icons Round 字体找到完全一致的 Google 提交，独立 Apache-2.0 许可已补入",
+    "统计脚本精确版本、MIT 文本、README 限制以及父源码许可均已保存"
+  ],
+  "evidence_archive": {
+    "path": "sources/mpv-provenance-evidence.zip",
+    "sha256": "09baa067b735a23856e1b5a05c0fa8e506bb64814f8c3083daa94cc1f3268a79",
+    "bytes": 72114691,
+    "kind": "provenance-evidence",
+    "complete_corresponding_source": false,
+    "file_count": 304
+  }
 }

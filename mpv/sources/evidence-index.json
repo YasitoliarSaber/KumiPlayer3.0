@@ -1,0 +1,1549 @@
+{
+  "schema_version": 1,
+  "archive_kind": "provenance-evidence",
+  "complete_corresponding_source": false,
+  "files": [
+    {
+      "path": "components-manifest.json",
+      "sha256": "1e0e1995853530fe85d4add70c6ce8bc330508627a55e691ee24847129f6e652",
+      "bytes": 14044
+    },
+    {
+      "path": "config/kumiplayer/mpv.conf",
+      "sha256": "63c92efb393b0db1083c412da3316015e51b1497b7cc21bf6c786c577561516e",
+      "bytes": 5259
+    },
+    {
+      "path": "config/kumiplayer/scripts/kumiplayer_anime4k.lua",
+      "sha256": "8a34001ee69e701f5585c205ebb131bb77fcee243d2afd51baf6c5a62add2901",
+      "bytes": 17968
+    },
+    {
+      "path": "config/kumiplayer/scripts/kumiplayer_bindings.lua",
+      "sha256": "5a5eb3b1651965fc1cdef1575ba391943be02e9bba5b2b825b268f1ef67ea26e",
+      "bytes": 2670
+    },
+    {
+      "path": "config/kumiplayer/scripts/kumiplayer_uosc_menu.lua",
+      "sha256": "9be4bc26ea61accef09367a644c680d59017873989145d47829e29256c315ec6",
+      "bytes": 16002
+    },
+    {
+      "path": "config/kumiplayer/scripts/screenshot_to_video_dir.lua",
+      "sha256": "ab8afbfe793733b41676df77c39146f0aad5b746db57e796b4478c425a83898f",
+      "bytes": 2884
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_AutoDownscalePre_x2.glsl",
+      "sha256": "8c58291740146bd766a4d73f132775a797fe80f7d07919b5d767e27a5dc85656",
+      "bytes": 1560
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_AutoDownscalePre_x4.glsl",
+      "sha256": "5af62d8cd844916dc1126613e13bad3beab195787f93a71200b47c6ec78f2e41",
+      "bytes": 1568
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Clamp_Highlights.glsl",
+      "sha256": "a2a9bf7fbc1d75d09660ca2e701e4d7fb0cf5457b94da47e1825032fa2b3671a",
+      "bytes": 2795
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_L.glsl",
+      "sha256": "d6efe215e6ee8af1ec560478a91afc1df83fac4ba43b2c806ee61ca2267ed674",
+      "bytes": 69921
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_M.glsl",
+      "sha256": "67ea3ed26539e8de3b7d307688535d2ff17e8d147e11dda0247da7770dbecf41",
+      "bytes": 35916
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_S.glsl",
+      "sha256": "97c24dc370ab300c108bfaa09db7f175aeff343674842c299cf3940a3d330427",
+      "bytes": 17136
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_L.glsl",
+      "sha256": "8f2a5c73b526c6e4c67bce0366f7dcd7410bfa4a31e718240d86f53660788e63",
+      "bytes": 70020
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_M.glsl",
+      "sha256": "a78a2c76898e08e09e442a9628c64208c26e8e15789649b8755223f009794c02",
+      "bytes": 36016
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_S.glsl",
+      "sha256": "9f6867f2ef42786729522d86fe24147cb4ea145418e3974df70496acf52dc392",
+      "bytes": 17198
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_VL.glsl",
+      "sha256": "094334b0e20c1a201fe4941c7c68de72451e5aee9efb5524d7fb82b12dca64b9",
+      "bytes": 144204
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_VL.glsl",
+      "sha256": "35036722733305cd4d4e57660b883bbe2569ba2914033c254327107d7b77e35e",
+      "bytes": 144075
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_L.glsl",
+      "sha256": "db1fedf7be82f6fd9034e6bf39b64daf2b7576988bb584ec38f24f5236b1cd97",
+      "bytes": 73443
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_M.glsl",
+      "sha256": "716e02098a68f0d648761f2b96b4dd139e1cb09b174bb369fca3aa34328fff7e",
+      "bytes": 37685
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_S.glsl",
+      "sha256": "4c53ec2e287908f7ee7bcb266b0170421626d663576468b7d7dafc62962649a4",
+      "bytes": 18638
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_VL.glsl",
+      "sha256": "5638fe31c37c151a3443fea3451a3ef91af073f4dbb9615f6c0d1e29db11493d",
+      "bytes": 146743
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_L.glsl",
+      "sha256": "6cc4604c9544fd4fd9e3a75fd797511bf5fe1e626e9e1dbcee03302823a63207",
+      "bytes": 73584
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_M.glsl",
+      "sha256": "8c72b042e2301fe66a45c3089720459148e2504cd72af16f9c0d5017ff14181e",
+      "bytes": 37714
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl",
+      "sha256": "359c48fe5a317fbc6b706ce368401eef496e84ed98abac7a43efebca2b65d79b",
+      "bytes": 146811
+    },
+    {
+      "path": "config/kumiplayer/shaders/anime4k-v4.0.1/LICENSE",
+      "sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5",
+      "bytes": 1063
+    },
+    {
+      "path": "config/portable_config/fonts/uosc_icons.otf",
+      "sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25",
+      "bytes": 400360
+    },
+    {
+      "path": "config/portable_config/fonts/uosc_textures.ttf",
+      "sha256": "ccc0660f284dfceb5ab31eb363ccb2355df30fcdf628e781ee374b7d4172ada5",
+      "bytes": 38228
+    },
+    {
+      "path": "config/portable_config/input.conf",
+      "sha256": "62f9e283ee3de0720461290582908d7916bd303c8f71f736fbeb4aa8e85154fd",
+      "bytes": 8749
+    },
+    {
+      "path": "config/portable_config/mpv.conf",
+      "sha256": "69beae596642431c1b4721195fdadb31a67cb65ac94db930a4592f563c104d85",
+      "bytes": 5046
+    },
+    {
+      "path": "config/portable_config/script-opts/kumiplayer_anime4k.conf",
+      "sha256": "5da8773fdf2418b879c21e806266b8a5271c0f88853065b92949f41ecc9c6652",
+      "bytes": 294
+    },
+    {
+      "path": "config/portable_config/script-opts/README.md",
+      "sha256": "bfdf49ed03277253a203fda7258f62dc63d254331bc9e39673821989a60733ce",
+      "bytes": 1176
+    },
+    {
+      "path": "config/portable_config/script-opts/stats.conf",
+      "sha256": "3675f9a2e13d99f467a86ecce30550ddbbd05041988a9543f0308dfbe63935e2",
+      "bytes": 1067
+    },
+    {
+      "path": "config/portable_config/script-opts/thumbfast.conf",
+      "sha256": "9d3affe0c9b0ef40b9ec1d2df8935d6c9c748f4a8bc15b1a98c5504c8b9b1ea4",
+      "bytes": 1221
+    },
+    {
+      "path": "config/portable_config/script-opts/uosc.conf",
+      "sha256": "6b049b9436147202a5cf7cb1d827880316a2bb1607b4b342d40f63e9e16d950b",
+      "bytes": 3590
+    },
+    {
+      "path": "config/portable_config/script-opts/uosc_danmaku.conf",
+      "sha256": "730a3c60639785165453384bb1148596eec610655a1b8faef94f8e502d104449",
+      "bytes": 3219
+    },
+    {
+      "path": "config/portable_config/scripts/stats.lua",
+      "sha256": "4f037d834a6d88b4615fcaf087963d04dfa814e7097621c87370f25184142302",
+      "bytes": 112050
+    },
+    {
+      "path": "config/portable_config/scripts/thumbfast.lua",
+      "sha256": "58a6a8ead7d79634f2bcc36b19864035ca50820771b30a89c871f6cf062f877a",
+      "bytes": 34421
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/char-conv/zh.json",
+      "sha256": "1e250ec50866529b57d273fa90bd8fc56f22b4371d5ea641ce3bebc832dd9889",
+      "bytes": 85097
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/BufferingIndicator.lua",
+      "sha256": "f7ceb7c88916e49ee5aef2a8c45d53ee5a6f9931b7977898ecf96ebfa543c1c4",
+      "bytes": 1689
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/Button.lua",
+      "sha256": "31d407dfc9e54295201f392d03886ef801108ead6384a2d12a620eafa38724c2",
+      "bytes": 3634
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/Controls.lua",
+      "sha256": "930f9c04fcc4e06dc8321e0639b719800a7b2c99e52e9acd5a9b4d6502c01565",
+      "bytes": 18051
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/Curtain.lua",
+      "sha256": "7f965119a6fc70d8cce70cf025db764a5d83433321da79a7734c691afdbb1e32",
+      "bytes": 1016
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/CycleButton.lua",
+      "sha256": "e49e20110bf84d852ce4d85f26e36a24330ef9a54f28f0886cc658352e09aa75",
+      "bytes": 3062
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/Element.lua",
+      "sha256": "381141cd760a42769c0abdf7cfdf7ef26930249e133fa9800e7c8623f55bc016",
+      "bytes": 9591
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/Elements.lua",
+      "sha256": "f44e57ea4c4c60f82f3775df9337064fdbcb7cb4bc157b47a5c07a12ee8a62c7",
+      "bytes": 4836
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/ManagedButton.lua",
+      "sha256": "da1c1ecf4d145e5c06fb7077a654b1c58412ae106e54b3f5946b919dabd01446",
+      "bytes": 1182
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/Menu.lua",
+      "sha256": "0cbc42afbe72f3f76f069995744de1e772d706445ed7987d1bffaafed50f2f49",
+      "bytes": 66443
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/PauseIndicator.lua",
+      "sha256": "f2fe8f6bf894c60686e021a5faa0eebf1da940ab61dbbac109f173865a6c8664",
+      "bytes": 2706
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/Speed.lua",
+      "sha256": "fee532d01e108cb4d74fbfdedaf91ea2fff81af3b4f3f4e3543fd8aaefa92326",
+      "bytes": 6093
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/Timeline.lua",
+      "sha256": "5be97872da67aa091e37f395664ad05e4c1f6e3cd6e727ef68217e236176b2ee",
+      "bytes": 19710
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/TopBar.lua",
+      "sha256": "7513c5ec0924befc5f7e8edb5a0c96870150ed827ace820ba863f1995ba8e3c0",
+      "bytes": 15495
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/Updater.lua",
+      "sha256": "41ecb02fb396d9a05f16db16b3970986bd21b31d4d5e32db9ed072338d9bc065",
+      "bytes": 10507
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/Volume.lua",
+      "sha256": "fa16d0cd19df402ef631931d49787ccc7fdf06adf3e86913deb5bafcd3266c7a",
+      "bytes": 10297
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/elements/WindowBorder.lua",
+      "sha256": "c8a6a64c321732913bc8ad838a202bdca037cfab3db4dcd636cb63098dc806cb",
+      "bytes": 1234
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/de.json",
+      "sha256": "606d296d7d0dd010cb732722a0c9e28abc9c0d09d962e959212c29bfdf2a125e",
+      "bytes": 3126
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/es.json",
+      "sha256": "cc38c03c9b954c8711b23eddfedb83ba6c9653a133c3ad7e432cfecdd089a999",
+      "bytes": 3843
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/fr.json",
+      "sha256": "a8ec21232c1fbb5c3de5a90f1f92ec1e4258ea9827f9eff87989f20471552c3b",
+      "bytes": 1887
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/it.json",
+      "sha256": "58bf14006cb8a61730ee7faabad4a7c4ea99681efd4268ffb02a26354076839f",
+      "bytes": 1747
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/pl.json",
+      "sha256": "c3733a695296104618683f4b705b1e03493d1cd96ba5fe98c339020b3cd95cdd",
+      "bytes": 4055
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/pt.json",
+      "sha256": "ad8539c3d8ae368a93e2cd0402ad92480aa3ea57db6430ee1bd6c34876005a1f",
+      "bytes": 4002
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/ro.json",
+      "sha256": "22c90c139b53e0b417a62987baa4e46b010195df8e85bd076861b7044dd3ab1e",
+      "bytes": 1799
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/ru.json",
+      "sha256": "ac86fd3ae167e79cc51aec8bd12f04dc9491613fecdba6820f3388db6671b9a6",
+      "bytes": 2313
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/tr.json",
+      "sha256": "1081a7e970764e0ff438c3d8c2164543732cc10f6feb8e11fa670b741d3d896e",
+      "bytes": 4019
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/uk.json",
+      "sha256": "e57d8cbc32b5b8e92b50cde0b2eb06cb405f87a138ebd88b5cb962d84be8e4a8",
+      "bytes": 3139
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/zh-hans.json",
+      "sha256": "d3339e658874530f4275c70d0837986746f98a9abca453d4bb2bde285c5dde31",
+      "bytes": 3471
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/intl/zh-HK.json",
+      "sha256": "889667e15b379bed7015fdc6bb6ac5295fba2bbb810f9392582da296d5444e5c",
+      "bytes": 3722
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/lib/ass.lua",
+      "sha256": "e0eab05a8924cb184867c965aefdcabd5b11989335dd1d24aa9d4a44e2346694",
+      "bytes": 11511
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/lib/buttons.lua",
+      "sha256": "f79302eda925010a8ccbfa7e960e0fc7760114b920d641897474ed91ea318f73",
+      "bytes": 1888
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/lib/char_conv.lua",
+      "sha256": "57dca5a0498d254826d8c18a1fc800b3556a6f49318e7ad0fbefc51b7167660f",
+      "bytes": 1556
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/lib/cursor.lua",
+      "sha256": "d77796d3d857b5527b882c18b92b9e81d7fb3f8a27e7b5ebf52e489c98bbc7f6",
+      "bytes": 16972
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/lib/fzy.lua",
+      "sha256": "5b1b53aaf56c8b51bd3507f6f6b76c042b92ceb55eaac8533277754158426711",
+      "bytes": 8164
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/lib/intl.lua",
+      "sha256": "234df27c1e6a27089b04e156c3146669bbe4fcb3960169692b222c9e4867110d",
+      "bytes": 1599
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/lib/menus.lua",
+      "sha256": "08181fa05c2a0dd0c5146c0a0e02e44a690732f84a08e3c5bfdd06ff68e0f79e",
+      "bytes": 36771
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/lib/std.lua",
+      "sha256": "fdaedd93bdb9b716dbd99ec1c8cff08b3d316c9fdc793718e2b4ee7a504799f5",
+      "bytes": 9961
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/lib/text.lua",
+      "sha256": "f4e040412b2e3c2d276d8098aa1eea01e020e916123336470dd2480a5968eb07",
+      "bytes": 22231
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/lib/utils.lua",
+      "sha256": "297fb0a150bc0ec8a4d342373c3864aafdd5aee7cccc66469c2a656cf120302c",
+      "bytes": 34667
+    },
+    {
+      "path": "config/portable_config/scripts/uosc/main.lua",
+      "sha256": "bf97dcde4f1b8bd74a5e1c672a436a5584b5db2dc9413ab5585745afd9e1dd8d",
+      "bytes": 43478
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/apis/dandanplay.lua",
+      "sha256": "1e5ce7a1a57d5f7a4709e47f5871b08b9ce5f67acac521a88ce3404ea8e02ea3",
+      "bytes": 25153
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/apis/extra.lua",
+      "sha256": "603933459a6e5dde65c16b840cabb4308bae0c3e9b2d989960f26f6d9ce94036",
+      "bytes": 16786
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/dicts/s2t_chars.lua",
+      "sha256": "318c29eae825dad40b05435931b63ca95a463a320afcf91e76f2692d290c3c91",
+      "bytes": 77124
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/dicts/t2s_chars.lua",
+      "sha256": "84dc35fb62e6480d6cceb2478284331517a11c5b211c0c5f7c3eb34bede5285c",
+      "bytes": 79632
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/LICENSE",
+      "sha256": "717bc0a3d9f24e80be5fe3771866ca97ed080d0151f82401f6d152b4dfbec452",
+      "bytes": 1066
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/main.lua",
+      "sha256": "f14d2bc2df857b965f8013bf48baf92cd26e77ff554fc9c56f68fb244b1e8c78",
+      "bytes": 25646
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/aes.lua",
+      "sha256": "7adc2fdfcb8ee66f438d716065570c1402b19c039576ec939ffcde7284302d8a",
+      "bytes": 20819
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/base64.lua",
+      "sha256": "4a8035153f69e7326dd09204557036b271eb3ed390883e62ac1b6853643526d8",
+      "bytes": 7273
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/guess.lua",
+      "sha256": "414896d780ddec27d6ee2df6939749eb495471bc7393e8828adc43f301feff3f",
+      "bytes": 5833
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/hash.lua",
+      "sha256": "ce45716518d5588afd9b0a1c71c2f9ce405b415fc85603c47e9ad4d813a6c7f6",
+      "bytes": 5231
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/inflate.lua",
+      "sha256": "a386b208fbc46172e7f3127614ce50e710ed2c71da824b86b661bab89e015682",
+      "bytes": 13946
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/md5.lua",
+      "sha256": "1fc84027d59550f82233bac765f203a2cf2b5691eb6437c514a57f4850891ddc",
+      "bytes": 6492
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/menu.lua",
+      "sha256": "c2430ece4f674f8d90cf0560129bf7777aaf4d6f83602c64eac0409d68c7a443",
+      "bytes": 58664
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/options.lua",
+      "sha256": "b6a7ee58e32bf37ac3038537aaff8a444216730d6b772c69e1ff7764ac38a3e0",
+      "bytes": 4333
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/parse.lua",
+      "sha256": "a729c573b8fc4dad5852a0932447b147ac98fc96672680b7dbc89b468df073d3",
+      "bytes": 24806
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/render.lua",
+      "sha256": "ab25b62f71d8104ea53086ef3bc953389fbca976f727318b6e0729b9e03f6fb2",
+      "bytes": 8601
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/update.lua",
+      "sha256": "f488320aa9be89052f5602611805f90fc409cf98346224582ed117510bd49118",
+      "bytes": 5624
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/modules/utils.lua",
+      "sha256": "2fcf668de396f911dba316aa064cd4569da2cbb351017b6d6c7cddeda9e4a9fd",
+      "bytes": 26551
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/README.md",
+      "sha256": "320ff3a674596aabc085ad99be271e33ea449da08ae4e34482d3a84e1e8ba48a",
+      "bytes": 41774
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/sites/bahamut.lua",
+      "sha256": "67be98f7a014f933cef07c45d0b7cf3d5f9ea9d9f8d1b7c9ec64399105325a01",
+      "bytes": 3452
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/sites/bilibili.lua",
+      "sha256": "4c4b01d00a82dcab1a316f3424245c49c4a97ea559e68e29f4e8dcd19ae17565",
+      "bytes": 8339
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/sites/iqiyi.lua",
+      "sha256": "d3b9828524846ad8f37de7aa8d9c963feae77a84f1d68c8eed6f8d72b0522cbc",
+      "bytes": 9972
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/sites/mgtv.lua",
+      "sha256": "eca3a2bab71d6caaad21e5edacdc6b95eaca1604018103a52f107d85179352a7",
+      "bytes": 4948
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/sites/tencentvideo.lua",
+      "sha256": "d61e97bbc089f44e48cb97dd29670280ed4cd1bddb008eb686e764560eaa7595",
+      "bytes": 4990
+    },
+    {
+      "path": "config/portable_config/scripts/uosc_danmaku/sites/youku.lua",
+      "sha256": "ed2945f6c3f7fdc7900bcc378ffe9b198ddcf3260d846baa1842681bc8cc9096",
+      "bytes": 10994
+    },
+    {
+      "path": "config/README.md",
+      "sha256": "cf48ac19f07fefe582e3c21957bbbe2f53f208ae50cabd407297fe935d16cc2e",
+      "bytes": 5154
+    },
+    {
+      "path": "licenses/anime4k-v4.0.1/LICENSE",
+      "sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5",
+      "bytes": 1063
+    },
+    {
+      "path": "licenses/dav1d/COPYING",
+      "sha256": "dd92c3c2247c5651606fc23a5e2d6a1ebc5ace9a3e49cbde0e12f05ad1cb1ee5",
+      "bytes": 1317
+    },
+    {
+      "path": "licenses/ffmpeg/COPYING.GPLv2",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "bytes": 18092
+    },
+    {
+      "path": "licenses/ffmpeg/LICENSE.md",
+      "sha256": "e6dc72d5665a1ebd6dcc841de59278dad4ca77ecc47b03f1064a55c3e9ea8bb8",
+      "bytes": 4352
+    },
+    {
+      "path": "licenses/freetype/FTL.TXT",
+      "sha256": "5a5ee54c5001bbad1cdc1a57cc3dd4c42199b2da09d39c7ee41fab002d02967f",
+      "bytes": 6743
+    },
+    {
+      "path": "licenses/freetype/LICENSE.TXT",
+      "sha256": "bd36c8b474855fa294c2ec5c184544478ef3720aad37d65a6296a4f264fd2d3b",
+      "bytes": 2149
+    },
+    {
+      "path": "licenses/fribidi/COPYING",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "bytes": 26419
+    },
+    {
+      "path": "licenses/gcc-runtime/COPYING.RUNTIME",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+      "bytes": 3324
+    },
+    {
+      "path": "licenses/gcc-runtime/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "bytes": 35147
+    },
+    {
+      "path": "licenses/harfbuzz/COPYING",
+      "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64",
+      "bytes": 1971
+    },
+    {
+      "path": "licenses/lcms2/LICENSE",
+      "sha256": "6dbd60437f8ef91d8de1f08ad75882547fd4931bfcc3566a0735f28db1484d31",
+      "bytes": 1080
+    },
+    {
+      "path": "licenses/libass/COPYING",
+      "sha256": "f7e30699d02798351e7f839e3d3bfeb29ce65e44efa7735c225464c4fd7dfe9c",
+      "bytes": 755
+    },
+    {
+      "path": "licenses/libiconv/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "bytes": 26419
+    },
+    {
+      "path": "licenses/libplacebo/LICENSE",
+      "sha256": "b3aa400aca6d2ba1f0bd03bd98d03d1fe7489a3bbb26969d72016360af8a5c9d",
+      "bytes": 24478
+    },
+    {
+      "path": "licenses/luajit/COPYRIGHT",
+      "sha256": "6cda3076a8c09b31bb1f90da614ea89e7ee194589626eeac613e522849604e47",
+      "bytes": 2935
+    },
+    {
+      "path": "licenses/material-icons-round/LICENSE",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "bytes": 11357
+    },
+    {
+      "path": "licenses/mingw-w64/COPYING",
+      "sha256": "99a69660981156c21336fdb5661f89341b013c94e4bf9e1c7467b4745718397f",
+      "bytes": 2326
+    },
+    {
+      "path": "licenses/mpv-stats-zh/LICENSE.md",
+      "sha256": "da5c26047cfdbefcf598e994cde74580e9857906255469ac59827518c447fffd",
+      "bytes": 3211
+    },
+    {
+      "path": "licenses/mpv-v0.41.0/LICENSE.GPL",
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+      "bytes": 17984
+    },
+    {
+      "path": "licenses/mpv-v0.41.0/LICENSE.LGPL",
+      "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
+      "bytes": 26410
+    },
+    {
+      "path": "licenses/mujs/COPYING",
+      "sha256": "0ca9b4fbfbcab8ac7d32475890d866efc02f4cffb6b6da5c0e9a0615cc3d82fe",
+      "bytes": 759
+    },
+    {
+      "path": "licenses/shaderc/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "bytes": 11357
+    },
+    {
+      "path": "licenses/spirv-cross/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358
+    },
+    {
+      "path": "licenses/thumbfast/MPL-2.0.txt",
+      "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+      "bytes": 16725
+    },
+    {
+      "path": "licenses/uosc-5.13.0/LICENSE.LGPL",
+      "sha256": "dbc8eab1421212bf7b392ea00619f6b8286df50b702d21f6e7382805828a1cef",
+      "bytes": 26530
+    },
+    {
+      "path": "licenses/uosc_danmaku/LICENSE",
+      "sha256": "717bc0a3d9f24e80be5fe3771866ca97ed080d0151f82401f6d152b4dfbec452",
+      "bytes": 1066
+    },
+    {
+      "path": "licenses/vulkan-loader/LICENSE.txt",
+      "sha256": "43c0a37e6a0fa7ff3c843b3ec5a4fac84b712558ddac103fbd4c1649662a9ece",
+      "bytes": 11661
+    },
+    {
+      "path": "licenses/zlib/LICENSE",
+      "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
+      "bytes": 1002
+    },
+    {
+      "path": "provenance/build/.github/workflows/build.yml",
+      "sha256": "3197e88f8c1bbf09da29591b40b31e7c522e6c286b553e1495b26ca6ef8af8d9",
+      "bytes": 17692
+    },
+    {
+      "path": "provenance/build/ci/build-common.sh",
+      "sha256": "57231023e0356b5114b91535c4fac2e031a2cffdeefc2ca43c4f5a55e4a5007a",
+      "bytes": 120
+    },
+    {
+      "path": "provenance/build/ci/build-mingw64.sh",
+      "sha256": "3987301f65e3a7e86b84c34d2e7f76c352cfdb600c6575df516feeed4f37880c",
+      "bytes": 9317
+    },
+    {
+      "path": "provenance/runtime.json",
+      "sha256": "a61f1f3b0b00a17ef1252b23d97899ce1918411ca1ece7dcdf10f5d3e47ac896",
+      "bytes": 3756
+    },
+    {
+      "path": "runtime-manifest.json",
+      "sha256": "0644c3c6aac881d5c8da6cc32257234e414d94fbab1f2604bf2ebbda08f54eee",
+      "bytes": 11049
+    },
+    {
+      "path": "SOURCE_CODE.txt",
+      "sha256": "75607b9e2a366b25ec2a6de9cf1117fc1e1b1de76a8195e663b56969d5d2715f",
+      "bytes": 2963
+    },
+    {
+      "path": "sources/evidence/components/anime4k/evidence.json",
+      "sha256": "35bd2e19a50b15bb4adfccbe98644d749bf3ee04a7d1181c9fcf4da336a376ed",
+      "bytes": 45514
+    },
+    {
+      "path": "sources/evidence/components/anime4k/licenses/LICENSE",
+      "sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5",
+      "bytes": 1063
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_AutoDownscalePre_x2.glsl",
+      "sha256": "8c58291740146bd766a4d73f132775a797fe80f7d07919b5d767e27a5dc85656",
+      "bytes": 1560
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_AutoDownscalePre_x4.glsl",
+      "sha256": "5af62d8cd844916dc1126613e13bad3beab195787f93a71200b47c6ec78f2e41",
+      "bytes": 1568
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Clamp_Highlights.glsl",
+      "sha256": "a2a9bf7fbc1d75d09660ca2e701e4d7fb0cf5457b94da47e1825032fa2b3671a",
+      "bytes": 2795
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_L.glsl",
+      "sha256": "d6efe215e6ee8af1ec560478a91afc1df83fac4ba43b2c806ee61ca2267ed674",
+      "bytes": 69921
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_M.glsl",
+      "sha256": "67ea3ed26539e8de3b7d307688535d2ff17e8d147e11dda0247da7770dbecf41",
+      "bytes": 35916
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_S.glsl",
+      "sha256": "97c24dc370ab300c108bfaa09db7f175aeff343674842c299cf3940a3d330427",
+      "bytes": 17136
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_L.glsl",
+      "sha256": "8f2a5c73b526c6e4c67bce0366f7dcd7410bfa4a31e718240d86f53660788e63",
+      "bytes": 70020
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_M.glsl",
+      "sha256": "a78a2c76898e08e09e442a9628c64208c26e8e15789649b8755223f009794c02",
+      "bytes": 36016
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_S.glsl",
+      "sha256": "9f6867f2ef42786729522d86fe24147cb4ea145418e3974df70496acf52dc392",
+      "bytes": 17198
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_Soft_VL.glsl",
+      "sha256": "094334b0e20c1a201fe4941c7c68de72451e5aee9efb5524d7fb82b12dca64b9",
+      "bytes": 144204
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Restore_CNN_VL.glsl",
+      "sha256": "35036722733305cd4d4e57660b883bbe2569ba2914033c254327107d7b77e35e",
+      "bytes": 144075
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_L.glsl",
+      "sha256": "db1fedf7be82f6fd9034e6bf39b64daf2b7576988bb584ec38f24f5236b1cd97",
+      "bytes": 73443
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_M.glsl",
+      "sha256": "716e02098a68f0d648761f2b96b4dd139e1cb09b174bb369fca3aa34328fff7e",
+      "bytes": 37685
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_S.glsl",
+      "sha256": "4c53ec2e287908f7ee7bcb266b0170421626d663576468b7d7dafc62962649a4",
+      "bytes": 18638
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_CNN_x2_VL.glsl",
+      "sha256": "5638fe31c37c151a3443fea3451a3ef91af073f4dbb9615f6c0d1e29db11493d",
+      "bytes": 146743
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_L.glsl",
+      "sha256": "6cc4604c9544fd4fd9e3a75fd797511bf5fe1e626e9e1dbcee03302823a63207",
+      "bytes": 73584
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_M.glsl",
+      "sha256": "8c72b042e2301fe66a45c3089720459148e2504cd72af16f9c0d5017ff14181e",
+      "bytes": 37714
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl",
+      "sha256": "359c48fe5a317fbc6b706ce368401eef496e84ed98abac7a43efebca2b65d79b",
+      "bytes": 146811
+    },
+    {
+      "path": "sources/evidence/components/anime4k/local-source/kumiplayer/shaders/anime4k-v4.0.1/LICENSE",
+      "sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5",
+      "bytes": 1063
+    },
+    {
+      "path": "sources/evidence/components/anime4k/upstream-source-4029bf701ecaa15f163cdc49cffe5501c1acf410.tar.gz",
+      "sha256": "97f04ca1204991f4224a249aba74c015c43a25cdd478b3f63dfd804e1634bcf0",
+      "bytes": 6768835
+    },
+    {
+      "path": "sources/evidence/components/MODIFICATIONS.txt",
+      "sha256": "6055c83f52c19f66abbf8d9c72eff4eae4fca4524cf5d97c1e7b5dd17323490e",
+      "bytes": 3832
+    },
+    {
+      "path": "sources/evidence/components/thumbfast/evidence.json",
+      "sha256": "26e2157c87143f9fb3eabc7c9e6e0c0a415dfe91d96cce3038ff2cfb67154c69",
+      "bytes": 2130
+    },
+    {
+      "path": "sources/evidence/components/thumbfast/licenses/LICENSE",
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+      "bytes": 16726
+    },
+    {
+      "path": "sources/evidence/components/thumbfast/local-modifications.patch",
+      "sha256": "f910bdd165800f13c35ad7e86466e1d1cd6482eb517bd3c004465a7e5973c61d",
+      "bytes": 4254
+    },
+    {
+      "path": "sources/evidence/components/thumbfast/local-source/portable_config/script-opts/thumbfast.conf",
+      "sha256": "9d3affe0c9b0ef40b9ec1d2df8935d6c9c748f4a8bc15b1a98c5504c8b9b1ea4",
+      "bytes": 1221
+    },
+    {
+      "path": "sources/evidence/components/thumbfast/local-source/portable_config/scripts/thumbfast.lua",
+      "sha256": "58a6a8ead7d79634f2bcc36b19864035ca50820771b30a89c871f6cf062f877a",
+      "bytes": 34421
+    },
+    {
+      "path": "sources/evidence/components/thumbfast/upstream-0f711de3138c9bd6718209d819ac54022c23ded2.tar.gz",
+      "sha256": "2d16e9172750c222f7357e3523e41ee9da8fc148fb1e4c0d5f6ac8a317c3a96e",
+      "bytes": 16723
+    },
+    {
+      "path": "sources/evidence/components/uosc/evidence.json",
+      "sha256": "bede6432f912f20535efd1ae58e1344555d856b381630cba1c55f88a4238d192",
+      "bytes": 40967
+    },
+    {
+      "path": "sources/evidence/components/uosc/licenses/LICENSE.LGPL",
+      "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+      "bytes": 26530
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/fonts/uosc_icons.otf",
+      "sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25",
+      "bytes": 400360
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/fonts/uosc_textures.ttf",
+      "sha256": "ccc0660f284dfceb5ab31eb363ccb2355df30fcdf628e781ee374b7d4172ada5",
+      "bytes": 38228
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/script-opts/uosc.conf",
+      "sha256": "6b049b9436147202a5cf7cb1d827880316a2bb1607b4b342d40f63e9e16d950b",
+      "bytes": 3590
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/char-conv/zh.json",
+      "sha256": "1e250ec50866529b57d273fa90bd8fc56f22b4371d5ea641ce3bebc832dd9889",
+      "bytes": 85097
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/BufferingIndicator.lua",
+      "sha256": "f7ceb7c88916e49ee5aef2a8c45d53ee5a6f9931b7977898ecf96ebfa543c1c4",
+      "bytes": 1689
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Button.lua",
+      "sha256": "31d407dfc9e54295201f392d03886ef801108ead6384a2d12a620eafa38724c2",
+      "bytes": 3634
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Controls.lua",
+      "sha256": "930f9c04fcc4e06dc8321e0639b719800a7b2c99e52e9acd5a9b4d6502c01565",
+      "bytes": 18051
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Curtain.lua",
+      "sha256": "7f965119a6fc70d8cce70cf025db764a5d83433321da79a7734c691afdbb1e32",
+      "bytes": 1016
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/CycleButton.lua",
+      "sha256": "e49e20110bf84d852ce4d85f26e36a24330ef9a54f28f0886cc658352e09aa75",
+      "bytes": 3062
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Element.lua",
+      "sha256": "381141cd760a42769c0abdf7cfdf7ef26930249e133fa9800e7c8623f55bc016",
+      "bytes": 9591
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Elements.lua",
+      "sha256": "f44e57ea4c4c60f82f3775df9337064fdbcb7cb4bc157b47a5c07a12ee8a62c7",
+      "bytes": 4836
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/ManagedButton.lua",
+      "sha256": "da1c1ecf4d145e5c06fb7077a654b1c58412ae106e54b3f5946b919dabd01446",
+      "bytes": 1182
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Menu.lua",
+      "sha256": "0cbc42afbe72f3f76f069995744de1e772d706445ed7987d1bffaafed50f2f49",
+      "bytes": 66443
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/PauseIndicator.lua",
+      "sha256": "f2fe8f6bf894c60686e021a5faa0eebf1da940ab61dbbac109f173865a6c8664",
+      "bytes": 2706
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Speed.lua",
+      "sha256": "fee532d01e108cb4d74fbfdedaf91ea2fff81af3b4f3f4e3543fd8aaefa92326",
+      "bytes": 6093
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Timeline.lua",
+      "sha256": "5be97872da67aa091e37f395664ad05e4c1f6e3cd6e727ef68217e236176b2ee",
+      "bytes": 19710
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/TopBar.lua",
+      "sha256": "7513c5ec0924befc5f7e8edb5a0c96870150ed827ace820ba863f1995ba8e3c0",
+      "bytes": 15495
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Updater.lua",
+      "sha256": "41ecb02fb396d9a05f16db16b3970986bd21b31d4d5e32db9ed072338d9bc065",
+      "bytes": 10507
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Volume.lua",
+      "sha256": "fa16d0cd19df402ef631931d49787ccc7fdf06adf3e86913deb5bafcd3266c7a",
+      "bytes": 10297
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/WindowBorder.lua",
+      "sha256": "c8a6a64c321732913bc8ad838a202bdca037cfab3db4dcd636cb63098dc806cb",
+      "bytes": 1234
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/de.json",
+      "sha256": "606d296d7d0dd010cb732722a0c9e28abc9c0d09d962e959212c29bfdf2a125e",
+      "bytes": 3126
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/es.json",
+      "sha256": "cc38c03c9b954c8711b23eddfedb83ba6c9653a133c3ad7e432cfecdd089a999",
+      "bytes": 3843
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/fr.json",
+      "sha256": "a8ec21232c1fbb5c3de5a90f1f92ec1e4258ea9827f9eff87989f20471552c3b",
+      "bytes": 1887
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/it.json",
+      "sha256": "58bf14006cb8a61730ee7faabad4a7c4ea99681efd4268ffb02a26354076839f",
+      "bytes": 1747
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/pl.json",
+      "sha256": "c3733a695296104618683f4b705b1e03493d1cd96ba5fe98c339020b3cd95cdd",
+      "bytes": 4055
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/pt.json",
+      "sha256": "ad8539c3d8ae368a93e2cd0402ad92480aa3ea57db6430ee1bd6c34876005a1f",
+      "bytes": 4002
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/ro.json",
+      "sha256": "22c90c139b53e0b417a62987baa4e46b010195df8e85bd076861b7044dd3ab1e",
+      "bytes": 1799
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/ru.json",
+      "sha256": "ac86fd3ae167e79cc51aec8bd12f04dc9491613fecdba6820f3388db6671b9a6",
+      "bytes": 2313
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/tr.json",
+      "sha256": "1081a7e970764e0ff438c3d8c2164543732cc10f6feb8e11fa670b741d3d896e",
+      "bytes": 4019
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/uk.json",
+      "sha256": "e57d8cbc32b5b8e92b50cde0b2eb06cb405f87a138ebd88b5cb962d84be8e4a8",
+      "bytes": 3139
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/zh-hans.json",
+      "sha256": "d3339e658874530f4275c70d0837986746f98a9abca453d4bb2bde285c5dde31",
+      "bytes": 3471
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/zh-HK.json",
+      "sha256": "889667e15b379bed7015fdc6bb6ac5295fba2bbb810f9392582da296d5444e5c",
+      "bytes": 3722
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/ass.lua",
+      "sha256": "e0eab05a8924cb184867c965aefdcabd5b11989335dd1d24aa9d4a44e2346694",
+      "bytes": 11511
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/buttons.lua",
+      "sha256": "f79302eda925010a8ccbfa7e960e0fc7760114b920d641897474ed91ea318f73",
+      "bytes": 1888
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/char_conv.lua",
+      "sha256": "57dca5a0498d254826d8c18a1fc800b3556a6f49318e7ad0fbefc51b7167660f",
+      "bytes": 1556
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/cursor.lua",
+      "sha256": "d77796d3d857b5527b882c18b92b9e81d7fb3f8a27e7b5ebf52e489c98bbc7f6",
+      "bytes": 16972
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/fzy.lua",
+      "sha256": "5b1b53aaf56c8b51bd3507f6f6b76c042b92ceb55eaac8533277754158426711",
+      "bytes": 8164
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/intl.lua",
+      "sha256": "234df27c1e6a27089b04e156c3146669bbe4fcb3960169692b222c9e4867110d",
+      "bytes": 1599
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/menus.lua",
+      "sha256": "08181fa05c2a0dd0c5146c0a0e02e44a690732f84a08e3c5bfdd06ff68e0f79e",
+      "bytes": 36771
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/std.lua",
+      "sha256": "fdaedd93bdb9b716dbd99ec1c8cff08b3d316c9fdc793718e2b4ee7a504799f5",
+      "bytes": 9961
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/text.lua",
+      "sha256": "f4e040412b2e3c2d276d8098aa1eea01e020e916123336470dd2480a5968eb07",
+      "bytes": 22231
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/utils.lua",
+      "sha256": "297fb0a150bc0ec8a4d342373c3864aafdd5aee7cccc66469c2a656cf120302c",
+      "bytes": 34667
+    },
+    {
+      "path": "sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/main.lua",
+      "sha256": "bf97dcde4f1b8bd74a5e1c672a436a5584b5db2dc9413ab5585745afd9e1dd8d",
+      "bytes": 43478
+    },
+    {
+      "path": "sources/evidence/components/uosc/material-icons-round/evidence.json",
+      "sha256": "22ddd8687d8abf11a4c32ec9e5368ea5c90fb0e8f3cd5e66ab49bffa8ed0aafe",
+      "bytes": 7041
+    },
+    {
+      "path": "sources/evidence/components/uosc/material-icons-round/font/MaterialIconsRound-Regular.otf",
+      "sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25",
+      "bytes": 400360
+    },
+    {
+      "path": "sources/evidence/components/uosc/material-icons-round/font/README.md",
+      "sha256": "551db2048ba32d09bc41f81ec136077e170a3b368d5efc9eaf2b6ab706436713",
+      "bytes": 1134
+    },
+    {
+      "path": "sources/evidence/components/uosc/material-icons-round/LICENSE",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "bytes": 11357
+    },
+    {
+      "path": "sources/evidence/components/uosc/material-icons-round/MaterialIconsRound-1c575764826fa5752ddc2bdc6b31ef7cc3233371.otf",
+      "sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25",
+      "bytes": 400360
+    },
+    {
+      "path": "sources/evidence/components/uosc/material-icons-round/README.md",
+      "sha256": "d51beabf61b701c7d5a33f9fb6c9b6e352c4111ba81da0899a2ea94ae22a8142",
+      "bytes": 7248
+    },
+    {
+      "path": "sources/evidence/components/uosc/upstream-d124c2c930d69446448022851373e00ae592390d.tar.gz",
+      "sha256": "c0df0c04cae467b6b20256a7c6a52dcbefc55f1ebd3b9794e907ca2481603bc6",
+      "bytes": 2619287
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/evidence.json",
+      "sha256": "692cf2b709bd16f6a220e606d3cf25494284c8c4d6769b74547fcd4ad63f9404",
+      "bytes": 26599
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/licenses/LICENSE",
+      "sha256": "717bc0a3d9f24e80be5fe3771866ca97ed080d0151f82401f6d152b4dfbec452",
+      "bytes": 1066
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-modifications.patch",
+      "sha256": "65c4eb871481459451c82b9c1911e36b901acc2faa8687bc790e0e5116165511",
+      "bytes": 6701
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/script-opts/uosc_danmaku.conf",
+      "sha256": "730a3c60639785165453384bb1148596eec610655a1b8faef94f8e502d104449",
+      "bytes": 3219
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/apis/dandanplay.lua",
+      "sha256": "1e5ce7a1a57d5f7a4709e47f5871b08b9ce5f67acac521a88ce3404ea8e02ea3",
+      "bytes": 25153
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/apis/extra.lua",
+      "sha256": "603933459a6e5dde65c16b840cabb4308bae0c3e9b2d989960f26f6d9ce94036",
+      "bytes": 16786
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/dicts/s2t_chars.lua",
+      "sha256": "318c29eae825dad40b05435931b63ca95a463a320afcf91e76f2692d290c3c91",
+      "bytes": 77124
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/dicts/t2s_chars.lua",
+      "sha256": "84dc35fb62e6480d6cceb2478284331517a11c5b211c0c5f7c3eb34bede5285c",
+      "bytes": 79632
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/LICENSE",
+      "sha256": "717bc0a3d9f24e80be5fe3771866ca97ed080d0151f82401f6d152b4dfbec452",
+      "bytes": 1066
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/main.lua",
+      "sha256": "f14d2bc2df857b965f8013bf48baf92cd26e77ff554fc9c56f68fb244b1e8c78",
+      "bytes": 25646
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/aes.lua",
+      "sha256": "7adc2fdfcb8ee66f438d716065570c1402b19c039576ec939ffcde7284302d8a",
+      "bytes": 20819
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/base64.lua",
+      "sha256": "4a8035153f69e7326dd09204557036b271eb3ed390883e62ac1b6853643526d8",
+      "bytes": 7273
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/guess.lua",
+      "sha256": "414896d780ddec27d6ee2df6939749eb495471bc7393e8828adc43f301feff3f",
+      "bytes": 5833
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/hash.lua",
+      "sha256": "ce45716518d5588afd9b0a1c71c2f9ce405b415fc85603c47e9ad4d813a6c7f6",
+      "bytes": 5231
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/inflate.lua",
+      "sha256": "a386b208fbc46172e7f3127614ce50e710ed2c71da824b86b661bab89e015682",
+      "bytes": 13946
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/md5.lua",
+      "sha256": "1fc84027d59550f82233bac765f203a2cf2b5691eb6437c514a57f4850891ddc",
+      "bytes": 6492
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/menu.lua",
+      "sha256": "c2430ece4f674f8d90cf0560129bf7777aaf4d6f83602c64eac0409d68c7a443",
+      "bytes": 58664
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/options.lua",
+      "sha256": "b6a7ee58e32bf37ac3038537aaff8a444216730d6b772c69e1ff7764ac38a3e0",
+      "bytes": 4333
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/parse.lua",
+      "sha256": "a729c573b8fc4dad5852a0932447b147ac98fc96672680b7dbc89b468df073d3",
+      "bytes": 24806
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/render.lua",
+      "sha256": "ab25b62f71d8104ea53086ef3bc953389fbca976f727318b6e0729b9e03f6fb2",
+      "bytes": 8601
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/update.lua",
+      "sha256": "f488320aa9be89052f5602611805f90fc409cf98346224582ed117510bd49118",
+      "bytes": 5624
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/utils.lua",
+      "sha256": "2fcf668de396f911dba316aa064cd4569da2cbb351017b6d6c7cddeda9e4a9fd",
+      "bytes": 26551
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/README.md",
+      "sha256": "320ff3a674596aabc085ad99be271e33ea449da08ae4e34482d3a84e1e8ba48a",
+      "bytes": 41774
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/bahamut.lua",
+      "sha256": "67be98f7a014f933cef07c45d0b7cf3d5f9ea9d9f8d1b7c9ec64399105325a01",
+      "bytes": 3452
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/bilibili.lua",
+      "sha256": "4c4b01d00a82dcab1a316f3424245c49c4a97ea559e68e29f4e8dcd19ae17565",
+      "bytes": 8339
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/iqiyi.lua",
+      "sha256": "d3b9828524846ad8f37de7aa8d9c963feae77a84f1d68c8eed6f8d72b0522cbc",
+      "bytes": 9972
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/mgtv.lua",
+      "sha256": "eca3a2bab71d6caaad21e5edacdc6b95eaca1604018103a52f107d85179352a7",
+      "bytes": 4948
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/tencentvideo.lua",
+      "sha256": "d61e97bbc089f44e48cb97dd29670280ed4cd1bddb008eb686e764560eaa7595",
+      "bytes": 4990
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/youku.lua",
+      "sha256": "ed2945f6c3f7fdc7900bcc378ffe9b198ddcf3260d846baa1842681bc8cc9096",
+      "bytes": 10994
+    },
+    {
+      "path": "sources/evidence/components/uosc_danmaku/upstream-948f64eef08011faf2f3eb43050062d7ce5ed1ba.tar.gz",
+      "sha256": "9772cda7935ce3278528c38b9b41118584eacc3ddde02b466b7dbe8bea05b072",
+      "bytes": 138188
+    },
+    {
+      "path": "sources/evidence/stats/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4/commit.json",
+      "sha256": "2036a2ae70c0e566a285cc15e6ed905f41def51b1fb5caad11c301124a0db2f3",
+      "bytes": 5198
+    },
+    {
+      "path": "sources/evidence/stats/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4/current-version.diff",
+      "sha256": "d67e3997ba72f22f7328e5a58ae4ff7935d46f472adcdeccc961f6f387f82321",
+      "bytes": 59716
+    },
+    {
+      "path": "sources/evidence/stats/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4/files.json",
+      "sha256": "0b76deca845a91af4293346b62246bd69e4489883f734aa3f978cac32d411346",
+      "bytes": 840
+    },
+    {
+      "path": "sources/evidence/stats/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4/LICENSE.md",
+      "sha256": "da5c26047cfdbefcf598e994cde74580e9857906255469ac59827518c447fffd",
+      "bytes": 3211
+    },
+    {
+      "path": "sources/evidence/stats/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4/README.md",
+      "sha256": "db13aaa0f61b99c7d63f2058be8e91df5eba99ba85177856dceb31f138a78c5a",
+      "bytes": 17605
+    },
+    {
+      "path": "sources/evidence/stats/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4/stats.lua",
+      "sha256": "a1629fa030e04167828bb2f8dd2ece8abd37f45f08d7219a1b4a33f7f408df17",
+      "bytes": 82215
+    },
+    {
+      "path": "sources/evidence/stats/396ffb8f9507a8fedbbdf2986779083e40d34b7c/commit.json",
+      "sha256": "b1d904bf998a0f37216c31176c1c77f373c0d21ea2f079f9a3bd70eb9b3d9ffe",
+      "bytes": 7477
+    },
+    {
+      "path": "sources/evidence/stats/396ffb8f9507a8fedbbdf2986779083e40d34b7c/current-version.diff",
+      "sha256": "55cec2a93cda902749090db288d5a89e7e31b0efeabed89c88d1226654d4ee72",
+      "bytes": 59716
+    },
+    {
+      "path": "sources/evidence/stats/396ffb8f9507a8fedbbdf2986779083e40d34b7c/files.json",
+      "sha256": "801c9a9b5d3adc45edc02e8fe464c00c1cbaf1f78dfd58a63d92be66af4ee437",
+      "bytes": 840
+    },
+    {
+      "path": "sources/evidence/stats/396ffb8f9507a8fedbbdf2986779083e40d34b7c/LICENSE.md",
+      "sha256": "da5c26047cfdbefcf598e994cde74580e9857906255469ac59827518c447fffd",
+      "bytes": 3211
+    },
+    {
+      "path": "sources/evidence/stats/396ffb8f9507a8fedbbdf2986779083e40d34b7c/README.md",
+      "sha256": "db7e95946318c2815ddead66918fe9b4a9d909aaf3b6838bc29a0032b469d4b0",
+      "bytes": 18708
+    },
+    {
+      "path": "sources/evidence/stats/396ffb8f9507a8fedbbdf2986779083e40d34b7c/stats.lua",
+      "sha256": "a1629fa030e04167828bb2f8dd2ece8abd37f45f08d7219a1b4a33f7f408df17",
+      "bytes": 82215
+    },
+    {
+      "path": "sources/evidence/stats/53b087e81d21bf6f5f376340b94d4184a7de9a19/commit.json",
+      "sha256": "019ed8bf7e76c88b7a2d7be197cef3bd097b9d8b40e825aa719b1a2b18e3f966",
+      "bytes": 8738
+    },
+    {
+      "path": "sources/evidence/stats/53b087e81d21bf6f5f376340b94d4184a7de9a19/files.json",
+      "sha256": "0b3a8e4e22553222a5c0c107faf3ab35549c6c2fd7d20a0cee2d48d9939624a0",
+      "bytes": 871
+    },
+    {
+      "path": "sources/evidence/stats/53b087e81d21bf6f5f376340b94d4184a7de9a19/LICENSE.md",
+      "sha256": "da5c26047cfdbefcf598e994cde74580e9857906255469ac59827518c447fffd",
+      "bytes": 3211
+    },
+    {
+      "path": "sources/evidence/stats/53b087e81d21bf6f5f376340b94d4184a7de9a19/README.md",
+      "sha256": "1711a9fc390d577af636986ed7b0a399f8f87abda785bf6721bb50d5023ed40b",
+      "bytes": 20094
+    },
+    {
+      "path": "sources/evidence/stats/53b087e81d21bf6f5f376340b94d4184a7de9a19/stats.lua",
+      "sha256": "4f037d834a6d88b4615fcaf087963d04dfa814e7097621c87370f25184142302",
+      "bytes": 112050
+    },
+    {
+      "path": "sources/evidence/stats/analyze_license_transition.py",
+      "sha256": "5846f74ca2bbc2a98283ff8e3c82c2371326adc9bb308aa054ab803b42a7283b",
+      "bytes": 2542
+    },
+    {
+      "path": "sources/evidence/stats/Argon--mpv-stats/750512a96379dd349c2b3b8a70e45bbdd392a3e2/LICENSE",
+      "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+      "bytes": 26530
+    },
+    {
+      "path": "sources/evidence/stats/Argon--mpv-stats/750512a96379dd349c2b3b8a70e45bbdd392a3e2/readme.md",
+      "sha256": "c0f72cddd3a2f3ad6e0a3c3da0b988aef06fbd61bfac823a0a81644cf62590ec",
+      "bytes": 3789
+    },
+    {
+      "path": "sources/evidence/stats/Argon--mpv-stats/750512a96379dd349c2b3b8a70e45bbdd392a3e2/stats.lua",
+      "sha256": "e96c375c2ea7fd369e72daef807a369301ccd5940bbf6cc7054e0225bc77c45f",
+      "bytes": 26026
+    },
+    {
+      "path": "sources/evidence/stats/bf1288ab1db3478b8ad9207d55cf1ecf89e06698/files.json",
+      "sha256": "4c9a79d110bc8a78a40520788a61bcfaf63fcf1419993bbdfed80095877781f6",
+      "bytes": 562
+    },
+    {
+      "path": "sources/evidence/stats/bf1288ab1db3478b8ad9207d55cf1ecf89e06698/LICENSE.md",
+      "sha256": "da5c26047cfdbefcf598e994cde74580e9857906255469ac59827518c447fffd",
+      "bytes": 3211
+    },
+    {
+      "path": "sources/evidence/stats/bf1288ab1db3478b8ad9207d55cf1ecf89e06698/README.md",
+      "sha256": "db13aaa0f61b99c7d63f2058be8e91df5eba99ba85177856dceb31f138a78c5a",
+      "bytes": 17605
+    },
+    {
+      "path": "sources/evidence/stats/candidate-diff-summary.json",
+      "sha256": "99f8742a600df13122eb044e96f80187ffce0bcd82415a373870f49c28fff873",
+      "bytes": 160
+    },
+    {
+      "path": "sources/evidence/stats/collect_evidence.py",
+      "sha256": "4544786db471b9719027da5f64865caf5cce608e810a6790732c8ce9a7b37cd0",
+      "bytes": 2908
+    },
+    {
+      "path": "sources/evidence/stats/collect_parent_sources.py",
+      "sha256": "3056f3be5c54e304412380b4e6cb94b88115081d29f17c9ac4e0c3aa7b434442",
+      "bytes": 1588
+    },
+    {
+      "path": "sources/evidence/stats/compare_candidates.py",
+      "sha256": "e0587b5989585042b57580977bc270a6cffec7116e5337ef99681646b7a1c353",
+      "bytes": 2282
+    },
+    {
+      "path": "sources/evidence/stats/EVIDENCE.txt",
+      "sha256": "d4c95e443fda50045704f42ddbd15de07e1fa5bde41f9dbac230c346193d4cc2",
+      "bytes": 3803
+    },
+    {
+      "path": "sources/evidence/stats/mpv-player-mpv/41f6a645068483470267271e1d09966ca3b9f413/Copyright",
+      "sha256": "bfe9ee4cceabcb8ecbfadf208d04156f73d801e6a57369a5606bb8341e204a23",
+      "bytes": 4096
+    },
+    {
+      "path": "sources/evidence/stats/mpv-player-mpv/41f6a645068483470267271e1d09966ca3b9f413/LICENSE.GPL",
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+      "bytes": 17984
+    },
+    {
+      "path": "sources/evidence/stats/mpv-player-mpv/41f6a645068483470267271e1d09966ca3b9f413/LICENSE.LGPL",
+      "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
+      "bytes": 26410
+    },
+    {
+      "path": "sources/evidence/stats/mpv-player-mpv/41f6a645068483470267271e1d09966ca3b9f413/player/lua/stats.lua",
+      "sha256": "567f4cf8cda677ff0d8409c72272862b880f4d48a1dda49dd4b373c28d6eb4c1",
+      "bytes": 67226
+    },
+    {
+      "path": "sources/evidence/stats/mpv-player-mpv/de0f2f943d485ad6623629831e079a1de8be021b/Copyright",
+      "sha256": "bfe9ee4cceabcb8ecbfadf208d04156f73d801e6a57369a5606bb8341e204a23",
+      "bytes": 4096
+    },
+    {
+      "path": "sources/evidence/stats/mpv-player-mpv/de0f2f943d485ad6623629831e079a1de8be021b/DOCS/contribute.md",
+      "sha256": "3d3c70d11f051f8b308c42e7d5213444f41a73dbb8bfecd59d058de9837feffd",
+      "bytes": 14058
+    },
+    {
+      "path": "sources/evidence/stats/mpv-player-mpv/de0f2f943d485ad6623629831e079a1de8be021b/LICENSE.GPL",
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+      "bytes": 17984
+    },
+    {
+      "path": "sources/evidence/stats/mpv-player-mpv/de0f2f943d485ad6623629831e079a1de8be021b/LICENSE.LGPL",
+      "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
+      "bytes": 26410
+    },
+    {
+      "path": "sources/evidence/stats/mpv-player-mpv/de0f2f943d485ad6623629831e079a1de8be021b/player/lua/stats.lua",
+      "sha256": "5d8fa3d5a5c9b6c54d723490384f63bac363706abdf36b6fda5103ea1300383e",
+      "bytes": 67656
+    },
+    {
+      "path": "sources/evidence/stats/mpv-stats-zh-2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4.zip",
+      "sha256": "d2db55b00a392e6a085ff11ad54cedddabc22c3e7bca843b09775ee814b40ad8",
+      "bytes": 2230351
+    },
+    {
+      "path": "sources/evidence/stats/mpv-stats-zh-53b087e81d21bf6f5f376340b94d4184a7de9a19.zip",
+      "sha256": "5321438d4c8bb8d3b877aab21afa75f859174f87372d55c0fa7af4f62a96979e",
+      "bytes": 2238030
+    },
+    {
+      "path": "sources/evidence/stats/parent-source-files.json",
+      "sha256": "37e78da8271f42923fe837408bd9a192e2341bf4c87f11047df016e877a07ba9",
+      "bytes": 4184
+    },
+    {
+      "path": "sources/evidence/stats/readme-license-transitions.json",
+      "sha256": "7bf6850a9673d4bbacb5eea8b4186ff54078fb1459af9ec3d7531de070e1f953",
+      "bytes": 179
+    },
+    {
+      "path": "sources/evidence/stats/stats-file-history.json",
+      "sha256": "3b9892fe552e9f0dac9d07d622075c0b475327a0d58aa750fefcae83a86b9968",
+      "bytes": 9109
+    },
+    {
+      "path": "sources/runtime/dav1d-43f3b8d33bae5179a134d1cd7c394063b1cebfcb.tar.gz",
+      "sha256": "083e45ed41e378c2a9cfe959d1f9145276b0f7d937ad58e520eee979ec84947a",
+      "bytes": 1716229
+    },
+    {
+      "path": "sources/runtime/ffmpeg-1fcb201ab10cbc98d931e340da6ace292e82b1e1.tar.gz",
+      "sha256": "869d9f2545fde592e92a3c44703d57626337477412d38c1ee170454f5ed2195f",
+      "bytes": 16735768
+    },
+    {
+      "path": "sources/runtime/freetype-2.14.1.tar.xz",
+      "sha256": "32427e8c471ac095853212a37aef816c60b42052d4d9e48230bab3bdf2936ccc",
+      "bytes": 2664948
+    },
+    {
+      "path": "sources/runtime/fribidi-1.0.16.tar.xz",
+      "sha256": "1b1cde5b235d40479e91be2f0e88a309e3214c8ab470ec8a2744d82a5a9ea05c",
+      "bytes": 1098260
+    },
+    {
+      "path": "sources/runtime/harfbuzz-12.2.0.tar.xz",
+      "sha256": "ecb603aa426a8b24665718667bda64a84c1504db7454ee4cadbd362eea64e545",
+      "bytes": 18221900
+    },
+    {
+      "path": "sources/runtime/libiconv-1.18.tar.gz",
+      "sha256": "3b08f5f4f9b4eb82f151a7040bfd6fe6c6fb922efe4b1659c66ea933276965e8",
+      "bytes": 5822590
+    },
+    {
+      "path": "sources/runtime/luajit-7152e15489d2077cd299ee23e3d51a4c599ab14f.tar.gz",
+      "sha256": "2103f2c9526d158259a627d51799de8016e2a2c6d89f6ef25f9d89b92c597511",
+      "bytes": 1093563
+    },
+    {
+      "path": "sources/runtime/mpv-41f6a645068483470267271e1d09966ca3b9f413.tar.gz",
+      "sha256": "068960e89211f2adc80af03f637fa393fb5e407d3dd23592c8fe8c5490bb7ae4",
+      "bytes": 7264274
+    },
+    {
+      "path": "sources/runtime/zlib-1.3.1.tar.gz",
+      "sha256": "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
+      "bytes": 1512791
+    },
+    {
+      "path": "sources/runtime-inputs.json",
+      "sha256": "65d64cb41c578a6d3c7c168ee4b2378e8263cf08f98daaa92e24380b2c8add7e",
+      "bytes": 5062
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "8343aaffd4995ec926b3eb522fa1d712818d79bc79b77e6186229a7c3ec370ea",
+      "bytes": 7588
+    },
+    {
+      "path": "tools/build_evidence_archive.py",
+      "sha256": "c53b25c0afb478aaf78617b11a9e48fca48b7a1b4ed85471c3b5365e7d50e01e",
+      "bytes": 5943
+    },
+    {
+      "path": "tools/collect_runtime_sources.py",
+      "sha256": "d2a312cbeac980a19a3d2572ec84dbef63da2ed59f84761efd449a8b0a3dcecb",
+      "bytes": 6422
+    }
+  ],
+  "unresolved": [
+    "libass",
+    "lcms2",
+    "libplacebo",
+    "shaderc and git-sync-deps closure",
+    "SPIRV-Cross",
+    "nv-codec-headers",
+    "Vulkan-Headers",
+    "Vulkan-Loader",
+    "mujs WrapDB revision",
+    "MinGW/GCC toolchain and build environment"
+  ],
+  "limitations": [
+    "Historical floating dependencies are not resolved by date guesses.",
+    "Stats authorization conflict requires a distribution decision.",
+    "Local archive creation does not constitute public source delivery."
+  ],
+  "archive": {
+    "path": "sources/mpv-provenance-evidence.zip",
+    "sha256": "09baa067b735a23856e1b5a05c0fa8e506bb64814f8c3083daa94cc1f3268a79",
+    "bytes": 72114691
+  }
+}

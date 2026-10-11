@@ -1,0 +1,14 @@
+[
+  {
+    "path": "README.md",
+    "sha256": "db13aaa0f61b99c7d63f2058be8e91df5eba99ba85177856dceb31f138a78c5a",
+    "bytes": 17605,
+    "url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/blob/bf1288ab1db3478b8ad9207d55cf1ecf89e06698/README.md"
+  },
+  {
+    "path": "LICENSE.md",
+    "sha256": "da5c26047cfdbefcf598e994cde74580e9857906255469ac59827518c447fffd",
+    "bytes": 3211,
+    "url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/blob/bf1288ab1db3478b8ad9207d55cf1ecf89e06698/LICENSE.md"
+  }
+]

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-10",
+  "generated_at": "2026-10-11",
   "components": [
     {
       "component": "uosc",
@@ -23,8 +23,15 @@
       ],
       "distribution_notes": "禁止 uosc 自更新；菜单/文件/URL/队列入口由 KumiPlayer 受控层屏蔽",
       "configuration_sha256": {
-        "script-opts/uosc.conf": "107b4eb60a5f1fc88e574cacf3161400a64a76e2f086017af17983b8a4e1233b"
-      }
+        "script-opts/uosc.conf": "6b049b9436147202a5cf7cb1d827880316a2bb1607b4b342d40f63e9e16d950b"
+      },
+      "source_evidence": "mpv/sources/evidence/components/uosc/evidence.json",
+      "corresponding_source": {
+        "path": "mpv/sources/evidence/components/uosc/upstream-d124c2c930d69446448022851373e00ae592390d.tar.gz",
+        "url": "https://codeload.github.com/tomasklaen/uosc/tar.gz/d124c2c930d69446448022851373e00ae592390d",
+        "sha256": "c0df0c04cae467b6b20256a7c6a52dcbefc55f1ebd3b9794e907ca2481603bc6"
+      },
+      "source_status": "verified"
     },
     {
       "component": "thumbfast",
@@ -43,7 +50,18 @@
       "notices": [
         "mpv/licenses/thumbfast/MPL-2.0.txt"
       ],
-      "distribution_notes": "源码内嵌 MPL-2.0 声明；KumiPlayer 增加切集回调代际保护、可选 GPU HDR 映射、单次兼容重试及逐文件静默降级；网络/音频缩略图默认关闭；缓存由后端注入 KumiPlayer 状态目录"
+      "distribution_notes": "源码内嵌 MPL-2.0 声明；KumiPlayer 增加切集回调代际保护、可选 GPU HDR 映射、单次兼容重试及逐文件静默降级；网络/音频缩略图默认关闭；缓存由后端注入 KumiPlayer 状态目录",
+      "source_evidence": "mpv/sources/evidence/components/thumbfast/evidence.json",
+      "corresponding_source": {
+        "path": "mpv/sources/evidence/components/thumbfast/upstream-0f711de3138c9bd6718209d819ac54022c23ded2.tar.gz",
+        "url": "https://codeload.github.com/po5/thumbfast/tar.gz/0f711de3138c9bd6718209d819ac54022c23ded2",
+        "sha256": "2d16e9172750c222f7357e3523e41ee9da8fc148fb1e4c0d5f6ac8a317c3a96e"
+      },
+      "modifications_patch": {
+        "path": "mpv/sources/evidence/components/thumbfast/local-modifications.patch",
+        "sha256": "f910bdd165800f13c35ad7e86466e1d1cd6482eb517bd3c004465a7e5973c61d"
+      },
+      "source_status": "verified"
     },
     {
       "component": "Anime4K",
@@ -101,16 +119,30 @@
       },
       "distribution_notes": "仅随包 S/M/L/VL 变体；UL 不进首发常规档位；链顺序以官方模板为准",
       "configuration_sha256": {
-        "scripts/kumiplayer_uosc_menu.lua": "602CE9FF8B269E17C1080879525830CFA70BE3F7EA2A1FD5F3EC8C2234CABFE2"
-      }
+        "scripts/kumiplayer_uosc_menu.lua": "9be4bc26ea61accef09367a644c680d59017873989145d47829e29256c315ec6"
+      },
+      "commit": "4029bf701ecaa15f163cdc49cffe5501c1acf410",
+      "source_evidence": "mpv/sources/evidence/components/anime4k/evidence.json",
+      "corresponding_source": {
+        "path": "mpv/sources/evidence/components/anime4k/upstream-4029bf701ecaa15f163cdc49cffe5501c1acf410.tar.gz",
+        "url": "https://codeload.github.com/bloc97/Anime4K/tar.gz/4029bf701ecaa15f163cdc49cffe5501c1acf410",
+        "sha256": "7021e226e1f3b72b3cab6bac1568f2ebbc1822db72265516c000aa8425abfd1c"
+      },
+      "source_only_archive": {
+        "path": "mpv/sources/evidence/components/anime4k/upstream-source-4029bf701ecaa15f163cdc49cffe5501c1acf410.tar.gz",
+        "sha256": "97f04ca1204991f4224a249aba74c015c43a25cdd478b3f63dfd804e1634bcf0",
+        "bytes": 6768835,
+        "omission_reason": "Only upstream comparison/demo PNG and JPG files under results/ omitted; not redistributed with KumiPlayer. All shaders, TensorFlow training/generation notebooks, model checkpoint, scripts, license and documents retained byte-for-byte. Original full upstream archive also retained locally."
+      },
+      "source_status": "verified"
     },
     {
       "component": "mpv-stats-zh",
-      "version": "main@2026-07-12",
+      "version": "commit 53b087e81d21bf6f5f376340b94d4184a7de9a19 (2026-07-12)",
       "upstream_repository": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-",
-      "license": "本地保存 MIT 文本，当前脚本 SHA-256 已复核；尚缺脚本与历史 LICENSE 同一不可变提交的授权证据，不能认定发布复核通过。派生自 mpv / Argon-/mpv-stats 的部分仍需核对 LGPL-2.1+ 义务。升级前必须重新评估上游许可。",
+      "license": "同一精确提交 LICENSE 为 MIT，但 README 已声明非商业、禁止商用；此授权冲突未解除。继承 MPV / Argon 部分保留 LGPL/GPL 声明，不认定整个脚本纯 MIT。",
       "source_artifact": {
-        "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/main/stats.lua",
+        "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/53b087e81d21bf6f5f376340b94d4184a7de9a19/stats.lua",
         "sha256": "4F037D834A6D88B4615FCAF087963D04DFA814E7097621C87370F25184142302"
       },
       "bundled_files": [
@@ -122,8 +154,14 @@
         "scripts/stats.lua": "4F037D834A6D88B4615FCAF087963D04DFA814E7097621C87370F25184142302"
       },
       "notices": [
-        "mpv/licenses/mpv-stats-zh/LICENSE.md"
-      ]
+        "mpv/licenses/mpv-stats-zh/LICENSE.md",
+        "mpv/licenses/mpv-v0.41.0/LICENSE.LGPL",
+        "mpv/licenses/mpv-v0.41.0/LICENSE.GPL"
+      ],
+      "commit": "53b087e81d21bf6f5f376340b94d4184a7de9a19",
+      "source_evidence": "mpv/sources/evidence/stats/EVIDENCE.txt",
+      "license_status": "conflicting-upstream-statements",
+      "distribution_decision": "按用户指示保留当前新版中文与系统 CPU/GPU 统计；正式分发前仍需澄清此版本授权，不自行降级"
     },
     {
       "component": "uosc_danmaku",
@@ -131,10 +169,10 @@
       "upstream_repository": "https://github.com/Tony15246/uosc_danmaku",
       "license": "MIT",
       "source_artifact": {
-        "url": "https://github.com/Tony15246/uosc_danmaku/archive/refs/heads/main.zip",
-        "sha256": ""
+        "url": "https://codeload.github.com/Tony15246/uosc_danmaku/tar.gz/948f64eef08011faf2f3eb43050062d7ce5ed1ba",
+        "sha256": "9772cda7935ce3278528c38b9b41118584eacc3ddde02b466b7dbe8bea05b072"
       },
-      "commit": "main",
+      "commit": "948f64eef08011faf2f3eb43050062d7ce5ed1ba",
       "bundled_files": [
         "mpv/config/portable_config/scripts/uosc_danmaku/",
         "mpv/config/portable_config/script-opts/uosc_danmaku.conf"
@@ -142,11 +180,41 @@
       "notices": [
         "mpv/licenses/uosc_danmaku/LICENSE"
       ],
-      "distribution_notes": "基于主分支 VERSION=2.2.0 的固定副本（非 v2.2.0 稳定发行版）；api_server 改用官方代理 danmaku-api.152468.xyz（弹弹play 直连 403）；fallback_server 改用 dmku.hls.one（danmu.icu 域名已失守）；fetch_danmaku 无参数优先、format=json 回退（官方代理不接受 format=json）；2026-10-08 同步上游 main.lua 的切集修复：不再以 container-fps 判定是否自动加载弹幕",
+      "distribution_notes": "基于主分支 VERSION=2.2.0 的固定副本（非 v2.2.0 稳定发行版）；api_server 改用官方代理 danmaku-api.152468.xyz（弹弹play 直连 403）；fallback_server 改用 dmku.hls.one（danmu.icu 域名已失守）；fetch_danmaku 无参数优先、format=json 回退（官方代理不接受 format=json）；2026-10-08 同步上游 main.lua 的切集修复：不再以 container-fps 判定是否自动加载弹幕；已固定可重建基底并保存全部当前源码、3 文件修改补丁和 SHA-256，不再以 main 作为来源证据",
       "configuration_sha256": {
         "main.lua": "F14D2BC2DF857B965F8013BF48BAF92CD26E77FF554FC9C56F68FB244B1E8C78",
         "modules/options.lua": "B6A7EE58E32BF37AC3038537AAFF8A444216730D6B772C69E1FF7764AC38A3E0",
         "apis/dandanplay.lua": "1E5CE7A1A57D5F7A4709E47F5871B08B9CE5F67ACAC521A88CE3404EA8E02EA3"
+      },
+      "source_evidence": "mpv/sources/evidence/components/uosc_danmaku/evidence.json",
+      "corresponding_source": {
+        "path": "mpv/sources/evidence/components/uosc_danmaku/upstream-948f64eef08011faf2f3eb43050062d7ce5ed1ba.tar.gz",
+        "url": "https://codeload.github.com/Tony15246/uosc_danmaku/tar.gz/948f64eef08011faf2f3eb43050062d7ce5ed1ba",
+        "sha256": "9772cda7935ce3278528c38b9b41118584eacc3ddde02b466b7dbe8bea05b072"
+      },
+      "modifications_patch": {
+        "path": "mpv/sources/evidence/components/uosc_danmaku/local-modifications.patch",
+        "sha256": "65c4eb871481459451c82b9c1911e36b901acc2faa8687bc790e0e5116165511"
+      },
+      "source_status": "verified"
+    },
+    {
+      "component": "Material Icons Round",
+      "version": "Google font (2022-08-01)",
+      "upstream_repository": "https://github.com/google/material-design-icons",
+      "commit": "1c575764826fa5752ddc2bdc6b31ef7cc3233371",
+      "license": "Apache-2.0",
+      "bundled_files": [
+        "mpv/config/portable_config/fonts/uosc_icons.otf"
+      ],
+      "notices": [
+        "mpv/licenses/material-icons-round/LICENSE"
+      ],
+      "source_evidence": "mpv/sources/evidence/components/uosc/material-icons-round/evidence.json",
+      "source_status": "verified",
+      "distribution_notes": "与 Google 历史 MaterialIconsRound-Regular.otf 字节完全一致，保持 Apache-2.0 字体版权，不用 uosc LGPL 代替",
+      "file_sha256": {
+        "uosc_icons.otf": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25"
       }
     }
   ]

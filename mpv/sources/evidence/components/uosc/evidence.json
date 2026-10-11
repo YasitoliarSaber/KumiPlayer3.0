@@ -1,0 +1,819 @@
+{
+  "repository": "https://github.com/tomasklaen/uosc",
+  "commit": "d124c2c930d69446448022851373e00ae592390d",
+  "source_archive": "mpv/sources/evidence/components/uosc/upstream-d124c2c930d69446448022851373e00ae592390d.tar.gz",
+  "source_url": "https://codeload.github.com/tomasklaen/uosc/tar.gz/d124c2c930d69446448022851373e00ae592390d",
+  "archive_sha256": "c0df0c04cae467b6b20256a7c6a52dcbefc55f1ebd3b9794e907ca2481603bc6",
+  "tag": "5.13.0",
+  "tag_object": "6a0fc25184429852daf755c79e82f9cda650f7bc",
+  "files": [
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/char-conv/zh.json",
+      "sha256": "1e250ec50866529b57d273fa90bd8fc56f22b4371d5ea641ce3bebc832dd9889",
+      "upstream_path": "src/uosc/char-conv/zh.json",
+      "upstream_sha256": "1e250ec50866529b57d273fa90bd8fc56f22b4371d5ea641ce3bebc832dd9889",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/BufferingIndicator.lua",
+      "sha256": "f7ceb7c88916e49ee5aef2a8c45d53ee5a6f9931b7977898ecf96ebfa543c1c4",
+      "upstream_path": "src/uosc/elements/BufferingIndicator.lua",
+      "upstream_sha256": "f7ceb7c88916e49ee5aef2a8c45d53ee5a6f9931b7977898ecf96ebfa543c1c4",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Button.lua",
+      "sha256": "31d407dfc9e54295201f392d03886ef801108ead6384a2d12a620eafa38724c2",
+      "upstream_path": "src/uosc/elements/Button.lua",
+      "upstream_sha256": "31d407dfc9e54295201f392d03886ef801108ead6384a2d12a620eafa38724c2",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Controls.lua",
+      "sha256": "930f9c04fcc4e06dc8321e0639b719800a7b2c99e52e9acd5a9b4d6502c01565",
+      "upstream_path": "src/uosc/elements/Controls.lua",
+      "upstream_sha256": "930f9c04fcc4e06dc8321e0639b719800a7b2c99e52e9acd5a9b4d6502c01565",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Curtain.lua",
+      "sha256": "7f965119a6fc70d8cce70cf025db764a5d83433321da79a7734c691afdbb1e32",
+      "upstream_path": "src/uosc/elements/Curtain.lua",
+      "upstream_sha256": "7f965119a6fc70d8cce70cf025db764a5d83433321da79a7734c691afdbb1e32",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/CycleButton.lua",
+      "sha256": "e49e20110bf84d852ce4d85f26e36a24330ef9a54f28f0886cc658352e09aa75",
+      "upstream_path": "src/uosc/elements/CycleButton.lua",
+      "upstream_sha256": "e49e20110bf84d852ce4d85f26e36a24330ef9a54f28f0886cc658352e09aa75",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Element.lua",
+      "sha256": "381141cd760a42769c0abdf7cfdf7ef26930249e133fa9800e7c8623f55bc016",
+      "upstream_path": "src/uosc/elements/Element.lua",
+      "upstream_sha256": "381141cd760a42769c0abdf7cfdf7ef26930249e133fa9800e7c8623f55bc016",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Elements.lua",
+      "sha256": "f44e57ea4c4c60f82f3775df9337064fdbcb7cb4bc157b47a5c07a12ee8a62c7",
+      "upstream_path": "src/uosc/elements/Elements.lua",
+      "upstream_sha256": "f44e57ea4c4c60f82f3775df9337064fdbcb7cb4bc157b47a5c07a12ee8a62c7",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/ManagedButton.lua",
+      "sha256": "da1c1ecf4d145e5c06fb7077a654b1c58412ae106e54b3f5946b919dabd01446",
+      "upstream_path": "src/uosc/elements/ManagedButton.lua",
+      "upstream_sha256": "da1c1ecf4d145e5c06fb7077a654b1c58412ae106e54b3f5946b919dabd01446",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Menu.lua",
+      "sha256": "0cbc42afbe72f3f76f069995744de1e772d706445ed7987d1bffaafed50f2f49",
+      "upstream_path": "src/uosc/elements/Menu.lua",
+      "upstream_sha256": "0cbc42afbe72f3f76f069995744de1e772d706445ed7987d1bffaafed50f2f49",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/PauseIndicator.lua",
+      "sha256": "f2fe8f6bf894c60686e021a5faa0eebf1da940ab61dbbac109f173865a6c8664",
+      "upstream_path": "src/uosc/elements/PauseIndicator.lua",
+      "upstream_sha256": "f2fe8f6bf894c60686e021a5faa0eebf1da940ab61dbbac109f173865a6c8664",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Speed.lua",
+      "sha256": "fee532d01e108cb4d74fbfdedaf91ea2fff81af3b4f3f4e3543fd8aaefa92326",
+      "upstream_path": "src/uosc/elements/Speed.lua",
+      "upstream_sha256": "fee532d01e108cb4d74fbfdedaf91ea2fff81af3b4f3f4e3543fd8aaefa92326",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Timeline.lua",
+      "sha256": "5be97872da67aa091e37f395664ad05e4c1f6e3cd6e727ef68217e236176b2ee",
+      "upstream_path": "src/uosc/elements/Timeline.lua",
+      "upstream_sha256": "5be97872da67aa091e37f395664ad05e4c1f6e3cd6e727ef68217e236176b2ee",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/TopBar.lua",
+      "sha256": "7513c5ec0924befc5f7e8edb5a0c96870150ed827ace820ba863f1995ba8e3c0",
+      "upstream_path": "src/uosc/elements/TopBar.lua",
+      "upstream_sha256": "7513c5ec0924befc5f7e8edb5a0c96870150ed827ace820ba863f1995ba8e3c0",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Updater.lua",
+      "sha256": "41ecb02fb396d9a05f16db16b3970986bd21b31d4d5e32db9ed072338d9bc065",
+      "upstream_path": "src/uosc/elements/Updater.lua",
+      "upstream_sha256": "41ecb02fb396d9a05f16db16b3970986bd21b31d4d5e32db9ed072338d9bc065",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Volume.lua",
+      "sha256": "fa16d0cd19df402ef631931d49787ccc7fdf06adf3e86913deb5bafcd3266c7a",
+      "upstream_path": "src/uosc/elements/Volume.lua",
+      "upstream_sha256": "fa16d0cd19df402ef631931d49787ccc7fdf06adf3e86913deb5bafcd3266c7a",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/WindowBorder.lua",
+      "sha256": "c8a6a64c321732913bc8ad838a202bdca037cfab3db4dcd636cb63098dc806cb",
+      "upstream_path": "src/uosc/elements/WindowBorder.lua",
+      "upstream_sha256": "c8a6a64c321732913bc8ad838a202bdca037cfab3db4dcd636cb63098dc806cb",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/de.json",
+      "sha256": "606d296d7d0dd010cb732722a0c9e28abc9c0d09d962e959212c29bfdf2a125e",
+      "upstream_path": "src/uosc/intl/de.json",
+      "upstream_sha256": "606d296d7d0dd010cb732722a0c9e28abc9c0d09d962e959212c29bfdf2a125e",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/es.json",
+      "sha256": "cc38c03c9b954c8711b23eddfedb83ba6c9653a133c3ad7e432cfecdd089a999",
+      "upstream_path": "src/uosc/intl/es.json",
+      "upstream_sha256": "cc38c03c9b954c8711b23eddfedb83ba6c9653a133c3ad7e432cfecdd089a999",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/fr.json",
+      "sha256": "a8ec21232c1fbb5c3de5a90f1f92ec1e4258ea9827f9eff87989f20471552c3b",
+      "upstream_path": "src/uosc/intl/fr.json",
+      "upstream_sha256": "a8ec21232c1fbb5c3de5a90f1f92ec1e4258ea9827f9eff87989f20471552c3b",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/it.json",
+      "sha256": "58bf14006cb8a61730ee7faabad4a7c4ea99681efd4268ffb02a26354076839f",
+      "upstream_path": "src/uosc/intl/it.json",
+      "upstream_sha256": "58bf14006cb8a61730ee7faabad4a7c4ea99681efd4268ffb02a26354076839f",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/pl.json",
+      "sha256": "c3733a695296104618683f4b705b1e03493d1cd96ba5fe98c339020b3cd95cdd",
+      "upstream_path": "src/uosc/intl/pl.json",
+      "upstream_sha256": "c3733a695296104618683f4b705b1e03493d1cd96ba5fe98c339020b3cd95cdd",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/pt.json",
+      "sha256": "ad8539c3d8ae368a93e2cd0402ad92480aa3ea57db6430ee1bd6c34876005a1f",
+      "upstream_path": "src/uosc/intl/pt.json",
+      "upstream_sha256": "ad8539c3d8ae368a93e2cd0402ad92480aa3ea57db6430ee1bd6c34876005a1f",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/ro.json",
+      "sha256": "22c90c139b53e0b417a62987baa4e46b010195df8e85bd076861b7044dd3ab1e",
+      "upstream_path": "src/uosc/intl/ro.json",
+      "upstream_sha256": "22c90c139b53e0b417a62987baa4e46b010195df8e85bd076861b7044dd3ab1e",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/ru.json",
+      "sha256": "ac86fd3ae167e79cc51aec8bd12f04dc9491613fecdba6820f3388db6671b9a6",
+      "upstream_path": "src/uosc/intl/ru.json",
+      "upstream_sha256": "ac86fd3ae167e79cc51aec8bd12f04dc9491613fecdba6820f3388db6671b9a6",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/tr.json",
+      "sha256": "1081a7e970764e0ff438c3d8c2164543732cc10f6feb8e11fa670b741d3d896e",
+      "upstream_path": "src/uosc/intl/tr.json",
+      "upstream_sha256": "1081a7e970764e0ff438c3d8c2164543732cc10f6feb8e11fa670b741d3d896e",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/uk.json",
+      "sha256": "e57d8cbc32b5b8e92b50cde0b2eb06cb405f87a138ebd88b5cb962d84be8e4a8",
+      "upstream_path": "src/uosc/intl/uk.json",
+      "upstream_sha256": "e57d8cbc32b5b8e92b50cde0b2eb06cb405f87a138ebd88b5cb962d84be8e4a8",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/zh-hans.json",
+      "sha256": "d3339e658874530f4275c70d0837986746f98a9abca453d4bb2bde285c5dde31",
+      "upstream_path": "src/uosc/intl/zh-hans.json",
+      "upstream_sha256": "d3339e658874530f4275c70d0837986746f98a9abca453d4bb2bde285c5dde31",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/zh-HK.json",
+      "sha256": "889667e15b379bed7015fdc6bb6ac5295fba2bbb810f9392582da296d5444e5c",
+      "upstream_path": "src/uosc/intl/zh-HK.json",
+      "upstream_sha256": "889667e15b379bed7015fdc6bb6ac5295fba2bbb810f9392582da296d5444e5c",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/ass.lua",
+      "sha256": "e0eab05a8924cb184867c965aefdcabd5b11989335dd1d24aa9d4a44e2346694",
+      "upstream_path": "src/uosc/lib/ass.lua",
+      "upstream_sha256": "e0eab05a8924cb184867c965aefdcabd5b11989335dd1d24aa9d4a44e2346694",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/buttons.lua",
+      "sha256": "f79302eda925010a8ccbfa7e960e0fc7760114b920d641897474ed91ea318f73",
+      "upstream_path": "src/uosc/lib/buttons.lua",
+      "upstream_sha256": "f79302eda925010a8ccbfa7e960e0fc7760114b920d641897474ed91ea318f73",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/char_conv.lua",
+      "sha256": "57dca5a0498d254826d8c18a1fc800b3556a6f49318e7ad0fbefc51b7167660f",
+      "upstream_path": "src/uosc/lib/char_conv.lua",
+      "upstream_sha256": "57dca5a0498d254826d8c18a1fc800b3556a6f49318e7ad0fbefc51b7167660f",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/cursor.lua",
+      "sha256": "d77796d3d857b5527b882c18b92b9e81d7fb3f8a27e7b5ebf52e489c98bbc7f6",
+      "upstream_path": "src/uosc/lib/cursor.lua",
+      "upstream_sha256": "d77796d3d857b5527b882c18b92b9e81d7fb3f8a27e7b5ebf52e489c98bbc7f6",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/fzy.lua",
+      "sha256": "5b1b53aaf56c8b51bd3507f6f6b76c042b92ceb55eaac8533277754158426711",
+      "upstream_path": "src/uosc/lib/fzy.lua",
+      "upstream_sha256": "5b1b53aaf56c8b51bd3507f6f6b76c042b92ceb55eaac8533277754158426711",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/intl.lua",
+      "sha256": "234df27c1e6a27089b04e156c3146669bbe4fcb3960169692b222c9e4867110d",
+      "upstream_path": "src/uosc/lib/intl.lua",
+      "upstream_sha256": "234df27c1e6a27089b04e156c3146669bbe4fcb3960169692b222c9e4867110d",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/menus.lua",
+      "sha256": "08181fa05c2a0dd0c5146c0a0e02e44a690732f84a08e3c5bfdd06ff68e0f79e",
+      "upstream_path": "src/uosc/lib/menus.lua",
+      "upstream_sha256": "08181fa05c2a0dd0c5146c0a0e02e44a690732f84a08e3c5bfdd06ff68e0f79e",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/std.lua",
+      "sha256": "fdaedd93bdb9b716dbd99ec1c8cff08b3d316c9fdc793718e2b4ee7a504799f5",
+      "upstream_path": "src/uosc/lib/std.lua",
+      "upstream_sha256": "fdaedd93bdb9b716dbd99ec1c8cff08b3d316c9fdc793718e2b4ee7a504799f5",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/text.lua",
+      "sha256": "f4e040412b2e3c2d276d8098aa1eea01e020e916123336470dd2480a5968eb07",
+      "upstream_path": "src/uosc/lib/text.lua",
+      "upstream_sha256": "f4e040412b2e3c2d276d8098aa1eea01e020e916123336470dd2480a5968eb07",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/utils.lua",
+      "sha256": "297fb0a150bc0ec8a4d342373c3864aafdd5aee7cccc66469c2a656cf120302c",
+      "upstream_path": "src/uosc/lib/utils.lua",
+      "upstream_sha256": "297fb0a150bc0ec8a4d342373c3864aafdd5aee7cccc66469c2a656cf120302c",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc/main.lua",
+      "sha256": "bf97dcde4f1b8bd74a5e1c672a436a5584b5db2dc9413ab5585745afd9e1dd8d",
+      "upstream_path": "src/uosc/main.lua",
+      "upstream_sha256": "bf97dcde4f1b8bd74a5e1c672a436a5584b5db2dc9413ab5585745afd9e1dd8d",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/fonts/uosc_icons.otf",
+      "sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25",
+      "upstream_path": "src/fonts/uosc_icons.otf",
+      "upstream_sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/fonts/uosc_textures.ttf",
+      "sha256": "ccc0660f284dfceb5ab31eb363ccb2355df30fcdf628e781ee374b7d4172ada5",
+      "upstream_path": "src/fonts/uosc_textures.ttf",
+      "upstream_sha256": "ccc0660f284dfceb5ab31eb363ccb2355df30fcdf628e781ee374b7d4172ada5",
+      "byte_identical": true
+    }
+  ],
+  "license_files": {
+    "LICENSE.LGPL": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551"
+  },
+  "limitations": [],
+  "checked_at": "2026-10-11",
+  "local_source_files": [
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/char-conv/zh.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/char-conv/zh.json",
+      "sha256": "1e250ec50866529b57d273fa90bd8fc56f22b4371d5ea641ce3bebc832dd9889"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/BufferingIndicator.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/BufferingIndicator.lua",
+      "sha256": "f7ceb7c88916e49ee5aef2a8c45d53ee5a6f9931b7977898ecf96ebfa543c1c4"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/Button.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Button.lua",
+      "sha256": "31d407dfc9e54295201f392d03886ef801108ead6384a2d12a620eafa38724c2"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/Controls.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Controls.lua",
+      "sha256": "930f9c04fcc4e06dc8321e0639b719800a7b2c99e52e9acd5a9b4d6502c01565"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/Curtain.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Curtain.lua",
+      "sha256": "7f965119a6fc70d8cce70cf025db764a5d83433321da79a7734c691afdbb1e32"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/CycleButton.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/CycleButton.lua",
+      "sha256": "e49e20110bf84d852ce4d85f26e36a24330ef9a54f28f0886cc658352e09aa75"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/Element.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Element.lua",
+      "sha256": "381141cd760a42769c0abdf7cfdf7ef26930249e133fa9800e7c8623f55bc016"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/Elements.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Elements.lua",
+      "sha256": "f44e57ea4c4c60f82f3775df9337064fdbcb7cb4bc157b47a5c07a12ee8a62c7"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/ManagedButton.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/ManagedButton.lua",
+      "sha256": "da1c1ecf4d145e5c06fb7077a654b1c58412ae106e54b3f5946b919dabd01446"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/Menu.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Menu.lua",
+      "sha256": "0cbc42afbe72f3f76f069995744de1e772d706445ed7987d1bffaafed50f2f49"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/PauseIndicator.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/PauseIndicator.lua",
+      "sha256": "f2fe8f6bf894c60686e021a5faa0eebf1da940ab61dbbac109f173865a6c8664"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/Speed.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Speed.lua",
+      "sha256": "fee532d01e108cb4d74fbfdedaf91ea2fff81af3b4f3f4e3543fd8aaefa92326"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/Timeline.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Timeline.lua",
+      "sha256": "5be97872da67aa091e37f395664ad05e4c1f6e3cd6e727ef68217e236176b2ee"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/TopBar.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/TopBar.lua",
+      "sha256": "7513c5ec0924befc5f7e8edb5a0c96870150ed827ace820ba863f1995ba8e3c0"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/Updater.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Updater.lua",
+      "sha256": "41ecb02fb396d9a05f16db16b3970986bd21b31d4d5e32db9ed072338d9bc065"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/Volume.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/Volume.lua",
+      "sha256": "fa16d0cd19df402ef631931d49787ccc7fdf06adf3e86913deb5bafcd3266c7a"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/elements/WindowBorder.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/elements/WindowBorder.lua",
+      "sha256": "c8a6a64c321732913bc8ad838a202bdca037cfab3db4dcd636cb63098dc806cb"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/de.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/de.json",
+      "sha256": "606d296d7d0dd010cb732722a0c9e28abc9c0d09d962e959212c29bfdf2a125e"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/es.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/es.json",
+      "sha256": "cc38c03c9b954c8711b23eddfedb83ba6c9653a133c3ad7e432cfecdd089a999"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/fr.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/fr.json",
+      "sha256": "a8ec21232c1fbb5c3de5a90f1f92ec1e4258ea9827f9eff87989f20471552c3b"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/it.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/it.json",
+      "sha256": "58bf14006cb8a61730ee7faabad4a7c4ea99681efd4268ffb02a26354076839f"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/pl.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/pl.json",
+      "sha256": "c3733a695296104618683f4b705b1e03493d1cd96ba5fe98c339020b3cd95cdd"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/pt.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/pt.json",
+      "sha256": "ad8539c3d8ae368a93e2cd0402ad92480aa3ea57db6430ee1bd6c34876005a1f"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/ro.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/ro.json",
+      "sha256": "22c90c139b53e0b417a62987baa4e46b010195df8e85bd076861b7044dd3ab1e"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/ru.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/ru.json",
+      "sha256": "ac86fd3ae167e79cc51aec8bd12f04dc9491613fecdba6820f3388db6671b9a6"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/tr.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/tr.json",
+      "sha256": "1081a7e970764e0ff438c3d8c2164543732cc10f6feb8e11fa670b741d3d896e"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/uk.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/uk.json",
+      "sha256": "e57d8cbc32b5b8e92b50cde0b2eb06cb405f87a138ebd88b5cb962d84be8e4a8"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/zh-hans.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/zh-hans.json",
+      "sha256": "d3339e658874530f4275c70d0837986746f98a9abca453d4bb2bde285c5dde31"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/intl/zh-HK.json",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/intl/zh-HK.json",
+      "sha256": "889667e15b379bed7015fdc6bb6ac5295fba2bbb810f9392582da296d5444e5c"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/lib/ass.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/ass.lua",
+      "sha256": "e0eab05a8924cb184867c965aefdcabd5b11989335dd1d24aa9d4a44e2346694"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/lib/buttons.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/buttons.lua",
+      "sha256": "f79302eda925010a8ccbfa7e960e0fc7760114b920d641897474ed91ea318f73"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/lib/char_conv.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/char_conv.lua",
+      "sha256": "57dca5a0498d254826d8c18a1fc800b3556a6f49318e7ad0fbefc51b7167660f"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/lib/cursor.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/cursor.lua",
+      "sha256": "d77796d3d857b5527b882c18b92b9e81d7fb3f8a27e7b5ebf52e489c98bbc7f6"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/lib/fzy.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/fzy.lua",
+      "sha256": "5b1b53aaf56c8b51bd3507f6f6b76c042b92ceb55eaac8533277754158426711"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/lib/intl.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/intl.lua",
+      "sha256": "234df27c1e6a27089b04e156c3146669bbe4fcb3960169692b222c9e4867110d"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/lib/menus.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/menus.lua",
+      "sha256": "08181fa05c2a0dd0c5146c0a0e02e44a690732f84a08e3c5bfdd06ff68e0f79e"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/lib/std.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/std.lua",
+      "sha256": "fdaedd93bdb9b716dbd99ec1c8cff08b3d316c9fdc793718e2b4ee7a504799f5"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/lib/text.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/text.lua",
+      "sha256": "f4e040412b2e3c2d276d8098aa1eea01e020e916123336470dd2480a5968eb07"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/lib/utils.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/lib/utils.lua",
+      "sha256": "297fb0a150bc0ec8a4d342373c3864aafdd5aee7cccc66469c2a656cf120302c"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc/main.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/scripts/uosc/main.lua",
+      "sha256": "bf97dcde4f1b8bd74a5e1c672a436a5584b5db2dc9413ab5585745afd9e1dd8d"
+    },
+    {
+      "path": "mpv/config/portable_config/fonts/uosc_icons.otf",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/fonts/uosc_icons.otf",
+      "sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25"
+    },
+    {
+      "path": "mpv/config/portable_config/fonts/uosc_textures.ttf",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/fonts/uosc_textures.ttf",
+      "sha256": "ccc0660f284dfceb5ab31eb363ccb2355df30fcdf628e781ee374b7d4172ada5"
+    },
+    {
+      "path": "mpv/config/portable_config/script-opts/uosc.conf",
+      "archived_path": "mpv/sources/evidence/components/uosc/local-source/portable_config/script-opts/uosc.conf",
+      "sha256": "6b049b9436147202a5cf7cb1d827880316a2bb1607b4b342d40f63e9e16d950b"
+    }
+  ],
+  "release_artifact": {
+    "url": "https://github.com/tomasklaen/uosc/releases/download/5.13.0/uosc.zip",
+    "path": "mpv/sources/evidence/components/uosc/uosc.zip",
+    "sha256": "4be9da3289285300fa374496c3f1bfd7bb20ac08e890d25bd5a06b28eebe4882",
+    "matches_recorded_hash": true
+  },
+  "release_file_checks": [
+    {
+      "release_path": "scripts/uosc/char-conv/zh.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/char-conv/zh.json",
+      "sha256": "1e250ec50866529b57d273fa90bd8fc56f22b4371d5ea641ce3bebc832dd9889",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/BufferingIndicator.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/BufferingIndicator.lua",
+      "sha256": "f7ceb7c88916e49ee5aef2a8c45d53ee5a6f9931b7977898ecf96ebfa543c1c4",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/Button.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Button.lua",
+      "sha256": "31d407dfc9e54295201f392d03886ef801108ead6384a2d12a620eafa38724c2",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/Controls.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Controls.lua",
+      "sha256": "930f9c04fcc4e06dc8321e0639b719800a7b2c99e52e9acd5a9b4d6502c01565",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/Curtain.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Curtain.lua",
+      "sha256": "7f965119a6fc70d8cce70cf025db764a5d83433321da79a7734c691afdbb1e32",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/CycleButton.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/CycleButton.lua",
+      "sha256": "e49e20110bf84d852ce4d85f26e36a24330ef9a54f28f0886cc658352e09aa75",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/Element.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Element.lua",
+      "sha256": "381141cd760a42769c0abdf7cfdf7ef26930249e133fa9800e7c8623f55bc016",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/Elements.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Elements.lua",
+      "sha256": "f44e57ea4c4c60f82f3775df9337064fdbcb7cb4bc157b47a5c07a12ee8a62c7",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/ManagedButton.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/ManagedButton.lua",
+      "sha256": "da1c1ecf4d145e5c06fb7077a654b1c58412ae106e54b3f5946b919dabd01446",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/Menu.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Menu.lua",
+      "sha256": "0cbc42afbe72f3f76f069995744de1e772d706445ed7987d1bffaafed50f2f49",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/PauseIndicator.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/PauseIndicator.lua",
+      "sha256": "f2fe8f6bf894c60686e021a5faa0eebf1da940ab61dbbac109f173865a6c8664",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/Speed.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Speed.lua",
+      "sha256": "fee532d01e108cb4d74fbfdedaf91ea2fff81af3b4f3f4e3543fd8aaefa92326",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/Timeline.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Timeline.lua",
+      "sha256": "5be97872da67aa091e37f395664ad05e4c1f6e3cd6e727ef68217e236176b2ee",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/TopBar.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/TopBar.lua",
+      "sha256": "7513c5ec0924befc5f7e8edb5a0c96870150ed827ace820ba863f1995ba8e3c0",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/Updater.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Updater.lua",
+      "sha256": "41ecb02fb396d9a05f16db16b3970986bd21b31d4d5e32db9ed072338d9bc065",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/Volume.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/Volume.lua",
+      "sha256": "fa16d0cd19df402ef631931d49787ccc7fdf06adf3e86913deb5bafcd3266c7a",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/elements/WindowBorder.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/elements/WindowBorder.lua",
+      "sha256": "c8a6a64c321732913bc8ad838a202bdca037cfab3db4dcd636cb63098dc806cb",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/de.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/de.json",
+      "sha256": "606d296d7d0dd010cb732722a0c9e28abc9c0d09d962e959212c29bfdf2a125e",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/es.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/es.json",
+      "sha256": "cc38c03c9b954c8711b23eddfedb83ba6c9653a133c3ad7e432cfecdd089a999",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/fr.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/fr.json",
+      "sha256": "a8ec21232c1fbb5c3de5a90f1f92ec1e4258ea9827f9eff87989f20471552c3b",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/it.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/it.json",
+      "sha256": "58bf14006cb8a61730ee7faabad4a7c4ea99681efd4268ffb02a26354076839f",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/pl.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/pl.json",
+      "sha256": "c3733a695296104618683f4b705b1e03493d1cd96ba5fe98c339020b3cd95cdd",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/pt.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/pt.json",
+      "sha256": "ad8539c3d8ae368a93e2cd0402ad92480aa3ea57db6430ee1bd6c34876005a1f",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/ro.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/ro.json",
+      "sha256": "22c90c139b53e0b417a62987baa4e46b010195df8e85bd076861b7044dd3ab1e",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/ru.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/ru.json",
+      "sha256": "ac86fd3ae167e79cc51aec8bd12f04dc9491613fecdba6820f3388db6671b9a6",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/tr.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/tr.json",
+      "sha256": "1081a7e970764e0ff438c3d8c2164543732cc10f6feb8e11fa670b741d3d896e",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/uk.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/uk.json",
+      "sha256": "e57d8cbc32b5b8e92b50cde0b2eb06cb405f87a138ebd88b5cb962d84be8e4a8",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/zh-hans.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/zh-hans.json",
+      "sha256": "d3339e658874530f4275c70d0837986746f98a9abca453d4bb2bde285c5dde31",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/intl/zh-HK.json",
+      "local_path": "mpv/config/portable_config/scripts/uosc/intl/zh-HK.json",
+      "sha256": "889667e15b379bed7015fdc6bb6ac5295fba2bbb810f9392582da296d5444e5c",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/lib/ass.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/ass.lua",
+      "sha256": "e0eab05a8924cb184867c965aefdcabd5b11989335dd1d24aa9d4a44e2346694",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/lib/buttons.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/buttons.lua",
+      "sha256": "f79302eda925010a8ccbfa7e960e0fc7760114b920d641897474ed91ea318f73",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/lib/char_conv.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/char_conv.lua",
+      "sha256": "57dca5a0498d254826d8c18a1fc800b3556a6f49318e7ad0fbefc51b7167660f",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/lib/cursor.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/cursor.lua",
+      "sha256": "d77796d3d857b5527b882c18b92b9e81d7fb3f8a27e7b5ebf52e489c98bbc7f6",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/lib/fzy.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/fzy.lua",
+      "sha256": "5b1b53aaf56c8b51bd3507f6f6b76c042b92ceb55eaac8533277754158426711",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/lib/intl.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/intl.lua",
+      "sha256": "234df27c1e6a27089b04e156c3146669bbe4fcb3960169692b222c9e4867110d",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/lib/menus.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/menus.lua",
+      "sha256": "08181fa05c2a0dd0c5146c0a0e02e44a690732f84a08e3c5bfdd06ff68e0f79e",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/lib/std.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/std.lua",
+      "sha256": "fdaedd93bdb9b716dbd99ec1c8cff08b3d316c9fdc793718e2b4ee7a504799f5",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/lib/text.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/text.lua",
+      "sha256": "f4e040412b2e3c2d276d8098aa1eea01e020e916123336470dd2480a5968eb07",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/lib/utils.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/lib/utils.lua",
+      "sha256": "297fb0a150bc0ec8a4d342373c3864aafdd5aee7cccc66469c2a656cf120302c",
+      "byte_identical": true
+    },
+    {
+      "release_path": "scripts/uosc/main.lua",
+      "local_path": "mpv/config/portable_config/scripts/uosc/main.lua",
+      "sha256": "bf97dcde4f1b8bd74a5e1c672a436a5584b5db2dc9413ab5585745afd9e1dd8d",
+      "byte_identical": true
+    },
+    {
+      "release_path": "fonts/uosc_icons.otf",
+      "local_path": "mpv/config/portable_config/fonts/uosc_icons.otf",
+      "sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25",
+      "byte_identical": true
+    },
+    {
+      "release_path": "fonts/uosc_textures.ttf",
+      "local_path": "mpv/config/portable_config/fonts/uosc_textures.ttf",
+      "sha256": "ccc0660f284dfceb5ab31eb363ccb2355df30fcdf628e781ee374b7d4172ada5",
+      "byte_identical": true
+    }
+  ],
+  "font_embedded_metadata": [
+    {
+      "file": "uosc_icons.otf",
+      "name_table": [
+        {
+          "name_id": 0,
+          "text": "Copyright 2019 Google LLC. All Rights Reserved."
+        },
+        {
+          "name_id": 1,
+          "text": "Material Icons Round"
+        }
+      ]
+    },
+    {
+      "file": "uosc_textures.ttf",
+      "name_table": [
+        {
+          "name_id": 1,
+          "text": "uosc_textures"
+        }
+      ]
+    }
+  ],
+  "icon_font_evidence": {
+    "path": "mpv/sources/evidence/components/uosc/material-icons-round/evidence.json",
+    "upstream_repository": "https://github.com/google/material-design-icons",
+    "commit": "1c575764826fa5752ddc2bdc6b31ef7cc3233371",
+    "license": "Apache-2.0",
+    "byte_identical": true,
+    "sha256": "a853f50913597e67f76facd269ff230c2f3038f9acadec04dd653080785dee25"
+  }
+}

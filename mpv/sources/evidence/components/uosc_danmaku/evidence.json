@@ -1,0 +1,601 @@
+{
+  "repository": "https://github.com/Tony15246/uosc_danmaku",
+  "commit": "948f64eef08011faf2f3eb43050062d7ce5ed1ba",
+  "source_archive": "mpv/sources/evidence/components/uosc_danmaku/upstream-948f64eef08011faf2f3eb43050062d7ce5ed1ba.tar.gz",
+  "source_url": "https://codeload.github.com/Tony15246/uosc_danmaku/tar.gz/948f64eef08011faf2f3eb43050062d7ce5ed1ba",
+  "archive_sha256": "9772cda7935ce3278528c38b9b41118584eacc3ddde02b466b7dbe8bea05b072",
+  "selection_method": "Compared Git blob IDs of all 25 locally bundled files against every first-parent commit since 2026-01-01; selected newest maximum exact-file match. This proves a reconstructable base, not the historical date of download.",
+  "best_candidates": [
+    {
+      "commit": "948f64eef08011faf2f3eb43050062d7ce5ed1ba",
+      "matching_count": 22,
+      "matching_files": [
+        "apis/extra.lua",
+        "dicts/s2t_chars.lua",
+        "dicts/t2s_chars.lua",
+        "LICENSE",
+        "modules/aes.lua",
+        "modules/base64.lua",
+        "modules/guess.lua",
+        "modules/hash.lua",
+        "modules/inflate.lua",
+        "modules/md5.lua",
+        "modules/menu.lua",
+        "modules/parse.lua",
+        "modules/render.lua",
+        "modules/update.lua",
+        "modules/utils.lua",
+        "README.md",
+        "sites/bahamut.lua",
+        "sites/bilibili.lua",
+        "sites/iqiyi.lua",
+        "sites/mgtv.lua",
+        "sites/tencentvideo.lua",
+        "sites/youku.lua"
+      ]
+    },
+    {
+      "commit": "127db9d62fe786bd5b036eff4999baa6bf3e05ad",
+      "matching_count": 21,
+      "matching_files": [
+        "apis/extra.lua",
+        "dicts/s2t_chars.lua",
+        "dicts/t2s_chars.lua",
+        "LICENSE",
+        "modules/aes.lua",
+        "modules/base64.lua",
+        "modules/guess.lua",
+        "modules/hash.lua",
+        "modules/inflate.lua",
+        "modules/md5.lua",
+        "modules/parse.lua",
+        "modules/render.lua",
+        "modules/update.lua",
+        "modules/utils.lua",
+        "README.md",
+        "sites/bahamut.lua",
+        "sites/bilibili.lua",
+        "sites/iqiyi.lua",
+        "sites/mgtv.lua",
+        "sites/tencentvideo.lua",
+        "sites/youku.lua"
+      ]
+    },
+    {
+      "commit": "d69c3e8075b9bb64427ed6cb4597262d5dbe629d",
+      "matching_count": 21,
+      "matching_files": [
+        "apis/extra.lua",
+        "dicts/s2t_chars.lua",
+        "dicts/t2s_chars.lua",
+        "LICENSE",
+        "modules/aes.lua",
+        "modules/base64.lua",
+        "modules/guess.lua",
+        "modules/hash.lua",
+        "modules/inflate.lua",
+        "modules/md5.lua",
+        "modules/parse.lua",
+        "modules/render.lua",
+        "modules/update.lua",
+        "modules/utils.lua",
+        "README.md",
+        "sites/bahamut.lua",
+        "sites/bilibili.lua",
+        "sites/iqiyi.lua",
+        "sites/mgtv.lua",
+        "sites/tencentvideo.lua",
+        "sites/youku.lua"
+      ]
+    },
+    {
+      "commit": "33c3b9a187a06bb311586dfa8a5662ba93eecc63",
+      "matching_count": 21,
+      "matching_files": [
+        "apis/extra.lua",
+        "dicts/s2t_chars.lua",
+        "dicts/t2s_chars.lua",
+        "LICENSE",
+        "modules/aes.lua",
+        "modules/base64.lua",
+        "modules/guess.lua",
+        "modules/hash.lua",
+        "modules/inflate.lua",
+        "modules/md5.lua",
+        "modules/menu.lua",
+        "modules/parse.lua",
+        "modules/render.lua",
+        "modules/update.lua",
+        "modules/utils.lua",
+        "sites/bahamut.lua",
+        "sites/bilibili.lua",
+        "sites/iqiyi.lua",
+        "sites/mgtv.lua",
+        "sites/tencentvideo.lua",
+        "sites/youku.lua"
+      ]
+    },
+    {
+      "commit": "8fb2107d1e04ce1fd700496ca7d2e4a62182016a",
+      "matching_count": 21,
+      "matching_files": [
+        "apis/extra.lua",
+        "dicts/s2t_chars.lua",
+        "dicts/t2s_chars.lua",
+        "LICENSE",
+        "modules/aes.lua",
+        "modules/base64.lua",
+        "modules/guess.lua",
+        "modules/hash.lua",
+        "modules/inflate.lua",
+        "modules/md5.lua",
+        "modules/menu.lua",
+        "modules/parse.lua",
+        "modules/render.lua",
+        "modules/update.lua",
+        "modules/utils.lua",
+        "sites/bahamut.lua",
+        "sites/bilibili.lua",
+        "sites/iqiyi.lua",
+        "sites/mgtv.lua",
+        "sites/tencentvideo.lua",
+        "sites/youku.lua"
+      ]
+    },
+    {
+      "commit": "7e4fc593e9e7a8ff459b35863b381d8d0fdb1fdc",
+      "matching_count": 20,
+      "matching_files": [
+        "apis/extra.lua",
+        "dicts/s2t_chars.lua",
+        "dicts/t2s_chars.lua",
+        "LICENSE",
+        "modules/aes.lua",
+        "modules/base64.lua",
+        "modules/guess.lua",
+        "modules/hash.lua",
+        "modules/inflate.lua",
+        "modules/md5.lua",
+        "modules/parse.lua",
+        "modules/render.lua",
+        "modules/update.lua",
+        "modules/utils.lua",
+        "sites/bahamut.lua",
+        "sites/bilibili.lua",
+        "sites/iqiyi.lua",
+        "sites/mgtv.lua",
+        "sites/tencentvideo.lua",
+        "sites/youku.lua"
+      ]
+    },
+    {
+      "commit": "6dbb1329dc4eb904f5f4eef234a3a1649bcf1aa0",
+      "matching_count": 20,
+      "matching_files": [
+        "apis/extra.lua",
+        "dicts/s2t_chars.lua",
+        "dicts/t2s_chars.lua",
+        "LICENSE",
+        "modules/aes.lua",
+        "modules/base64.lua",
+        "modules/guess.lua",
+        "modules/hash.lua",
+        "modules/inflate.lua",
+        "modules/md5.lua",
+        "modules/menu.lua",
+        "modules/parse.lua",
+        "modules/render.lua",
+        "modules/update.lua",
+        "sites/bahamut.lua",
+        "sites/bilibili.lua",
+        "sites/iqiyi.lua",
+        "sites/mgtv.lua",
+        "sites/tencentvideo.lua",
+        "sites/youku.lua"
+      ]
+    },
+    {
+      "commit": "e88bb8751f654b30f7b0c7ca2455a7015d2db927",
+      "matching_count": 20,
+      "matching_files": [
+        "apis/extra.lua",
+        "dicts/s2t_chars.lua",
+        "dicts/t2s_chars.lua",
+        "LICENSE",
+        "modules/aes.lua",
+        "modules/base64.lua",
+        "modules/guess.lua",
+        "modules/hash.lua",
+        "modules/inflate.lua",
+        "modules/md5.lua",
+        "modules/menu.lua",
+        "modules/parse.lua",
+        "modules/render.lua",
+        "modules/update.lua",
+        "sites/bahamut.lua",
+        "sites/bilibili.lua",
+        "sites/iqiyi.lua",
+        "sites/mgtv.lua",
+        "sites/tencentvideo.lua",
+        "sites/youku.lua"
+      ]
+    },
+    {
+      "commit": "b4ef542f4d26c8b4a02b0436ac3fa383a237f555",
+      "matching_count": 19,
+      "matching_files": [
+        "dicts/s2t_chars.lua",
+        "dicts/t2s_chars.lua",
+        "LICENSE",
+        "modules/aes.lua",
+        "modules/base64.lua",
+        "modules/guess.lua",
+        "modules/hash.lua",
+        "modules/inflate.lua",
+        "modules/md5.lua",
+        "modules/parse.lua",
+        "modules/render.lua",
+        "modules/update.lua",
+        "modules/utils.lua",
+        "sites/bahamut.lua",
+        "sites/bilibili.lua",
+        "sites/iqiyi.lua",
+        "sites/mgtv.lua",
+        "sites/tencentvideo.lua",
+        "sites/youku.lua"
+      ]
+    },
+    {
+      "commit": "a1079707f4753fea33923d5e559ced142c38a009",
+      "matching_count": 18,
+      "matching_files": [
+        "dicts/s2t_chars.lua",
+        "dicts/t2s_chars.lua",
+        "LICENSE",
+        "modules/aes.lua",
+        "modules/base64.lua",
+        "modules/guess.lua",
+        "modules/hash.lua",
+        "modules/inflate.lua",
+        "modules/md5.lua",
+        "modules/parse.lua",
+        "modules/update.lua",
+        "modules/utils.lua",
+        "sites/bahamut.lua",
+        "sites/bilibili.lua",
+        "sites/iqiyi.lua",
+        "sites/mgtv.lua",
+        "sites/tencentvideo.lua",
+        "sites/youku.lua"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/apis/dandanplay.lua",
+      "sha256": "1e5ce7a1a57d5f7a4709e47f5871b08b9ce5f67acac521a88ce3404ea8e02ea3",
+      "upstream_path": "apis/dandanplay.lua",
+      "upstream_sha256": "5111781f5dc15c4e7ef705c0a2ab1cd0ca90240b05c233226b25d557baa79ee3",
+      "byte_identical": false,
+      "text_identical_ignoring_line_endings": false
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/apis/extra.lua",
+      "sha256": "603933459a6e5dde65c16b840cabb4308bae0c3e9b2d989960f26f6d9ce94036",
+      "upstream_path": "apis/extra.lua",
+      "upstream_sha256": "603933459a6e5dde65c16b840cabb4308bae0c3e9b2d989960f26f6d9ce94036",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/dicts/s2t_chars.lua",
+      "sha256": "318c29eae825dad40b05435931b63ca95a463a320afcf91e76f2692d290c3c91",
+      "upstream_path": "dicts/s2t_chars.lua",
+      "upstream_sha256": "318c29eae825dad40b05435931b63ca95a463a320afcf91e76f2692d290c3c91",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/dicts/t2s_chars.lua",
+      "sha256": "84dc35fb62e6480d6cceb2478284331517a11c5b211c0c5f7c3eb34bede5285c",
+      "upstream_path": "dicts/t2s_chars.lua",
+      "upstream_sha256": "84dc35fb62e6480d6cceb2478284331517a11c5b211c0c5f7c3eb34bede5285c",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/LICENSE",
+      "sha256": "717bc0a3d9f24e80be5fe3771866ca97ed080d0151f82401f6d152b4dfbec452",
+      "upstream_path": "LICENSE",
+      "upstream_sha256": "717bc0a3d9f24e80be5fe3771866ca97ed080d0151f82401f6d152b4dfbec452",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/main.lua",
+      "sha256": "f14d2bc2df857b965f8013bf48baf92cd26e77ff554fc9c56f68fb244b1e8c78",
+      "upstream_path": "main.lua",
+      "upstream_sha256": "47324773cb9403453e53f1621302519614f4620978d4125a6d72b8c91d72bd96",
+      "byte_identical": false,
+      "text_identical_ignoring_line_endings": false
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/aes.lua",
+      "sha256": "7adc2fdfcb8ee66f438d716065570c1402b19c039576ec939ffcde7284302d8a",
+      "upstream_path": "modules/aes.lua",
+      "upstream_sha256": "7adc2fdfcb8ee66f438d716065570c1402b19c039576ec939ffcde7284302d8a",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/base64.lua",
+      "sha256": "4a8035153f69e7326dd09204557036b271eb3ed390883e62ac1b6853643526d8",
+      "upstream_path": "modules/base64.lua",
+      "upstream_sha256": "4a8035153f69e7326dd09204557036b271eb3ed390883e62ac1b6853643526d8",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/guess.lua",
+      "sha256": "414896d780ddec27d6ee2df6939749eb495471bc7393e8828adc43f301feff3f",
+      "upstream_path": "modules/guess.lua",
+      "upstream_sha256": "414896d780ddec27d6ee2df6939749eb495471bc7393e8828adc43f301feff3f",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/hash.lua",
+      "sha256": "ce45716518d5588afd9b0a1c71c2f9ce405b415fc85603c47e9ad4d813a6c7f6",
+      "upstream_path": "modules/hash.lua",
+      "upstream_sha256": "ce45716518d5588afd9b0a1c71c2f9ce405b415fc85603c47e9ad4d813a6c7f6",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/inflate.lua",
+      "sha256": "a386b208fbc46172e7f3127614ce50e710ed2c71da824b86b661bab89e015682",
+      "upstream_path": "modules/inflate.lua",
+      "upstream_sha256": "a386b208fbc46172e7f3127614ce50e710ed2c71da824b86b661bab89e015682",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/md5.lua",
+      "sha256": "1fc84027d59550f82233bac765f203a2cf2b5691eb6437c514a57f4850891ddc",
+      "upstream_path": "modules/md5.lua",
+      "upstream_sha256": "1fc84027d59550f82233bac765f203a2cf2b5691eb6437c514a57f4850891ddc",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/menu.lua",
+      "sha256": "c2430ece4f674f8d90cf0560129bf7777aaf4d6f83602c64eac0409d68c7a443",
+      "upstream_path": "modules/menu.lua",
+      "upstream_sha256": "c2430ece4f674f8d90cf0560129bf7777aaf4d6f83602c64eac0409d68c7a443",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/options.lua",
+      "sha256": "b6a7ee58e32bf37ac3038537aaff8a444216730d6b772c69e1ff7764ac38a3e0",
+      "upstream_path": "modules/options.lua",
+      "upstream_sha256": "f4c553ac5689347f430d8e214996fd3a88cbd50c6367cf9a878a37502311699b",
+      "byte_identical": false,
+      "text_identical_ignoring_line_endings": false
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/parse.lua",
+      "sha256": "a729c573b8fc4dad5852a0932447b147ac98fc96672680b7dbc89b468df073d3",
+      "upstream_path": "modules/parse.lua",
+      "upstream_sha256": "a729c573b8fc4dad5852a0932447b147ac98fc96672680b7dbc89b468df073d3",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/render.lua",
+      "sha256": "ab25b62f71d8104ea53086ef3bc953389fbca976f727318b6e0729b9e03f6fb2",
+      "upstream_path": "modules/render.lua",
+      "upstream_sha256": "ab25b62f71d8104ea53086ef3bc953389fbca976f727318b6e0729b9e03f6fb2",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/update.lua",
+      "sha256": "f488320aa9be89052f5602611805f90fc409cf98346224582ed117510bd49118",
+      "upstream_path": "modules/update.lua",
+      "upstream_sha256": "f488320aa9be89052f5602611805f90fc409cf98346224582ed117510bd49118",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/utils.lua",
+      "sha256": "2fcf668de396f911dba316aa064cd4569da2cbb351017b6d6c7cddeda9e4a9fd",
+      "upstream_path": "modules/utils.lua",
+      "upstream_sha256": "2fcf668de396f911dba316aa064cd4569da2cbb351017b6d6c7cddeda9e4a9fd",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/README.md",
+      "sha256": "320ff3a674596aabc085ad99be271e33ea449da08ae4e34482d3a84e1e8ba48a",
+      "upstream_path": "README.md",
+      "upstream_sha256": "320ff3a674596aabc085ad99be271e33ea449da08ae4e34482d3a84e1e8ba48a",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/bahamut.lua",
+      "sha256": "67be98f7a014f933cef07c45d0b7cf3d5f9ea9d9f8d1b7c9ec64399105325a01",
+      "upstream_path": "sites/bahamut.lua",
+      "upstream_sha256": "67be98f7a014f933cef07c45d0b7cf3d5f9ea9d9f8d1b7c9ec64399105325a01",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/bilibili.lua",
+      "sha256": "4c4b01d00a82dcab1a316f3424245c49c4a97ea559e68e29f4e8dcd19ae17565",
+      "upstream_path": "sites/bilibili.lua",
+      "upstream_sha256": "4c4b01d00a82dcab1a316f3424245c49c4a97ea559e68e29f4e8dcd19ae17565",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/iqiyi.lua",
+      "sha256": "d3b9828524846ad8f37de7aa8d9c963feae77a84f1d68c8eed6f8d72b0522cbc",
+      "upstream_path": "sites/iqiyi.lua",
+      "upstream_sha256": "d3b9828524846ad8f37de7aa8d9c963feae77a84f1d68c8eed6f8d72b0522cbc",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/mgtv.lua",
+      "sha256": "eca3a2bab71d6caaad21e5edacdc6b95eaca1604018103a52f107d85179352a7",
+      "upstream_path": "sites/mgtv.lua",
+      "upstream_sha256": "eca3a2bab71d6caaad21e5edacdc6b95eaca1604018103a52f107d85179352a7",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/tencentvideo.lua",
+      "sha256": "d61e97bbc089f44e48cb97dd29670280ed4cd1bddb008eb686e764560eaa7595",
+      "upstream_path": "sites/tencentvideo.lua",
+      "upstream_sha256": "d61e97bbc089f44e48cb97dd29670280ed4cd1bddb008eb686e764560eaa7595",
+      "byte_identical": true
+    },
+    {
+      "local_path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/youku.lua",
+      "sha256": "ed2945f6c3f7fdc7900bcc378ffe9b198ddcf3260d846baa1842681bc8cc9096",
+      "upstream_path": "sites/youku.lua",
+      "upstream_sha256": "ed2945f6c3f7fdc7900bcc378ffe9b198ddcf3260d846baa1842681bc8cc9096",
+      "byte_identical": true
+    }
+  ],
+  "license_files": {
+    "LICENSE": "717bc0a3d9f24e80be5fe3771866ca97ed080d0151f82401f6d152b4dfbec452"
+  },
+  "modification_summary": [
+    "Three changed files; exact changes preserved in unified patch and local-source.",
+    "apis/dandanplay.lua: missing API server handling, no-parameter JSON request with compatibility fallback, external request format.",
+    "main.lua: remove container-fps gate while retaining duration/video guards; KumiPlayer comments identify synchronized upstream switching fix.",
+    "modules/options.lua: fallback endpoint, automatic loading, user agent and nonconflicting keyboard defaults; API proxy default already present in base.",
+    "script-opts/uosc_danmaku.conf: KumiPlayer configuration retained in local-source."
+  ],
+  "unresolved": [],
+  "checked_at": "2026-10-11",
+  "local_source_files": [
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/apis/dandanplay.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/apis/dandanplay.lua",
+      "sha256": "1e5ce7a1a57d5f7a4709e47f5871b08b9ce5f67acac521a88ce3404ea8e02ea3"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/apis/extra.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/apis/extra.lua",
+      "sha256": "603933459a6e5dde65c16b840cabb4308bae0c3e9b2d989960f26f6d9ce94036"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/dicts/s2t_chars.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/dicts/s2t_chars.lua",
+      "sha256": "318c29eae825dad40b05435931b63ca95a463a320afcf91e76f2692d290c3c91"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/dicts/t2s_chars.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/dicts/t2s_chars.lua",
+      "sha256": "84dc35fb62e6480d6cceb2478284331517a11c5b211c0c5f7c3eb34bede5285c"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/LICENSE",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/LICENSE",
+      "sha256": "717bc0a3d9f24e80be5fe3771866ca97ed080d0151f82401f6d152b4dfbec452"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/main.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/main.lua",
+      "sha256": "f14d2bc2df857b965f8013bf48baf92cd26e77ff554fc9c56f68fb244b1e8c78"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/aes.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/aes.lua",
+      "sha256": "7adc2fdfcb8ee66f438d716065570c1402b19c039576ec939ffcde7284302d8a"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/base64.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/base64.lua",
+      "sha256": "4a8035153f69e7326dd09204557036b271eb3ed390883e62ac1b6853643526d8"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/guess.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/guess.lua",
+      "sha256": "414896d780ddec27d6ee2df6939749eb495471bc7393e8828adc43f301feff3f"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/hash.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/hash.lua",
+      "sha256": "ce45716518d5588afd9b0a1c71c2f9ce405b415fc85603c47e9ad4d813a6c7f6"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/inflate.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/inflate.lua",
+      "sha256": "a386b208fbc46172e7f3127614ce50e710ed2c71da824b86b661bab89e015682"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/md5.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/md5.lua",
+      "sha256": "1fc84027d59550f82233bac765f203a2cf2b5691eb6437c514a57f4850891ddc"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/menu.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/menu.lua",
+      "sha256": "c2430ece4f674f8d90cf0560129bf7777aaf4d6f83602c64eac0409d68c7a443"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/options.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/options.lua",
+      "sha256": "b6a7ee58e32bf37ac3038537aaff8a444216730d6b772c69e1ff7764ac38a3e0"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/parse.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/parse.lua",
+      "sha256": "a729c573b8fc4dad5852a0932447b147ac98fc96672680b7dbc89b468df073d3"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/render.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/render.lua",
+      "sha256": "ab25b62f71d8104ea53086ef3bc953389fbca976f727318b6e0729b9e03f6fb2"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/update.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/update.lua",
+      "sha256": "f488320aa9be89052f5602611805f90fc409cf98346224582ed117510bd49118"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/modules/utils.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/modules/utils.lua",
+      "sha256": "2fcf668de396f911dba316aa064cd4569da2cbb351017b6d6c7cddeda9e4a9fd"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/README.md",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/README.md",
+      "sha256": "320ff3a674596aabc085ad99be271e33ea449da08ae4e34482d3a84e1e8ba48a"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/bahamut.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/bahamut.lua",
+      "sha256": "67be98f7a014f933cef07c45d0b7cf3d5f9ea9d9f8d1b7c9ec64399105325a01"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/bilibili.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/bilibili.lua",
+      "sha256": "4c4b01d00a82dcab1a316f3424245c49c4a97ea559e68e29f4e8dcd19ae17565"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/iqiyi.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/iqiyi.lua",
+      "sha256": "d3b9828524846ad8f37de7aa8d9c963feae77a84f1d68c8eed6f8d72b0522cbc"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/mgtv.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/mgtv.lua",
+      "sha256": "eca3a2bab71d6caaad21e5edacdc6b95eaca1604018103a52f107d85179352a7"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/tencentvideo.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/tencentvideo.lua",
+      "sha256": "d61e97bbc089f44e48cb97dd29670280ed4cd1bddb008eb686e764560eaa7595"
+    },
+    {
+      "path": "mpv/config/portable_config/scripts/uosc_danmaku/sites/youku.lua",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/scripts/uosc_danmaku/sites/youku.lua",
+      "sha256": "ed2945f6c3f7fdc7900bcc378ffe9b198ddcf3260d846baa1842681bc8cc9096"
+    },
+    {
+      "path": "mpv/config/portable_config/script-opts/uosc_danmaku.conf",
+      "archived_path": "mpv/sources/evidence/components/uosc_danmaku/local-source/portable_config/script-opts/uosc_danmaku.conf",
+      "sha256": "730a3c60639785165453384bb1148596eec610655a1b8faef94f8e502d104449"
+    }
+  ],
+  "modifications_patch": {
+    "path": "mpv/sources/evidence/components/uosc_danmaku/local-modifications.patch",
+    "sha256": "65c4eb871481459451c82b9c1911e36b901acc2faa8687bc790e0e5116165511"
+  }
+}

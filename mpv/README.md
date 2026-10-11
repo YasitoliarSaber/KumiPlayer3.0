@@ -16,11 +16,22 @@ KumiPlayer 的 MPV 相关文件**全部集中在本目录**：干净官方二进
 | `components-manifest.json` | 第三方组件登记（uosc / thumbfast / Anime4K / mpv-stats-zh / uosc_danmaku）的来源、版本、许可证、随包文件 | ✅ | ✅ |
 | `distribution-manifest.json` | 对应源码审核状态、缺项、源码归档与全部发布文件 SHA-256；当前 pending | ✅ | ✅ |
 | `SOURCE_CODE.txt`、`THIRD_PARTY_NOTICES.md` | 对应源码取得方式、当前缺项与第三方声明 | ✅ | ✅ |
-| `licenses/` | 运行时与增强组件的第三方许可证正文（当前 27 份） | ✅ | ✅ |
-| `sources/` | 正式发布时准备的完整对应源码归档；当前尚未具备 | ✅ | 按归档策略保存，不以导航链接替代 |
+| `licenses/` | 运行时与增强组件许可证正文，含独立的 Google 图标字体 Apache 许可 | ✅ | ✅ |
+| `sources/` | 已保存准确源码、补丁与来源证据档案；完整对应源码闭包仍待补齐 | 仅正式审核的对应源码归档 | 跟踪来源/哈希；压缩档案本地保存，正式发布时单独交付 |
+| `provenance/`、`tools/` | 原始 ZIP 与二进制来源核对、准确 CI 脚本、已知源码采集与证据归档工具 | 证据纳入源码归档；下载缓存不随包 | 跟踪实际证据和工具，不跟踪下载缓存 |
 | `docs/` | MPV 运行时演进记录、开源项目与功能候选清单、按用途查找入口 | — | ❌（`*.md` 全局忽略，`README.md` 除外） |
 
 ## 源码层 ↔ 安装包层
+
+### 对应源码当前进度（2026-10-11）
+
+原始官方 ZIP 与全部 27 个运行文件已核对一致；MPV/FFmpeg/dav1d 准确提交、LuaJIT 内嵌版本来源、9 份已证实源码输入与实际 `ci/build-mingw64.sh` 已归档。四个增强组件的不可变来源与修改补丁已保存，图标字体单独附 Apache 许可。`tools/collect_runtime_sources.py` 重复采集必须匹配已有摘要；`tools/build_evidence_archive.py` 生成并读回核对来源证据档案。
+
+重新采集时，先把官方 `mpv-v0.41.0-x86_64-w64-mingw32.zip` 保存至 `provenance/downloads/`，再从项目根运行 `python mpv/tools/collect_runtime_sources.py`。来源证据与配置快照齐全后运行 `python mpv/tools/build_evidence_archive.py`；工具只处理材料，不编译或启动播放器。源码压缩档案不进普通 Git，最终发布时作为对应源码随包交付。
+
+`sources/evidence-index.json` 的归档是 **provenance-evidence / incomplete**，不冒充完整对应源码。官方浮动依赖的历史构建日志已删除，准确 checkout、静态依赖闭包与工具链资料仍有缺项；统计脚本同提交 MIT 与禁止商用声明冲突也未解除。按用户意愿保留新版统计功能和自愿赞助方向，继续拦截正式内置 MPV 分发；缺项见 `distribution-manifest.json`。安装入口只复制正式审批的源码归档，不递归复制来源研究目录与临时 Git checkout。
+
+按用户 2026-10-11 的要求，当前优先完成实际功能与已有许可材料；不扩展安全加固或发布校验体系，最终发布前统一复核。
 
 安装包由 `scripts/stage_mpv_runtime.ps1` 生成到 `packaging/runtime/mpv/`，布局与源码**不完全相同**：安装层要求 `mpv.exe` 与 `portable_config/` 同级（符合 mpv 自带的 portable_config 约定），源码层的 `config/` 外壳不进入安装包。
 

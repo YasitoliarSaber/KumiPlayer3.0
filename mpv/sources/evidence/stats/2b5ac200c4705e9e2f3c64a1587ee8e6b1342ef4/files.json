@@ -1,0 +1,20 @@
+[
+  {
+    "path": "stats.lua",
+    "url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/blob/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4/stats.lua",
+    "sha256": "a1629fa030e04167828bb2f8dd2ece8abd37f45f08d7219a1b4a33f7f408df17",
+    "bytes": 82215
+  },
+  {
+    "path": "LICENSE.md",
+    "url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/blob/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4/LICENSE.md",
+    "sha256": "da5c26047cfdbefcf598e994cde74580e9857906255469ac59827518c447fffd",
+    "bytes": 3211
+  },
+  {
+    "path": "README.md",
+    "url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/blob/2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4/README.md",
+    "sha256": "db13aaa0f61b99c7d63f2058be8e91df5eba99ba85177856dceb31f138a78c5a",
+    "bytes": 17605
+  }
+]

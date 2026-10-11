@@ -1,0 +1,101 @@
+{
+  "sha": "53b087e81d21bf6f5f376340b94d4184a7de9a19",
+  "node_id": "C_kwDORbfMCdoAKDUzYjA4N2U4MWQyMWJmNmY1ZjM3NjM0MGI5NGQ0MTg0YTdkZTlhMTk",
+  "commit": {
+    "author": {
+      "name": "yosh.wang",
+      "email": "162548755+yosh-wang@users.noreply.github.com",
+      "date": "2026-07-12T02:54:36Z"
+    },
+    "committer": {
+      "name": "GitHub",
+      "email": "noreply@github.com",
+      "date": "2026-07-12T02:54:36Z"
+    },
+    "message": "Update stats.lua",
+    "tree": {
+      "sha": "dd6ac66bfbc785d270c23b6441a696d00b069c2f",
+      "url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/git/trees/dd6ac66bfbc785d270c23b6441a696d00b069c2f"
+    },
+    "url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/git/commits/53b087e81d21bf6f5f376340b94d4184a7de9a19",
+    "comment_count": 0,
+    "verification": {
+      "verified": true,
+      "reason": "valid",
+      "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJqUwHtCRC1aQ7uu5UhlAAADmsQACxIz91v09nXw++aHAFZgJ/0\nvw2vclU3HWNI4mlamQULWW12JrD7gguqv62byknO+Ew06EV1wzd94q3T1f+hcIbO\n0mbo2jlYB2w0nXdUitUQbPE2nMxe+sbTFMyJpjLJ5UPO8RJh4vPiOJ7iCVTCKrFi\nj3Xwbc1aODuywDi/u2H7DSQYB0lQPy/cKubhzMEgQ7HbrkNEqdQNkeo3a3Wwh9UO\nL/Cc5bXHkkph1PpTMbSzvsPg0axz2snrhDE1H+m3/TaAhXxQ4f5EiRjxO33aO5mv\ndCM8YSjnmYGAg11O5n6lz+Lhu7EHG0y1mj4Fxg4yO7xrbN37m42mC6uCEBtbu3t9\nliwqZdARloFq2k379/3xkBG5TZmGeXew1UCR/57T4GBMmfysAkLLraVXqNXkFVny\nvJPdSFlT7Xpq5cdrSuIbPCF1vSAL3lWtVo55AEFL3pSAIQc2GHdRmlaIeG2b0Ofc\n0sqjDU/m2IcJ4kmVw9wUDN9vE+v3hKLjPSM3Ic1MYjpZz2MHJ05wd/wsUIeEEtnQ\n5s20/5teBlfnBNWEcapAdiMFCa9xQd8m/YOVqBNEe+hRnQtVqtoRhTP+juAT9O10\npu4LnF0VXXY4xQDrIrGxaKL5boN8hLAfhHFS2YN0QcisCRk/0qsqdK2LexVOUnk1\nzHjGVgWnZ5GHh2SPgNJU\n=gvGX\n-----END PGP SIGNATURE-----\n",
+      "payload": "tree dd6ac66bfbc785d270c23b6441a696d00b069c2f\nparent b3a47fc65c2e2c8267e6d072f43f1e9424d56089\nauthor yosh.wang <162548755+yosh-wang@users.noreply.github.com> 1783824876 +0800\ncommitter GitHub <noreply@github.com> 1783824876 +0800\n\nUpdate stats.lua",
+      "verified_at": "2026-07-12T02:54:37Z"
+    }
+  },
+  "url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/commits/53b087e81d21bf6f5f376340b94d4184a7de9a19",
+  "html_url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/commit/53b087e81d21bf6f5f376340b94d4184a7de9a19",
+  "comments_url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/commits/53b087e81d21bf6f5f376340b94d4184a7de9a19/comments",
+  "author": {
+    "login": "yosh-wang",
+    "id": 162548755,
+    "node_id": "U_kgDOCbBMEw",
+    "avatar_url": "https://avatars.githubusercontent.com/u/162548755?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/yosh-wang",
+    "html_url": "https://github.com/yosh-wang",
+    "followers_url": "https://api.github.com/users/yosh-wang/followers",
+    "following_url": "https://api.github.com/users/yosh-wang/following{/other_user}",
+    "gists_url": "https://api.github.com/users/yosh-wang/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/yosh-wang/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/yosh-wang/subscriptions",
+    "organizations_url": "https://api.github.com/users/yosh-wang/orgs",
+    "repos_url": "https://api.github.com/users/yosh-wang/repos",
+    "events_url": "https://api.github.com/users/yosh-wang/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/yosh-wang/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "committer": {
+    "login": "web-flow",
+    "id": 19864447,
+    "node_id": "MDQ6VXNlcjE5ODY0NDQ3",
+    "avatar_url": "https://avatars.githubusercontent.com/u/19864447?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/web-flow",
+    "html_url": "https://github.com/web-flow",
+    "followers_url": "https://api.github.com/users/web-flow/followers",
+    "following_url": "https://api.github.com/users/web-flow/following{/other_user}",
+    "gists_url": "https://api.github.com/users/web-flow/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/web-flow/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/web-flow/subscriptions",
+    "organizations_url": "https://api.github.com/users/web-flow/orgs",
+    "repos_url": "https://api.github.com/users/web-flow/repos",
+    "events_url": "https://api.github.com/users/web-flow/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/web-flow/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "parents": [
+    {
+      "sha": "b3a47fc65c2e2c8267e6d072f43f1e9424d56089",
+      "url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/commits/b3a47fc65c2e2c8267e6d072f43f1e9424d56089",
+      "html_url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/commit/b3a47fc65c2e2c8267e6d072f43f1e9424d56089"
+    }
+  ],
+  "stats": {
+    "total": 21,
+    "additions": 15,
+    "deletions": 6
+  },
+  "files": [
+    {
+      "sha": "ef343fb5608f215813acc85bef56786a06c8ace2",
+      "filename": "stats.lua",
+      "status": "modified",
+      "additions": 15,
+      "deletions": 6,
+      "changes": 21,
+      "blob_url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/blob/53b087e81d21bf6f5f376340b94d4184a7de9a19/stats.lua",
+      "raw_url": "https://github.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/raw/53b087e81d21bf6f5f376340b94d4184a7de9a19/stats.lua",
+      "contents_url": "https://api.github.com/repos/yosh-wang/mpv-stats.lua-zh-chinese-translation-/contents/stats.lua?ref=53b087e81d21bf6f5f376340b94d4184a7de9a19",
+      "patch": "@@ -2016,7 +2016,7 @@ local function auto_translate_text(text)\n     \n     -- 模糊匹配（跳过过短的键，防止破坏包含短英文单词的文本）\n     for en, zh in pairs(translations) do\n-        if #en >= 3 and text:find(en, 1, true) then\n+        if #en >= 4 and text:find(en, 1, true) then\n             text = text:gsub(en, zh, 1)\n         end\n     end\n@@ -2662,6 +2662,15 @@ local function apply_gpu_usage_map(gpu_map, fmt)\n             end\n         end\n     end\n+    -- 单 N 卡系统兜底：只有 1 个 LUID 且有 NVIDIA 显卡时，直接将该 LUID 分配给 N 卡\n+    if not nvidia_luid_idx and #luid_utils == 1 then\n+        for _, gname in ipairs(gpu_names) do\n+            if is_nvidia_gpu(gname) then\n+                nvidia_luid_idx = 1\n+                break\n+            end\n+        end\n+    end\n     -- 兜底：有 N 卡但没能通过值匹配识别 LUID 时，跳过利用率最高的 LUID\n     -- （mpv 硬解通常在 N 卡上，负载高于集显）\n     if not nvidia_luid_idx and #luid_utils > 1 then\n@@ -2918,9 +2927,9 @@ add_file = function(s, print_cache, print_tags)\n         refresh_stats()\n     end\n \n-    -- 显示 CPU（占用率 + 型号，百分比右对齐到 3 字符以对齐后续标签）\n+    -- 显示 CPU（占用率 + 型号，百分比右对齐到 4 字符以对齐后续标签，兼容 100%）\n     local cpu_display = cpu_usage ~= \"N/A\" and cpu_usage or \"--%\"\n-    local cpu_line = \"CPU: \" .. string.format(\"%3s\", cpu_display)\n+    local cpu_line = \"CPU: \" .. string.format(\"%4s\", cpu_display)\n     if cpu_name then\n         cpu_line = cpu_line .. \"  CPU:\" .. cpu_name\n     end\n@@ -2931,15 +2940,15 @@ add_file = function(s, print_cache, print_tags)\n         for _, gname in ipairs(gpu_names) do\n             local gutil = gpu_usages[gname] or \"N/A\"\n             local gpu_display = gutil ~= \"N/A\" and gutil or \"--%\"\n-            local gpu_line = \"GPU: \" .. string.format(\"%3s\", gpu_display) .. \"  GPU:\" .. gname\n+            local gpu_line = \"GPU: \" .. string.format(\"%4s\", gpu_display) .. \"  GPU:\" .. gname\n             append(s, gpu_line, {nl=o.nl, prefix=\"\", prefix_sep=\"\"})\n         end\n     elseif gpu_usages[\"__total__\"] then\n         local gpu_display = gpu_usages[\"__total__\"] ~= \"N/A\" and gpu_usages[\"__total__\"] or \"--%\"\n-        local gpu_line = \"GPU: \" .. string.format(\"%3s\", gpu_display)\n+        local gpu_line = \"GPU: \" .. string.format(\"%4s\", gpu_display)\n         append(s, gpu_line, {nl=o.nl, prefix=\"\", prefix_sep=\"\"})\n     else\n-        append(s, \"GPU: \" .. string.format(\"%3s\", \"--%\"), {nl=o.nl, prefix=\"\", prefix_sep=\"\"})\n+        append(s, \"GPU: \" .. string.format(\"%4s\", \"--%\"), {nl=o.nl, prefix=\"\", prefix_sep=\"\"})\n     end\n end\n "
+    }
+  ]
+}

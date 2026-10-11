@@ -87,9 +87,14 @@ Get-ChildItem -LiteralPath $layerSource -Force |
 Copy-Item -LiteralPath $manifestSource -Destination (Join-Path $staging 'runtime-manifest.json')
 
 # 4. 许可证、组件出处、审核证据及对应源码必须与播放器一起进入安装包。
-foreach ($material in @('components-manifest.json', 'distribution-manifest.json', 'THIRD_PARTY_NOTICES.md', 'SOURCE_CODE.txt', 'licenses', 'sources')) {
+foreach ($material in @('components-manifest.json', 'distribution-manifest.json', 'THIRD_PARTY_NOTICES.md', 'SOURCE_CODE.txt', 'licenses')) {
     Copy-Item -LiteralPath (Join-Path $mpvSource $material) -Destination (Join-Path $staging $material) -Recurse -Force
 }
+# 只交付正式审核的源码归档；来源研究目录可能包含下载缓存或临时 Git checkout。
+# 不把整个 sources/ 研究目录递归混入用户安装包。
+$distribution = Get-Content -LiteralPath (Join-Path $mpvSource 'distribution-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+New-Item -ItemType Directory -Path (Join-Path $staging 'sources') -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $mpvSource $distribution.source_archive.path) -Destination (Join-Path $staging $distribution.source_archive.path)
 & (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot $staging -Layout staged
 
 # 移除旧的 mpv-plugins 暂存目标（仅暂存目录，不碰开发/用户 MPV）

@@ -31,6 +31,20 @@ runtime/
 # 忽略：运行期可写产物（日志、缓存、缩略图、watch_later），绝不进入版本控制。
 /mpv/**/mpv.log
 /mpv/**/*.log
+/mpv/provenance/downloads/
+/mpv/provenance/scratch/
+# 来源采集副本保存在本地归档；Git 只保存出处、摘要和修改补丁。
+/mpv/sources/evidence/**/*
+!/mpv/sources/evidence/**/
+!/mpv/sources/evidence/**/*.json
+!/mpv/sources/evidence/**/*.txt
+!/mpv/sources/evidence/**/*.patch
+/mpv/sources/evidence/**/local-source/
+/mpv/sources/evidence/stats/upstream-history/
+/mpv/sources/**/*.zip
+/mpv/sources/**/*.tar.gz
+/mpv/sources/**/*.tar.xz
+/mpv/sources/**/*.tar.bz2
 /mpv/**/cache/
 /mpv/**/watch_later/
 # 忽略：uosc_danmaku 第三方弹幕插件与运行数据（含凭据/历史）。
@@ -144,3 +158,8 @@ docs/**
 # ===== AI 协作模式说明随源码可见（2026-10-04）=====
 # 必须放在本文件末尾：否则会被前面的 `*.md` 全局排除规则重新忽略。
 !/KumiPlayer AI 协作模式说明（个人开发版）.md
+
+# 本地来源归档中的上游说明与含第三方默认密钥上下文的补丁不另传 Git。
+/mpv/sources/evidence/**/README.md
+/mpv/sources/evidence/components/uosc/material-icons-round/font/
+/mpv/sources/evidence/components/uosc_danmaku/local-modifications.patch

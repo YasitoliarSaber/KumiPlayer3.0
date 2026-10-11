@@ -1,0 +1,63 @@
+KumiPlayer bundled Lua / shader component source evidence
+Snapshot recorded: 2026-10-11
+
+This directory preserves immutable upstream source archives, exact redistributed
+local sources/options, original license text, SHA-256 inventories and modification
+patches. It does not declare that the complete MPV runtime distribution has passed
+release review. The root distribution manifest remains the release authority.
+
+uosc 5.13.0
+  Commit d124c2c930d69446448022851373e00ae592390d, annotated tag object
+  6a0fc25184429852daf755c79e82f9cda650f7bc. All 40 scripts/JSON files and two fonts
+  are byte-identical to this commit and official release ZIP. KumiPlayer changes
+  configuration only; the exact uosc.conf is supplied in local-source.
+  Code license: LGPL version 2.1, as supplied in LICENSE.LGPL.
+  Icon font additionally identifies Google Material Icons Round in its name table;
+  the Google Apache-2.0 license and exact byte-identical upstream font are supplied
+  under material-icons-round, pinned to Google commit
+  1c575764826fa5752ddc2bdc6b31ef7cc3233371 (2022-08-01). Font history checks,
+  license and README from the same immutable commit are supplied.
+
+thumbfast
+  Commit 0f711de3138c9bd6718209d819ac54022c23ded2, MPL-2.0.
+  KumiPlayer modifies thumbfast.lua: protects callbacks across media changes;
+  adds optional GPU HDR preview mapping; permits one compatibility retry; and
+  quietly disables unsupported previews for the current file when configured.
+  Original complete source and MPL license, exact changed source, options and
+  unified modification patch are supplied. Patch reconstruction was verified to
+  produce byte-identical current thumbfast.lua.
+
+Anime4K v4.0.1
+  Commit 4029bf701ecaa15f163cdc49cffe5501c1acf410, MIT.
+  All 18 selected GLSL shaders plus LICENSE are byte-identical to upstream.
+  KumiPlayer distributes only the selected subset; the complete upstream archive
+  is preserved locally. The exact selected source is supplied. No shader changes.
+  A smaller upstream-source archive excludes only 98 comparison/demo PNG/JPG
+  images under results/, which are not redistributed with KumiPlayer. It retains
+  every shader, TensorFlow training/generation notebook, model checkpoint,
+  utility, license and document byte-for-byte. evidence.json records every
+  included and omitted file/hash; the full 223 MB archive remains preserved.
+
+uosc_danmaku VERSION 2.2.0 main snapshot
+  Reconstructable base commit 948f64eef08011faf2f3eb43050062d7ce5ed1ba, MIT.
+  Comparing all 2026 first-parent history trees gives 22/25 exact source files
+  at this newest best-match base. This proves reconstructability, not the date
+  on which the original upstream snapshot was downloaded.
+  KumiPlayer changes three files:
+    apis/dandanplay.lua: handles absent API configuration; requests JSON without
+    query parameters then retries a legacy JSON format; specifies JSON for
+    external comment requests.
+    main.lua: removes the unreliable container-fps auto-loading gate while
+    retaining video/duration checks, incorporating the 2026-10-08 switching fix.
+    modules/options.lua: configures fallback endpoint, automatic loading,
+    user agent and keyboard defaults.
+  Exact changed source, configuration, original complete source/MIT license
+  and unified patch are supplied. Patch reconstruction was verified to produce
+  byte-identical current files. Comments and endpoint defaults are preserved as
+  source evidence rather than silently rewritten during license preparation.
+
+Reproducibility
+  evidence.json records the SHA-256 of each archive, patch, upstream file and
+  current redistributed source. local-source snapshots preserve current bytes
+  and line endings. Git patch application must disable core.autocrlf while
+  checking byte equivalence; Windows global autocrlf otherwise changes bytes.

@@ -1,0 +1,48 @@
+mpv-stats-zh 来源与许可证据（2026-10-11）
+
+核对方法
+通过 GitHub API 枚举 stats.lua 路径全部 26 个修改提交，下载不可变提交文件并计算 SHA-256。
+本地运行脚本与 53b087e81d21bf6f5f376340b94d4184a7de9a19 字节完全一致：
+4f037d834a6d88b4615fcaf087963d04dfa814e7097621c87370f25184142302。
+历史脚本、同提交 LICENSE.md、README.md、GitHub commit 返回内容均保存在同名目录。
+
+当前脚本的真实授权冲突
+同提交 LICENSE.md 为完整 MIT 文本（da5c26047cfdbefcf598e994cde74580e9857906255469ac59827518c447fffd）。
+同提交 README.md 同时存在 MIT 表述与非商业、禁止商用表述。
+README 的非商业条款在 396ffb8f9507a8fedbbdf2986779083e40d34b7c（2026-07-05）引入，早于当前脚本的 2026-07-12 修改。
+LICENSE.md 本身在 d8dd2dd34d5b6c2c16e42b19f5f23357b8bd6dc8（2026-09-11）才改为非商业许可。
+因此，找到精确 MIT 文件解决来源缺口，但不能据此宣布当前整个脚本的授权矛盾已经解决。
+
+无冲突的历史候选
+2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4（2026-06-30）同提交脚本、README 和 LICENSE 已归档。
+三文件未发现非商业用途限制；LICENSE 明确允许商业使用。
+stats.lua：a1629fa030e04167828bb2f8dd2ece8abd37f45f08d7219a1b4a33f7f408df17，82215 字节。
+完整 Git 源树归档 mpv-stats-zh-2b5ac200c4705e9e2f3c64a1587ee8e6b1342ef4.zip：
+d2db55b00a392e6a085ff11ad54cedddabc22c3e7bca843b09775ee814b40ad8。
+这是通过 git archive 从不可变提交生成的项目源码归档，不冒充上游 Release ZIP。
+current-version.diff 保存此候选与当前脚本的完整差异。
+
+候选功能与取舍
+保留中文媒体信息、帧耗时、缓存、按键、轨道、内部性能共六页；保留 i/I 和各页 toggle 控制。
+保留 MPV 内部 CPU 时间/渲染性能统计。
+不含后来新增的系统 CPU/GPU 占用率和硬件型号模块（当前脚本第 2133–3002 行，约 870 行；最终差异块单次插入 650 行）。
+当前版还改变翻译实现及 toggle 行为，不能描述为只差几行。
+如果默认套件改用此候选，可保留基本统计和中文 UI；系统占用增强需要独立实现或取得明确授权，不能直接复制限制引入后的代码。
+本次证据收集没有修改运行脚本。
+
+继承代码许可不能丢失
+README 指定原版 MPV stats 来源 de0f2f9；解析为 de0f2f943d485ad6623629831e079a1de8be021b。
+GitHub 实际提交日期为 2026-02-18，历史 README 标为 2026-02-10，保留此事实差异。
+已保存该提交 player/lua/stats.lua、Copyright、LICENSE.LGPL、LICENSE.GPL、DOCS/contribute.md。
+已保存 Argon-/mpv-stats 不可变提交 750512a96379dd349c2b3b8a70e45bbdd392a3e2 的 LICENSE、readme.md、stats.lua。
+Argon LICENSE 是 LGPL-2.1；其 README 说明自 2018-11 起 stats 已并入 mpv，不再更新此仓库。
+MPV Copyright 说明整体默认 GPL-2.0-or-later，多数代码 LGPL-2.1+ 或 GPL-2.0+；新贡献须 LGPL-2.1+ 或兼容的更宽松许可。
+中文作者的 MIT 声明只可作为其可授权修改的证据，不能把继承的 MPV / Argon 代码重标为纯 MIT。
+随包时应保留上述 LGPL/GPL 许可证、来源与修改声明及完整实际脚本源码。
+许可证文本与完整对应来源准备是工程证据；本文件不作司法意义的组合程序或授权争议判决。
+
+其他文件
+stats-file-history.json：全部路径修改提交与哈希比对结果。
+parent-source-files.json：父源码资料的不可变链接、字节数、SHA-256。
+各提交 files.json：本次保存材料的不可变链接、字节数、SHA-256。
+collect_*.py / compare_candidates.py / analyze_license_transition.py：可复核的只读上游采集工具，不进入 MPV 脚本加载目录。

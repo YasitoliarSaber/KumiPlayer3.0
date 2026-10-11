@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "complete_corresponding_source": false,
+  "runtime_verified_files": 27,
+  "upstream_artifact_sha256": "a49811c0752c108b8260636f9c6f6fcb97406641c98b30f1e7b500dfb20177de",
+  "archives": [
+    {
+      "component": "dav1d",
+      "revision": "43f3b8d33bae5179a134d1cd7c394063b1cebfcb",
+      "url": "https://codeload.github.com/videolan/dav1d/tar.gz/43f3b8d33bae5179a134d1cd7c394063b1cebfcb",
+      "path": "sources/runtime/dav1d-43f3b8d33bae5179a134d1cd7c394063b1cebfcb.tar.gz",
+      "sha256": "083e45ed41e378c2a9cfe959d1f9145276b0f7d937ad58e520eee979ec84947a",
+      "bytes": 1716229,
+      "basis": "binary commit/version plus pinned CI input",
+      "hash_origin": "locally computed, no signature verification claimed"
+    },
+    {
+      "component": "ffmpeg",
+      "revision": "1fcb201ab10cbc98d931e340da6ace292e82b1e1",
+      "url": "https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/1fcb201ab10cbc98d931e340da6ace292e82b1e1",
+      "path": "sources/runtime/ffmpeg-1fcb201ab10cbc98d931e340da6ace292e82b1e1.tar.gz",
+      "sha256": "869d9f2545fde592e92a3c44703d57626337477412d38c1ee170454f5ed2195f",
+      "bytes": 16735768,
+      "basis": "binary commit/version plus pinned CI input",
+      "hash_origin": "locally computed, no signature verification claimed"
+    },
+    {
+      "component": "freetype",
+      "revision": "2.14.1",
+      "url": "https://download.savannah.gnu.org/releases/freetype/freetype-2.14.1.tar.xz",
+      "path": "sources/runtime/freetype-2.14.1.tar.xz",
+      "sha256": "32427e8c471ac095853212a37aef816c60b42052d4d9e48230bab3bdf2936ccc",
+      "bytes": 2664948,
+      "basis": "binary commit/version plus pinned CI input",
+      "hash_origin": "locally computed, no signature verification claimed"
+    },
+    {
+      "component": "fribidi",
+      "revision": "1.0.16",
+      "url": "https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz",
+      "path": "sources/runtime/fribidi-1.0.16.tar.xz",
+      "sha256": "1b1cde5b235d40479e91be2f0e88a309e3214c8ab470ec8a2744d82a5a9ea05c",
+      "bytes": 1098260,
+      "basis": "binary commit/version plus pinned CI input",
+      "hash_origin": "locally computed, no signature verification claimed"
+    },
+    {
+      "component": "harfbuzz",
+      "revision": "12.2.0",
+      "url": "https://github.com/harfbuzz/harfbuzz/releases/download/12.2.0/harfbuzz-12.2.0.tar.xz",
+      "path": "sources/runtime/harfbuzz-12.2.0.tar.xz",
+      "sha256": "ecb603aa426a8b24665718667bda64a84c1504db7454ee4cadbd362eea64e545",
+      "bytes": 18221900,
+      "basis": "binary commit/version plus pinned CI input",
+      "hash_origin": "locally computed, no signature verification claimed"
+    },
+    {
+      "component": "libiconv",
+      "revision": "1.18",
+      "url": "https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz",
+      "path": "sources/runtime/libiconv-1.18.tar.gz",
+      "sha256": "3b08f5f4f9b4eb82f151a7040bfd6fe6c6fb922efe4b1659c66ea933276965e8",
+      "bytes": 5822590,
+      "basis": "binary commit/version plus pinned CI input",
+      "hash_origin": "locally computed, no signature verification claimed"
+    },
+    {
+      "component": "luajit",
+      "revision": "7152e15489d2077cd299ee23e3d51a4c599ab14f",
+      "url": "https://codeload.github.com/LuaJIT/LuaJIT/tar.gz/7152e15489d2077cd299ee23e3d51a4c599ab14f",
+      "path": "sources/runtime/luajit-7152e15489d2077cd299ee23e3d51a4c599ab14f.tar.gz",
+      "sha256": "2103f2c9526d158259a627d51799de8016e2a2c6d89f6ef25f9d89b92c597511",
+      "bytes": 1093563,
+      "basis": "binary commit/version plus pinned CI input",
+      "hash_origin": "locally computed, no signature verification claimed"
+    },
+    {
+      "component": "mpv",
+      "revision": "41f6a645068483470267271e1d09966ca3b9f413",
+      "url": "https://codeload.github.com/mpv-player/mpv/tar.gz/41f6a645068483470267271e1d09966ca3b9f413",
+      "path": "sources/runtime/mpv-41f6a645068483470267271e1d09966ca3b9f413.tar.gz",
+      "sha256": "068960e89211f2adc80af03f637fa393fb5e407d3dd23592c8fe8c5490bb7ae4",
+      "bytes": 7264274,
+      "basis": "binary commit/version plus pinned CI input",
+      "hash_origin": "locally computed, no signature verification claimed"
+    },
+    {
+      "component": "zlib",
+      "revision": "1.3.1",
+      "url": "https://zlib.net/fossils/zlib-1.3.1.tar.gz",
+      "path": "sources/runtime/zlib-1.3.1.tar.gz",
+      "sha256": "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
+      "bytes": 1512791,
+      "basis": "binary commit/version plus pinned CI input",
+      "hash_origin": "locally computed, no signature verification claimed"
+    }
+  ],
+  "acquisition_failures": [],
+  "unresolved": [
+    "libass",
+    "lcms2",
+    "libplacebo",
+    "shaderc and git-sync-deps closure",
+    "SPIRV-Cross",
+    "nv-codec-headers",
+    "Vulkan-Headers",
+    "Vulkan-Loader",
+    "mujs WrapDB revision",
+    "MinGW/GCC toolchain and build environment"
+  ]
+}

@@ -1,0 +1,181 @@
+[
+  {
+    "commit": "14efb2cbed214566976420778173b8a7afabf879",
+    "date": "2026-09-28T06:35:16Z",
+    "sha256": "cabcf2cfff2216c33d5be86dca5c672c1a36137dfc3ba2e37412fb806db291f6",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/14efb2cbed214566976420778173b8a7afabf879/stats.lua"
+  },
+  {
+    "commit": "45db0bcf45cce239f8d057308dc00bc6a7af5d70",
+    "date": "2026-09-28T01:22:38Z",
+    "sha256": "688b0cdacb430a9c88adbbe5724565ac0330e480e3a1bec6ed66f214b82c5b2c",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/45db0bcf45cce239f8d057308dc00bc6a7af5d70/stats.lua"
+  },
+  {
+    "commit": "36a677e3382360aa83f85641f5ec8e9a15d6878f",
+    "date": "2026-09-28T00:45:41Z",
+    "sha256": "99e93c86f943498b2e409e43c07ee5f8cf2f53b825e52b691ec25c4fd7138022",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/36a677e3382360aa83f85641f5ec8e9a15d6878f/stats.lua"
+  },
+  {
+    "commit": "92914ea40414875c2f942535267bf3761f71239a",
+    "date": "2026-09-27T06:19:17Z",
+    "sha256": "ac8d0666e43e94697806bd9f3e03058496f62cfd1f60c1e040b3469658231ac6",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/92914ea40414875c2f942535267bf3761f71239a/stats.lua"
+  },
+  {
+    "commit": "7818a4feb7cbf087ef6e2651191048086639dc4e",
+    "date": "2026-09-26T04:59:22Z",
+    "sha256": "f185cb4ac9267800c5e24928b48bdc1a804c0fa9fb1d8065aa9ae9a4ee2fda53",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/7818a4feb7cbf087ef6e2651191048086639dc4e/stats.lua"
+  },
+  {
+    "commit": "53b087e81d21bf6f5f376340b94d4184a7de9a19",
+    "date": "2026-07-12T02:54:36Z",
+    "sha256": "4f037d834a6d88b4615fcaf087963d04dfa814e7097621c87370f25184142302",
+    "matches": true,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/53b087e81d21bf6f5f376340b94d4184a7de9a19/stats.lua"
+  },
+  {
+    "commit": "b3a47fc65c2e2c8267e6d072f43f1e9424d56089",
+    "date": "2026-07-12T02:14:03Z",
+    "sha256": "9a9f94273d63843368bde946e3a55ed746e47f58127440ed5860b3b247c9dee5",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/b3a47fc65c2e2c8267e6d072f43f1e9424d56089/stats.lua"
+  },
+  {
+    "commit": "9833ab3da1ef359e4cf0fa4e1e3cf9b6f1f78395",
+    "date": "2026-07-12T01:30:22Z",
+    "sha256": "8eae651dfe6ab577d9ff6bd12f39f5d48f947caf7fcb136df1a1906250721137",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/9833ab3da1ef359e4cf0fa4e1e3cf9b6f1f78395/stats.lua"
+  },
+  {
+    "commit": "7b079b212dbf8a68747ef87f9aff68e50ec86cf5",
+    "date": "2026-07-12T01:24:44Z",
+    "sha256": "1f6b8335e801c58f986451911036535a6ffba85447006880b9fb61780533940e",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/7b079b212dbf8a68747ef87f9aff68e50ec86cf5/stats.lua"
+  },
+  {
+    "commit": "b3837b56183933e98bcf44d8dc771b15c1b4012b",
+    "date": "2026-06-30T03:48:26Z",
+    "sha256": "a1629fa030e04167828bb2f8dd2ece8abd37f45f08d7219a1b4a33f7f408df17",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/b3837b56183933e98bcf44d8dc771b15c1b4012b/stats.lua"
+  },
+  {
+    "commit": "8d0ec1cc8cfa79540babdb50fa5d3ef02ad88eae",
+    "date": "2026-06-30T03:47:02Z",
+    "sha256": "c91c053c4b1857708901e2fdd7e7a290516b1bd816eecd0924f570e9c5ba61d8",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/8d0ec1cc8cfa79540babdb50fa5d3ef02ad88eae/stats.lua"
+  },
+  {
+    "commit": "dea91183a8d03e7399bbb2e34dda1415128313d3",
+    "error": "CalledProcessError"
+  },
+  {
+    "commit": "83859ab1aac8e5fd486cae9af20587e44f8b25d5",
+    "date": "2026-04-26T02:15:27Z",
+    "sha256": "c91c053c4b1857708901e2fdd7e7a290516b1bd816eecd0924f570e9c5ba61d8",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/83859ab1aac8e5fd486cae9af20587e44f8b25d5/stats.lua"
+  },
+  {
+    "commit": "a1334aa06c926e68dc9b828327aeab749579b23c",
+    "date": "2026-04-26T02:04:08Z",
+    "sha256": "3b79c5212e4d66b9d87ff4b95e67202629a07824e380ee4d98796b2f44725b88",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/a1334aa06c926e68dc9b828327aeab749579b23c/stats.lua"
+  },
+  {
+    "commit": "7a84c7b4aac8a0d45dde1912d5eca76d4704e32c",
+    "date": "2026-04-22T08:51:59Z",
+    "sha256": "1eb7065703f78c2eec20397a8435e9395da9b12cd0991880e77148cd15ff2b3b",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/7a84c7b4aac8a0d45dde1912d5eca76d4704e32c/stats.lua"
+  },
+  {
+    "commit": "fcfdfb93794a3eea13bf672c990c9e8f75fe0438",
+    "date": "2026-04-22T08:13:31Z",
+    "sha256": "8242d5280e1506e3de5b5ecb8c7a11fa55c4b507d4d0f20c91f1d9935f05a85a",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/fcfdfb93794a3eea13bf672c990c9e8f75fe0438/stats.lua"
+  },
+  {
+    "commit": "8d2fe41b56ff6b7603c2a661b135b0fe239c5043",
+    "date": "2026-04-21T12:38:30Z",
+    "sha256": "9286022723736b5bbc0407647598872a01dccbdef5826458f84979598744260e",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/8d2fe41b56ff6b7603c2a661b135b0fe239c5043/stats.lua"
+  },
+  {
+    "commit": "f083665c74af74354c1d3ed22819cd289bf16906",
+    "date": "2026-04-21T12:29:42Z",
+    "sha256": "3eae83029bac99341185518c44a1210276c385b09320a69669f4c79aa8bbadfc",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/f083665c74af74354c1d3ed22819cd289bf16906/stats.lua"
+  },
+  {
+    "commit": "8b5666b11f5276e9c039bdaca87cfd4795f8be26",
+    "date": "2026-04-21T12:19:18Z",
+    "sha256": "40f3620e1c7b7e91ac2ed0a1a429bd8620c6620bd69c18cfc39dfd09ca943bae",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/8b5666b11f5276e9c039bdaca87cfd4795f8be26/stats.lua"
+  },
+  {
+    "commit": "288fe5861ce2a104fbdd460c5597f75d86b8bc0e",
+    "date": "2026-03-31T04:35:41Z",
+    "sha256": "d0548aba294e8189821a1efb22a9ee28dbc7b2fb42e7b2d9acc43b2219ba2f8e",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/288fe5861ce2a104fbdd460c5597f75d86b8bc0e/stats.lua"
+  },
+  {
+    "commit": "fbe093f367aef99ad0534bb00c66f58cea87353b",
+    "date": "2026-03-30T11:31:50Z",
+    "sha256": "1be01d793204c643a4c62b4d73d9f7753c227872e91ee3cc0c4eb09511e68b5c",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/fbe093f367aef99ad0534bb00c66f58cea87353b/stats.lua"
+  },
+  {
+    "commit": "fb8d7fa1a5bf2fcb8ead15e6233928d6ac07443e",
+    "date": "2026-03-30T11:22:56Z",
+    "sha256": "cc315242ef05b14f41c501a20ae932020296c9b877405f0b5e62aa1baed9e45e",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/fb8d7fa1a5bf2fcb8ead15e6233928d6ac07443e/stats.lua"
+  },
+  {
+    "commit": "450e2ca1e2c76d331aee72e64f963844f5b9100e",
+    "date": "2026-03-30T10:46:58Z",
+    "sha256": "8b81628aa35877f0e012e9d7f34ce5079845d8a43a794b0940edf8aaa08b853c",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/450e2ca1e2c76d331aee72e64f963844f5b9100e/stats.lua"
+  },
+  {
+    "commit": "77cdee15544e8e389f4d6cf897904cd6799e6661",
+    "date": "2026-03-30T04:54:35Z",
+    "sha256": "3bcaaaa41e61d7c59cf0d23d98165e7a0e120ac750d030e7c6378ea84d1f51c1",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/77cdee15544e8e389f4d6cf897904cd6799e6661/stats.lua"
+  },
+  {
+    "commit": "a170a5e46d460e01271950b269372024fbaf1eef",
+    "date": "2026-03-30T04:53:12Z",
+    "sha256": "e43ff19d94c038dbe463246d438897ac6554493f27b748fab57b8711daba4e3e",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/a170a5e46d460e01271950b269372024fbaf1eef/stats.lua"
+  },
+  {
+    "commit": "5c5a7f655dabe02be226f7f2513c8b4957e96c2d",
+    "date": "2026-03-01T03:09:21Z",
+    "sha256": "d0e7f7ba9d338cb05dd285dcf114b14d2e9677bcae1611c236a6c98473bf76b0",
+    "matches": false,
+    "url": "https://raw.githubusercontent.com/yosh-wang/mpv-stats.lua-zh-chinese-translation-/5c5a7f655dabe02be226f7f2513c8b4957e96c2d/stats.lua"
+  }
+]

@@ -117,7 +117,11 @@ foreach ($folder in @('portable_config', 'kumiplayer', 'licenses', 'sources')) {
     if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
         throw "MPV distribution refused: required distribution directory missing: $folder"
     }
-    $entries = @((Get-Item -LiteralPath $directory)) + @(Get-ChildItem -LiteralPath $directory -Recurse -Force)
+    $entries = if ($folder -eq 'sources' -and $Layout -eq 'source') {
+        @((Get-Item -LiteralPath $directory), (Get-Item -LiteralPath (Resolve-BundledPath $evidence.source_archive.path)))
+    } else {
+        @((Get-Item -LiteralPath $directory)) + @(Get-ChildItem -LiteralPath $directory -Recurse -Force)
+    }
     if (@($entries | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -ne 0) {
         throw 'MPV distribution refused: package materials must not contain reparse points.'
     }
