@@ -60,6 +60,7 @@ def start_mpv(
     ipc_server: str = "",
     start_position: float = 0.0,
     display_title: str = "",
+    media_path_validated: bool = False,
 ) -> subprocess.Popen:
     """启动 MPV，直接播放已确认的本地媒体路径。
 
@@ -88,9 +89,10 @@ def start_mpv(
             raise ValueError(reason)
     if media_paths[0] != media_path:
         raise ValueError("播放列表首项与选定媒体不一致")
-    ok, reason = validate_playback_locator(media_path)
-    if not ok:
-        raise FileNotFoundError(reason)
+    if not media_path_validated:
+        ok, reason = validate_playback_locator(media_path)
+        if not ok:
+            raise FileNotFoundError(reason)
 
     external_mode = False
     if mpv_path:

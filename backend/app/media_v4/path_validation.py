@@ -6,10 +6,14 @@
 from __future__ import annotations
 
 import re
+import threading
 from pathlib import Path
 
 _REMOTE_SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
 _PLAYLIST_SUFFIXES = frozenset({".strm", ".m3u", ".m3u8", ".pls", ".asx", ".xspf"})
+_PROBE_LOCK = threading.Lock()
+_PROBE_SLOTS = threading.BoundedSemaphore(4)
+_PENDING_PROBES: dict[str, tuple[threading.Event, list[bool]]] = {}
 
 # Windows 设备路径段（CON/NUL/COM1 等）出现在定位符中一律拒绝。
 _WINDOWS_DEVICE_NAMES = frozenset({
@@ -56,7 +60,7 @@ def validate_playback_locator_syntax(locator: str) -> tuple[bool, str]:
     return True, ""
 
 
-def validate_playback_locator(locator: str) -> tuple[bool, str]:
+def validate_playback_locator(locator: str, *, timeout: float = 2.0) -> tuple[bool, str]:
     """校验单个可播放定位符。
 
     只检查本次选定文件，不读取媒体内容或修改来源/媒体状态。
@@ -65,7 +69,39 @@ def validate_playback_locator(locator: str) -> tuple[bool, str]:
     if not ok:
         return ok, reason
     value = (locator or "").strip()
-    path = Path(value)
-    if not path.is_file():
+    # 挂载盘的 stat 也可能等网络；只检查选中项，并把等待与请求线程隔离。
+    # 同一路径复用尚未结束的探测，最多保留四个 daemon，避免断网时线程堆积。
+    with _PROBE_LOCK:
+        probe = _PENDING_PROBES.get(value)
+        if probe is None:
+            if not _PROBE_SLOTS.acquire(blocking=False):
+                return False, "媒体挂载仍未响应，请恢复挂载连接后重试"
+            done = threading.Event()
+            result: list[bool] = []
+            probe = (done, result)
+            _PENDING_PROBES[value] = probe
+
+            def inspect_file() -> None:
+                try:
+                    result.append(Path(value).is_file())
+                except (OSError, ValueError):
+                    result.append(False)
+                finally:
+                    done.set()
+                    with _PROBE_LOCK:
+                        _PENDING_PROBES.pop(value, None)
+                    _PROBE_SLOTS.release()
+
+            worker = threading.Thread(target=inspect_file, name="playback-file-probe", daemon=True)
+            try:
+                worker.start()
+            except RuntimeError:
+                _PENDING_PROBES.pop(value, None)
+                _PROBE_SLOTS.release()
+                raise
+    done, result = probe
+    if not done.wait(timeout=max(0.0, timeout)):
+        return False, "媒体挂载响应超时，请检查 OpenList 和挂载连接后重试"
+    if not result or not result[0]:
         return False, "媒体挂载路径不可访问，请检查来源映射或挂载状态"
     return True, ""

@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from app.core.config import load_config
 from app.core.paths import get_data_dir
 from app.media_v4.path_validation import validate_playback_locator, validate_playback_locator_syntax
 from app.media_v4.persistence.database import V4Database
-from app.media_v4.playback.store import V4PlaybackStore
+from app.media_v4.playback.store import SessionBinding, V4PlaybackStore
 from app.playback.mpv import start_mpv
 from app.playback.mpv_ipc import (
     make_ipc_server_name,
@@ -67,11 +68,21 @@ class V4PlaybackManager:
         self.database = database
         self.session_dir = Path(session_dir) if session_dir else get_data_dir() / "playback" / "sessions"
         self._lock = threading.Lock()
+        self._play_lock = threading.Lock()
         self._process: subprocess.Popen | None = None
         self._session: dict | None = None
         self._session_bindings: dict[str, dict] = {}
 
     def play(self, work_id: str, episode_id: str, asset_id: str = "") -> dict:
+        # 连点播放不能并行启动两份 MPV、覆盖当前受控进程的引用。
+        if not self._play_lock.acquire(blocking=False):
+            raise ValueError("播放器正在启动，请稍候再试")
+        try:
+            return self._play(work_id, episode_id, asset_id)
+        finally:
+            self._play_lock.release()
+
+    def _play(self, work_id: str, episode_id: str, asset_id: str = "") -> dict:
         asset = self._resolve_asset(work_id, episode_id, asset_id)
         locator = str(asset.get("playback_locator") or "")
         if not locator:
@@ -103,6 +114,7 @@ class V4PlaybackManager:
             ipc_server=ipc_server,
             start_position=start_position,
             display_title=title,
+            media_path_validated=True,
         )
         session = {
             "session_id": session_id,
@@ -531,9 +543,13 @@ class V4PlaybackManager:
         from fastapi import HTTPException
 
         from app.api.bangumi import EpisodeWatchedRequest, sync_completed_episode
+        from app.media_v4.playback.watch_state import manual_watch_states
 
         for attempt in range(3):
             try:
+                with self.database.connect() as conn:
+                    if manual_watch_states(conn, work_id).get(episode_id) is False:
+                        return True
                 sync_completed_episode(
                     self.database,
                     episode_id,
@@ -696,11 +712,20 @@ class V4PlaybackManager:
         # 达到 90% 后每条进度事件都会绕过 5 秒节流写库（末尾写放大）。
         completed_assets: dict[tuple[str, str], bool] = {}
         reconnect_delay = 0.25
+        quitting = False
         try:
             while process.poll() is None:
                 try:
-                    for event in observe_mpv_progress(session["ipc_server"]):
+                    for event in observe_mpv_progress(
+                        session["ipc_server"], should_stop=lambda: process.poll() is not None,
+                    ):
                         reconnect_delay = 0.25
+                        if event.shutdown:
+                            # 用户已通过原生窗口/快捷键退出，不能重连这一会话。
+                            # 网络或 Lua 清理卡住时，只回收本会话启动的进程。
+                            quitting = True
+                            self._finish_quitting_process(process)
+                            break
                         if process.poll() is not None:
                             break
                         playlist = session.get("playlist") or []
@@ -713,6 +738,13 @@ class V4PlaybackManager:
                             # 进度事件。先以会话中最后一份有效采样结算旧集，再替换
                             # 身份，避免丢失完成状态、Bangumi 投递和恢复位置。
                             self._force_checkpoint(session)
+                            # 队列在启动时已绑定身份；进入新集只更新时间，不重绑 revision。
+                            active_key = (str(active_asset.get("episode_id") or session["episode_id"]), active_asset["asset_id"])
+                            with self._lock:
+                                bindings = self._session_bindings.get(session["session_id"], {})
+                                binding = bindings.get(active_key)
+                                if isinstance(binding, SessionBinding):
+                                    bindings[active_key] = replace(binding, captured_at=_now())
                             session["playlist_position"] = playlist_position
                             session["episode_id"] = active_asset.get("episode_id") or session["episode_id"]
                             session["asset_id"] = active_asset["asset_id"]
@@ -771,6 +803,8 @@ class V4PlaybackManager:
                 except (OSError, TimeoutError, ValueError, UnicodeDecodeError):
                     if process.poll() is not None:
                         break
+                if quitting:
+                    break
                 if process.poll() is None:
                     # MPV 进程的 IPC server 会在启动后稍晚出现，也可能在切文件时
                     # 短暂重建；保持旧版的有界退避，而不是首个连接失败就丢失整场会话。
@@ -783,8 +817,8 @@ class V4PlaybackManager:
                 # 退出清理必须继续完成；下次播放仍可从已持久化检查点恢复。
                 pass
             try:
-                process.wait()
-            except OSError:
+                process.wait(timeout=0.5)
+            except (OSError, subprocess.TimeoutExpired):
                 pass
             with self._lock:
                 self._session_bindings.pop(str(session.get('session_id')), None)
@@ -792,6 +826,21 @@ class V4PlaybackManager:
                     self._process = None
                     if self._session:
                         self._session["status"] = "exited"
+
+    @staticmethod
+    def _finish_quitting_process(process, timeout: float = 2.25) -> None:
+        deadline = time.monotonic() + timeout
+        try:
+            process.wait(timeout=max(0.0, deadline - time.monotonic()))
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        except OSError:
+            return
+        try:
+            process.kill()
+        except OSError:
+            return
 
 
 _manager: V4PlaybackManager | None = None

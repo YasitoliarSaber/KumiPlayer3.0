@@ -3,7 +3,9 @@
 import json
 import os
 import tempfile
-from collections.abc import Iterator
+import threading
+import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -16,6 +18,7 @@ class MpvProgressEvent:
     playlist_position: int
     force_checkpoint: bool = False
     media_path: str = ""
+    shutdown: bool = False
 
 
 def make_ipc_server_name(session_id: str) -> str:
@@ -43,7 +46,11 @@ def read_mpv_progress(ipc_server: str, timeout: float = 0.5) -> tuple[float, flo
     return float(position), float(duration), int(playlist_position)
 
 
-def observe_mpv_progress(ipc_server: str, timeout: float = 0.5) -> Iterator[MpvProgressEvent]:
+def observe_mpv_progress(
+    ipc_server: str,
+    timeout: float = 0.5,
+    should_stop: Callable[[], bool] | None = None,
+) -> Iterator[MpvProgressEvent]:
     """Yield progress changes from one persistent MPV JSON IPC connection."""
     observations = (
         (1, "playlist-pos"),
@@ -67,8 +74,14 @@ def observe_mpv_progress(ipc_server: str, timeout: float = 0.5) -> Iterator[MpvP
                 100 + observation_id,
             )
 
-        while True:
-            line = pipe.readline()
+        if isinstance(pipe, _WindowsNamedPipe):
+            pipe.set_read_timeout(timeout)
+        while should_stop is None or not should_stop():
+            try:
+                line = pipe.readline()
+            except TimeoutError:
+                # 暂停时可能长时间没有事件，保留同一连接和未完成的读取。
+                continue
             if not line:
                 raise OSError("mpv IPC closed while observing progress")
             message = json.loads(line.decode("utf-8"))
@@ -81,6 +94,16 @@ def observe_mpv_progress(ipc_server: str, timeout: float = 0.5) -> Iterator[MpvP
                 continue
 
             event_name = message.get("event")
+            if event_name == "shutdown":
+                yield MpvProgressEvent(
+                    position=position or 0.0,
+                    duration=duration or 0.0,
+                    playlist_position=playlist_position if playlist_position is not None else -1,
+                    force_checkpoint=True,
+                    media_path=media_path,
+                    shutdown=True,
+                )
+                return
             if event_name == "seek":
                 force_next_checkpoint = True
                 continue
@@ -201,9 +224,18 @@ def _open_ipc(ipc_server: str, timeout: float):
 
 def _open_windows_named_pipe(pipe_name: str, timeout: float):
     import ctypes
-    import msvcrt
+
+    class Overlapped(ctypes.Structure):
+        _fields_ = [
+            ("Internal", ctypes.c_size_t),
+            ("InternalHigh", ctypes.c_size_t),
+            ("Offset", ctypes.c_uint32),
+            ("OffsetHigh", ctypes.c_uint32),
+            ("hEvent", ctypes.c_void_p),
+        ]
 
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    deadline = time.monotonic() + max(0.0, timeout)
     kernel32.WaitNamedPipeW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32]
     kernel32.WaitNamedPipeW.restype = ctypes.c_int
     kernel32.CreateFileW.argtypes = [
@@ -216,8 +248,27 @@ def _open_windows_named_pipe(pipe_name: str, timeout: float):
         ctypes.c_void_p,
     ]
     kernel32.CreateFileW.restype = ctypes.c_void_p
+    kernel32.CreateEventW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_wchar_p]
+    kernel32.CreateEventW.restype = ctypes.c_void_p
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle.restype = ctypes.c_int
+    kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+    for name in ("ReadFile", "WriteFile"):
+        function = getattr(kernel32, name)
+        function.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(Overlapped),
+        ]
+        function.restype = ctypes.c_int
+    kernel32.GetOverlappedResult.argtypes = [
+        ctypes.c_void_p, ctypes.POINTER(Overlapped), ctypes.POINTER(ctypes.c_uint32), ctypes.c_int,
+    ]
+    kernel32.GetOverlappedResult.restype = ctypes.c_int
+    kernel32.CancelIoEx.argtypes = [ctypes.c_void_p, ctypes.POINTER(Overlapped)]
+    kernel32.CancelIoEx.restype = ctypes.c_int
 
-    timeout_ms = max(1, int(timeout * 1000))
+    timeout_ms = max(1, int(max(0.0, deadline - time.monotonic()) * 1000))
     if not kernel32.WaitNamedPipeW(pipe_name, timeout_ms):
         raise TimeoutError(pipe_name)
 
@@ -227,15 +278,148 @@ def _open_windows_named_pipe(pipe_name: str, timeout: float):
         0,
         None,
         3,  # OPEN_EXISTING
-        0,
+        0x40000000,  # FILE_FLAG_OVERLAPPED：连接成功不代表后续读写不会阻塞。
         None,
     )
     invalid = ctypes.c_void_p(-1).value
     if handle == invalid:
         raise OSError(ctypes.get_last_error(), pipe_name)
 
-    fd = msvcrt.open_osfhandle(int(handle), os.O_RDWR | os.O_BINARY)
-    return open(fd, "r+b", buffering=0, closefd=True)
+    return _WindowsNamedPipe(kernel32, handle, Overlapped, deadline)
+
+
+class _WindowsNamedPipe:
+    """按调用预算等待异步 I/O；空闲观察保留待完成读取及半行数据。"""
+
+    def __init__(self, kernel32, handle, overlapped_type, deadline: float):
+        self._kernel32 = kernel32
+        self._handle = handle
+        self._overlapped_type = overlapped_type
+        self._deadline = deadline
+        self._read_timeout: float | None = None
+        self._buffer = bytearray()
+        self._pending = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.close()
+
+    def set_read_timeout(self, timeout: float) -> None:
+        self._read_timeout = max(0.01, timeout)
+
+    def write(self, payload: bytes) -> int:
+        written = 0
+        while written < len(payload):
+            count = self._transfer("write", payload[written:], self._deadline)
+            if not count:
+                raise OSError("mpv IPC closed while writing")
+            written += count
+        return written
+
+    def flush(self) -> None:
+        # WriteFile 完成即已投递；FlushFileBuffers 会等待服务端读取而再次无界阻塞。
+        pass
+
+    def readline(self) -> bytes:
+        deadline = (
+            time.monotonic() + self._read_timeout
+            if self._read_timeout is not None else self._deadline
+        )
+        if time.monotonic() >= deadline:
+            raise TimeoutError("mpv IPC I/O timed out")
+        while b"\n" not in self._buffer:
+            chunk = self._transfer("read", 4096, deadline)
+            if not chunk:
+                result = bytes(self._buffer)
+                self._buffer.clear()
+                return result
+            self._buffer.extend(chunk)
+        end = self._buffer.index(b"\n") + 1
+        result = bytes(self._buffer[:end])
+        del self._buffer[:end]
+        return result
+
+    def _transfer(self, operation: str, value, deadline: float):
+        import ctypes
+
+        if self._handle is None:
+            raise OSError("mpv IPC connection is closed")
+        if time.monotonic() >= deadline:
+            raise TimeoutError("mpv IPC I/O timed out")
+        kernel32 = self._kernel32
+        count = ctypes.c_uint32()
+        completed = False
+        if self._pending is None:
+            buffer = ctypes.create_string_buffer(value)
+            event = kernel32.CreateEventW(None, True, False, None)
+            if not event:
+                raise ctypes.WinError(ctypes.get_last_error())
+            overlapped = self._overlapped_type()
+            overlapped.hEvent = event
+            self._pending = (operation, buffer, overlapped, event)
+            function = kernel32.WriteFile if operation == "write" else kernel32.ReadFile
+            size = len(value) if operation == "write" else value
+            completed = function(self._handle, buffer, size, None, ctypes.byref(overlapped))
+            if not completed:
+                error = ctypes.get_last_error()
+                if error != 997:  # ERROR_IO_PENDING
+                    self._complete(0)
+                    if operation == "read" and error in (109, 233):
+                        return b""
+                    raise ctypes.WinError(error)
+
+        pending_operation, _buffer, overlapped, event = self._pending
+        if pending_operation != operation:
+            raise OSError("mpv IPC has another pending operation")
+        if not completed:
+            remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
+            wait_result = kernel32.WaitForSingleObject(event, remaining_ms)
+            if wait_result == 258:  # WAIT_TIMEOUT；保留 buffer/OVERLAPPED，不能提前释放。
+                raise TimeoutError("mpv IPC I/O timed out")
+            if wait_result != 0:
+                raise ctypes.WinError(ctypes.get_last_error())
+        if not kernel32.GetOverlappedResult(self._handle, ctypes.byref(overlapped), ctypes.byref(count), False):
+            error = ctypes.get_last_error()
+            self._complete(0)
+            if operation == "read" and error in (109, 233):
+                return b""
+            raise ctypes.WinError(error)
+        return self._complete(count.value)
+
+    def _complete(self, count: int):
+        operation, buffer, _overlapped, event = self._pending
+        result = buffer.raw[:count] if operation == "read" else count
+        self._kernel32.CloseHandle(event)
+        self._pending = None
+        return result
+
+    def close(self) -> None:
+        import ctypes
+
+        handle, self._handle = self._handle, None
+        if handle is None:
+            return
+        pending, self._pending = self._pending, None
+        kernel32 = self._kernel32
+        if pending is None:
+            kernel32.CloseHandle(handle)
+            return
+        _operation, _buffer, overlapped, event = pending
+        kernel32.CancelIoEx(handle, ctypes.byref(overlapped))
+
+        def finish_cancelled_io() -> None:
+            # CancelIoEx 只请求取消：完成前必须保持结构和 buffer 存活。
+            kernel32.WaitForSingleObject(event, 0xFFFFFFFF)
+            kernel32.CloseHandle(event)
+            kernel32.CloseHandle(handle)
+            _ = pending
+
+        if kernel32.WaitForSingleObject(event, 0) == 0:
+            finish_cancelled_io()
+        else:
+            threading.Thread(target=finish_cancelled_io, name="mpv-ipc-cleanup", daemon=True).start()
 
 
 def _get_property(pipe, property_name: str, request_id: int) -> float | None:

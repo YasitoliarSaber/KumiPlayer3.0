@@ -390,7 +390,7 @@ def test_progress_monitor_retries_when_mpv_ipc_is_not_ready(tmp_path, monkeypatc
     attempts = []
     saved = []
 
-    def observe(_ipc_server):
+    def observe(_ipc_server, *, should_stop=None):
         attempts.append("attempt")
         if len(attempts) == 1:
             raise OSError("mpv IPC is still starting")
@@ -409,7 +409,7 @@ def test_progress_monitor_retries_when_mpv_ipc_is_not_ready(tmp_path, monkeypatc
             self.polls += 1
             return None if self.polls < 6 else 0
 
-        def wait(self):
+        def wait(self, timeout=None):
             return 0
 
     monkeypatch.setattr(session_module, "observe_mpv_progress", observe)
@@ -453,7 +453,7 @@ def test_playlist_switch_forces_final_checkpoint_for_the_previous_episode(tmp_pa
     saved_episode_ids = []
     observed = 0
 
-    def observe(_ipc_server):
+    def observe(_ipc_server, *, should_stop=None):
         nonlocal observed
         observed += 1
         if observed == 1:
@@ -472,7 +472,7 @@ def test_playlist_switch_forces_final_checkpoint_for_the_previous_episode(tmp_pa
             self.polls += 1
             return None if self.polls < 4 else 0
 
-        def wait(self):
+        def wait(self, timeout=None):
             return 0
 
     monkeypatch.setattr(session_module, "observe_mpv_progress", observe)
@@ -539,7 +539,7 @@ class _MonitorProcess:
     def poll(self):
         return 0 if self.ended else None
 
-    def wait(self):
+    def wait(self, timeout=None):
         return 0
 
 
@@ -582,7 +582,7 @@ def _run_monitor(events, *, step=0.0, checkpoint_results=()):
     def monotonic():
         return clock["t"]
 
-    def generator(_server):
+    def generator(_server, *, should_stop=None):
         for position, duration in events:
             yield MpvProgressEvent(position=position, duration=duration, playlist_position=0)
             clock["t"] += step
@@ -665,7 +665,7 @@ def test_episode_switch_resets_completion_bookkeeping():
     manager._display_title = staticmethod(lambda asset: "Probe")
     clock = {"t": 100.0}
 
-    def generator(_server):
+    def generator(_server, *, should_stop=None):
         yield MpvProgressEvent(position=91.0, duration=100.0, playlist_position=0)
         clock["t"] += 1.0
         yield MpvProgressEvent(position=91.0, duration=100.0, playlist_position=1)
