@@ -11,6 +11,7 @@ $runtimeSource = [IO.Path]::GetFullPath((Join-Path $resolvedRoot 'mpv\runtime'))
 $configSource = [IO.Path]::GetFullPath((Join-Path $resolvedRoot 'mpv\config\portable_config'))
 $layerSource = [IO.Path]::GetFullPath((Join-Path $resolvedRoot 'mpv\config\kumiplayer'))
 $manifestSource = [IO.Path]::GetFullPath((Join-Path $resolvedRoot 'mpv\runtime-manifest.json'))
+$mpvSource = Split-Path -Parent $manifestSource
 # 目标：安装版运行时布局 packaging/runtime/mpv/（mpv.exe 与 portable_config 同级，
 # 符合 mpv 自带的 portable_config 约定；源码层的 config/ 外壳不进入安装包）。
 $runtimeRoot = [IO.Path]::GetFullPath((Join-Path $resolvedRoot 'packaging\runtime'))
@@ -25,6 +26,12 @@ foreach ($candidate in @($target, $staging) + $obsoleteTargets) {
     if ((Split-Path -Parent $candidate) -ne $runtimeRoot) {
         throw "MPV runtime staging refused for an unexpected target: $candidate"
     }
+    if ((Test-Path -LiteralPath $candidate) -and ((Get-Item -LiteralPath $candidate).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'MPV runtime staging refused: a staging target must not be a reparse point.'
+    }
+}
+if ((Test-Path -LiteralPath $runtimeRoot) -and ((Get-Item -LiteralPath $runtimeRoot).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    throw 'MPV runtime staging refused: runtime staging root must not be a reparse point.'
 }
 
 if (-not (Test-Path -LiteralPath $runtimeSource -PathType Container)) {
@@ -51,6 +58,7 @@ $manifest = Get-Content -LiteralPath $manifestSource -Raw -Encoding UTF8 | Conve
 if ($manifest.distribution_status -eq 'development-only') {
     throw 'MPV runtime staging refused: distribution_status is development-only. 第三方许可证与发布材料尚未补齐，内置 MPV 暂不能进入正式安装包。'
 }
+& (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot $mpvSource -Layout source
 
 New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
 if (Test-Path -LiteralPath $staging) {
@@ -59,9 +67,9 @@ if (Test-Path -LiteralPath $staging) {
 New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
 # 1. 干净 MPV 运行文件（mpv.exe、mpv.com、DLL、bat），排除 README 说明文件
-Get-ChildItem -LiteralPath $runtimeSource -Force |
-    Where-Object { $_.Name -ne 'README.md' } |
-    Copy-Item -Destination $staging -Recurse -Force
+foreach ($entry in $manifest.files) {
+    Copy-Item -LiteralPath (Join-Path $runtimeSource $entry.path) -Destination (Join-Path $staging $entry.path)
+}
 
 # 2. KumiPlayer 自有 portable_config（可替换层，用户可整体替换为整合包）
 $stagedConfig = Join-Path $staging 'portable_config'
@@ -78,11 +86,20 @@ Get-ChildItem -LiteralPath $layerSource -Force |
 # 3. 实际 runtime-manifest.json
 Copy-Item -LiteralPath $manifestSource -Destination (Join-Path $staging 'runtime-manifest.json')
 
+# 4. 许可证、组件出处、审核证据及对应源码必须与播放器一起进入安装包。
+foreach ($material in @('components-manifest.json', 'distribution-manifest.json', 'THIRD_PARTY_NOTICES.md', 'SOURCE_CODE.txt', 'licenses', 'sources')) {
+    Copy-Item -LiteralPath (Join-Path $mpvSource $material) -Destination (Join-Path $staging $material) -Recurse -Force
+}
+& (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot $staging -Layout staged
+
 # 移除旧的 mpv-plugins 暂存目标（仅暂存目录，不碰开发/用户 MPV）
 foreach ($oldTarget in $obsoleteTargets) {
     if (Test-Path -LiteralPath $oldTarget) {
         Remove-Item -LiteralPath $oldTarget -Recurse -Force
     }
+}
+if (Test-Path -LiteralPath $target) {
+    Remove-Item -LiteralPath $target -Recurse -Force
 }
 Move-Item -LiteralPath $staging -Destination $target
 

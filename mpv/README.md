@@ -13,8 +13,11 @@ KumiPlayer 的 MPV 相关文件**全部集中在本目录**：干净官方二进
 | `config/kumiplayer/` | **自有层**：KumiPlayer 自有强制配置、Lua 脚本与自有资源（`shaders/anime4k-v4.0.1/`），不可替换 | ✅ | ✅ |
 | `runtime-manifest.json` | 二进制来源、版本、文件清单、逐文件 SHA-256、配置版本、`distribution_status` | ✅ | ✅ |
 | `runtime-manifest.schema.json` | 上述清单的 JSON Schema（v1.0） | — | ✅ |
-| `components-manifest.json` | 第三方组件登记（uosc / thumbfast / Anime4K / mpv-stats-zh / uosc_danmaku）的来源、版本、许可证、随包文件 | — | ✅ |
-| `licenses/` | 第三方许可证正文（6 份） | — | ✅ |
+| `components-manifest.json` | 第三方组件登记（uosc / thumbfast / Anime4K / mpv-stats-zh / uosc_danmaku）的来源、版本、许可证、随包文件 | ✅ | ✅ |
+| `distribution-manifest.json` | 对应源码审核状态、缺项、源码归档与全部发布文件 SHA-256；当前 pending | ✅ | ✅ |
+| `SOURCE_CODE.txt`、`THIRD_PARTY_NOTICES.md` | 对应源码取得方式、当前缺项与第三方声明 | ✅ | ✅ |
+| `licenses/` | 运行时与增强组件的第三方许可证正文（当前 27 份） | ✅ | ✅ |
+| `sources/` | 正式发布时准备的完整对应源码归档；当前尚未具备 | ✅ | 按归档策略保存，不以导航链接替代 |
 | `docs/` | MPV 运行时演进记录、开源项目与功能候选清单、按用途查找入口 | — | ❌（`*.md` 全局忽略，`README.md` 除外） |
 
 ## 源码层 ↔ 安装包层
@@ -27,6 +30,9 @@ KumiPlayer 的 MPV 相关文件**全部集中在本目录**：干净官方二进
 | `mpv/config/portable_config/` | `runtime/mpv/portable_config/` |
 | `mpv/config/kumiplayer/` | `runtime/mpv/kumiplayer/` |
 | `mpv/runtime-manifest.json` | `runtime/mpv/runtime-manifest.json` |
+| `mpv/components-manifest.json`、`distribution-manifest.json` | `runtime/mpv/` 下同名清单 |
+| `mpv/licenses/`、`sources/` | `runtime/mpv/` 下同名目录 |
+| `mpv/THIRD_PARTY_NOTICES.md`、`SOURCE_CODE.txt` | `runtime/mpv/` 下同名声明 |
 
 后端按运行形态解析这些路径（`backend/app/core/runtime.py`）：源码模式读本目录，安装模式读桌面运行时目录下的 `mpv/`，可用环境变量（`KUMIPLAYER_MPV_RUNTIME_DIR` / `KUMIPLAYER_MPV_CONFIG_DIR` / `KUMIPLAYER_MPV_LAYER_DIR`）覆盖。
 
@@ -104,4 +110,4 @@ mpv.exe
 3. 接入或升级二进制、DLL、辅助运行文件时，必须更新符合 `runtime-manifest.schema.json` 的 `runtime-manifest.json`；进入 `runtime/` 的文件必须具备明确来源、版本与 SHA-256。
 4. 自有层脚本必须放在 `config/kumiplayer/scripts/`，自有资源放在 `config/kumiplayer/` 内（不放进可替换层，否则用户替换整合包后自有功能会跟着丢失）。
 5. 自有层脚本与配置保持 UTF-8 无 BOM、LF 行尾。
-6. 未补齐发布材料（来源、版本、SHA-256、许可证）前，`distribution_status` 保持 `development-only`，不得进入公开安装包；`scripts/stage_mpv_runtime.ps1` 与 `scripts/verify_installer_bundle.ps1` 会双层拦截。
+6. 未补齐发布材料（来源、准确对应源码/依赖/构建记录、版本、SHA-256、许可证和历史授权证据）前，`distribution_status` 保持 `development-only`，不得进入公开安装包。`qualified` 仅表示内部验证，不是公开发布批准。两个安装包门禁共用 `scripts/verify_mpv_distribution.ps1`：仅接受 `public-release`、已人工复核的对应源码归档和与当前全部发布文件字节一致的审核清单；缺失、未知状态、改动后旧批准均拦截。校验器不能自动作出法律合规判断。

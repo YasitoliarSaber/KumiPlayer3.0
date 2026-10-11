@@ -1,0 +1,28 @@
+KumiPlayer 内置 MPV：对应源码与发布状态
+
+当前 distribution_status 为 development-only，distribution-manifest.json 为 pending。
+这份说明登记真实缺项，不是已完成的 GPL 源码提供承诺；当前内置播放器不得进入公开安装包。
+
+正式发布采用随包提供对应源码归档的方式：runtime/mpv/sources/ 下的归档必须包含
+实际二进制使用的 MPV、FFmpeg 及全部相关依赖的准确源码、补丁、构建与安装脚本、
+构建配置和版本记录。归档文件名及 SHA-256 在 distribution-manifest.json 中登记。
+配置层中的 Lua、着色器等可读源码随包提供；修改记录和版权声明保留在相应文件及
+components-manifest.json、THIRD_PARTY_NOTICES.md、licenses/ 中。
+
+发布负责人应复核源码是否真正对应二进制、依赖是否完整、修改声明及历史许可证据
+是否充分，然后登记审核人、日期和全部发布文件的 SHA-256。校验器只能证明材料存在、
+字节一致和审批范围，没有能力自动判断法律合规。仅修改状态字段不能通过发布校验。
+approved_files 的每项为 path 与 sha256，path 统一使用安装包 MPV 根下的相对路径：
+运行文件置于根，其他文件位于 portable_config/、kumiplayer/、licenses/、sources/。
+清单包含 runtime-manifest.json、components-manifest.json、本说明及第三方声明，
+不包含 distribution-manifest.json 自身，避免自校验循环。任何发布输入修改都需重新审核。
+
+上游导航（用于查证，不代替完整对应源码）：
+https://github.com/mpv-player/mpv/tree/v0.41.0
+https://github.com/mpv-player/mpv-winbuild-cmake
+https://github.com/FFmpeg/FFmpeg
+
+依据：
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.html （第 3 节）
+https://ffmpeg.org/legal.html
+https://github.com/mpv-player/mpv/blob/v0.41.0/Copyright

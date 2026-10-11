@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "review_status": "pending",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "source_delivery": "bundled",
+  "source_archive": { "path": null, "sha256": null },
+  "approved_files": [],
+  "blockers": [
+    "原始二进制 ZIP 尚未本地复算 SHA-256；构建短哈希尚未核对为完整提交",
+    "MPV、FFmpeg、动态及静态依赖的准确版本、构建脚本和完整对应源码尚未归档",
+    "mpv-stats-zh 当前脚本和历史 MIT 许可的同一提交证据尚未固定",
+    "修改过的 uosc、thumbfast 与弹幕脚本的版本来源、修改说明和许可义务尚未完成复核"
+  ]
+}

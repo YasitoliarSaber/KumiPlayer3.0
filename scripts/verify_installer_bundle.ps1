@@ -104,6 +104,7 @@ $stagedManifestJson = Get-Content -LiteralPath $stagedManifest -Raw -Encoding UT
 if ($stagedManifestJson.distribution_status -eq 'development-only') {
     throw 'Installer blocked: built-in MPV is development-only. 第三方许可证与发布材料尚未补齐，内置 MPV 暂不能进入正式安装包。'
 }
+& (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot $stagedMpv -Layout staged
 
 # 内置 MPV 运行文件必须与清单一致，且不得泄露本地绝对路径。
 $absolutePathPattern = '[A-Za-z]:\\'
@@ -133,4 +134,4 @@ if ($setupFiles[0].Length -le 0) {
     throw 'The generated NSIS setup executable is empty.'
 }
 
-Write-Host "Verified installer manifest and $($setupFiles[0].Name): KumiPlayer plugins are bundled without MPV player binaries or user configuration, and user data is protected."
+Write-Host "Verified installer manifest and $($setupFiles[0].Name): built-in MPV runtime, configuration and distribution materials are verified; user data is protected."
