@@ -144,8 +144,9 @@ export default function VirtualizedPosterGrid({
 
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
-    // 固定行高与预渲染区允许 React 合并快速跨行事件，避免逐事件 flushSync 阻塞原生滚动。
-    useFlushSync: false,
+    // 使用 TanStack 的同步通知提交：跨行时立即更新窗口，同范围滚动仍由上游去重。
+    // WebView2 交错实测通知到布局提交 p95 从 3.5–3.8ms 降至 0.9ms，呈现收益另行评估。
+    useFlushSync: true,
     getScrollElement: () => scrollElementRef.current,
     estimateSize: () => rowHeight,
     overscan: OVERSCAN_ROWS,
