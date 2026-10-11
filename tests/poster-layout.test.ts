@@ -142,3 +142,18 @@ test('分类、收藏与搜索共用同一个行虚拟化网格并各自传入�
     assert.match(page, /<VirtualizedPosterGrid[\s\S]{0,200}columns=\{/);
   }
 });
+
+test('详情页与主题的背景模糊重置也由构建器补前缀，避免标准声明被折叠', () => {
+  const styles = stripCssComments(readFileSync(new URL('../src/index.css', import.meta.url), 'utf8'));
+
+  assert.doesNotMatch(styles, /-webkit-backdrop-filter:\s*none\b/);
+  for (const selector of [
+    '.detail-page.detail-classic-page .episode-strip-slider',
+    ":root[data-theme='cinema'] .desktop-titlebar",
+    '.detail-content-drawer',
+    '.episode-item',
+  ]) {
+    const rules = styles.split('}').filter((block) => block.slice(0, block.lastIndexOf('{')).includes(selector));
+    assert.ok(rules.some((block) => /(?:^|;)\s*backdrop-filter:\s*none\b/.test(block.slice(block.lastIndexOf('{') + 1))), selector);
+  }
+});

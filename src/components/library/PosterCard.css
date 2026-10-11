@@ -3,6 +3,15 @@
   gap: 8px;
 }
 
+/* 原生滚动期间不让鼠标下方不断更换的卡片启动悬停/渐显过渡，停稳后恢复。 */
+.app-main[data-scroll-active] .poster-card,
+.app-main[data-scroll-active] .poster-card .poster-media,
+.app-main[data-scroll-active] .poster-card .poster-media::after,
+.app-main[data-scroll-active] .poster-card .poster-media img,
+.app-main[data-scroll-active] .poster-card .poster-card-meta {
+  transition: none !important;
+}
+
 .poster-card .poster-placeholder-state {
   color: var(--text-muted);
   font-size: 12px;

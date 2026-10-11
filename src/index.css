@@ -424,25 +424,25 @@
     filter 220ms var(--ease-out);
 }
 
-.poster-card:hover {
+.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) {
   transform: translateY(-2px);
 }
 
-.poster-card:hover .poster-media {
+.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media {
   box-shadow: 0 16px 34px rgba(28, 28, 28, .14), 0 2px 8px rgba(28, 28, 28, .08);
   outline-color: rgba(143, 88, 51, .18);
 }
 
-.poster-card:hover .poster-media::after {
+.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media::after {
   opacity: 1;
 }
 
-.poster-card:hover .poster-media img {
+.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media img {
   transform: scale(1.025);
   filter: saturate(1.04) contrast(1.015);
 }
 
-.poster-card:hover .poster-media-vertical img {
+.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media-vertical img {
   transform: none;
 }
 
@@ -500,7 +500,7 @@
   -webkit-line-clamp: 4;
 }
 
-.poster-card:hover .poster-card-meta {
+.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-card-meta {
   transform: translateY(1px);
 }
 
@@ -4121,7 +4121,6 @@
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
@@ -4455,7 +4454,6 @@
   background: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 .detail-page.detail-classic-page .detail-main-grid .detail-episode-section {
   margin-top: 0 !important;
@@ -4598,7 +4596,6 @@
   padding-top: 0 !important;
   background: transparent !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 .detail-page.detail-classic-page .detail-main-grid {
   padding: 0 !important;
@@ -4607,7 +4604,6 @@
   background: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 .detail-page.detail-classic-page .detail-episode-section,
 .detail-page.detail-classic-page .detail-cast-section,
@@ -4621,7 +4617,6 @@
   background: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 .detail-page.detail-classic-page .detail-more-menu {
   border-color: rgb(255 255 255 / .20) !important;
@@ -4668,7 +4663,7 @@ body { background: var(--app-bg); }
 .sidebar-nav-item.active::before { width: 4px; }
 .sidebar-bottom { border-top-color: #d9dfe6 !important; }
 .poster-media { box-shadow: 0 1px 2px rgba(28, 35, 45, .06); outline-color: rgba(54, 64, 76, .10); }
-.poster-card:hover .poster-media { box-shadow: 0 12px 28px rgba(28, 35, 45, .14), 0 2px 7px rgba(28, 35, 45, .08); }
+.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media { box-shadow: 0 12px 28px rgba(28, 35, 45, .14), 0 2px 7px rgba(28, 35, 45, .08); }
 .category-page { gap: 20px; }
 .category-title-block h1 { font-size: clamp(27px, 2vw, 34px); font-weight: 800; }
 .category-toolbar { gap: 8px; }
@@ -5088,7 +5083,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   background: var(--surface-soft);
   box-shadow: var(--shadow-card);
 }
-.poster-card:hover .poster-media {
+.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media {
   border-color: color-mix(in srgb, var(--accent) 32%, var(--border)) !important;
   box-shadow: 0 14px 34px color-mix(in srgb, var(--text) 15%, transparent) !important;
   transform: translateY(-2px);
@@ -5201,7 +5196,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .appearance-guidance span { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
 :root[data-theme='cinema'] .home-feature-tile-shade { background: linear-gradient(180deg, transparent 28%, rgba(4, 6, 10, .88)); }
 :root[data-theme='cinema'] img { filter: saturate(.94) contrast(1.02); }
-:root[data-theme='cinema'] .poster-card:hover img { filter: saturate(1.05) contrast(1.03); }
+:root[data-theme='cinema'] .poster-card:hover:not(:where(.app-main[data-scroll-active] *)) img { filter: saturate(1.05) contrast(1.03); }
 @media (max-width: 1120px) {
   .settings-shell { grid-template-columns: 1fr !important; }
   .appearance-grid, .appearance-guidance { grid-template-columns: 1fr; }
@@ -7897,7 +7892,6 @@ body::before {
   background: #0c0c0c !important;
   background-image: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 .app-shell,
@@ -8886,7 +8880,6 @@ body::before {
   border-top: 0 !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
   contain: none !important;
   color: var(--detail-ink) !important;
 }
@@ -9072,7 +9065,6 @@ body::before {
   color: var(--detail-ink) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 .detail-action-btn:hover,
@@ -9171,7 +9163,6 @@ body::before {
   padding: clamp(18px, 2vw, 28px) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 .detail-content-drawer > section:last-child {
@@ -9494,7 +9485,6 @@ body::before {
   padding: clamp(16px, 1.8vw, 24px) clamp(16px, 1.8vw, 24px) 0 !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
   /* 季度菜单会向上溢出；paint containment 会把它裁切成“点击无选项”。 */
   contain: layout style !important;
 }
@@ -9517,7 +9507,6 @@ body::before {
   background: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
   transition: background 110ms var(--ease-out), border-color 110ms var(--ease-out), box-shadow 110ms var(--ease-out) !important;
 }
 
@@ -9804,7 +9793,7 @@ body::before {
 .detail-episode-tool-btn { display: inline-grid; width: 32px; height: 32px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: inherit; line-height: 1; cursor: pointer; }.detail-episode-tool-btn svg { width: 16px; height: 16px; stroke-width: 1.9; }
 .detail-page .detail-episode-grid { display: grid; gap: 8px; }.detail-page .detail-episode-grid.list-view { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }.detail-page .detail-episode-grid.grid-view { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 6px !important; }.detail-episode-grid.grid-view .episode-item { min-height: 46px; border-radius: 6px; padding: 0 10px; }.detail-episode-grid.grid-view .episode-button { flex-wrap: nowrap; align-content: center; gap: 6px; }.detail-episode-grid.grid-view .episode-state { font-size: 12px; }
 
-.detail-page .detail-poster { position: relative; z-index: 2; opacity: 1 !important; filter: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.detail-page .detail-poster { position: relative; z-index: 2; opacity: 1 !important; filter: none !important; backdrop-filter: none !important; }
 
 .detail-related-section {
   padding-bottom: 28px;
@@ -10390,7 +10379,6 @@ body::before {
   background: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 .detail-page.detail-classic-page .detail-main-grid .detail-episode-section {
   margin-top: 0 !important;
@@ -10780,7 +10768,6 @@ body > .detail-manual-scrape-panel {
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
   text-shadow: none;
 }
 
@@ -10792,7 +10779,6 @@ body > .detail-manual-scrape-panel {
   background: var(--detail-command-hover);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / .12);
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 .detail-page.detail-classic-page .detail-episode-view-btn.active {
@@ -10865,7 +10851,6 @@ body > .detail-manual-scrape-panel {
   border-top: 0 !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 .detail-page.detail-classic-page .detail-content-drawer > section,
@@ -10878,7 +10863,6 @@ body > .detail-manual-scrape-panel {
   background: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 .detail-page.detail-classic-page .detail-content-drawer h2,

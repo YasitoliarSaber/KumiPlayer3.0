@@ -25,9 +25,10 @@ def test_poster_grid_uses_measured_columns_and_preserves_vertical_artwork():
     assert "safeColumns" not in component
     assert ".poster-media-vertical img" in css
     assert "object-fit: contain" in css
-    assert ".poster-card:hover .poster-media-vertical img" in css
+    hover_selector = ".poster-card:hover:not(:where(.app-main[data-scroll-active] *))"
+    assert f"{hover_selector} .poster-media-vertical img" in css
     assert "transform: none" in css
-    assert css.index(".poster-card:hover .poster-media-vertical img") > css.index(".poster-card:hover .poster-media img")
+    assert css.index(f"{hover_selector} .poster-media-vertical img") > css.index(f"{hover_selector} .poster-media img")
     assert "--sidebar-width: 56px !important" in css
     navigation_layer = css.split("/* Three-stage NavigationView layout: hidden, compact icon rail, expanded pane. */", 1)[1]
     assert "@media (max-width: 760px)" in navigation_layer
