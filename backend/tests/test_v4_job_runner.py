@@ -190,7 +190,6 @@ def test_successful_scrape_is_published_by_background_refresh_before_final_job(t
 
 
 def test_failed_scrape_does_not_block_publishing_confirmed_local_media(tmp_path):
-    import pytest
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -205,10 +204,10 @@ def test_failed_scrape_does_not_block_publishing_confirmed_local_media(tmp_path)
         metadata_provider=lambda _target: (_ for _ in ()).throw(RuntimeError("provider unavailable")),
     )
 
-    with pytest.raises(RuntimeError, match="provider unavailable"):
-        runner.process_available(mirror_root=tmp_path / "mirror")
-
-    assert [r.job_type for r in runner.process_available(mirror_root=tmp_path / "mirror")] == ['refresh_projection']
+    results = runner.process_available(mirror_root=tmp_path / "mirror")
+    assert [(r.job_type, r.status) for r in results] == [
+        ('scrape_work', 'failed'), ('refresh_projection', 'succeeded'),
+    ]
     with database.connect() as conn:
         statuses = {
             row["job_type"]: row["status"]

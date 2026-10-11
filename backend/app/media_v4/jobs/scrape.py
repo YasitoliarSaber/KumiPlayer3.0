@@ -179,23 +179,29 @@ def _provider_identity_scope(conn, target: dict, facts: list) -> dict:
         and str(fact.series_group).strip().casefold() != normalized_title
         and (fact.card_type == 'standalone' or fact.relation_type in {'related', 'spin_off', 'sequel'})
     }
-    shared_ids = {
-        str(row["provider_id"])
-        for row in conn.execute(
+    shared_rows = conn.execute(
             """
             SELECT DISTINCT other.provider_id, w.preferred_title FROM provider_bindings other
             JOIN works w ON w.work_id = other.work_id AND w.status = 'active'
             WHERE other.work_id != ? AND other.provider = 'tmdb' AND other.media_type = 'tv'
+              AND EXISTS (
+                  SELECT 1 FROM revision_bindings rb
+                  JOIN import_revisions ir ON ir.revision_id = rb.revision_id AND ir.status = 'confirmed'
+                  JOIN source_roots sr ON sr.root_id = ir.root_id AND sr.retired_at = '' AND sr.enabled = 1
+                  WHERE rb.work_id = other.work_id
+              )
             """,
             (target["work_id"],),
         ).fetchall()
+    shared = [dict(row) for row in shared_rows
         if str(row["preferred_title"] or "").strip().casefold() not in {
             normalized_title,
             *(str(title).strip().casefold() for title in target.get("identity_titles") or []),
         }
-    }
+    ]
     return {"confirmed_child": bool(groups), "series_groups": sorted(groups),
-            "shared_distinct_tv_ids": sorted(shared_ids)}
+            "shared_distinct_tv_ids": sorted({str(row['provider_id']) for row in shared}),
+            "shared_tv_titles": shared}
 
 
 def _consistent_season_mappings(conn, target: dict, result: dict, provider: str) -> dict:

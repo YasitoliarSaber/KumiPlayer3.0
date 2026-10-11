@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -16,6 +17,8 @@ from app.media_v4.jobs.metadata import default_metadata_provider
 from app.media_v4.jobs.scrape import V4ScrapeService
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.library import LibrarySnapshot, V4LibraryProjection
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,7 +249,7 @@ class V4JobRunner:
                 # 而留下永远排队的任务。复用 process_job 的取消分支，确保
                 # 不会领取任务或产生任何文件写入。
                 if job["status"] == "queued":
-                    results.append(self.process_job(str(row["job_id"]), mirror_root=mirror_root))
+                    results.append(self._process_batch_job(str(row["job_id"]), mirror_root=mirror_root))
                 continue
             job_type = str(job["job_type"])
             if job_type == "refresh_projection":
@@ -261,17 +264,16 @@ class V4JobRunner:
             if job_type == "recover_work_aliases":
                 recovery_job_ids.append(str(row["job_id"]))
                 continue
-            results.append(self.process_job(row["job_id"], mirror_root=mirror_root))
+            results.append(self._process_batch_job(row["job_id"], mirror_root=mirror_root))
 
         if scrape_job_ids:
             workers = min(self._MAX_PARALLEL_SCRAPE_JOBS, len(scrape_job_ids))
             with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="v4-scrape") as executor:
                 futures = [
-                    executor.submit(self.process_job, job_id, mirror_root=mirror_root)
+                    executor.submit(self._process_batch_job, job_id, mirror_root=mirror_root)
                     for job_id in scrape_job_ids
                 ]
-                # 按队列顺序读取结果，保持 API/测试的稳定可观察顺序；如果任一
-                # 任务失败，executor 仍先安全等待已领取的同批任务退出。
+                # 按队列顺序收集真实终态；单作品异常由包装器隔离，不中断恢复与投影。
                 results.extend(future.result() for future in futures)
 
         # 只有本轮确实执行了刮削批次时，才可能把新成功的 scrape 转成恢复
@@ -286,7 +288,7 @@ class V4JobRunner:
             with self.database.connect() as conn:
                 job = conn.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
             if job and self._prerequisites_succeeded(dict(job)):
-                results.append(self.process_job(job_id, mirror_root=mirror_root))
+                results.append(self._process_batch_job(job_id, mirror_root=mirror_root))
         # 每波最多十部；只有本轮确实存在待恢复作业时才需要补排下一波，
         # 空闲迭代不再重复扫描历史任务。首次调度已在迭代开头完成。
         if recovery_job_ids:
@@ -299,12 +301,43 @@ class V4JobRunner:
                 continue
             if bool(job["cancel_requested"]):
                 if job["status"] == "queued":
-                    results.append(self.process_job(job_id, mirror_root=mirror_root))
+                    results.append(self._process_batch_job(job_id, mirror_root=mirror_root))
                 continue
             if not self._prerequisites_succeeded(dict(job)):
                 continue
-            results.append(self.process_job(job_id, mirror_root=mirror_root))
+            results.append(self._process_batch_job(job_id, mirror_root=mirror_root))
         return results
+
+    def _process_batch_job(self, job_id: str, *, mirror_root=None) -> JobRunResult:
+        """隔离单个任务异常；不覆盖用户取消、重新领取或已经保存的终态。"""
+        with self.database.connect() as conn:
+            initial = conn.execute('SELECT * FROM jobs WHERE job_id=?', (job_id,)).fetchone()
+        if initial is None:
+            raise KeyError(job_id)
+        try:
+            return self.process_job(job_id, mirror_root=mirror_root)
+        except Exception as exc:
+            logger.error('V4 batch job failed: job=%s type=%s exception=%s',
+                         job_id, initial['job_type'], type(exc).__name__)
+            with self.database.connect() as conn:
+                conn.execute('BEGIN IMMEDIATE')
+                current = conn.execute('SELECT * FROM jobs WHERE job_id=?', (job_id,)).fetchone()
+                if current is None:
+                    raise KeyError(job_id) from exc
+                # running 与 attempts 不能证明领取者就是本执行器。已领取任务由
+                # 执行链自身保存终态；批次包装器只收口未被其他执行器改动的排队任务。
+                before_claim = (current['status'] == 'queued' and current['attempts'] == initial['attempts']
+                                and current['updated_at'] == initial['updated_at'])
+                if before_claim and not current['cancel_requested']:
+                    payload = json.loads(current['result_json'] or '{}')
+                    payload.update(failure_stage='job_execution', exception_type=type(exc).__name__)
+                    stamp = now()
+                    conn.execute("UPDATE jobs SET status='failed',last_error=?,result_json=?,"
+                                 "heartbeat_at=?,finished_at=?,updated_at=? WHERE job_id=?",
+                                 (f'任务执行失败（{type(exc).__name__}），请重试。',
+                                  json.dumps(payload, ensure_ascii=False), stamp, stamp, stamp, job_id))
+                status = conn.execute('SELECT status FROM jobs WHERE job_id=?', (job_id,)).fetchone()[0]
+            return JobRunResult(job_id, initial['job_type'], status)
 
     def _cancel_legacy_jobs_if_present(self) -> None:
         """只在只读探测发现待清理历史任务时才开启写事务，并在事务内重核。"""

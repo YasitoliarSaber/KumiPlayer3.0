@@ -1499,14 +1499,23 @@ def _fetch_provider_metadata(target: dict) -> dict:
 def _provider_child_scope(target: dict, provider_id: int, work_detail: dict | None) -> bool:
     """关系与共享在线身份提供范围证据；仅本地/在线标题不同不构成子作品。"""
     scope = target.get("provider_identity_scope") or {}
-    if isinstance(scope, dict):
-        if str(provider_id) in {str(value) for value in scope.get("shared_distinct_tv_ids") or []}:
-            return True
     detail = work_detail or {}
     local = _normalize_title(target.get("preferred_title"))
     remote_titles = {_normalize_title(detail.get(key)) for key in ("name", "original_name")}
     remote_titles.update(_normalize_title(value) for value in _extract_aliases(detail, "tv"))
     remote_titles.update(_normalize_title(value) for value in detail.get("title_aliases") or [])
+    remote_titles.discard('')
+    if isinstance(scope, dict) and str(provider_id) in {
+        str(value) for value in scope.get("shared_distinct_tv_ids") or []
+    }:
+        shared_titles = [item for item in scope.get('shared_tv_titles') or []
+                         if isinstance(item, dict) and str(item.get('provider_id')) == str(provider_id)]
+        # 不同来源的中/日/罗马音标题，只有在线详情的可信完整别名能证明同一身份。
+        # 没有逐作品标题证据的旧响应，或真实子作品，仍保留范围保护。
+        if not shared_titles or any(
+            _normalize_title(item.get('preferred_title')) not in remote_titles for item in shared_titles
+        ):
+            return True
     if local and local in remote_titles:
         # 独立外传有自己的线上作品时，父系列关系不把其编号限制成母作品子区间。
         # 只认当前 Provider 详情的完整同名，共享身份的范围冲突仍优先保护。
