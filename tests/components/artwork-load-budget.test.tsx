@@ -17,19 +17,28 @@ test('实际 DOM 加载最多六个，预取最多两个，load/error 终态才�
   expect(nodes[7]).not.toHaveAttribute('src');
 });
 
-test('排队可见图优先；取消已经开始的组件不会伪造网络预算释放', () => {
+test('排队可见图优先；实际撤销旧请求后释放预算，取消不伪装加载成功', async () => {
+  vi.useFakeTimers();
   const budget = new ArtworkLoadBudget(1, 1);
   const [active, prefetch, visible] = [image(), image(), image()];
-  const first = budget.enqueue(active, '/active', 0, () => {});
+  const state = vi.fn();
+  const first = budget.enqueue(active, '/active', 0, state);
   budget.enqueue(prefetch, '/preload', 1, () => {});
   budget.enqueue(visible, '/visible', 0, () => {});
   first.cancel();
+  expect(active).not.toHaveAttribute('src');
   expect(visible).not.toHaveAttribute('src');
-  loaded(active);
+  expect(first.pending()).toBe(true);
+  loaded(active); // 撤销时已移除监听，晚到终态不放行新任务。
+  expect(visible).not.toHaveAttribute('src');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(first.pending()).toBe(false);
+  expect(state).not.toHaveBeenCalledWith('ready');
   expect(visible).toHaveAttribute('src');
   expect(prefetch).not.toHaveAttribute('src');
   loaded(visible);
   expect(prefetch).toHaveAttribute('src');
+  loaded(prefetch);
 });
 
 test('失败冷却按版本 URL 隔离，不重复请求坏版本，新版本立即可用', async () => {
@@ -69,7 +78,8 @@ test('离开预取区保留驻留图片，离开两视口驻留才清除；排�
   lifecycle.dispose();
 });
 
-test('旧请求终态不能标记已替换地址的新记录就绪', () => {
+test('旧请求终态不能标记已替换地址的新记录就绪', async () => {
+  vi.useFakeTimers();
   const lifecycle = new PosterImageLifecycle(new ArtworkLoadBudget(1, 1));
   const node = image();
   const oldState = vi.fn(); const newState = vi.fn();
@@ -79,6 +89,8 @@ test('旧请求终态不能标记已替换地址的新记录就绪', () => {
   loaded(node);
   expect(oldState).not.toHaveBeenCalledWith('ready');
   expect(newState).not.toHaveBeenCalledWith('ready');
+  expect(node).not.toHaveAttribute('src');
+  await vi.advanceTimersByTimeAsync(0);
   expect(node).toHaveAttribute('src', '/new');
   loaded(node);
   expect(newState).toHaveBeenCalledWith('ready');

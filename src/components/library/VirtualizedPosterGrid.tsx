@@ -16,8 +16,8 @@ interface VirtualizedPosterGridProps {
   presentationKey?: string;
 }
 
-// 下限行数配合两视口驻留，横图行高较小时不会过早卸载刚看过的图片。
-const OVERSCAN_ROWS = 6;
+// 有界预渲染：避免横图或高窗口把上下两个视口的卡片一起挂载、解码。
+const OVERSCAN_ROWS = 3;
 
 // 卡片宽度与屏幕缩放共同决定固定档位。
 function pickThumbnailWidth(cssWidth: number, horizontal: boolean): number {
@@ -47,7 +47,6 @@ export default function VirtualizedPosterGrid({
   const [columnWidth, setColumnWidth] = useState(0);
   const [rowHeight, setRowHeight] = useState(0);
   const [gridGap, setGridGap] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(0);
   // 作品墙顶部在滚动容器内容坐标中的位置（标题、数量、排序工具之后）。
   const [gridOffset, setGridOffset] = useState(0);
   const [focusedWorkId, setFocusedWorkId] = useState<string | null>(null);
@@ -99,7 +98,6 @@ export default function VirtualizedPosterGrid({
         setGridOffset(Math.max(0, rect.top - containerRect.top + scrollContainer.scrollTop));
       }
       imageLifecycle.configure(scrollContainer, currentViewportHeight());
-      setViewportHeight(currentViewportHeight());
     };
 
     const requestMeasure = () => {
@@ -150,7 +148,7 @@ export default function VirtualizedPosterGrid({
     useFlushSync: false,
     getScrollElement: () => scrollElementRef.current,
     estimateSize: () => rowHeight,
-    overscan: Math.max(OVERSCAN_ROWS, rowHeight > 0 ? Math.ceil(viewportHeight * 2 / rowHeight) : 0),
+    overscan: OVERSCAN_ROWS,
     rangeExtractor,
     scrollMargin: gridOffset,
     // 挂载时滚动容器可能已经在别处（返回分类页恢复位置），必须按真实 scrollTop 起步。
@@ -210,6 +208,7 @@ export default function VirtualizedPosterGrid({
         lastRow,
         renderedRows: virtualRows.length,
         renderedCards,
+        overscanRows: OVERSCAN_ROWS,
         totalRows: rowCount,
         totalWorks: works.length,
       });

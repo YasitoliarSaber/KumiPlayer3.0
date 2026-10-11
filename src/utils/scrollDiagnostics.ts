@@ -36,6 +36,8 @@ export interface ScrollDiagnosticsDump {
   slowFrameCount: number;
   longTaskCount: number;
   worstLongTaskMs: number;
+  /** dump 时读取的当前计数，不依赖最后一次状态变化事件。 */
+  snapshots: Record<string, Record<string, number | boolean>>;
   events: ScrollDiagnosticEvent[];
 }
 
@@ -57,6 +59,12 @@ let lastFrameAt = 0;
 let longTaskObserver: PerformanceObserver | null = null;
 let listenersAttached = false;
 const sessionListeners = new Set<() => void>();
+const snapshotProviders = new Map<string, () => Record<string, number | boolean>>();
+
+/** 固定模块注册即时计数；不创建轮询、定时器或 React 状态。 */
+export function registerScrollDiagnosticSnapshot(name: string, read: () => Record<string, number | boolean>): void {
+  snapshotProviders.set(name, read);
+}
 
 /** 开关与清空通知不经过 React；订阅者可立即挂载输入监听、补记当前窗口。 */
 export function subscribeScrollDiagnostics(listener: () => void): () => void {
@@ -238,6 +246,7 @@ export function dumpScrollDiagnostics(options?: { includeEvents?: boolean }): Sc
     slowFrameCount,
     longTaskCount,
     worstLongTaskMs,
+    snapshots: Object.fromEntries([...snapshotProviders].map(([name, read]) => [name, read()])),
     events: options?.includeEvents === false ? [] : events,
   };
 }

@@ -189,7 +189,8 @@ test('离开预取区不立即清 src，离开驻留区后才清除', () => {
   intersect([image], true); fireEvent.load(image);
 });
 
-test('图片版本变化更新同一卡片，旧请求终态不能将新版本标为完成', () => {
+test('图片版本变化更新同一卡片，旧请求终态不能将新版本标为完成', async () => {
+  vi.useFakeTimers();
   const first = work(0);
   const { rerender } = render(<main className="app-main"><VirtualizedPosterGrid works={[first]} columns={4} /></main>);
   const card = screen.getByRole('button');
@@ -200,13 +201,16 @@ test('图片版本变化更新同一卡片，旧请求终态不能将新版本�
   expect(screen.getByRole('button')).toBe(card);
   intersect([image], true);
   fireEvent.load(image);
+  expect(image).not.toHaveAttribute('src');
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
   expect(image).toHaveAttribute('data-state', 'loading');
   expect(image).toHaveAttribute('src', expect.stringContaining(updatedPath));
   fireEvent.load(image);
   expect(image).toHaveAttribute('data-state', 'ready');
 });
 
-test('StrictMode 重放与卸载清理观察器，但已开始请求保留实际终态预算', () => {
+test('StrictMode 重放与卸载清理观察器，实际撤销已开始请求后释放预算', async () => {
+  vi.useFakeTimers();
   const { unmount } = render(<main className="app-main"><StrictMode><VirtualizedPosterGrid works={[work(0)]} columns={4} /></StrictMode></main>);
   const image = screen.getByRole('img') as HTMLImageElement;
   intersect([image], true);
@@ -214,5 +218,6 @@ test('StrictMode 重放与卸载清理观察器，但已开始请求保留实际
   unmount();
   expect(disconnect).toHaveBeenCalled();
   expect(document.querySelector('.poster-card')).toBeNull();
-  fireEvent.load(image);
+  expect(image).not.toHaveAttribute('src');
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 });

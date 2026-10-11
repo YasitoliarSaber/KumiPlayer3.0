@@ -11,7 +11,7 @@ const VIEWPORT_WIDTH = 1000;
 const VIEWPORT_HEIGHT = 900;
 const COLUMNS = 4;
 /** 组件内固定的视口外预渲染行数（不做速度预测）。 */
-const OVERSCAN_ROWS = 6;
+const OVERSCAN_ROWS = 3;
 /** 由测试注入到 :root 的网格变量，让行距期望值可精确计算。 */
 const GRID_GAP = 24;
 const META_HEIGHT = 62;
@@ -102,7 +102,7 @@ test('大量作品只渲染可视窗口与 overscan 行，不再全量挂载卡�
   // 关键：200 部作品不再对应 200 个卡片 DOM。
   expect(cards).toHaveLength(rows.length * COLUMNS);
   expect(cards.length).toBeLessThan(200);
-  // 只保留可视行 + 上下 overscan：900px 视口 / 行距 ~434px → 3 行可视 + 6 行 overscan = 9 行 36 张卡。
+  // 首屏只保留 3 行可视 + 3 行 overscan = 6 行 24 张卡。
   expect(rows).toHaveLength(viewportRows + OVERSCAN_ROWS);
   expect(cards).toHaveLength((viewportRows + OVERSCAN_ROWS) * COLUMNS);
   // 首屏从第一行开始，渲染范围必须覆盖整个视口（不能出现空白带）。
@@ -161,7 +161,7 @@ test('列数变化后按新列数重新切分，行距与总高度同步重算',
   rerender(<main className="app-main"><VirtualizedPosterGrid works={works(12)} columns={2} /></main>);
   const narrowRows = renderedRows();
   const narrowRowHeight = expectedRowHeight(2);
-  expect(narrowRows).toHaveLength(6);
+  expect(narrowRows).toHaveLength(Math.min(6, Math.ceil(VIEWPORT_HEIGHT / narrowRowHeight) + OVERSCAN_ROWS));
   // 列数减少 → 列宽与行距变大，不能用旧行距残留布局。
   expect(narrowRows[0].height).toBeCloseTo(narrowRowHeight, 5);
   narrowRows.forEach((row, position) => {

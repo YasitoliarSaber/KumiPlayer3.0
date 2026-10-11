@@ -1,34 +1,60 @@
 import { createContext } from 'react';
-import { recordScrollDiagnostic } from '../../utils/scrollDiagnostics';
+import { isScrollDiagnosticsEnabled, recordScrollDiagnostic, registerScrollDiagnosticSnapshot } from '../../utils/scrollDiagnostics';
 
 type Priority = 0 | 1;
 type State = 'idle' | 'loading' | 'ready' | 'error';
 interface LoadJob {
   image: HTMLImageElement; url: string; priority: Priority;
-  started: boolean; cancelled: boolean; done: (state: State) => void;
+  started: boolean; cancelled: boolean; finished: boolean; startedAt: number;
+  abort?: () => void; done: (state: State) => void;
 }
 
-/** 所有页面共用实际 DOM 请求预算，取消挂载不等于浏览器已取消传输。 */
+/** 所有页面共用实际 DOM 请求预算，先撤销浏览器请求，再释放预算。 */
 export class ArtworkLoadBudget {
   private queued = new Set<LoadJob>();
   private running = new Set<LoadJob>();
   private failures = new Map<string, number>();
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
-  constructor(private limit = 6, private preloadLimit = 2, private cooldown = 30_000) {}
+  private totals = { cancelled: 0, loaded: 0, failed: 0, timedOut: 0 };
+  constructor(private limit = 6, private preloadLimit = 2, private cooldown = 30_000, private timeout = 30_000) {}
+
+  snapshot() {
+    return {
+      queued: this.queued.size, running: this.running.size,
+      preloading: [...this.running].filter((job) => job.priority === 1).length,
+      cancelling: [...this.running].filter((job) => job.cancelled).length,
+      oldestRunningMs: Math.max(0, ...[...this.running].map((job) => Date.now() - job.startedAt)),
+      ...this.totals,
+    };
+  }
+
+  private recordBudget() {
+    if (isScrollDiagnosticsEnabled()) recordScrollDiagnostic('image-budget', this.snapshot());
+  }
 
   enqueue(image: HTMLImageElement, url: string, priority: Priority, done: LoadJob['done']) {
-    const job: LoadJob = { image, url, priority, done, started: false, cancelled: false };
+    const job: LoadJob = { image, url, priority, done, started: false, cancelled: false, finished: false, startedAt: 0 };
     this.queued.add(job);
+    this.recordBudget();
     this.pump();
     return {
-      priority: (next: Priority) => { job.priority = next; this.pump(); },
-      cancel: () => {
-        job.cancelled = true;
-        this.queued.delete(job);
-        // 已开始的请求保留监听器和预算，直到 load/error；不能虚报取消成功。
+      priority: (next: Priority) => {
+        if (job.finished || job.cancelled || job.priority === next) return;
+        job.priority = next;
+        if (job.started) job.image.fetchPriority = next === 0 ? 'high' : 'low';
+        this.recordBudget();
         this.pump();
       },
-      pending: () => !job.started || this.running.has(job),
+      cancel: () => {
+        if (job.finished || job.cancelled) return;
+        job.cancelled = true;
+        if (this.queued.delete(job)) { job.finished = true; this.totals.cancelled += 1; }
+        // 移除 src 会实际撤销 img 的 current/pending fetch；仅卸载节点不会。
+        job.abort?.();
+        this.recordBudget();
+        this.pump();
+      },
+      pending: () => !job.finished,
       started: () => job.started,
     };
   }
@@ -37,6 +63,7 @@ export class ArtworkLoadBudget {
     if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = undefined; }
     let retryIn = Infinity;
     for (const job of [...this.queued].sort((a, b) => a.priority - b.priority)) {
+      if (!this.queued.has(job)) continue; // 缓存同步命中可能递归 pump，不能重复启动旧快照项。
       if (this.running.size >= this.limit) break;
       if ([...this.running].some((other) => other.image === job.image)) continue;
       if (job.priority === 1 && [...this.running].filter((other) => other.priority === 1).length >= this.preloadLimit) continue;
@@ -45,28 +72,64 @@ export class ArtworkLoadBudget {
       this.queued.delete(job);
       this.running.add(job);
       job.started = true;
-      const terminal = (state: State) => {
-        if (!this.running.delete(job)) return;
+      job.startedAt = Date.now();
+      let stopping = false;
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      const removeListeners = () => {
         job.image.removeEventListener('load', loaded);
         job.image.removeEventListener('error', failed);
+        clearTimeout(deadline);
+      };
+      const terminal = (state: 'ready' | 'error' | 'cancelled') => {
+        if (!this.running.delete(job)) return;
+        job.finished = true;
+        job.abort = undefined;
+        removeListeners();
+        this.totals[state === 'ready' ? 'loaded' : state === 'error' ? 'failed' : 'cancelled'] += 1;
         if (state === 'error') {
           this.failures.delete(job.url);
           this.failures.set(job.url, Date.now());
           if (this.failures.size > 512) this.failures.delete(this.failures.keys().next().value!);
-        } else this.failures.delete(job.url);
-        if (!job.cancelled) job.done(state);
+        } else if (state === 'ready') this.failures.delete(job.url);
+        recordScrollDiagnostic(`image-${state}`, { ms: Date.now() - job.startedAt });
+        this.recordBudget();
+        if (!job.cancelled && state !== 'cancelled') job.done(state);
         this.pump();
       };
-      const loaded = () => terminal('ready');
-      const failed = () => terminal('error');
+      const loaded = () => { if (!stopping) terminal('ready'); };
+      const failed = () => { if (!stopping) terminal('error'); };
+      const abort = (state: 'error' | 'cancelled') => {
+        if (stopping || job.finished) return;
+        stopping = true;
+        removeListeners();
+        clearImageSource(job.image);
+        // WHATWG 的 stable state 会排入微任务。撤销后的微任务才放行同节点新请求，
+        // 防止同步重设 src 合并掉撤销操作；取消不依赖缺失的 load/error 事件。
+        queueMicrotask(() => terminal(state));
+      };
+      job.abort = () => abort('cancelled');
       job.image.addEventListener('load', loaded);
       job.image.addEventListener('error', failed);
+      deadline = setTimeout(() => {
+        // 缓存或脱离 DOM 的节点可能错过终态事件，先对账实际图片状态。
+        if (job.image.complete) {
+          if (job.image.naturalWidth > 0) loaded();
+          else failed();
+          return;
+        }
+        this.totals.timedOut += 1;
+        recordScrollDiagnostic('image-timeout', { ms: Date.now() - job.startedAt });
+        abort('error');
+      }, this.timeout);
       job.done('loading');
+      // 状态回调可能同步卸载/取消，不能在撤销之后重新启动 src。
+      if (job.cancelled || job.finished || stopping) continue;
       // 可见性已由观察器控制；原生 lazy 会让已占预算的预取或卸载图片永远不开始。
       job.image.loading = 'eager';
       job.image.fetchPriority = job.priority === 0 ? 'high' : 'low';
       job.image.src = job.url;
       recordScrollDiagnostic('image-src-set');
+      this.recordBudget();
       if (job.image.complete && job.image.naturalWidth > 0) loaded();
     }
     if (Number.isFinite(retryIn)) this.retryTimer = setTimeout(() => this.pump(), retryIn);
@@ -74,6 +137,7 @@ export class ArtworkLoadBudget {
 }
 
 export const artworkLoadBudget = new ArtworkLoadBudget();
+registerScrollDiagnosticSnapshot('imageBudget', () => artworkLoadBudget.snapshot());
 function clearImageSource(image: HTMLImageElement) {
   if (!image.hasAttribute('src')) return;
   image.removeAttribute('src');
@@ -127,7 +191,7 @@ export class PosterImageLifecycle {
       this.entries.delete(image);
       clearTimeout(entry.retryTimer);
       entry.job?.cancel();
-      // 未完成的 src 不主动清除；浏览器终态仍负责释放全局预算。
+      // 运行任务自行撤销 src 并等浏览器处理；已结束图片直接释放驻留。
       if (!entry.job?.pending()) clearImageSource(image);
     };
   }
@@ -135,9 +199,13 @@ export class PosterImageLifecycle {
   private update(image: HTMLImageElement, entry: ImageEntry) {
     if (!entry.visible) { clearTimeout(entry.retryTimer); entry.retryTimer = undefined; }
     if (!entry.visible && !entry.preload) {
+      if (entry.job?.started()) entry.job.priority(1);
       if (!entry.job?.pending()) {
         if (!entry.resident) { clearImageSource(image); entry.ready = false; image.dataset.state = 'idle'; }
-      } else if (!entry.job?.started()) { entry.job?.cancel(); entry.job = undefined; }
+      } else if (!entry.job?.started() || !entry.resident) {
+        entry.job?.cancel(); entry.job = undefined;
+        entry.ready = false; image.dataset.state = 'idle'; entry.onState?.('idle');
+      }
       return;
     }
     if (entry.job?.pending()) { entry.job.priority(entry.visible ? 0 : 1); return; }

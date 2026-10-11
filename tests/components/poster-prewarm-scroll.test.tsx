@@ -101,10 +101,10 @@ test('多张海报卡共享同一个全局滚动监听器与计时器', async ()
   expect(scrollListenerRegistrations).toHaveLength(1);
 
   fireEvent.scroll(window);
-  expect(vi.getTimerCount()).toBe(1);
+  expect(vi.getTimerCount()).toBe(7); // 六个图片终止兜底 + 一个共享滚动计时器。
 
   unmount();
-  await act(async () => {});
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
   expect(addListenerSpy.mock.calls.filter((call) => call[0] === 'scroll')).toHaveLength(1);
 });
 
@@ -114,7 +114,7 @@ test('卸载海报卡不残留每卡滚动监听与计时器', async () => {
 
   fireEvent.pointerEnter(card);
   unmount();
-  await act(async () => {});
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
   fireEvent.scroll(window);
 
   expect(addListenerSpy.mock.calls.filter((call) => call[0] === 'scroll')).toHaveLength(1);
