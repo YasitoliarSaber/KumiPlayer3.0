@@ -424,25 +424,25 @@
     filter 220ms var(--ease-out);
 }
 
-.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) {
+.poster-card:hover {
   transform: translateY(-2px);
 }
 
-.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media {
+.poster-card:hover .poster-media {
   box-shadow: 0 16px 34px rgba(28, 28, 28, .14), 0 2px 8px rgba(28, 28, 28, .08);
   outline-color: rgba(143, 88, 51, .18);
 }
 
-.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media::after {
+.poster-card:hover .poster-media::after {
   opacity: 1;
 }
 
-.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media img {
+.poster-card:hover .poster-media img {
   transform: scale(1.025);
   filter: saturate(1.04) contrast(1.015);
 }
 
-.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media-vertical img {
+.poster-card:hover .poster-media-vertical img {
   transform: none;
 }
 
@@ -500,7 +500,7 @@
   -webkit-line-clamp: 4;
 }
 
-.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-card-meta {
+.poster-card:hover .poster-card-meta {
   transform: translateY(1px);
 }
 
@@ -4663,7 +4663,7 @@ body { background: var(--app-bg); }
 .sidebar-nav-item.active::before { width: 4px; }
 .sidebar-bottom { border-top-color: #d9dfe6 !important; }
 .poster-media { box-shadow: 0 1px 2px rgba(28, 35, 45, .06); outline-color: rgba(54, 64, 76, .10); }
-.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media { box-shadow: 0 12px 28px rgba(28, 35, 45, .14), 0 2px 7px rgba(28, 35, 45, .08); }
+.poster-card:hover .poster-media { box-shadow: 0 12px 28px rgba(28, 35, 45, .14), 0 2px 7px rgba(28, 35, 45, .08); }
 .category-page { gap: 20px; }
 .category-title-block h1 { font-size: clamp(27px, 2vw, 34px); font-weight: 800; }
 .category-toolbar { gap: 8px; }
@@ -5083,7 +5083,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   background: var(--surface-soft);
   box-shadow: var(--shadow-card);
 }
-.poster-card:hover:not(:where(.app-main[data-scroll-active] *)) .poster-media {
+.poster-card:hover .poster-media {
   border-color: color-mix(in srgb, var(--accent) 32%, var(--border)) !important;
   box-shadow: 0 14px 34px color-mix(in srgb, var(--text) 15%, transparent) !important;
   transform: translateY(-2px);
@@ -5196,7 +5196,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .appearance-guidance span { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
 :root[data-theme='cinema'] .home-feature-tile-shade { background: linear-gradient(180deg, transparent 28%, rgba(4, 6, 10, .88)); }
 :root[data-theme='cinema'] img { filter: saturate(.94) contrast(1.02); }
-:root[data-theme='cinema'] .poster-card:hover:not(:where(.app-main[data-scroll-active] *)) img { filter: saturate(1.05) contrast(1.03); }
+:root[data-theme='cinema'] .poster-card:hover img { filter: saturate(1.05) contrast(1.03); }
 @media (max-width: 1120px) {
   .settings-shell { grid-template-columns: 1fr !important; }
   .appearance-grid, .appearance-guidance { grid-template-columns: 1fr; }

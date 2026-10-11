@@ -7,33 +7,14 @@ const SCROLL_QUIET_MS = 300;
 let scrollRecentlyActive = false;
 let resetTimer: number | null = null;
 let listenerInstalled = false;
-let lastScrollAt = 0;
-const activeRoots = new Set<HTMLElement>();
 
-function finishWhenQuiet(): void {
-  const remaining = SCROLL_QUIET_MS - (Date.now() - lastScrollAt);
-  if (remaining > 0) {
-    resetTimer = window.setTimeout(finishWhenQuiet, remaining);
-    return;
-  }
-  scrollRecentlyActive = false;
-  resetTimer = null;
-  for (const root of activeRoots) delete root.dataset.scrollActive;
-  activeRoots.clear();
-}
-
-function markScrolling(event: Event): void {
+function markScrolling(): void {
   scrollRecentlyActive = true;
-  lastScrollAt = Date.now();
-  const target = event.target;
-  const root = target instanceof Element ? target.closest<HTMLElement>('.app-main') : null;
-  // 每个滚动容器只在开始/结束时改一次 DOM，不在逐帧热路径更新样式或 React。
-  if (root && !activeRoots.has(root)) {
-    root.dataset.scrollActive = 'true';
-    activeRoots.add(root);
-  }
-  // 连续滚动只更新时刻；同一个计时器到期后检查静默窗口，避免每个事件撤销重建。
-  if (resetTimer === null) resetTimer = window.setTimeout(finishWhenQuiet, SCROLL_QUIET_MS);
+  if (resetTimer !== null) window.clearTimeout(resetTimer);
+  resetTimer = window.setTimeout(() => {
+    scrollRecentlyActive = false;
+    resetTimer = null;
+  }, SCROLL_QUIET_MS);
 }
 
 function installScrollListener(): void {
@@ -59,7 +40,4 @@ export function resetScrollGestureForTests(): void {
     resetTimer = null;
   }
   scrollRecentlyActive = false;
-  lastScrollAt = 0;
-  for (const root of activeRoots) delete root.dataset.scrollActive;
-  activeRoots.clear();
 }

@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import PosterCard from '../../src/components/library/PosterCard';
 import { useLibraryStore } from '../../src/stores/library';
-import { isScrollRecentlyActive, resetScrollGestureForTests } from '../../src/utils/scrollGesture';
+import { resetScrollGestureForTests } from '../../src/utils/scrollGesture';
 
 const getWorkDetail = vi.fn();
 let addListenerSpy: ReturnType<typeof vi.spyOn>;
@@ -210,43 +210,4 @@ test('尚未测量的海报只展示标题，不声称图片正在加载', () =>
   expect(screen.queryByText('图片加载中')).toBeNull();
   expect(screen.queryByText('图片暂不可用')).toBeNull();
   expect(screen.getAllByText('作品w1').length).toBeGreaterThan(0);
-});
-
-test('continuous scrolling keeps hover quiet until the last event settles', () => {
-  render(<main className="app-main"><button>Work</button></main>);
-  const main = screen.getByRole('main');
-  isScrollRecentlyActive();
-
-  fireEvent.scroll(main);
-  expect(main).toHaveAttribute('data-scroll-active', 'true');
-  vi.advanceTimersByTime(200);
-  fireEvent.scroll(main);
-  vi.advanceTimersByTime(299);
-  expect(main).toHaveAttribute('data-scroll-active', 'true');
-  expect(isScrollRecentlyActive()).toBe(true);
-
-  vi.advanceTimersByTime(1);
-  expect(main).not.toHaveAttribute('data-scroll-active');
-  expect(isScrollRecentlyActive()).toBe(false);
-});
-
-test('a burst of scroll events reuses its quiet timer and preserves card interaction', () => {
-  const click = vi.fn();
-  render(<main className="app-main"><button onClick={click}>Work</button></main>);
-  const main = screen.getByRole('main');
-  isScrollRecentlyActive();
-  const schedule = vi.spyOn(window, 'setTimeout');
-
-  fireEvent.scroll(main);
-  for (let index = 0; index < 10; index += 1) {
-    vi.advanceTimersByTime(10);
-    fireEvent.scroll(main);
-  }
-  expect(schedule).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole('button', { name: 'Work' }));
-  expect(click).toHaveBeenCalledTimes(1);
-
-  vi.advanceTimersByTime(300);
-  expect(main).not.toHaveAttribute('data-scroll-active');
-  expect(vi.getTimerCount()).toBe(0);
 });
