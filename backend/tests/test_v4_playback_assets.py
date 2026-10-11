@@ -96,7 +96,7 @@ def test_playback_session_launches_mpv_for_confirmed_asset(tmp_path, monkeypatch
         "app.media_v4.playback.session.start_mpv",
         lambda media_path, **kwargs: captured.append((media_path, kwargs)) or Process(),
     )
-    monkeypatch.setattr("app.media_v4.playback.session.threading.Thread.start", lambda _self: None)
+    monkeypatch.setattr(V4PlaybackManager, "_monitor", lambda *_args: None)
     manager = V4PlaybackManager(database, session_dir=tmp_path / "sessions")
 
     session = manager.play(row["work_id"], row["episode_id"], row["asset_id"])

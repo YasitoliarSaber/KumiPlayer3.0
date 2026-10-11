@@ -60,10 +60,12 @@ def validate_playback_locator_syntax(locator: str) -> tuple[bool, str]:
     return True, ""
 
 
-def validate_playback_locator(locator: str, *, timeout: float = 2.0) -> tuple[bool, str]:
+def validate_playback_locator(locator: str, *, timeout: float = 15.0) -> tuple[bool, str]:
     """校验单个可播放定位符。
 
     只检查本次选定文件，不读取媒体内容或修改来源/媒体状态。
+    挂载冷启动允许等待最多 15 秒，文件就绪即返回；为前端 30 秒请求预算
+    留出会话切换和播放器启动时间，不把短暂等待误判成挂载配置故障。
     """
     ok, reason = validate_playback_locator_syntax(locator)
     if not ok:
@@ -101,7 +103,7 @@ def validate_playback_locator(locator: str, *, timeout: float = 2.0) -> tuple[bo
                 raise
     done, result = probe
     if not done.wait(timeout=max(0.0, timeout)):
-        return False, "媒体挂载响应超时，请检查 OpenList 和挂载连接后重试"
+        return False, "等待媒体文件响应超时，请稍后重试；若持续超时，请检查挂载连接"
     if not result or not result[0]:
         return False, "媒体挂载路径不可访问，请检查来源映射或挂载状态"
     return True, ""
