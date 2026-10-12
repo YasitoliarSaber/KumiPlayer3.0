@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useUiStore } from './stores/ui';
 import { useLibraryStore } from './stores/library';
 import { useBangumiStore, SESSION_VERIFY_TTL_MS } from './stores/bangumi';
@@ -49,6 +49,33 @@ export default function App() {
   const [appConfig, setAppConfig] = useState<PublicConfig | null>(null);
   const [configReady, setConfigReady] = useState(false);
   const [setupOverride, setSetupOverride] = useState(false);
+  const [setupDismissed, setSetupDismissed] = useState(false);
+  const [setupSaveError, setSetupSaveError] = useState('');
+  const showSetup = Boolean(appConfig && (setupOverride || (!appConfig.setup_completed && !appConfig.setup_deferred && !setupDismissed)));
+  const mainAvailable = configReady && !showSetup;
+
+  const dismissSetup = useCallback(() => {
+    setSetupOverride(false);
+    setSetupDismissed(true);
+    setSetupSaveError('');
+    if (!appConfig || appConfig.setup_completed || appConfig.setup_deferred) return;
+    // 进入软件不等待保存成功；后台故障也不能把用户困在引导中。
+    void configApi.deferSetup().then((config) => {
+      setAppConfig((current) => current
+        ? (current.setup_completed ? current : { ...current, setup_deferred: config.setup_deferred })
+        : config);
+    }).catch(() => {
+      setSetupSaveError('已进入软件，但“稍后设置”未能保存，下次启动可能再次显示引导。你仍可在设置中继续配置。');
+    });
+  }, [appConfig]);
+
+  useEffect(() => {
+    if (!showSetup) return undefined;
+    // 引导共用应用导航；点击其他页面或开始搜索也可直接进入软件。
+    return useUiStore.subscribe((current, previous) => {
+      if (current.page !== previous.page || current.query !== previous.query) dismissSetup();
+    });
+  }, [dismissSetup, showSetup]);
 
   useLayoutEffect(() => {
     if (!configReady) return;
@@ -62,7 +89,7 @@ export default function App() {
   }, [styleMode, motionMode, appearanceMode]);
 
   useEffect(() => {
-    if (!appConfig?.setup_completed || setupOverride) return undefined;
+    if (!mainAvailable) return undefined;
     if (page === 'detail' || page === 'settings') return undefined;
 
     let disposed = false;
@@ -80,10 +107,10 @@ export default function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [appConfig?.setup_completed, goManageView, page, queueDroppedTreePath, setupOverride]);
+  }, [mainAvailable, goManageView, page, queueDroppedTreePath]);
 
   useEffect(() => {
-    if (!appConfig?.setup_completed) return undefined;
+    if (!mainAvailable) return undefined;
     let disposed = false;
     let timer = 0;
     let checking = false;
@@ -130,25 +157,25 @@ export default function App() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       unsubscribe();
     };
-  }, [appConfig?.setup_completed, syncChanges]);
+  }, [mainAvailable, syncChanges]);
 
   useEffect(() => {
-    if (!appConfig?.setup_completed) return;
+    if (!mainAvailable) return;
     loadLibrary();
-  }, [appConfig?.setup_completed, loadLibrary]);
+  }, [mainAvailable, loadLibrary]);
 
   useEffect(() => {
-    if (!appConfig?.setup_completed) return undefined;
+    if (!configReady) return undefined;
     startHeartbeat();
     startHealthPolling();
     return () => {
       stopHealthPolling();
       stopHeartbeat();
     };
-  }, [appConfig?.setup_completed, startHeartbeat, startHealthPolling, stopHeartbeat, stopHealthPolling]);
+  }, [configReady, startHeartbeat, startHealthPolling, stopHeartbeat, stopHealthPolling]);
 
   useEffect(() => {
-    if (!appConfig?.setup_completed) return undefined;
+    if (!mainAvailable) return undefined;
     let disposed = false;
     // 启动只做本地会话恢复（GET /session，0 远程请求、不重试）；
     // 认证证据时间取 max(last_verified_at, last_success_at)：任何 authenticated
@@ -169,7 +196,7 @@ export default function App() {
     return () => {
       disposed = true;
     };
-  }, [appConfig?.setup_completed, restoreSession, verifySession]);
+  }, [mainAvailable, restoreSession, verifySession]);
 
   useEffect(() => {
     configApi.getConfig()
@@ -205,7 +232,7 @@ export default function App() {
       case 'manage':
         return <MediaManagementPage />;
       case 'settings':
-        return <SettingsPage onOpenSetup={() => setSetupOverride(true)} />;
+        return <SettingsPage onOpenSetup={(config) => { setAppConfig(config); setSetupOverride(true); }} />;
       case 'player-tuning':
         return <PlayerTuningPage />;
       default:
@@ -217,32 +244,32 @@ export default function App() {
   return (
     <FluentProvider theme={fluentTheme}>
       {!configReady && <StartupSplash />}
-      {configReady && appConfig && (!appConfig.setup_completed || setupOverride) && (
-        <Suspense fallback={<LoadingState label="正在准备初始设置" detail="正在载入本机配置" />}>
-          <FirstRunSetup
-            initialConfig={appConfig}
-            mode={setupOverride ? "reconfigure" : "first-run"}
-            onCancel={setupOverride ? () => setSetupOverride(false) : undefined}
-            onComplete={(config) => {
-              setAppConfig(config);
-              setSetupOverride(false);
-            }}
-          />
-        </Suspense>
-      )}
-      {configReady && (!appConfig || (appConfig.setup_completed && !setupOverride)) && (
+      {configReady && (
         <AppShell>
-          <div className="app-page-source-scope" data-source={activeSource}>
-            <Suspense fallback={null}>
-              <div
-                key={visiblePage}
-                className="app-page-transition"
-                data-page={visiblePage}
-              >
-                {visiblePage === 'search' ? <SearchPage /> : renderPage()}
-              </div>
-            </Suspense>
-          </div>
+          {showSetup && appConfig ? <Suspense fallback={<LoadingState label="正在准备初始设置" detail="正在载入本机配置" />}>
+            <FirstRunSetup
+              initialConfig={appConfig}
+              mode={setupOverride ? "reconfigure" : "first-run"}
+              onCancel={dismissSetup}
+              onComplete={(config) => {
+                setAppConfig(config);
+                setSetupOverride(false);
+              }}
+            />
+          </Suspense> : <>
+            {setupSaveError && <div role="status" className="first-run-defer-notice">{setupSaveError}</div>}
+            <div className="app-page-source-scope" data-source={activeSource}>
+              <Suspense fallback={null}>
+                <div
+                  key={visiblePage}
+                  className="app-page-transition"
+                  data-page={visiblePage}
+                >
+                  {visiblePage === 'search' ? <SearchPage /> : renderPage()}
+                </div>
+              </Suspense>
+            </div>
+          </>}
         </AppShell>
       )}
     </FluentProvider>

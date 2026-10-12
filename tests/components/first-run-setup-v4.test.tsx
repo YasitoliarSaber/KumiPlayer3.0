@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import FirstRunSetup from '../../src/pages/FirstRunSetup';
 import { pickFolder } from '../../src/platform/folderPicker';
 
@@ -37,16 +37,54 @@ const config = {
 describe('FirstRunSetup V4 引导', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  test('首次引导始终可以通过关闭按钮退出应用', async () => {
-    render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: '关闭应用' }));
-    await waitFor(() => expect(closeWindow).toHaveBeenCalledOnce());
+  test('首次引导可稍后设置，进入软件而不关闭应用', () => {
+    const onCancel = vi.fn();
+    render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} onCancel={onCancel} />);
+    fireEvent.click(screen.getByRole('button', { name: '关闭引导，进入软件' }));
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(closeWindow).not.toHaveBeenCalled();
     expect(api.completeSetup).not.toHaveBeenCalled();
+  });
+
+  test('验证失败可返回修改来源，也可直接回到播放器并关闭引导', async () => {
+    api.completeSetup.mockRejectedValueOnce(new Error('媒体来源不可访问: 本地媒体'));
+    const onCancel = vi.fn();
+    render(<FirstRunSetup initialConfig={{ ...config, local_root: 'D:\\Missing' } as never} onComplete={vi.fn()} onCancel={onCancel} />);
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByText('内置播放器已就绪');
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    fireEvent.click(screen.getByRole('button', { name: /海报与观看同步/ }));
+    fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('媒体来源不可访问');
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    expect(screen.getByRole('textbox', { name: '本地媒体根目录' })).toHaveValue('D:\\Missing');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '返回播放器' }));
+    expect(screen.getByRole('heading', { name: '选择播放器' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '关闭引导，进入软件' }));
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  test('验证尚未结束仍可返回，迟到的结果不会把用户带离正在修改的步骤', async () => {
+    let resolve!: (value: never) => void;
+    api.completeSetup.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    const onComplete = vi.fn();
+    render(<FirstRunSetup initialConfig={{ ...config, local_root: 'D:\\Media' } as never} onComplete={onComplete} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByText('内置播放器已就绪');
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    await act(async () => { resolve({ ...config, setup_completed: true } as never); });
+    await waitFor(() => expect(screen.getByRole('textbox', { name: '本地媒体根目录' })).toBeVisible());
+    expect(onComplete).not.toHaveBeenCalled();
   });
 
   test('内置不可用时可切换外部播放器，检测并提交选择；修改路径使检测失效', async () => {
     api.getMpvRuntime.mockResolvedValueOnce({ available: true, manifest_valid: false, files_valid: false, configuration_available: true, message: '运行时清单缺失' } as never);
-    render(<FirstRunSetup initialConfig={{ ...config, local_root: 'D:\\Anime' } as never} onComplete={vi.fn()} />);
+    render(<FirstRunSetup initialConfig={{ ...config, local_root: 'D:\\Anime' } as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByText('运行时清单缺失');
     expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
@@ -67,7 +105,7 @@ describe('FirstRunSetup V4 引导', () => {
   test('切换模式后忽略上一次尚未完成的检测结果', async () => {
     let resolveInternal!: (value: never) => void;
     api.getMpvRuntime.mockReturnValueOnce(new Promise((resolve) => { resolveInternal = resolve; }));
-    render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} />);
+    render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByText('正在检测内置播放器…');
     fireEvent.click(screen.getByRole('radio', { name: '外部播放器' }));
@@ -80,7 +118,7 @@ describe('FirstRunSetup V4 引导', () => {
   });
 
   test('简化欢迎说明，并把 OpenList 明确为完成后的接入配置', async () => {
-    render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} />);
+    render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
 
     expect(screen.getByText(/不会移动或改名你的原始文件/)).toBeVisible();
     expect(screen.getByText(/配置可以随时修改/)).toBeVisible();
@@ -96,7 +134,7 @@ describe('FirstRunSetup V4 引导', () => {
   });
 
   test('先选来源类型，切换时保留每种来源的路径并一起提交', async () => {
-    render(<FirstRunSetup initialConfig={{ ...config, mirror_dir: 'D:\\Mirror', local_root: 'D:\\Anime', pan115_root: 'H:\\115' } as never} onComplete={vi.fn()} />);
+    render(<FirstRunSetup initialConfig={{ ...config, mirror_dir: 'D:\\Mirror', local_root: 'D:\\Anime', pan115_root: 'H:\\115' } as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByText('内置播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
@@ -119,7 +157,7 @@ describe('FirstRunSetup V4 引导', () => {
 
   test('文件夹选择失败时可见报错，手动输入仍然可用', async () => {
     vi.mocked(pickFolder).mockRejectedValueOnce(new Error('目录选择不可用'));
-    render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} />);
+    render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByText('内置播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
@@ -132,7 +170,7 @@ describe('FirstRunSetup V4 引导', () => {
   });
 
   test('重新引导检查当前外部播放器，不将它误报为内置播放器', async () => {
-    render(<FirstRunSetup initialConfig={{ ...config, player_mode: 'external', external_mpv_path: 'D:\\Player\\mpv.exe' } as never} onComplete={vi.fn()} mode="reconfigure" />);
+    render(<FirstRunSetup initialConfig={{ ...config, player_mode: 'external', external_mpv_path: 'D:\\Player\\mpv.exe' } as never} onComplete={vi.fn()} onCancel={vi.fn()} mode="reconfigure" />);
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     expect(await screen.findByText('外部播放器已就绪')).toBeVisible();
     expect(api.testMpv).toHaveBeenCalledWith('D:\\Player\\mpv.exe', 'external');
@@ -142,7 +180,7 @@ describe('FirstRunSetup V4 引导', () => {
 
   test('外部播放器检测失败时阻止继续，重新检测成功后恢复', async () => {
     api.testMpv.mockResolvedValueOnce({ ok: false, message: '找不到播放器' });
-    render(<FirstRunSetup initialConfig={{ ...config, player_mode: 'external', external_mpv_path: 'D:\\Player\\mpv.exe' } as never} onComplete={vi.fn()} />);
+    render(<FirstRunSetup initialConfig={{ ...config, player_mode: 'external', external_mpv_path: 'D:\\Player\\mpv.exe' } as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     expect(await screen.findByText('播放器暂不可用')).toBeVisible();
     expect(screen.getByText('找不到播放器')).toBeVisible();
@@ -154,7 +192,7 @@ describe('FirstRunSetup V4 引导', () => {
   });
 
   test('旧版外部播放器配置沿用已保存的 mpv_path', async () => {
-    render(<FirstRunSetup initialConfig={{ ...config, player_mode: 'external', external_mpv_path: '', mpv_path: 'D:\\Player\\mpv.exe' } as never} onComplete={vi.fn()} mode="reconfigure" />);
+    render(<FirstRunSetup initialConfig={{ ...config, player_mode: 'external', external_mpv_path: '', mpv_path: 'D:\\Player\\mpv.exe' } as never} onComplete={vi.fn()} onCancel={vi.fn()} mode="reconfigure" />);
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     expect(await screen.findByText('外部播放器已就绪')).toBeVisible();
     expect(api.testMpv).toHaveBeenCalledWith('D:\\Player\\mpv.exe', 'external');
@@ -162,7 +200,7 @@ describe('FirstRunSetup V4 引导', () => {
   });
 
   test('只有镜像目录不能进入下一步，至少需要一个实际媒体来源', async () => {
-    render(<FirstRunSetup initialConfig={{ ...config, mirror_dir: 'D:\\Mirror' } as never} onComplete={vi.fn()} />);
+    render(<FirstRunSetup initialConfig={{ ...config, mirror_dir: 'D:\\Mirror' } as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByText('内置播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));

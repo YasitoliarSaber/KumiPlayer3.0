@@ -343,6 +343,15 @@ def test_mpv_path(req: MpvPathRequest):
     return _inspect_mpv(req.mpv_path.strip(), require_file=True)
 
 
+@router.post("/setup/defer")
+def defer_setup():
+    # 只记录稍后设置；不验证播放器或来源，也不把未完成的配置标为完成。
+    config = copy.deepcopy(load_config())
+    config.setup_deferred = True
+    save_config(config)
+    return config.to_public_dict()
+
+
 @router.post("/setup/complete")
 def complete_setup(req: SetupCompleteRequest):
     # Validate the requested selection before persisting any setup changes.
@@ -425,6 +434,7 @@ def complete_setup(req: SetupCompleteRequest):
             raise HTTPException(status_code=400, detail=f"Bangumi 验证异常: {exc}") from exc
         config.bangumi_access_token = bangumi_access_token
     config.setup_completed = True
+    config.setup_deferred = False
     config.setup_version = 1
     save_config(config)
     return config.to_public_dict()

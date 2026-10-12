@@ -60,7 +60,7 @@ const sourceLabels: Record<SourceKey | 'all' | 'openlist', string> = {
 const sectionId = (key: SettingsTab) => `settings-panel-${key}`;
 
 
-export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void }) {
+export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: PublicConfig) => void }) {
   const {
     user,
     isLoggedIn,
@@ -632,10 +632,10 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: () => void
         </>}
         <div className="settings-support-row">
           <div>
-            <p>不会清空现有配置或媒体库。</p>
+            <p>可随时重新打开设置引导，不会清空现有配置或媒体库。</p>
           </div>
-          <GhostButton onClick={() => onOpenSetup?.()} disabled={!onOpenSetup}>
-            <RotateCcw size={16} aria-hidden="true" />打开首次设置
+          <GhostButton onClick={() => config && onOpenSetup?.(config)} disabled={!onOpenSetup}>
+            <RotateCcw size={16} aria-hidden="true" />打开设置引导
           </GhostButton>
         </div>
       </SettingsSection>

@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Accordion, AccordionHeader, AccordionItem, AccordionPanel, Radio, RadioGroup } from '@fluentui/react-components';
 import { CheckCircle2, ChevronLeft, ChevronRight, ExternalLink, FolderOpen, KeyRound, Play, RefreshCw, ShieldCheck, X } from 'lucide-react';
-import { isTauri } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { configApi, type MpvRuntimeStatus, type PublicConfig, type SetupCompletePayload } from '../api/config';
 import { BANGUMI_ACCESS_TOKEN_URL, getTmdbCredentialError, TMDB_API_SETTINGS_URL } from '../config/credentials';
 import { pickFile, pickFolder } from '../platform/folderPicker';
@@ -12,7 +10,7 @@ interface FirstRunSetupProps {
   initialConfig: PublicConfig;
   onComplete: (config: PublicConfig) => void;
   mode?: 'first-run' | 'reconfigure';
-  onCancel?: () => void;
+  onCancel: () => void;
 }
 
 const steps = ['欢迎', '播放器', '媒体来源', '完成设置'];
@@ -39,6 +37,9 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
   const externalPlayer = form.player_mode === 'external';
   const playerLabel = externalPlayer ? '外部播放器' : '内置播放器';
   const checkRevision = useRef(0);
+  const finishRevision = useRef(0);
+  const scrollArea = useRef<HTMLDivElement>(null);
+  const errorNotice = useRef<HTMLDivElement>(null);
   const [mpvStatus, setMpvStatus] = useState<MpvRuntimeStatus | null>(null);
   const [externalStatus, setExternalStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [activeSource, setActiveSource] = useState<SourceKey>(sourceOptions.find((source) => initialConfig[source.key]?.trim())?.key || 'local_root');
@@ -82,7 +83,10 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, form.player_mode]);
 
-  useEffect(() => () => { checkRevision.current += 1; }, []);
+  useEffect(() => () => { checkRevision.current += 1; finishRevision.current += 1; }, []);
+
+  useEffect(() => { scrollArea.current?.scrollTo?.({ top: 0 }); }, [step]);
+  useEffect(() => { if (error) errorNotice.current?.scrollIntoView?.({ block: 'nearest' }); }, [error]);
 
   const resetPlayerCheck = () => {
     checkRevision.current += 1;
@@ -92,13 +96,15 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
     setError('');
   };
 
-  const closeWindow = async () => {
-    try {
-      if (isTauri()) await getCurrentWindow().close();
-      else window.close();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '无法关闭窗口');
-    }
+  const returnToStep = (target: number) => {
+    finishRevision.current += 1;
+    setError('');
+    setStep(target);
+  };
+
+  const dismiss = () => {
+    finishRevision.current += 1;
+    onCancel();
   };
 
   const update = (key: keyof SetupCompletePayload, value: string) => {
@@ -153,46 +159,48 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
       setError(tmdbCredentialError);
       return;
     }
+    const revision = ++finishRevision.current;
     setFinishing(true);
     setError('');
     try {
       // 空输入表示保留已有凭据，不发送清空值。
       const { tmdb_bearer_token, bangumi_access_token, ...paths } = form;
-      onComplete(await configApi.completeSetup({
+      const config = await configApi.completeSetup({
         ...paths,
         ...(tmdb_bearer_token?.trim() ? { tmdb_bearer_token: tmdb_bearer_token.trim() } : {}),
         ...(bangumi_access_token?.trim() ? { bangumi_access_token: bangumi_access_token.trim() } : {}),
-      }));
+      });
+      if (revision === finishRevision.current) onComplete(config);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '初始化失败，请检查配置');
+      if (revision === finishRevision.current) setError(reason instanceof Error ? reason.message : '初始化失败，请检查配置');
     } finally {
       setFinishing(false);
     }
   };
 
   return (
-    <main className="first-run-shell first-run-refined">
+    <section className="first-run-shell first-run-refined">
       <section className="first-run-window" aria-label={isReconfigure ? 'KumiPlayer 初始设置引导' : 'KumiPlayer 首次启动引导'}>
         <header className="first-run-header">
-          <div className="first-run-brand"><img src="/brand/kumiplayer-app-icon.svg" alt="" /><strong>KumiPlayer</strong></div>
+          <div className="first-run-brand"><strong>{isReconfigure ? '设置引导' : '首次启动设置'}</strong></div>
           <div className="first-run-header-actions">
-            <span>{isReconfigure ? '重新配置初始设置' : '首次启动设置'}</span>
-            {onCancel && <button type="button" onClick={onCancel}>退出引导</button>}
-            <button type="button" className="first-run-close" onClick={() => void closeWindow()} aria-label="关闭应用" title="关闭应用"><X size={16} />关闭</button>
+            <span>进入软件后，可在设置中继续配置</span>
+            <button type="button" className="first-run-close" onClick={dismiss} aria-label="关闭引导，进入软件" title="关闭引导，进入软件"><X size={16} />稍后设置</button>
           </div>
         </header>
 
         <div className="first-run-layout">
           <nav className="first-run-steps" aria-label="设置步骤">
             {steps.map((label, index) => (
-              <div key={label} aria-current={index === step ? 'step' : undefined} className={`first-run-step ${index === step ? 'active' : ''} ${index < step ? 'done' : ''}`}>
+              <button type="button" key={label} disabled={index > step} onClick={() => returnToStep(index)} aria-label={index < step ? `返回${label}` : label} aria-current={index === step ? 'step' : undefined} className={`first-run-step ${index === step ? 'active' : ''} ${index < step ? 'done' : ''}`}>
                 <span>{index < step ? <CheckCircle2 size={16} /> : index + 1}</span>
                 <div><strong>{label}</strong><small>{index === step ? '正在设置' : index < step ? '已完成' : '稍后设置'}</small></div>
-              </div>
+              </button>
             ))}
           </nav>
 
           <div className="first-run-content">
+            <div className="first-run-scroll" ref={scrollArea}>
             {step === 0 && (
               <div className="first-run-panel first-run-welcome">
                 <p className="first-run-eyebrow">{isReconfigure ? '重新检查 KumiPlayer 配置' : '欢迎使用 KumiPlayer'}</p>
@@ -209,7 +217,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
               <div className="first-run-panel">
                 <p className="first-run-eyebrow">播放器</p>
                 <h1>选择播放器</h1>
-                <RadioGroup className="first-run-source-options" aria-label="播放器类型" layout="horizontal" value={form.player_mode} disabled={finishing}
+                <RadioGroup className="first-run-source-options" aria-label="播放器类型" layout="horizontal" value={form.player_mode}
                   onChange={(_, data) => { resetPlayerCheck(); setForm((current) => ({ ...current, player_mode: data.value as PublicConfig['player_mode'] })); }}>
                   <Radio value="internal" label="内置播放器" />
                   <Radio value="external" label="外部播放器" />
@@ -291,9 +299,10 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
               </div>
             )}
 
-            {error && <div className="first-run-error" role="alert">{error}</div>}
+            {error && <div className="first-run-error" role="alert" ref={errorNotice}>{error}</div>}
+            </div>
             <footer className="first-run-footer">
-              <button className="first-run-back" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || finishing}><ChevronLeft size={17} />返回</button>
+              <button className="first-run-back" onClick={() => returnToStep(Math.max(0, step - 1))} disabled={step === 0}><ChevronLeft size={17} />返回</button>
               {step < steps.length - 1 ? (
                 <button
                   className="first-run-primary"
@@ -307,7 +316,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
           </div>
         </div>
       </section>
-    </main>
+    </section>
   );
 }
 

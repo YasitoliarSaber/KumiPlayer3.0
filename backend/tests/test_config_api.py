@@ -139,6 +139,26 @@ class TestGetConfig:
 
 
 class TestFirstRunSetup:
+    @patch("app.api.config.check_mpv_runtime", side_effect=AssertionError("不应检测播放器"))
+    @patch("app.api.config._probe_media_path_states", side_effect=AssertionError("不应检测来源"))
+    def test_defer_preserves_unfinished_config_and_credentials(self, probe, runtime, client, temp_config):
+        saved_config = AppConfig(local_root="missing-media", player_mode="external",
+                                 external_mpv_path="missing-mpv", tmdb_bearer_token="fixture-token")
+        save_config(saved_config)
+        before = json.loads(temp_config.read_text(encoding="utf-8"))
+        for _ in range(2):
+            response = client.post("/api/config/setup/defer")
+            assert response.status_code == 200
+            assert response.json()["setup_deferred"] is True
+            assert response.json()["setup_completed"] is False
+            assert response.json()["tmdb_bearer_token"] == ""
+        after = json.loads(temp_config.read_text(encoding="utf-8"))
+        assert after == {**before, "setup_deferred": True}
+        invalidate_config_cache()
+        assert load_config().setup_deferred is True
+        probe.assert_not_called()
+        runtime.assert_not_called()
+
     def test_new_install_starts_in_setup_mode(self, temp_config):
         config = load_config(force_reload=True)
         assert config.setup_completed is False
@@ -160,6 +180,7 @@ class TestFirstRunSetup:
         mirror_dir.mkdir()
         media_root.mkdir()
         tree_dir.mkdir()
+        save_config(AppConfig(setup_deferred=True))
         mock_run.return_value = {"available": True, "manifest_valid": True, "files_valid": True, "configuration_available": True, "message": "内置播放器已就绪"}
 
         response = client.post("/api/config/setup/complete", json={
@@ -173,6 +194,7 @@ class TestFirstRunSetup:
         assert response.json()["setup_completed"] is True
         saved = json.loads(temp_config.read_text(encoding="utf-8"))
         assert saved["setup_completed"] is True
+        assert saved["setup_deferred"] is False
         assert saved["mpv_path"] == str(mpv_path)
 
     @patch("app.api.config.check_mpv_runtime")

@@ -43,6 +43,7 @@ class AppConfig:
 
     # 首次启动。配置文件不存在时为未完成；旧版本配置会在读取时自动迁移。
     setup_completed: bool = False
+    setup_deferred: bool = False
     setup_version: int = 0
 
     # 播放器

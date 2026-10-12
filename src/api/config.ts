@@ -22,6 +22,7 @@ export interface PublicConfig {
   openlist_connection_name?: string
   openlist_connection_id?: string
   setup_completed: boolean
+  setup_deferred?: boolean
   setup_version: number
   mpv_path: string
   /** 播放模式：internal = KumiPlayer 内置干净 MPV；external = 用户自备 MPV 整合包。 */
@@ -149,6 +150,7 @@ export const configApi = {
     ? api.post<MpvValidationResult>('/api/config/test/mpv-path', { mpv_path: mpvPath || '', player_mode: playerMode || 'internal' })
     : api.post<MpvValidationResult>('/api/config/test/mpv'),
   testMpvPath: (mpvPath: string, playerMode?: PublicConfig['player_mode']) => api.post<MpvValidationResult>('/api/config/test/mpv-path', { mpv_path: mpvPath, ...(playerMode ? { player_mode: playerMode } : {}) }),
+  deferSetup: () => api.post<PublicConfig>('/api/config/setup/defer'),
   completeSetup: (payload: SetupCompletePayload) => api.post<PublicConfig>('/api/config/setup/complete', payload),
   testTmdb: () => api.post<{ ok: boolean; message: string }>('/api/config/test/tmdb'),
   testDeepseek: () => api.post<{ ok: boolean; message: string }>('/api/config/test/deepseek'),
