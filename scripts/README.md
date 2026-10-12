@@ -34,11 +34,18 @@ build_installer.bat
 
 默认后端端口为 37821。构建入口会先检查运行中程序和残留后端；不要手工结束无法确认身份的端口占用进程。
 
+安装包入口随后汇总检查本机的 Python 3.12、后端模块与 PyInstaller、Node.js/npm、Rust 和内置 MPV 发布材料，未通过时保留错误窗口，不开始编译。自动化调用可设置 `KUMIPLAYER_BUILD_NO_PAUSE=1`，失败仍返回非零退出码。
+
+从备份恢复源码不会恢复开发环境：Windows 商店的 `python` 占位入口不是真实 Python；备份中的 `backend/.venv` 和 `.cargo/config.toml` 可能仍引用旧电脑的绝对路径。重新安装构建工具后，从 `backend/uv.lock` 恢复环境，在同一 Python 环境安装 PyInstaller，并激活该环境再运行安装包入口。前端依赖残缺时，入口会用 `npm ci` 从锁文件恢复。
+
+普通用户应运行已经生成的 `release/KumiPlayer-Setup.exe`。当前项目的内置 MPV 发布材料尚未完成，因此安装包检查仍会拦截；具体缺项见 `mpv/distribution-manifest.json`。
+
 ## 脚本目录
 
 ```text
 scripts/
 ├─ ensure_kumiplayer_runtime_stopped.ps1  构建前运行时预检
+├─ check_installer_prerequisites.ps1      安装包构建环境与发布材料预检
 ├─ build_backend_sidecar.ps1              冻结 Python 后端
 ├─ stage_mpv_runtime.ps1                  暂存 KumiPlayer MPV 配置与白名单工具
 ├─ stage_tauri_runtime.ps1                暂存 WebView2Loader
