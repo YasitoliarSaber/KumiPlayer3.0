@@ -102,7 +102,9 @@ class ConfigPatch(BaseModel):
 class SetupCompleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # mpv_path 仅保留数据兼容；首次引导不再要求用户选择外部 MPV，播放默认使用内置干净 MPV。
+    # Omitted fields preserve the saved choice when re-running setup.
+    player_mode: Literal["internal", "external"] | None = None
+    external_mpv_path: str | None = None
     mpv_path: str = ""
     mirror_dir: str | None = None
     pan115_root: str = ""
@@ -343,10 +345,16 @@ def test_mpv_path(req: MpvPathRequest):
 
 @router.post("/setup/complete")
 def complete_setup(req: SetupCompleteRequest):
-    # 重新运行引导时沿用已保存模式，外部整合包不依赖内置运行时。
+    # Validate the requested selection before persisting any setup changes.
     config = copy.deepcopy(load_config())
+    if req.player_mode is not None:
+        config.player_mode = req.player_mode
+    if req.external_mpv_path is not None:
+        config.external_mpv_path = req.external_mpv_path.strip()
     if config.player_mode == "external":
-        status = inspect_external_mpv(config.external_mpv_path or config.mpv_path)
+        player_path = (req.external_mpv_path.strip() if req.external_mpv_path is not None
+                       else config.external_mpv_path or config.mpv_path)
+        status = inspect_external_mpv(player_path)
         if not status["ok"]:
             raise HTTPException(status_code=400, detail=status["message"])
     else:
@@ -384,7 +392,7 @@ def complete_setup(req: SetupCompleteRequest):
     ):
         raise HTTPException(status_code=400, detail="目录树文件目录不存在或不可访问")
 
-    # mpv_path 仅保留数据兼容；旧值不删除，但播放不再以它为依据。
+    # Preserve the legacy field for old clients; explicit selection uses external_mpv_path.
     requested_mpv_path = req.mpv_path.strip()
     if requested_mpv_path:
         config.mpv_path = requested_mpv_path

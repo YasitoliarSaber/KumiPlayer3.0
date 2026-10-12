@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 from app.core.runtime import (
+    _uses_packaged_runtime,
     get_kumiplayer_layer_dir,
     get_mpv_config_dir,
     get_mpv_runtime_dir,
@@ -55,7 +56,9 @@ KUMIPLAYER_FORCED_CONFIG = "mpv.conf"
 
 
 def get_mpv_manifest_path() -> Path:
-    return get_mpv_runtime_dir().parent / MANIFEST_FILENAME
+    runtime_dir = get_mpv_runtime_dir()
+    # Source: mpv/runtime + mpv/runtime-manifest.json. Installed: both in runtime/mpv.
+    return (runtime_dir if _uses_packaged_runtime() else runtime_dir.parent) / MANIFEST_FILENAME
 
 
 def _sha256(path: Path) -> str:

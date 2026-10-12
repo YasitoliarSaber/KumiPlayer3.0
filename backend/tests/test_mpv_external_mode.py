@@ -240,6 +240,45 @@ def test_external_setup_preserves_mode_without_requiring_builtin(monkeypatch, tm
     assert response.json()["player_mode"] == "external"
 
 
+def test_first_setup_can_select_external_player_when_builtin_is_unavailable(monkeypatch, tmp_path):
+    from app.api import config
+    from app.core.config import AppConfig
+    from app.main import app
+    from app.playback import mpv_runtime
+
+    exe = tmp_path / "mpv.exe"
+    exe.write_bytes(b"mpv")
+    original = AppConfig()
+    saved = []
+    monkeypatch.setattr(config, "load_config", lambda: original)
+    monkeypatch.setattr(config, "save_config", saved.append)
+    monkeypatch.setattr(config, "check_mpv_runtime", lambda **kwargs: pytest.fail("must not require builtin"))
+    monkeypatch.setattr(mpv_runtime, "read_mpv_version", lambda path: ("mpv v0.41.0", ""))
+    response = TestClient(app).post("/api/config/setup/complete", json={
+        "player_mode": "external", "external_mpv_path": str(tmp_path), "local_root": str(tmp_path),
+    })
+    assert response.status_code == 200
+    assert saved[0].player_mode == "external"
+    assert saved[0].external_mpv_path == str(tmp_path)
+    assert saved[0].setup_completed
+    assert original.player_mode == "internal" and not original.setup_completed
+
+
+def test_cleared_external_selection_does_not_reuse_legacy_player_or_save(monkeypatch, tmp_path):
+    from app.api import config
+    from app.core.config import AppConfig
+    from app.main import app
+
+    original = AppConfig(player_mode="external", mpv_path=str(tmp_path / "mpv.exe"))
+    monkeypatch.setattr(config, "load_config", lambda: original)
+    monkeypatch.setattr(config, "save_config", lambda candidate: pytest.fail("must not save invalid selection"))
+    response = TestClient(app).post("/api/config/setup/complete", json={
+        "player_mode": "external", "external_mpv_path": "", "local_root": str(tmp_path),
+    })
+    assert response.status_code == 400
+    assert not original.setup_completed
+
+
 @pytest.mark.parametrize("external", [False, True])
 def test_external_playlist_resume_applies_only_to_first_file(tmp_path, monkeypatch, external):
     """用隔离合成音频验证 MPV 的文件局部选项语义，不加载用户配置。"""

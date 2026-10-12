@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Accordion, AccordionHeader, AccordionItem, AccordionPanel, Radio, RadioGroup } from '@fluentui/react-components';
-import { CheckCircle2, ChevronLeft, ChevronRight, ExternalLink, FolderOpen, KeyRound, Play, RefreshCw, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, ExternalLink, FolderOpen, KeyRound, Play, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { configApi, type MpvRuntimeStatus, type PublicConfig, type SetupCompletePayload } from '../api/config';
 import { BANGUMI_ACCESS_TOKEN_URL, getTmdbCredentialError, TMDB_API_SETTINGS_URL } from '../config/credentials';
-import { pickFolder } from '../platform/folderPicker';
+import { pickFile, pickFolder } from '../platform/folderPicker';
 import '../styles/first-run-refinement.css';
 
 interface FirstRunSetupProps {
@@ -23,10 +25,10 @@ type SourceKey = typeof sourceOptions[number]['key'];
 
 export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first-run', onCancel }: FirstRunSetupProps) {
   const isReconfigure = mode === 'reconfigure';
-  const externalPlayer = initialConfig.player_mode === 'external';
-  const playerLabel = externalPlayer ? '外部播放器' : '内置播放器';
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<SetupCompletePayload>({
+    player_mode: initialConfig.player_mode === 'external' ? 'external' : 'internal',
+    external_mpv_path: initialConfig.external_mpv_path || (initialConfig.player_mode === 'external' ? initialConfig.mpv_path : '') || '',
     pan115_root: initialConfig.pan115_root || '',
     baidu_root: initialConfig.baidu_root || '',
     local_root: initialConfig.local_root || '',
@@ -34,6 +36,9 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
     tmdb_bearer_token: '',
     bangumi_access_token: '',
   });
+  const externalPlayer = form.player_mode === 'external';
+  const playerLabel = externalPlayer ? '外部播放器' : '内置播放器';
+  const checkRevision = useRef(0);
   const [mpvStatus, setMpvStatus] = useState<MpvRuntimeStatus | null>(null);
   const [externalStatus, setExternalStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [activeSource, setActiveSource] = useState<SourceKey>(sourceOptions.find((source) => initialConfig[source.key]?.trim())?.key || 'local_root');
@@ -48,34 +53,67 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
   );
 
   const checkMpv = async () => {
+    const revision = ++checkRevision.current;
     setCheckingMpv(true);
     setError('');
     try {
       if (externalPlayer) {
-        setExternalStatus(await configApi.testMpv(initialConfig.external_mpv_path || initialConfig.mpv_path, 'external'));
+        const status = await configApi.testMpv(form.external_mpv_path?.trim() || '', 'external');
+        if (revision === checkRevision.current) setExternalStatus(status);
       } else {
-        setMpvStatus(await configApi.getMpvRuntime());
+        const status = await configApi.getMpvRuntime();
+        if (revision === checkRevision.current) setMpvStatus(status);
       }
     } catch (reason) {
+      if (revision !== checkRevision.current) return;
       setMpvStatus(null);
       setExternalStatus(null);
       setError(reason instanceof Error ? reason.message : `${playerLabel}检测失败`);
     } finally {
-      setCheckingMpv(false);
+      if (revision === checkRevision.current) setCheckingMpv(false);
     }
   };
 
-  // 按当前播放模式检查；重新引导不切换播放器。
+  // A new selection must be checked independently of the previous player's result.
   useEffect(() => {
-    if (step === 1 && !mpvStatus && !externalStatus) {
+    if (step === 1 && !mpvStatus && !externalStatus && (!externalPlayer || form.external_mpv_path?.trim())) {
       void checkMpv();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
+  }, [step, form.player_mode]);
+
+  useEffect(() => () => { checkRevision.current += 1; }, []);
+
+  const resetPlayerCheck = () => {
+    checkRevision.current += 1;
+    setCheckingMpv(false);
+    setMpvStatus(null);
+    setExternalStatus(null);
+    setError('');
+  };
+
+  const closeWindow = async () => {
+    try {
+      if (isTauri()) await getCurrentWindow().close();
+      else window.close();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法关闭窗口');
+    }
+  };
 
   const update = (key: keyof SetupCompletePayload, value: string) => {
+    if (key === 'external_mpv_path') resetPlayerCheck();
     setForm((current) => ({ ...current, [key]: value }));
     setError('');
+  };
+
+  const choosePlayer = async () => {
+    try {
+      const selected = await pickFile(form.external_mpv_path, '选择 MPV 可执行文件');
+      if (selected) update('external_mpv_path', selected);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法打开文件选择器，请手动输入路径');
+    }
   };
 
   const chooseDirectory = async (key: keyof SetupCompletePayload, title: string) => {
@@ -140,6 +178,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
           <div className="first-run-header-actions">
             <span>{isReconfigure ? '重新配置初始设置' : '首次启动设置'}</span>
             {onCancel && <button type="button" onClick={onCancel}>退出引导</button>}
+            <button type="button" className="first-run-close" onClick={() => void closeWindow()} aria-label="关闭应用" title="关闭应用"><X size={16} />关闭</button>
           </div>
         </header>
 
@@ -160,7 +199,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                 <h1>{isReconfigure ? '检查你的媒体库设置' : '从你的媒体开始'}</h1>
                 <p>确认播放器，选择媒体文件夹，就可以开始整理和观看。KumiPlayer 不会移动或改名你的原始文件。</p>
                 <div className="first-run-principles">
-                  <article><Play size={20} /><div><strong>{externalPlayer ? '继续使用你的 MPV' : '播放器已随应用提供'}</strong><span>{externalPlayer ? '保留当前整合包及它自己的播放设置。' : '检查内置 MPV 后即可继续。'}</span></div></article>
+                  <article><Play size={20} /><div><strong>选择适合你的播放器</strong><span>使用内置 MPV，或选择你已有的 MPV 整合包。</span></div></article>
                   <article><ShieldCheck size={20} /><div><strong>配置可以随时修改</strong><span>更多来源、海报和观看同步都可以稍后在设置中添加。</span></div></article>
                 </div>
               </div>
@@ -169,8 +208,14 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
             {step === 1 && (
               <div className="first-run-panel">
                 <p className="first-run-eyebrow">播放器</p>
-                <h1>{playerLabel}</h1>
-                <p>{externalPlayer ? '继续使用你已选择的 MPV 整合包，保留它的画质、快捷键和插件设置。' : '使用随应用提供的 MPV。播放器配置独立保存，不影响你电脑上的其他 MPV。'}</p>
+                <h1>选择播放器</h1>
+                <RadioGroup className="first-run-source-options" aria-label="播放器类型" layout="horizontal" value={form.player_mode} disabled={finishing}
+                  onChange={(_, data) => { resetPlayerCheck(); setForm((current) => ({ ...current, player_mode: data.value as PublicConfig['player_mode'] })); }}>
+                  <Radio value="internal" label="内置播放器" />
+                  <Radio value="external" label="外部播放器" />
+                </RadioGroup>
+                <p>{externalPlayer ? '选择已有的 MPV 可执行文件或整合包目录，保留它的画质、快捷键和插件设置。' : '使用随应用提供的 MPV。播放器配置独立保存，不影响你电脑上的其他 MPV。'}</p>
+                {externalPlayer && <SetupPathField label="外部 MPV 路径" value={form.external_mpv_path || ''} placeholder="选择 mpv.exe，或粘贴整合包目录" onChange={(value) => update('external_mpv_path', value)} onPick={() => void choosePlayer()} actionLabel="选择文件" />}
                 {checkingMpv && (
                   <div className="first-run-result" role="status">
                     <strong>正在检测{playerLabel}…</strong>
@@ -182,8 +227,8 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                     <span>{mpvReady ? '可以继续下一步。' : (externalPlayer ? externalStatus?.message : mpvStatus?.message)}</span>
                   </div>
                 )}
-                <button className="first-run-secondary" onClick={checkMpv} disabled={checkingMpv}>{checkingMpv ? '正在检测…' : <><RefreshCw size={14} />重新检测</>}</button>
-                {!mpvReady && !checkingMpv && <p className="first-run-help-link">{externalPlayer ? '请确认外部播放器仍在原位置；也可以退出引导，在播放器设置中更换。' : '请检查应用安装目录中的播放器文件是否完整。'}</p>}
+                <button className="first-run-secondary" onClick={checkMpv} disabled={checkingMpv || (externalPlayer && !form.external_mpv_path?.trim())}>{checkingMpv ? '正在检测…' : <><RefreshCw size={14} />重新检测</>}</button>
+                {!mpvReady && !checkingMpv && <p className="first-run-help-link">{externalPlayer ? '选择播放器后点击「重新检测」，检测成功即可继续。' : '请检查应用安装目录中的播放器文件；也可以切换到外部播放器，选择已有的 MPV。'}</p>}
               </div>
             )}
 

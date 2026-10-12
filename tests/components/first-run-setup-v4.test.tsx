@@ -21,7 +21,10 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock('../../src/api/config', () => ({ configApi: api }));
-vi.mock('../../src/platform/folderPicker', () => ({ pickFolder: vi.fn() }));
+vi.mock('../../src/platform/folderPicker', () => ({ pickFolder: vi.fn(), pickFile: vi.fn() }));
+const closeWindow = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true }));
+vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ close: closeWindow }) }));
 
 const config = {
   mirror_dir: '',
@@ -33,6 +36,48 @@ const config = {
 
 describe('FirstRunSetup V4 引导', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  test('首次引导始终可以通过关闭按钮退出应用', async () => {
+    render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '关闭应用' }));
+    await waitFor(() => expect(closeWindow).toHaveBeenCalledOnce());
+    expect(api.completeSetup).not.toHaveBeenCalled();
+  });
+
+  test('内置不可用时可切换外部播放器，检测并提交选择；修改路径使检测失效', async () => {
+    api.getMpvRuntime.mockResolvedValueOnce({ available: true, manifest_valid: false, files_valid: false, configuration_available: true, message: '运行时清单缺失' } as never);
+    render(<FirstRunSetup initialConfig={{ ...config, local_root: 'D:\\Anime' } as never} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByText('运行时清单缺失');
+    expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('radio', { name: '外部播放器' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '外部 MPV 路径' }), { target: { value: 'D:\\Player\\mpv.exe' } });
+    fireEvent.click(screen.getByRole('button', { name: '重新检测' }));
+    await screen.findByText('外部播放器已就绪');
+    fireEvent.change(screen.getByRole('textbox', { name: '外部 MPV 路径' }), { target: { value: 'D:\\OtherPlayer' } });
+    expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '重新检测' }));
+    await screen.findByText('外部播放器已就绪');
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
+    await waitFor(() => expect(api.completeSetup).toHaveBeenCalledWith(expect.objectContaining({ player_mode: 'external', external_mpv_path: 'D:\\OtherPlayer' })));
+  });
+
+  test('切换模式后忽略上一次尚未完成的检测结果', async () => {
+    let resolveInternal!: (value: never) => void;
+    api.getMpvRuntime.mockReturnValueOnce(new Promise((resolve) => { resolveInternal = resolve; }));
+    render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByText('正在检测内置播放器…');
+    fireEvent.click(screen.getByRole('radio', { name: '外部播放器' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '外部 MPV 路径' }), { target: { value: 'D:\\Player' } });
+    fireEvent.click(screen.getByRole('button', { name: '重新检测' }));
+    await screen.findByText('外部播放器已就绪');
+    resolveInternal({ available: false, message: '旧检测失败' } as never);
+    await waitFor(() => expect(screen.getByRole('button', { name: '继续' })).toBeEnabled());
+    expect(screen.queryByText('旧检测失败')).not.toBeInTheDocument();
+  });
 
   test('简化欢迎说明，并把 OpenList 明确为完成后的接入配置', async () => {
     render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} />);

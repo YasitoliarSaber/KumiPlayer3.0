@@ -47,6 +47,8 @@ KumiPlayer 的 MPV 相关文件**全部集中在本目录**：干净官方二进
 
 后端按运行形态解析这些路径（`backend/app/core/runtime.py`）：源码模式读本目录，安装模式读桌面运行时目录下的 `mpv/`，可用环境变量（`KUMIPLAYER_MPV_RUNTIME_DIR` / `KUMIPLAYER_MPV_CONFIG_DIR` / `KUMIPLAYER_MPV_LAYER_DIR`）覆盖。
 
+运行时清单在源码中位于 `mpv/runtime-manifest.json`（运行文件目录的上一级），在安装版中位于 `runtime/mpv/runtime-manifest.json`（与 `mpv.exe` 同级）。健康检查按实际运行形态读取，不通过查找其他目录来绕过清单校验。首次设置与设置页都支持内外播放器选择，外部模式不要求内置播放器就绪。
+
 ## 分层与加载机制
 
 内置播放器启动时（`backend/app/playback/mpv_runtime.py`）：

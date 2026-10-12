@@ -111,6 +111,8 @@ export interface MpvValidationResult {
 }
 
 export interface SetupCompletePayload {
+  player_mode?: PublicConfig['player_mode']
+  external_mpv_path?: string
   mpv_path?: string
   mirror_dir?: string
   pan115_root?: string

@@ -48,6 +48,8 @@
 .first-run-refined .first-run-error { color: var(--text); }
 .first-run-refined .first-run-result { margin: 0 0 16px; }
 .first-run-refined .first-run-header-actions { flex-wrap: wrap; justify-content: flex-end; }
+.first-run-refined .first-run-header-actions .first-run-close { display: inline-flex; align-items: center; gap: 6px; }
+.first-run-refined .first-run-header-actions .first-run-close:hover { background: #c42b1c; border-color: #c42b1c; color: white; }
 
 .startup-splash .startup-splash-caption {
   position: absolute;
