@@ -20,8 +20,8 @@ def test_selected_tree_mount_overrides_saved_root(tmp_path, monkeypatch, durable
 
     monkeypatch.setattr(source_scan_runner, "get_source_scan_runner", lambda db: SimpleNamespace(wake=lambda: None))
     tree = tmp_path / "tree.txt"
-    tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
     selected = tmp_path / "selected"
+    tree.write_text(f"|——{selected}\nShow/Show.S01E01.mkv\n", encoding="utf-8")
     request = media_v4.SourceScanRequest(
         source="tree", provider="baidu", tree_file=str(tree), source_root=str(selected),
     )

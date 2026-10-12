@@ -700,7 +700,7 @@ def test_tree_scan_works_after_original_txt_is_deleted(tmp_path, monkeypatch):
     monkeypatch.setattr(media_v4, "_database", database)
     mount = tmp_path / "百度网盘"
     tree = tmp_path / "01动画_文件目录.txt"
-    tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
+    tree.write_text(f"|——{mount}\nShow/Show.S01E01.mkv\n", encoding="utf-8")
     monkeypatch.setattr(media_v4, "load_config", lambda: SimpleNamespace(
         pan115_root="", baidu_root=str(mount),
         openlist_mount_root="", openlist_remote_root="/", openlist_routes=[],

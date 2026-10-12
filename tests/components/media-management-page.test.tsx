@@ -102,6 +102,81 @@ async function enterImport() {
   fireEvent.click(await screen.findByRole('button', { name: '导入媒体' }))
 }
 
+test('目录树默认复用媒体来源位置，正常导入没有额外映射模式', async () => {
+  render(<MediaManagementPage />)
+  await enterImport()
+  fireEvent.click(screen.getByRole('button', { name: '目录树 TXT' }))
+  fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'K:/115网盘/动画/tree.txt' } })
+  expect(await screen.findByLabelText('本地播放位置')).toHaveTextContent('K:\\115网盘')
+  expect(screen.queryByRole('combobox', { name: '目录对应方式' })).toBeNull()
+  expect(screen.getByRole('button', { name: '扫描并识别' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
+  await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledWith(expect.objectContaining({
+    source: 'tree', source_root: 'K:\\115网盘',
+  })))
+  await screen.findByRole('heading', { name: '检查识别结果' })
+})
+
+test('只有路径不确定时在原预览确认候选，不生成猜测媒体证据', async () => {
+  api.startDurableScan.mockResolvedValueOnce({
+    scan_id: '', root_id: '', status: 'mapping_required', scan_mode: 'tree_snapshot', evidence_count: 2472,
+    path_validation: { requires_confirmation: true, state: 'unverifiable', reason: '挂载暂时无法验证', selected_count: 2472, choices: [
+      { id: 'choice-a', root: 'J:/115open', path_samples: ['J:/115open/动画/Show/e.mkv'], selected_count: 2472, skipped_count: 0 },
+      { id: 'choice-b', root: 'J:/115open', path_samples: ['J:/115open/Show/e.mkv'], selected_count: 2472, skipped_count: 0 },
+    ] },
+  })
+  render(<MediaManagementPage />)
+  await enterImport()
+  fireEvent.click(screen.getByRole('button', { name: '目录树 TXT' }))
+  fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'D:/tree.txt' } })
+  fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
+  expect(await screen.findByText('播放路径需要确认')).toBeVisible()
+  expect(screen.getByText('J:/115open/动画/Show/e.mkv')).toBeVisible()
+  expect(screen.getByText('J:/115open/Show/e.mkv')).toBeVisible()
+  expect(api.preview).not.toHaveBeenCalled()
+  expect(api.durableScan).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: '确认并建立媒体库' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '使用路径 B' }))
+  await waitFor(() => expect(api.startDurableScan).toHaveBeenLastCalledWith(expect.objectContaining({ tree_mapping_choice: 'choice-b' })))
+  await screen.findByRole('heading', { name: '检查识别结果' })
+})
+
+test('多目录歧义可筛选到后面的挂载分支并确认', async () => {
+  api.startDurableScan.mockResolvedValueOnce({
+    scan_id: '', root_id: '', status: 'mapping_required', scan_mode: 'tree_snapshot', evidence_count: 35,
+    path_validation: { requires_confirmation: true, selected_count: 35, choices: Array.from({ length: 35 }, (_, index) => ({
+      id: `choice-${index}`, root: 'Z:/', mapping_scope: `Branch-${index}`, path_samples: [`Z:/Show-${index}/e.mkv`], selected_count: 1, skipped_count: 34,
+    })) },
+  })
+  render(<MediaManagementPage />)
+  await enterImport()
+  fireEvent.click(screen.getByRole('button', { name: '目录树 TXT' }))
+  fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'D:/tree.txt' } })
+  fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
+  await screen.findByText('播放路径需要确认')
+  expect(screen.queryByRole('button', { name: '使用路径 35' })).toBeNull()
+  fireEvent.change(screen.getByRole('textbox', { name: '筛选目录边界' }), { target: { value: 'Branch-34' } })
+  fireEvent.click(await screen.findByRole('button', { name: '使用路径 35' }))
+  await waitFor(() => expect(api.startDurableScan).toHaveBeenLastCalledWith(expect.objectContaining({ tree_mapping_choice: 'choice-34' })))
+  await screen.findByRole('heading', { name: '检查识别结果' })
+})
+
+test('识别结果显示后端生成的路径示例和范围排除数量', async () => {
+  api.startDurableScan.mockResolvedValue({
+    scan_id: 'scan-durable', root_id: 'root', scan_mode: 'tree_snapshot', status: 'queued',
+    effective_playback_root: 'Z:/',
+    path_validation: { path_samples: ['Z:/Show/e.mkv'], selected_count: 1, skipped_count: 2 },
+  })
+  render(<MediaManagementPage />)
+  await enterImport()
+  fireEvent.click(screen.getByRole('button', { name: '目录树 TXT' }))
+  fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'D:/tree.txt' } })
+  fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
+  await screen.findByRole('heading', { name: '检查识别结果' })
+  expect(screen.getByText('Z:/Show/e.mkv')).toBeVisible()
+  expect(screen.getByText(/排除 2 个范围外的视频/)).toBeVisible()
+})
+
 test('首次导入选择另一个连接后使用其目录、路由、基线和持久任务身份', async () => {
   const connection = (connection_id: string, name: string, remote: string) => ({
     connection_id, name, openlist_configured: true, openlist_server_url: 'http://localhost:5244',
@@ -212,6 +287,27 @@ test('新番TXT更新清空旧归档，选择新版后复用目标来源、播�
     source: 'tree', content_scope: 'ongoing', target_root_id: 'ongoing-tree',
     tree_file: 'D:/Trees/new-export.txt', source_root: 'J:/新番', source_display_name: '连载专用目录',
   })))
+})
+
+test('新版TXT更新复用原始播放位置和导出目录，避免重复追加子目录', async () => {
+  sessionStorage.setItem('kumiplayer.media-v4.ongoing-source-action', JSON.stringify({ root_id: 'ongoing-tree', action: 'new_txt' }))
+  api.sourceLibraries.mockResolvedValue({ cards: [{
+    root_id: 'ongoing-tree', provider: 'baidu', ingest_method: 'directory_tree', content_scope: 'ongoing',
+    source_mode: 'tree_snapshot', source_locator: 'J:/新番/01动画', playback_locator: 'J:/新番/01动画',
+    tree_source_root: 'J:/新番', tree_mapping_mode: 'export_subdir', tree_mapping_scope: '01动画',
+    tree_file_path: 'D:/Trees/old.txt', display_name: '连载专用目录', route_id: '', phase: 'execute',
+    work_count: 1, evidence_count: 1, asset_count: 1, can_resume: false, attention_count: 0,
+    job_summary: { total: 0, queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0 },
+  }] })
+  render(<MediaManagementPage />)
+  const input = await screen.findByRole('textbox', { name: '目录树 TXT 文件' })
+  expect(screen.queryByRole('textbox', { name: '播放位置下的导出目录' })).toBeNull()
+  fireEvent.change(input, { target: { value: 'D:/Trees/new.txt' } })
+  fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
+  await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledWith(expect.objectContaining({
+    source_root: 'J:/新番', target_root_id: 'ongoing-tree',
+  })))
+  await screen.findByRole('heading', { name: '检查识别结果' })
 })
 
 test('新番待确认跳转复用既有草稿，避免创建第二次扫描', async () => {

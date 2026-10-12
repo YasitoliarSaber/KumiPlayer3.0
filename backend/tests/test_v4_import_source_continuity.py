@@ -9,6 +9,7 @@ from __future__ import annotations
 import sqlite3
 
 import pytest
+
 from app.media_v4.domain.identity import (
     CONTINUITY_NEW,
     CONTINUITY_RENAMED,
@@ -103,8 +104,8 @@ def test_export_header_trimmed_once_and_real_folder_preserved(tmp_path):
     assert nested[0].source_locator == "K:\\115网盘\\动画\\动画\\Show\\Show.S01E01.mkv"
 
 
-def test_absolute_export_root_must_prefix_selected_root():
-    """CHECK-002A: 绝对导出根是所选根的逐段相等前缀才裁；否则扫描失败。"""
+def test_absolute_export_root_is_metadata_and_can_map_to_another_mount():
+    """导出工具的绝对头只表达导出边界；换盘挂载仍按明确播放根映射。"""
 
     text = "├── K:\\115网盘\\动画\n│   ├── Show\n│   │   ├── Show.S01E01.mkv\n"
     _scan, evidence = build_directory_tree_evidence(
@@ -118,15 +119,16 @@ def test_absolute_export_root_must_prefix_selected_root():
     assert evidence[0].source_locator == "K:\\115网盘\\动画\\Show\\Show.S01E01.mkv"
     assert export_root_scope(text) == "K:\\115网盘\\动画"
 
-    with pytest.raises(DirectoryTreeReadError) as excinfo:
+    _, remapped = build_directory_tree_evidence(
+        text, root_id="root-abs", provider="baidu", scan_id="scan-abs-2", source_root="D:\\其他盘",
+    )
+    assert remapped[0].playback_locator == "D:\\其他盘\\Show\\Show.S01E01.mkv"
+    # 非顶层的绝对路径节点不是导出头，必须拒绝。
+    with pytest.raises(DirectoryTreeReadError):
         build_directory_tree_evidence(
-            text,
-            root_id="root-abs",
-            provider="baidu",
-            scan_id="scan-abs-2",
-            source_root="D:\\其他盘",
+            "├── Show\n│   ├── C:\\Injected\n│   │   ├── e.mkv\n",
+            root_id="root-unsafe", provider="baidu", source_root="D:\\其他盘",
         )
-    assert excinfo.value.kind == "source_root_mismatch"
 
 
 def test_metadata_node_keeps_following_video_hierarchy():

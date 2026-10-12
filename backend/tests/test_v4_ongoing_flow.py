@@ -209,8 +209,8 @@ def test_txt_new_export_is_copied_and_auto_appended_without_media_disk_io(tmp_pa
     export_dir = mount / "Ongoing"
     export_dir.mkdir(parents=True)
     old_txt, new_txt = export_dir / "Ongoing_目录树_20261001.txt", export_dir / "Ongoing_目录树_20261002.txt"
-    old_txt.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
-    new_txt.write_text("Show/Show.S01E01.mkv\nShow/Show.S01E02.mkv\n", encoding="utf-8")
+    old_txt.write_text(f"|——{export_dir}\nShow/Show.S01E01.mkv\n", encoding="utf-8")
+    new_txt.write_text(f"|——{export_dir}\nShow/Show.S01E01.mkv\nShow/Show.S01E02.mkv\n", encoding="utf-8")
     config.baidu_root = str(mount)
     guard_source_disk_io(monkeypatch, [mount])
     copies = []
@@ -282,7 +282,7 @@ def test_remote_real_incremental_scan_auto_appends_and_unchanged_keeps_jobs(tmp_
     monkeypatch.setattr(openlist_v4, "_client", lambda _: Client())
     guard_source_disk_io(monkeypatch, [mount])
     tree = tmp_path / "Ongoing_目录树_20261001.txt"
-    tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
+    tree.write_text(f"|——{mount / 'Ongoing'}\nShow/Show.S01E01.mkv\n", encoding="utf-8")
     first = media_v4.start_durable_scan(media_v4.SourceScanRequest(
         source=source_kind, root_path="/Ongoing", tree_file=str(tree) if source_kind == "hybrid" else "",
         scan_mode="full", content_scope="ongoing", revision_id="remote-first",

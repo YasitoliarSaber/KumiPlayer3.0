@@ -85,6 +85,7 @@ def _enqueue_root_incremental(database, config, *, root_id: str, remote_root: st
     from app.api.media_v4 import (
         _confirmed_source_evidence,
         _connection_request_guard,
+        _mapped_openlist_playback_root,
         _register_durable_source_scan,
         _source_openlist_root_id,
         _source_root_mode,
@@ -121,7 +122,7 @@ def _enqueue_root_incremental(database, config, *, root_id: str, remote_root: st
         raise HTTPException(status_code=409, detail=f"来源 {remote_root} 尚无已确认基线，请先在媒体管理完成首次扫描")
     scan_id = "scan_" + uuid.uuid4().hex
     source_mode = _source_root_mode(root_id) or "openlist_full"
-    from app.integrations.openlist.providers import derive_local_path
+    playback_root = _mapped_openlist_playback_root(config, remote_root)
 
     with database.connect() as conn:
         root_row = conn.execute("SELECT content_scope FROM source_roots WHERE root_id = ?", (root_id,)).fetchone()
@@ -129,7 +130,7 @@ def _enqueue_root_incremental(database, config, *, root_id: str, remote_root: st
     actual_id = _register_durable_source_scan(database, root={
         "root_id": root_id, "provider": routed_provider, "ingest_method": "openlist_scan",
         "source_locator": remote_root, "route_id": _route_id,
-        "playback_locator": derive_local_path(config.openlist_mount_root, _remote_root(config), remote_root),
+        "playback_locator": playback_root,
         "root_container": remote_root, "source_mode": source_mode, "last_scan_mode": "incremental",
     }, scan={
         "scan_id": scan_id, "root_id": root_id, "scan_kind": "openlist_incremental", "source_mode": source_mode,

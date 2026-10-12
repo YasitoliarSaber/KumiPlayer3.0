@@ -398,7 +398,7 @@ def test_tree_durable_entrypoint_resolves_identity_before_task_creation(tmp_path
     video.parent.mkdir(parents=True)
     video.write_bytes(b"video")
     tree_file = tmp_path / "Anime.txt"
-    tree_file.write_text("Anime\n└── Show\n    └── Show.S01E01.mkv\n", encoding="utf-8")
+    tree_file.write_text(f"├── {mounted_root / 'Anime'}\n│   └── Show\n│       └── Show.S01E01.mkv\n", encoding="utf-8")
     started = threading.Event()
     release = threading.Event()
     real_build = media_v4.build_directory_tree_evidence
@@ -425,7 +425,7 @@ def test_tree_durable_entrypoint_resolves_identity_before_task_creation(tmp_path
     scan_id = payload["scan_id"]
     assert payload["status"] == "queued"
     # 身份已在请求内解析完成：响应携带与同步入口一致的解析后播放根。
-    assert payload["effective_playback_root"] == str(mounted_root)
+    assert payload["effective_playback_root"] == str(mounted_root / "Anime")
     assert payload["path_validation"]["ok"] is True
     assert started.wait(1)
     release.set()

@@ -241,7 +241,7 @@ def test_txt_offline_scan_preview_confirm_persists_final_locators(tmp_path, monk
     source_root = r"Q:\百度网盘"
     tree = tmp_path / "01动画_文件目录.txt"
     tree.write_text(
-        "Show/Season 1/Show.S01E01.mkv\nShow/Season 1/Show.S01E02.mkv\n"
+        f"|——{source_root}/01动画\nShow/Season 1/Show.S01E01.mkv\nShow/Season 1/Show.S01E02.mkv\n"
         "Show/tvshow.nfo\nShow/OP1.mkv\nShow/Specials/Show.SP01.mkv\nMovie/Movie.mkv\n",
         encoding="utf-8",
     )

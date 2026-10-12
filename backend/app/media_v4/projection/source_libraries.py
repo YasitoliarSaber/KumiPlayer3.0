@@ -422,6 +422,8 @@ def list_source_cards(database: V4Database) -> list[dict]:
             scan_request = json.loads(scan["request_json"] or "{}") if scan is not None else {}
         except (TypeError, ValueError):
             scan_request = {}
+        if not isinstance(scan_request, dict):
+            scan_request = {}
         tree_file_path = str(scan_request.get("tree_file_path") or "") if isinstance(scan_request, dict) else ""
         cards.append({
             "root_id": root_id,
@@ -434,6 +436,11 @@ def list_source_cards(database: V4Database) -> list[dict]:
             "source_locator": str(root["source_locator"] or ""),
             "display_path": _display_path(str(root["source_locator"] or ""), str(root["provider"] or "")),
             "tree_file_path": tree_file_path,
+            "tree_mapping_mode": str(scan_request.get("tree_mapping_mode") or "direct"),
+            "tree_mapping_scope": str(scan_request.get("tree_mapping_scope") or ""),
+            "tree_source_root": str((scan_request.get("configured_roots") or [""])[0]),
+            "tree_path_samples": list(scan_request.get("tree_path_samples") or ()),
+            "tree_skipped_count": int(scan_request.get("tree_skipped_count") or 0),
             "connection_id": str(scan_request.get("connection_id") or "legacy") if isinstance(scan_request, dict) else "legacy",
             "import_completed_at": import_completed_at,
             "playback_locator": str(root["playback_locator"] or ""),

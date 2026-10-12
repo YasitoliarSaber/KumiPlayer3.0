@@ -117,9 +117,17 @@ def _tree_resolution(task):
         root=str(request.get("effective_root") or ""),
         ok=bool(request.get("resolution_ok", True)),
         reason=str(request.get("resolution_reason") or ""),
-        hits=0,
-        total=0,
+        hits=int(request.get("tree_probe_hits") or 0),
+        total=int(request.get("tree_probe_total") or 0),
         candidates=tuple(str(item) for item in (request.get("resolution_candidates") or ())),
+        mapping_mode=str(request.get("tree_mapping_mode") or "direct"),
+        mapping_scope=str(request.get("tree_mapping_scope") or ""),
+        selected_count=int(request.get("tree_selected_count") or 0),
+        skipped_count=int(request.get("tree_skipped_count") or 0),
+        path_samples=tuple(request.get("tree_path_samples") or ()),
+        export_scope=request.get("tree_export_scope"),
+        state=str(request.get("tree_resolution_state") or "confirmed"),
+        mapping_rule=request.get("tree_mapping_rule") or {},
     )
 
 
@@ -139,11 +147,16 @@ def scan_tree_source(database, task, runtime):
     request = task.request
     tree_text = _read_archive_text(task)
     resolution = _tree_resolution(task)
+    if not resolution.ok:
+        raise ValueError("目录映射尚未确认，不能生成媒体证据")
     _scan_id, evidence = build_directory_tree_evidence(
         tree_text,
         root_id=task.root_id,
         provider=str(request.get("provider") or ""),
         source_root=resolution.root,
+        mapping_mode=resolution.mapping_mode,
+        mapping_scope=resolution.mapping_scope,
+        relative_from_mapping=task.source_mode == "tree_openlist",
         source_route_id=str(request.get("route_id") or ""),
         scan_id=task.scan_id,
         **_callbacks(runtime),

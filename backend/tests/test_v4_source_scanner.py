@@ -55,12 +55,12 @@ def test_local_scan_rejects_a_configured_cloud_mount_even_when_it_reports_ntfs(t
         scanner.scan_local_directory(tmp_path, excluded_roots=[tmp_path])
 
 
-def test_tree_root_identity_separates_libraries_but_ignores_export_timestamps():
+def test_tree_root_identity_separates_explicit_scopes_and_ignores_filenames():
     from app.media_v4.sources.scanner import tree_root_id
 
-    first = tree_root_id("baidu", "K:\\百度网盘", "动画_文件目录_20260810194440.txt")
-    refreshed = tree_root_id("baidu", "K:\\百度网盘", "动画_文件目录_20260824120000.txt")
-    movies = tree_root_id("baidu", "K:\\百度网盘", "电影_文件目录_20260824120000.txt")
+    first = tree_root_id("baidu", "K:\\百度网盘", "动画_文件目录_20260810194440.txt", export_scope="动画")
+    refreshed = tree_root_id("baidu", "K:\\百度网盘", "other-name.txt", export_scope="动画")
+    movies = tree_root_id("baidu", "K:\\百度网盘", "动画_文件目录_20260824120000.txt", export_scope="电影")
 
     assert first == refreshed
     assert first != movies
@@ -73,7 +73,7 @@ def test_openlist_local_mapping_preserves_selected_remote_scope_when_mount_is_pa
 
     assert derive_local_path(
         "K:\\百度网盘",
-        "/01动画",
+        "/",
         "/01动画/刮削好的动画/藤本树 17-26/Season 1/01.strm",
     ) == "K:\\百度网盘\\01动画\\刮削好的动画\\藤本树 17-26\\Season 1\\01.strm"
 
@@ -90,12 +90,12 @@ def test_openlist_local_mapping_does_not_duplicate_scope_already_in_mount_root()
     ) == "K:\\百度网盘\\01动画\\刮削好的动画\\辉夜大小姐想让我告白\\01.strm"
 
 
-def test_openlist_local_mapping_uses_partial_segment_overlap_without_repeating_mount_prefix():
+def test_openlist_local_mapping_uses_explicit_remote_root_without_repeating_mount_prefix():
     from app.integrations.openlist.providers import derive_local_path
 
     assert derive_local_path(
         "K:\\百度网盘",
-        "/百度网盘/01动画",
+        "/百度网盘",
         "/百度网盘/01动画/刮削好的动画/作品/01.strm",
     ) == "K:\\百度网盘\\01动画\\刮削好的动画\\作品\\01.strm"
 

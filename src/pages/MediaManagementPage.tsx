@@ -21,7 +21,7 @@ import {
   ScanObject24Regular,
 } from '@fluentui/react-icons'
 import { mediaV4Api, type V4Job, type V4OpenlistBaselineStatus, type V4Preview, type V4SourceEvidence, type V4SourceLibraryCard } from '../api/mediaV4'
-import type { V4ContentScope, V4ExecutionProgress } from '../api/mediaV4'
+import type { V4ContentScope, V4ExecutionProgress, V4TreePathPreview } from '../api/mediaV4'
 import { consumeOngoingSourceAction } from '../components/media/ongoingSourceNavigation'
 import { ApiError } from '../api/client'
 import { configApi, type PublicConfig } from '../api/config'
@@ -302,6 +302,11 @@ export default function MediaManagementPage() {
   const [path, setPath] = useState('')
   const [treeMountRoots, setTreeMountRoots] = useState<Record<string, string>>({})
   const [treeRootEditors, setTreeRootEditors] = useState<Record<string, boolean>>({})
+  const [treePathPreview, setTreePathPreview] = useState<V4TreePathPreview | null>(null)
+  const [mappingFilter, setMappingFilter] = useState('')
+  const mappingChoices = useMemo(() => (treePathPreview?.choices || []).map((choice, index) => ({ ...choice, index })).filter(choice =>
+    [choice.mapping_scope || '', choice.root, ...choice.path_samples].join('\n').toLocaleLowerCase().includes(mappingFilter.toLocaleLowerCase())
+  ), [treePathPreview, mappingFilter])
   const [provider, setProvider] = useState<Exclude<ProviderId, 'local' | 'other'>>('pan115')
   const [remoteRoot, setRemoteRoot] = useState('')
   const [baseConfig, setConfig] = useState<PublicConfig | null>(null)
@@ -618,6 +623,7 @@ export default function MediaManagementPage() {
   }
 
   const clearResultState = () => {
+    setTreePathPreview(null)
     setScan(null)
     setPreview(null)
     setJobs([])
@@ -676,7 +682,7 @@ export default function MediaManagementPage() {
     }
   }
 
-  const scanSource = async (action: 'primary' | 'incremental' | 'full' = 'primary') => {
+  const scanSource = async (action: 'primary' | 'incremental' | 'full' = 'primary', mappingChoice = '') => {
     const requiresOpenListConfig = kind === 'openlist' || kind === 'hybrid' || action === 'incremental' || action === 'full'
     if (kind !== 'openlist' && action === 'primary' && !path.trim()) {
       setError(kind === 'local' ? '请先选择本地媒体目录' : '请先选择目录树 TXT')
@@ -742,6 +748,7 @@ export default function MediaManagementPage() {
           tree_file: requestSource === 'tree' || kind === 'hybrid' ? path : '',
           provider: selectedProvider,
           source_root: selectedSourceRoot,
+          ...(mappingChoice ? { tree_mapping_choice: mappingChoice } : {}),
           scan_mode: scanMode === 'incremental' ? 'incremental' : 'full',
           revision_id: nextRevisionId,
           source_display_name: metadata.source_display_name,
@@ -749,7 +756,18 @@ export default function MediaManagementPage() {
         // 用户可能在创建请求返回前点击“重新开始”；此时要取消迟到的任务，
         // 离开页面则只脱离观察，持久任务仍可从来源卡继续查看。
         if (!isCurrentRun()) {
-          if (scanCancelRef.current !== cancelVersion) await mediaV4Api.cancelDurableScan(task.scan_id).catch(() => undefined)
+          if (task.scan_id && scanCancelRef.current !== cancelVersion) await mediaV4Api.cancelDurableScan(task.scan_id).catch(() => undefined)
+          return
+        }
+        if (requestSource === 'tree' || requestSource === 'hybrid') {
+          setTreePathPreview(task.path_validation || null)
+          if (task.effective_playback_root) metadata.playback_locator = task.effective_playback_root
+        }
+        if (task.status === 'mapping_required') {
+          setMappingFilter('')
+          setScan(null)
+          setWorkflowStage('review')
+          goManageView('import')
           return
         }
         setScanTask({
@@ -932,6 +950,8 @@ export default function MediaManagementPage() {
     setPath(config?.local_root || '')
     setProvider('pan115')
     setRemoteRoot(config?.openlist_remote_root || '/')
+    setTreeMountRoots({})
+    setTreeRootEditors({})
     clearResultState()
   }
 
@@ -953,8 +973,10 @@ export default function MediaManagementPage() {
     }
     if (card.source_mode === 'tree_snapshot' || (card.source_mode === '' && !card.route_id)) {
       setKind('tree')
-      setPath(card.source_locator)
-      if (card.playback_locator) setTreeMountRoots((current) => ({ ...current, [nextProvider]: card.playback_locator }))
+      setPath(card.tree_file_path || card.source_locator)
+      const sourceRoot = card.tree_source_root || card.playback_locator
+      if (sourceRoot) setTreeMountRoots((current) => ({ ...current, [nextProvider]: sourceRoot }))
+      setTreePathPreview({ path_samples: card.tree_path_samples, skipped_count: card.tree_skipped_count })
       return
     }
     if (card.source_mode === 'tree_openlist' || (card.source_mode === '' && card.route_id)) {
@@ -1792,13 +1814,32 @@ export default function MediaManagementPage() {
         )}
       </section>}
 
-      {workflowStage === 'review' && scan && <section className="media-stage-shell media-v4-stage-panel media-v4-review-card">
+      {workflowStage === 'review' && treePathPreview?.requires_confirmation && <section className="media-stage-shell media-v4-stage-panel media-v4-review-card" aria-label="导入路径预览">
+        <div className="media-stage-header">
+          <div className="media-stage-heading"><span className="media-stage-icon" aria-hidden="true"><DocumentText24Regular /></span><div><span className="media-stage-eyebrow">第 2 步</span><h2>检查导入预览</h2><p>已解析 {treePathPreview.selected_count || 0} 个媒体文件。</p></div></div>
+        </div>
+        <MessageBar intent="warning"><MessageBarBody><strong>播放路径需要确认</strong><p>{treePathPreview.reason} 请选择与实际挂载内容一致的路径，之后会为此来源保存对应规则。</p></MessageBarBody></MessageBar>
+        {(treePathPreview.choices?.length || 0) > 20 && <Field label="筛选目录边界"><Input value={mappingFilter} onChange={(_, data) => setMappingFilter(data.value)} placeholder="输入实际挂载的目录名称" /><span>共 {mappingChoices.length} 个匹配项，显示前 20 项。</span></Field>}
+        {mappingChoices.slice(0, 20).map(choice => <div className="media-v4-field-block" key={choice.id}>
+          <div className="media-v4-field-copy"><strong>路径 {choice.index < 26 ? String.fromCharCode(65 + choice.index) : choice.index + 1}{choice.mapping_scope ? ` · ${choice.mapping_scope}` : ''}</strong><span>包含 {choice.selected_count} 个媒体文件。{choice.skipped_count ? `排除 ${choice.skipped_count} 个范围外的文件。` : ''}</span></div>
+          {choice.path_samples.map(sample => <div className="media-v4-selected-file" key={sample} title={sample}><span>{sample}</span></div>)}
+          {!choice.path_samples.length && <div className="media-v4-selected-file"><span>{choice.root}</span></div>}
+          <Button appearance="secondary" disabled={busy !== ''} onClick={() => void scanSource('primary', choice.id)}>使用路径 {choice.index < 26 ? String.fromCharCode(65 + choice.index) : choice.index + 1}</Button>
+        </div>)}
+        <Button appearance="subtle" disabled={busy !== ''} onClick={() => { setTreePathPreview(null); setWorkflowStage('source') }}>返回更改播放位置</Button>
+      </section>}
+
+      {workflowStage === 'review' && scan && !treePathPreview?.requires_confirmation && <section className="media-stage-shell media-v4-stage-panel media-v4-review-card">
         <div className="media-stage-header">
           <div className="media-stage-heading"><span className="media-stage-icon" aria-hidden="true"><DocumentText24Regular /></span><div><span className="media-stage-eyebrow">第 2 步</span><h2>检查识别结果</h2><p>已扫描 {scan.evidence_count} 个媒体条目。默认按作品摘要检查，需要处理的条目会置顶。</p></div></div>
           {!preview && <Button appearance="secondary" disabled={busy !== '' || (scan.evidence_count === 0 && !allowEmpty)} onClick={() => void buildPreview()}>{busy === 'preview' ? <Spinner size="tiny" /> : '生成识别预览'}</Button>}
         </div>
         {scan.scan_mode === 'incremental' && <MessageBar intent="info"><MessageBarBody>本次使用 OpenList 增量核对：请求 {scan.scan_stats?.requested_directories || 0} 个目录，其中滚动抽查 {scan.scan_stats?.rolling_verified || 0} 个、变化优先核对 {scan.scan_stats?.changed_directories || 0} 个。{(scan.scan_stats?.unknown_directories || 0) > 0 ? `还有 ${scan.scan_stats?.unknown_directories} 个目录尚未远端核实，会在后续增量中逐个补齐。` : '全部目录已完成远端核实。'}</MessageBarBody></MessageBar>}
         {scan.scan_mode === 'tree_baseline' && <MessageBar intent="info"><MessageBarBody>TXT 基线已建立。确认本次导入后，再扫描同一 OpenList 目录时会自动进入风险受控增量核对。</MessageBarBody></MessageBar>}
+        {Boolean(treePathPreview?.path_samples?.length) && <div className="media-v4-field-block" aria-label="播放路径预览">
+          <div className="media-v4-field-copy"><strong>播放路径示例</strong><span>{treePathPreview?.state === 'supported' ? treePathPreview.reason : '确认导入前请核对目录层级。'}{treePathPreview?.skipped_count ? `已排除 ${treePathPreview.skipped_count} 个范围外的视频。` : ''}</span></div>
+          {treePathPreview?.path_samples?.map(sample => <div className="media-v4-selected-file" key={sample} title={sample}><span>{sample}</span></div>)}
+        </div>}
         {!preview && <div className="media-v4-empty">{scan.evidence_count === 0 ? <Checkbox checked={allowEmpty} onChange={(_, data) => setAllowEmpty(Boolean(data.checked))} label="我确认该来源当前确实为空，并允许移除它先前导入的媒体" /> : '正在生成识别结果…'}</div>}
         {preview && <>
           {previewBlockingIssueCount > 0 && <MessageBar intent="warning"><MessageBarBody>发现 {previewBlockingIssueCount} 个需要人工处理的问题；未解决前不能确认。</MessageBarBody></MessageBar>}

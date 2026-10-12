@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 
 # ------------------------------------------------------------
 # 提供商与导入方式常量
@@ -165,6 +165,26 @@ def provider_for_remote(
     return route.route_id, route.provider_id
 
 
+def _local_mapping_path(value: str) -> PurePath:
+    """只做路径语法校验；裸盘符作为挂载盘根兼容，不接受盘符相对路径。"""
+    raw = str(value or "").strip()
+    if raw.startswith("~"):
+        raw = str(Path(raw).expanduser())
+    windows = raw.replace("/", "\\")
+    if windows.startswith(("\\\\?\\", "\\\\.\\")) or ".." in windows.split("\\"):
+        raise ValueError("本地挂载路径包含非法目录段或设备前缀")
+    if len(raw) == 2 and raw[0].isalpha() and raw[1] == ":":
+        raw += "\\"
+    path: PurePath = (
+        PureWindowsPath(raw)
+        if PureWindowsPath(raw).drive or "\\" in raw or raw.startswith("//")
+        else PurePosixPath(raw)
+    )
+    if not raw or not path.is_absolute():
+        raise ValueError("本地挂载路径必须是绝对路径")
+    return path
+
+
 def derive_remote_path(mount_root: str, remote_root: str, local_path: str) -> str | None:
     """由本地挂载路径反推远端路径（``derive_local_path`` 的逆向）。
 
@@ -174,30 +194,23 @@ def derive_remote_path(mount_root: str, remote_root: str, local_path: str) -> st
     条件而不是异常）。
     """
     from app.integrations.openlist.client import normalize_remote_path
+    from app.integrations.openlist.models import OpenListValidationError
 
-    # 统一分隔符后按大小写归一前缀判定（盘符 "K:"/"K:\" 与段名大小写都不敏感；
-    # pathlib 对裸盘符 "K:" 的 parts 形态不稳定，故用字符串段边界判定）
-    mount_n = str(mount_root or "").strip().replace("/", "\\").rstrip("\\")
-    local_n = str(local_path or "").strip().replace("/", "\\").rstrip("\\")
-    if not mount_n or not local_n:
+    try:
+        mount = _local_mapping_path(mount_root)
+        local = _local_mapping_path(local_path)
+        relative = local.relative_to(mount)
+        rroot = normalize_remote_path(remote_root or "/")
+        return normalize_remote_path(str(PurePosixPath(rroot).joinpath(*relative.parts)))
+    except (ValueError, OpenListValidationError):
         return None
-    mount_cf = mount_n.casefold()
-    local_cf = local_n.casefold()
-    if local_cf == mount_cf or not local_cf.startswith(mount_cf + "\\"):
-        return None
-    remainder = "/".join(local_n[len(mount_n):].lstrip("\\").split("\\"))
-    if not remainder:
-        return None
-    rroot = normalize_remote_path(remote_root or "/")
-    return normalize_remote_path(f"{rroot.rstrip('/')}/{remainder}")
 
 
 def derive_local_path(mount_root: str, remote_root: str, remote_path: str) -> str:
-    """按路径段重叠把 OpenList 远端定位映射到本地挂载路径。
+    """按配置的远端根 ↔ 本地挂载根映射，不根据目录同名裁剪。
 
-    ``remote_root`` 是当前浏览或扫描的远端范围，不能天然等同于本地
-    挂载根。若本地路径已经以远端范围的前缀结尾，只追加尚未存在的段；
-    否则保留远端完整前缀，避免把 ``01动画`` 等实际目录层级裁掉。
+    ``remote_root`` 必须是连接配置的映射根；浏览或扫描范围由调用方
+    单独保存。远端根自身对应本地根，远端根下的目录段原样保留。
     """
     from app.integrations.openlist.client import normalize_remote_path
 
@@ -206,22 +219,5 @@ def derive_local_path(mount_root: str, remote_root: str, remote_path: str) -> st
     if rroot != "/" and not is_ancestor_or_self(rroot, rpath):
         raise ValueError("选择的远端目录不在映射根路径之下，无法映射到本地挂载")
 
-    root_parts = tuple(part for part in PurePosixPath(rroot).parts if part != "/")
-    remote_parts = tuple(part for part in PurePosixPath(rpath).parts if part != "/")
-    local_parts = tuple(
-        part
-        for part in PureWindowsPath(str(mount_root).replace("/", "\\")).parts
-        if part not in {"\\", "/"} and not part.endswith(":\\")
-    )
-    overlap = 0
-    for size in range(min(len(local_parts), len(root_parts)), 0, -1):
-        local_tail = tuple(part.casefold() for part in local_parts[-size:])
-        remote_head = tuple(part.casefold() for part in root_parts[:size])
-        if local_tail == remote_head:
-            overlap = size
-            break
-
-    local = Path(mount_root).expanduser()
-    for part in remote_parts[overlap:]:
-        local = local / part
-    return str(local)
+    relative = PurePosixPath(rpath).relative_to(PurePosixPath(rroot))
+    return str(_local_mapping_path(mount_root).joinpath(*relative.parts))

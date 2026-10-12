@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import uuid
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
@@ -196,6 +195,10 @@ class SourceScanRequest(BaseModel):
     tree_file: str = ""
     provider: str = "local"
     source_root: str = ""
+    tree_mapping_mode: Literal["auto", "direct", "export_subdir", "mounted_subdir"] = "auto"
+    tree_mapping_scope: str = ""
+    tree_mapping_choice: str = ""
+    tree_verify_paths: bool = True
     scan_mode: Literal["auto", "full", "incremental"] = "auto"
     revision_id: str = ""
     source_display_name: str = ""
@@ -218,6 +221,17 @@ def _select_openlist_config(identity: str = ""):
 
 def _openlist_credentials(identity: str = ""):
     return resolve_openlist_credentials(identity) if identity and identity != "legacy" else resolve_openlist_credentials()
+
+
+def _mapped_openlist_playback_root(config, remote_root: str) -> str:
+    from app.api.openlist_v4 import _remote_root
+
+    if not str(config.openlist_mount_root or "").strip():
+        raise HTTPException(status_code=409, detail="当前内容来源尚未配置本地挂载路径，请先在设置页完成来源映射")
+    try:
+        return derive_local_path(config.openlist_mount_root, _remote_root(config), remote_root)
+    except (ValueError, OpenListError):
+        raise HTTPException(status_code=409, detail="OpenList 目录无法映射到本地，请核对设置中的远端根目录与本地挂载位置") from None
 
 
 class SourceCardRenameRequest(BaseModel):
@@ -392,31 +406,6 @@ def _configured_cloud_roots(config) -> list[str]:
     return [root for root in roots if root.strip()]
 
 
-def _collapse_repeated_segment(path: str, segment: str) -> str:
-    """折叠路由根拼接产生的**连续重复**段（定点修复，可证明的配置拼接）。
-
-    用户实测（115 网盘目录树导入）：生成的 strm 路径多出一层"动画"。根因是
-    ``remote_root`` 已以分类目录结尾（如 ``/动画``）、路由的 ``remote_prefix`` 又是
-    ``动画``，两次拼接得到 ``动画/动画``。这里只对**已知的配置段**做定点折叠，对不含重复
-    的路径完全无影响。
-
-    不再回退到"任意相邻同名段折叠"：那会改坏合法路径（``C:\\media\\作品甲\\作品甲\\ep01.mkv``）
-    与 UNC 双斜线，属于 F-012 的根因。
-    """
-
-    cleaned = (segment or "").strip().strip("/\\")
-    if not cleaned or not path:
-        return path
-    pattern = re.compile(
-        r"(?i)([\\/])" + re.escape(cleaned) + r"\1" + re.escape(cleaned) + r"(?=[\\/]|$)"
-    )
-    while True:
-        collapsed = pattern.sub(lambda match: match.group(1) + cleaned, path)
-        if collapsed == path:
-            return path
-        path = collapsed
-
-
 def _configured_tree_roots(config, provider: str) -> list[str]:
     roots: list[str] = []
     if provider == "pan115":
@@ -431,12 +420,11 @@ def _configured_tree_roots(config, provider: str) -> list[str]:
             enabled = route.get("enabled", True) if isinstance(route, dict) else getattr(route, "enabled", True)
             prefix = route.get("remote_prefix", "") if isinstance(route, dict) else getattr(route, "remote_prefix", "")
             if enabled and route_provider == provider and prefix:
-                roots.append(
-                    _collapse_repeated_segment(
-                        derive_local_path(mount_root, remote_root, str(prefix)),
-                        str(prefix),
-                    )
-                )
+                try:
+                    roots.append(derive_local_path(mount_root, remote_root, str(prefix)))
+                except ValueError:
+                    # 其他路由不在本次挂载范围内，不能拼接成这个 TXT 的播放位置。
+                    continue
     unique: dict[str, str] = {}
     for root in roots:
         raw = root.strip()
@@ -460,6 +448,78 @@ def _tree_roots_for_request(request: SourceScanRequest, config, provider: str) -
             raise HTTPException(status_code=400, detail=reason)
         return [request.source_root]
     return _configured_tree_roots(config, provider)
+
+
+def _tree_mapping_fingerprint(config, roots: list[str], provider: str) -> str:
+    from app.media_v4.sources.connection_identity import openlist_account_namespace
+
+    def routes(items):
+        return [{key: r.get(key) if isinstance(r, dict) else getattr(r, key, None)
+                 for key in ("route_id", "provider_id", "remote_prefix", "local_path", "enabled")} for r in items]
+    return hashlib.sha256(json.dumps({
+        "provider": provider, "roots": roots,
+        "defaults": [str(getattr(config, name, "") or "") for name in ("pan115_root", "baidu_root", "openlist_mount_root", "openlist_remote_root")],
+        "namespace": openlist_account_namespace(str(getattr(config, "openlist_server_url", "") or ""),
+                                                str(getattr(config, "openlist_username", "") or "")) if getattr(config, "openlist_server_url", "") else "",
+        "routes": routes(getattr(config, "openlist_routes", ()) or ()),
+        "connections": [{"id": c.connection_id, "remote_root": c.openlist_remote_root,
+                         "namespace": openlist_account_namespace(c.openlist_server_url, c.openlist_username) if c.openlist_server_url else "",
+                         "mount_root": c.openlist_mount_root, "routes": routes(c.openlist_routes)}
+                        for c in getattr(config, "openlist_connections", ()) or ()],
+    }, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _resolve_tree_mapping(request: SourceScanRequest, config, roots: list[str], text: str, provider: str) -> TreeRootResolution:
+    """同步和持久入口共享解析；规则仅从已确认 revision 的扫描记录复用。"""
+    fingerprint = _tree_mapping_fingerprint(config, roots, provider)
+    saved_rules = []
+    with get_database().connect() as conn:
+        rows = conn.execute(
+            "SELECT ssr.request_json FROM source_scan_requests ssr "
+            "JOIN source_scans ss ON ss.scan_id=ssr.scan_id "
+            "JOIN source_roots sr ON sr.root_id=ss.root_id "
+            "JOIN import_revisions ir ON ir.scan_id=ss.scan_id AND ir.confirmed_at<>'' "
+            "WHERE sr.provider=? AND sr.enabled=1 AND (?='' OR sr.root_id=?) ORDER BY ir.confirmed_at DESC LIMIT 20",
+            (provider, request.target_root_id, request.target_root_id),
+        ).fetchall()
+    for row in rows:
+        try:
+            rule = json.loads(row["request_json"]).get("tree_mapping_rule")
+            if isinstance(rule, dict):
+                saved_rules.append(rule)
+        except (ValueError, TypeError, AttributeError):
+            pass
+    kwargs = dict(configured_roots=roots, mapping_mode=request.tree_mapping_mode,
+                  mapping_scope=request.tree_mapping_scope, choice_id=request.tree_mapping_choice,
+                  config_fingerprint=fingerprint)
+    resolver = TreePlaybackRootResolver(request.tree_file, **kwargs)
+    resolution = resolver.resolve(text)
+    for rule in saved_rules:
+        if resolution.ok or request.tree_mapping_choice:
+            break
+        resolution = TreePlaybackRootResolver(request.tree_file, saved_rule=rule, **kwargs).resolve(text)
+    if resolution.ok or resolution.state == "invalid" or not request.tree_verify_paths:
+        return resolution
+    from app.media_v4.sources.mount_metadata import discover_mount_relationships
+    from app.media_v4.sources.tree_mapping_probe import BoundedMetadataProbe, bounded_call
+
+    relationships = bounded_call(lambda: discover_mount_relationships(roots), timeout=0.3) or []
+    if relationships:
+        resolution = TreePlaybackRootResolver(request.tree_file, mount_relationships=relationships, **kwargs).resolve(text)
+    if resolution.ok or len(resolution.choices) < 2:
+        return resolution
+    return TreePlaybackRootResolver(request.tree_file, probe=BoundedMetadataProbe(roots=roots), **kwargs).resolve(text)
+
+
+def _pending_tree_mapping(resolution: TreeRootResolution, *, source_mode: str, scan_mode: str) -> dict | None:
+    if resolution.ok:
+        return None
+    if resolution.state == "invalid":
+        raise HTTPException(status_code=409, detail=resolution.reason)
+    return {"scan_id": "", "root_id": "", "status": "mapping_required",
+            "source_mode": source_mode, "scan_mode": scan_mode, "entries": [],
+            "evidence_count": resolution.selected_count,
+            "path_validation": _tree_validation_dict(resolution)}
 
 
 def _container_name(path: str) -> str:
@@ -615,6 +675,14 @@ def _tree_validation_dict(resolution: TreeRootResolution) -> dict:
         "hits": resolution.hits,
         "total": resolution.total,
         "reason": resolution.reason,
+        "mapping_mode": resolution.mapping_mode,
+        "mapping_scope": resolution.mapping_scope,
+        "selected_count": resolution.selected_count,
+        "skipped_count": resolution.skipped_count,
+        "path_samples": list(resolution.path_samples),
+        "state": resolution.state,
+        "requires_confirmation": not resolution.ok,
+        "choices": [{key: c[key] for key in ("id", "root", "mapping_scope", "path_samples", "selected_count", "skipped_count")} for c in resolution.choices],
     }
 
 
@@ -636,6 +704,8 @@ def _persist_tree_scan(
     durable: bool = False,
     save_evidence: bool = True,
     content_scope: str = "",
+    tree_file_path: str = "",
+    configured_roots: list[str] | None = None,
 ) -> None:
     """把目录树扫描的证据与验证事实写入事务约束的 SQLite。
 
@@ -734,13 +804,28 @@ def _persist_tree_scan(
         root_id=root_id,
         effective_root=effective_root,
         ok=resolution.ok,
-        hits=0,
-        total=0,
+        hits=resolution.hits,
+        total=resolution.total,
         reason=resolution.reason,
-        # 新合同：hits/total=0、samples=[]，说明只是词法映射，不做样本可达性断言。
+        # 保留登记时的受限探测计数；确认阶段不重新探测来源盘。
         samples=[],
         candidates=list(resolution.candidates),
     )
+    if resolution.mapping_rule:
+        # 复用现有请求 JSON，不增加数据库结构；confirmed revision 才使规则可复用。
+        with database.connect() as conn:
+            conn.execute(
+                "INSERT INTO source_scan_requests(scan_id, scan_kind, source_mode, request_json, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(scan_id) DO NOTHING",
+                (scan_id, last_scan_mode, source_mode, json.dumps({
+                    "tree_mapping_rule": resolution.mapping_rule,
+                    "configured_roots": configured_roots or [resolution.mapping_rule["source_root"]],
+                    "tree_path_samples": list(resolution.path_samples),
+                    "tree_selected_count": resolution.selected_count,
+                    "tree_skipped_count": resolution.skipped_count,
+                    "tree_file_path": os.path.abspath(os.path.expanduser(tree_file_path)) if tree_file_path else "",
+                }, ensure_ascii=False), now, now),
+            )
 
 
 def _tree_sample_paths(evidence: list) -> list[str]:
@@ -810,19 +895,22 @@ def scan_source(request: SourceScanRequest):
             root_id = _source_openlist_root_id(config, username, remote_root, connection_id=request.connection_id)
             if not config.openlist_mount_root:
                 raise HTTPException(status_code=409, detail="当前内容来源尚未配置本地挂载路径，请先在设置页完成来源映射")
-            local_root = derive_local_path(config.openlist_mount_root, _remote_root(config), remote_root)
+            local_root = _mapped_openlist_playback_root(config, remote_root)
             # 同一份已解码文本同时交给根解析与 evidence 构建，只读取一次。
             tree_text = _read_local_tree_text(request.tree_file)
-            resolution = TreePlaybackRootResolver(
-                request.tree_file,
-                configured_roots=[local_root],
-            ).resolve(tree_text)
+            resolution = _resolve_tree_mapping(request, config, [local_root], tree_text, content_provider)
+            pending = _pending_tree_mapping(resolution, source_mode=root_source_mode, scan_mode=effective_scan_mode)
+            if pending:
+                return pending
             scan_id, evidence = build_directory_tree_evidence(
                 tree_text,
                 root_id=root_id,
                 provider=content_provider,
                 source_root=resolution.root,
                 source_route_id=route_id,
+                mapping_mode=resolution.mapping_mode,
+                mapping_scope=resolution.mapping_scope,
+                relative_from_mapping=True,
             )
             _persist_tree_scan(
                 get_database(),
@@ -839,6 +927,8 @@ def scan_source(request: SourceScanRequest):
                 source_mode=root_source_mode,
                 last_scan_mode=effective_scan_mode,
                 content_scope=request.content_scope,
+                tree_file_path=request.tree_file,
+                configured_roots=[local_root],
             )
             effective_playback_root = resolution.root
             stage_scan_state(
@@ -853,10 +943,10 @@ def scan_source(request: SourceScanRequest):
             if not configured_roots:
                 raise HTTPException(status_code=409, detail="当前内容来源尚未配置本地挂载路径，请先在设置页完成来源映射")
             tree_text = _read_local_tree_text(request.tree_file)
-            resolution = TreePlaybackRootResolver(
-                request.tree_file,
-                configured_roots=configured_roots,
-            ).resolve(tree_text)
+            resolution = _resolve_tree_mapping(request, config, configured_roots, tree_text, content_provider)
+            pending = _pending_tree_mapping(resolution, source_mode=root_source_mode, scan_mode=effective_scan_mode)
+            if pending:
+                return pending
             effective_root = resolution.root
             root_id = tree_scan_root_id(
                 provider=content_provider,
@@ -869,6 +959,8 @@ def scan_source(request: SourceScanRequest):
                 root_id=root_id,
                 provider=content_provider,
                 source_root=effective_root,
+                mapping_mode=resolution.mapping_mode,
+                mapping_scope=resolution.mapping_scope,
             )
             _persist_tree_scan(
                 get_database(),
@@ -883,6 +975,8 @@ def scan_source(request: SourceScanRequest):
                 source_mode=root_source_mode,
                 last_scan_mode=effective_scan_mode,
                 content_scope=request.content_scope,
+                tree_file_path=request.tree_file,
+                configured_roots=configured_roots,
             )
             effective_playback_root = resolution.root
         elif request.source == "openlist":
@@ -901,11 +995,7 @@ def scan_source(request: SourceScanRequest):
                 raise HTTPException(status_code=409, detail="当前 OpenList 目录未匹配已保存的内容来源路由")
             content_provider = routed_provider
             root_id = _source_openlist_root_id(config, username, remote_root, connection_id=request.connection_id)
-            openlist_playback_root = derive_local_path(
-                config.openlist_mount_root,
-                _remote_root(config),
-                remote_root,
-            )
+            openlist_playback_root = _mapped_openlist_playback_root(config, remote_root)
             baseline = _confirmed_source_evidence(root_id)
             state = load_active_state(root_id)
             existing_mode = _source_root_mode(root_id)
@@ -984,13 +1074,7 @@ def scan_source(request: SourceScanRequest):
         raise HTTPException(status_code=400, detail=_directory_tree_error_message(exc)) from exc
     except (FileNotFoundError, NotADirectoryError, OSError, OpenListError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=f"来源扫描失败: {exc}") from exc
-    validation = {
-        "ok": resolution.ok,
-        "root": resolution.root,
-        "hits": resolution.hits,
-        "total": resolution.total,
-        "reason": resolution.reason,
-    }
+    validation = _tree_validation_dict(resolution)
     return {
         "root_id": root_id,
         "scan_id": scan_id,
@@ -1224,6 +1308,23 @@ def _require_tree_validation(database, scan_id: str, root_id: str, *, require: b
 
     if not require:
         return
+    with database.connect() as conn:
+        request_row = conn.execute("SELECT request_json, source_mode FROM source_scan_requests WHERE scan_id=?", (scan_id,)).fetchone()
+        root_row = conn.execute("SELECT provider FROM source_roots WHERE root_id=?", (root_id,)).fetchone()
+    if request_row and root_row:
+        try:
+            scan_request = json.loads(request_row["request_json"])
+            rule = scan_request.get("tree_mapping_rule") or {}
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(status_code=409, detail="来源映射记录损坏，请重新扫描") from None
+        if not isinstance(rule, dict) or (rule and rule.get("version") != 1):
+            raise HTTPException(status_code=409, detail="来源映射记录无效，请重新扫描")
+        if rule.get("version") == 1:
+            config = (_select_openlist_config(str(scan_request.get("connection_id") or "legacy"))
+                      if request_row["source_mode"] == "tree_openlist" else load_config())
+            roots = scan_request.get("configured_roots") or [rule.get("source_root", "")]
+            if rule.get("config_fingerprint") != _tree_mapping_fingerprint(config, roots, str(root_row["provider"])):
+                raise HTTPException(status_code=409, detail="来源设置已变化，请重新扫描并核对播放路径")
     validation = load_tree_scan_validation(database, scan_id)
     if validation is None:
         raise HTTPException(
@@ -1652,21 +1753,20 @@ def _start_durable_tree_scan(request: SourceScanRequest) -> dict:
             raise HTTPException(status_code=409, detail="当前 OpenList 目录未匹配已保存的内容来源路由")
         if not config.openlist_mount_root:
             raise HTTPException(status_code=409, detail="当前内容来源尚未配置本地挂载路径，请先在设置页完成来源映射")
-        configured_roots = [derive_local_path(config.openlist_mount_root, _remote_root(config), remote_root)]
+        configured_roots = [_mapped_openlist_playback_root(config, remote_root)]
         root_id = _source_openlist_root_id(config, username, remote_root, connection_id=request.connection_id)
     else:
         if not configured_roots:
             raise HTTPException(status_code=409, detail="当前内容来源尚未配置本地挂载路径，请先在设置页完成来源映射")
 
-    # 原位置只用于复制与词法映射；任何 TXT 解析及正式归档都在本地进行。
-    # 身份仍由原路径和正文确定，不能因为缓存副本换位置而改变来源归属。
+    # 原位置仅用于读取与显示；播放根和身份都不依赖 TXT 所在文件夹或文件名。
     try:
         with copy_tree_input_to_local(request.tree_file) as local_copy:
             tree_text = read_directory_tree_text(local_copy)
-            resolution = TreePlaybackRootResolver(
-                request.tree_file,
-                configured_roots=configured_roots,
-            ).resolve(tree_text)
+            resolution = _resolve_tree_mapping(request, config, configured_roots, tree_text, content_provider)
+            pending = _pending_tree_mapping(resolution, source_mode=source_mode, scan_mode=scan_mode)
+            if pending:
+                return pending
             if request.source != "hybrid":
                 root_id = tree_scan_root_id(
                     provider=content_provider,
@@ -1724,6 +1824,16 @@ def _start_durable_tree_scan(request: SourceScanRequest) -> dict:
                 "content_scope": request.content_scope,
                 "auto_update": bool(request.target_root_id and request.content_scope == "ongoing"),
                 "configured_roots": configured_roots,
+                "tree_mapping_mode": resolution.mapping_mode,
+                "tree_mapping_scope": resolution.mapping_scope,
+                "tree_mapping_rule": resolution.mapping_rule,
+                "tree_resolution_state": resolution.state,
+                "tree_export_scope": resolution.export_scope,
+                "tree_probe_hits": resolution.hits,
+                "tree_probe_total": resolution.total,
+                "tree_path_samples": list(resolution.path_samples),
+                "tree_selected_count": resolution.selected_count,
+                "tree_skipped_count": resolution.skipped_count,
                 "identity_root": identity_root,
                 "effective_root": resolution.root,
                 "resolution_ok": resolution.ok,
@@ -1781,11 +1891,7 @@ def start_durable_scan(request: SourceScanRequest):
     root_id = _source_openlist_root_id(config, username, remote_root, connection_id=request.connection_id)
     database = get_database()
     scan_mode = request.scan_mode or "full"
-    playback_root = derive_local_path(
-        config.openlist_mount_root,
-        _remote_root(config),
-        remote_root,
-    )
+    playback_root = _mapped_openlist_playback_root(config, remote_root)
     if scan_mode == "incremental":
         baseline = _confirmed_source_evidence(root_id)
         if not baseline:

@@ -151,8 +151,8 @@ def test_local_real_registration_reuses_active_task_and_serializes_update(contex
     assert request["revision_id"] != f"rev-{root_id}"
 
 
-@pytest.mark.parametrize("account_changed", [False, True])
-def test_remote_request_uses_its_own_connection_and_actual_registered_id(context, monkeypatch, account_changed):
+@pytest.mark.parametrize("account_changed, invalid_mount", [(False, False), (True, False), (False, True)])
+def test_remote_request_uses_its_own_connection_and_actual_registered_id(context, monkeypatch, account_changed, invalid_mount):
     from app.api import openlist_v4
     from app.core.openlist_connections import OpenListConnectionConfig
     from app.integrations.openlist.providers import OpenListRouteConfig
@@ -164,7 +164,7 @@ def test_remote_request_uses_its_own_connection_and_actual_registered_id(context
                      "VALUES ('scan-cloud', 'openlist_full', 'tree_openlist', ?, 'now', 'now')", (json.dumps({"connection_id": "right"}),))
     route = OpenListRouteConfig(route_id="anime", remote_prefix="/cloud", provider_id="pan115")
     config = SimpleNamespace(openlist_connections=[OpenListConnectionConfig("wrong", openlist_server_url="https://wrong.example.test"),
-        OpenListConnectionConfig("right", openlist_server_url="https://right.example.test", openlist_routes=[route])])
+        OpenListConnectionConfig("right", openlist_server_url="https://right.example.test", openlist_mount_root="relative/mount" if invalid_mount else "Q:/Mount", openlist_routes=[route])])
     identities = []
     monkeypatch.setattr(tracking_v4, "resolve_openlist_credentials", lambda identity: identities.append(identity) or ("right-user", "fixture-password", "found"))
     monkeypatch.setattr(media_v4, "_source_openlist_root_id", lambda config, username, remote, **kwargs: "changed" if account_changed else "cloud")
@@ -174,7 +174,7 @@ def test_remote_request_uses_its_own_connection_and_actual_registered_id(context
     registrations = []
     monkeypatch.setattr(media_v4, "_register_durable_source_scan", lambda database, **kwargs: registrations.append(kwargs) or "existing-task")
     monkeypatch.setattr("app.media_v4.sources.source_scan_runner.get_source_scan_runner", lambda _: SimpleNamespace(wake=lambda: None))
-    if account_changed:
+    if account_changed or invalid_mount:
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as error:

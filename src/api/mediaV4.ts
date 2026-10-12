@@ -107,6 +107,16 @@ export interface V4LibraryCard {
   asset_count: number
 }
 
+export interface V4TreePathPreview {
+  path_samples?: string[]
+  selected_count?: number
+  skipped_count?: number
+  reason?: string
+  state?: 'confirmed' | 'supported' | 'ambiguous' | 'unverifiable' | 'invalid'
+  requires_confirmation?: boolean
+  choices?: { id: string; root: string; mapping_scope?: string; path_samples: string[]; selected_count: number; skipped_count: number }[]
+}
+
 export interface V4SourceLibraryCard {
   content_scope?: V4ContentScope
   connection_id?: string
@@ -143,6 +153,9 @@ export interface V4SourceLibraryCard {
   display_path?: string
   /** 用户实际选择的 TXT 路径；旧记录未保存时为空，不使用归档位置代替。 */
   tree_file_path?: string
+  tree_source_root?: string
+  tree_path_samples?: string[]
+  tree_skipped_count?: number
   /** 当前 revision 导入任务全部成功后的实际结束时间，不是来源卡更新时间。 */
   import_completed_at?: string
   playback_locator: string
@@ -515,6 +528,8 @@ export const mediaV4Api = {
     tree_file?: string
     provider?: string
     source_root?: string
+    tree_mapping_choice?: string
+    tree_verify_paths?: boolean
     scan_mode?: 'auto' | 'full' | 'incremental'
   }) => api.post<{
     root_id: string
@@ -682,12 +697,14 @@ export const mediaV4Api = {
     tree_file?: string
     provider?: string
     source_root?: string
+    tree_mapping_choice?: string
+    tree_verify_paths?: boolean
     scan_mode?: 'full' | 'incremental'
     revision_id?: string
     source_display_name?: string
     /** 继续一次因请求预算暂停的扫描：必须复用同一 scan_id，后端才从断点续扫。 */
     resume_scan_id?: string
-  }) => api.post<{ scan_id: string; root_id: string; scan_mode: string; source_mode?: string; status: string }>('/api/v4/sources/scans', request),
+  }) => api.post<{ scan_id: string; root_id: string; scan_mode: string; source_mode?: string; status: string; evidence_count?: number; effective_playback_root?: string; path_validation?: V4TreePathPreview }>('/api/v4/sources/scans', request),
 
   durableScan: (scanId: string, includeEntries = false) =>
     api.get<{ scan_id: string; root_id: string; status: string; started_at: string; finished_at: string; error: string; evidence_count: number; parsed_count?: number; stage: string; stage_label: string; processed_count: number; total_count: number; discovered_count?: number; current_directory?: string; directories_completed?: number; directories_pending?: number; resumable?: boolean; progress?: number | null; heartbeat_at?: string; cancel_requested?: boolean; entries: V4SourceEvidence[] }>(`/api/v4/sources/scans/${encodeURIComponent(scanId)}?include_entries=${includeEntries ? 'true' : 'false'}`),
