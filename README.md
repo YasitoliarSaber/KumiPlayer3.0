@@ -117,6 +117,8 @@ release\KumiPlayer-Setup.exe
 
 ## 运行环境与本地配置
 
+项目精简使用 `scripts/cleanup_workspace.ps1`，默认只列出历史测试副本、运行记录和可重建缓存。执行 `powershell -File scripts/cleanup_workspace.ps1 -Apply` 才删除所列内容；增加 `-ResetUserData` 会同时清空项目内媒体库、海报、导入记录、个人配置和 `.env`。脚本保护已跟踪文件、源码、当前测试、Git、依赖和 MPV；运行中的应用必须先正常关闭。Windows 凭据管理器不在文件清理范围内。空库首次启动仿真可运行 `uv run --project backend python -m pytest backend/tests/test_fresh_user_startup.py`，使用隔离数据目录且不读取系统凭据。
+
 - 支持 Windows 10 / 11；普通用户使用完整安装包时，无需另外配置开发环境。
 - 源码开发需要 Node.js 22、Python 3.12、Rust stable；播放器使用项目内置的干净 MPV，不读取或改写用户全局 MPV 配置。
 - 个人配置仅保存在本机。源码版默认使用项目 `data/`，安装版默认使用 `%LOCALAPPDATA%\KumiPlayer\data`。
