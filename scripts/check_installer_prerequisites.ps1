@@ -1,5 +1,6 @@
 param(
-    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot)
+    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [switch]$LocalTest
 )
 
 Set-StrictMode -Version Latest
@@ -44,11 +45,11 @@ if ($python) {
     }
 }
 
-$node = Test-BuildCommand 'node' 'Install Node.js 22 with npm: https://nodejs.org/'
+$node = Test-BuildCommand 'node' 'Install Node.js 22.12 or newer with npm: https://nodejs.org/'
 if ($node) {
-    & $node -e 'process.exit(parseInt(process.versions.node) >= 22 ? 0 : 1)'
+    & $node -e 'const [major,minor]=process.versions.node.split(String.fromCharCode(46)).map(Number);process.exit(major>22 || major===22 && minor>=12 ? 0 : 1)'
     if ($LASTEXITCODE -ne 0) {
-        $problems.Add('Node.js 22 or newer is required by the frontend build.')
+        $problems.Add('Node.js 22.12 or newer is required by the frontend build.')
     }
 }
 $null = Test-BuildCommand 'npm.cmd' 'npm is unavailable. Install Node.js with npm and reopen the build window: https://nodejs.org/'
@@ -84,7 +85,7 @@ if ($rust) {
 
 # Reuse the existing release gate before any expensive compilation or staging.
 try {
-    & (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot (Join-Path $root 'mpv') -Layout source
+    & (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot (Join-Path $root 'mpv') -Layout source -LocalTest:$LocalTest
 } catch {
     $problems.Add('Built-in MPV release materials are incomplete or invalid. See mpv/README.md and mpv/distribution-manifest.json. ' + $_.Exception.Message)
 }

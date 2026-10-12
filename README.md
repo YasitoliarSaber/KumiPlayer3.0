@@ -202,6 +202,36 @@ KumiPlayer 是三层桌面应用，职责严格分离：
 
 ## 构建
 
+### 新电脑的构建环境
+
+下面这些工具用于从源码制作程序与安装包，**普通用户运行已生成的安装包无需安装它们**。
+
+| 依赖 | 要求与用途 |
+|---|---|
+| Git | 源码版本管理；从网盘恢复时保留 `.git`，不要覆盖已有修改 |
+| Node.js + npm | 推荐 Node.js 22，至少 22.12；构建 React 前端与运行 Tauri CLI |
+| Python | Python 3.12，安装时启用 Add to PATH；Windows 商店的 `python` 占位入口不可用于构建 |
+| uv | 按 `backend/uv.lock` 恢复项目 Python 环境 |
+| PyInstaller | 安装包后端冻结工具，由 `installer` extra 锁定安装，不能只安装后端业务依赖 |
+| Rust | stable，当前 Windows 构建使用 `x86_64-pc-windows-gnu` 工具链，包含 cargo / rustc |
+| GCC / MinGW-w64 | 完整的 Windows GNU 编译器与库，例如 WinLibs POSIX/UCRT；将其 `mingw64/bin` 加入 PATH。只有 LLVM-MinGW 不足以提供当前 Rust 所需的 `libgcc` / `libgcc_eh` |
+| 内置 MPV 文件 | 保留 `mpv/runtime`、配置与运行时清单；仅下载 Git 源码不会包含被忽略的播放器二进制 |
+
+官方入口：[Python](https://www.python.org/downloads/windows/)、[Node.js](https://nodejs.org/)、[uv](https://docs.astral.sh/uv/getting-started/installation/)、[Rust](https://rust-lang.github.io/rustup/installation/)、[WinLibs](https://winlibs.com/)。NSIS 打包工具由 Tauri 构建流程下载；最终安装缺少 WebView2 时，安装包会下载微软官方运行时。
+
+安装工具后重新打开终端，再在项目根目录执行：
+
+```powershell
+uv sync --project backend --locked --extra dev --extra installer --python 3.12
+npm ci
+```
+
+从网盘备份恢复的 `backend/.venv` 不能直接当作新电脑的可用环境；它可能指向旧电脑的 Python。先将旧环境移到备份位置，再执行上面的恢复命令。`.cargo/config.toml` 中的旧电脑绝对编译器路径也必须改为本机可用的编译器；当前配置可通过 PATH 解析 `x86_64-w64-mingw32-gcc.exe`。不要删除 `data`、个人配置或 MPV 源文件来解决构建环境问题。
+
+本次恢复使用 Python 3.12.10、Node.js 22.23.3 / npm 10.9.9、uv 0.13.0、Rust 1.99.0 GNU、WinLibs GCC 16.2.0 POSIX/UCRT 和 PyInstaller 6.22.3；这是本机恢复记录，不要求所有用户逐项固定到这些补丁版本。
+
+### 标准构建入口
+
 开发 EXE：
 
 ```bat
@@ -213,6 +243,8 @@ build_tauri.bat
 ```bat
 build_installer.bat
 ```
+
+当前双击默认构建仅供本机安装自测的完整包，包含内置 MPV，安装内容附带 `LOCAL_TEST_ONLY.txt`；这不代表公开发布审核已完成。公开发布使用 `build_installer.bat --public-release`，仍须通过对应源码与许可证材料检查。后端打包依赖使用 `uv sync --project backend --locked --extra dev --extra installer --python 3.12` 恢复，入口自动激活项目环境。
 
 两种构建都会检查 `37821` 端口和 KumiPlayer 运行状态。开发 EXE 构建执行 TypeScript、Vite、Rust/Tauri 和桌面产物验证；安装包额外检查冻结后端、内置 MPV 运行时、许可证发布门，以及 NSIS 内容。
 

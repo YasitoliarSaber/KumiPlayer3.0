@@ -3,6 +3,7 @@
 import os
 
 import uvicorn
+
 from app.main import app
 
 
@@ -13,7 +14,7 @@ def main() -> None:
     except ValueError:
         port = 37821
     server = uvicorn.Server(
-        uvicorn.Config(app, host=host, port=port, log_level="warning", access_log=False)
+        uvicorn.Config(app, host=host, port=port, log_level="warning", access_log=False, use_colors=False)
     )
     # system.shutdown invokes this only after its 202 response has been sent;
     # Uvicorn then runs the app lifespan teardown before the desktop shell reaps it.

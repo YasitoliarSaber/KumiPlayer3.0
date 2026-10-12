@@ -1,6 +1,7 @@
 """空数据目录与无凭据环境下的首次使用仿真，不访问用户真实数据。"""
 
 import socket
+import sys
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -10,6 +11,29 @@ from app.core import config
 from app.core.paths import get_data_dir
 from app.main import app
 from app.media_v4.persistence.schema_v4 import V4_SCHEMA_VERSION
+
+
+def test_desktop_backend_starts_without_console_streams(monkeypatch):
+    import desktop_backend
+
+    started = []
+
+    class Server:
+        def __init__(self, server_config):
+            self.config = server_config
+
+        def run(self):
+            started.append(self.config)
+
+    # PyInstaller --noconsole makes both streams None. Exercise real logging
+    # configuration while substituting only the socket-serving loop.
+    with monkeypatch.context() as patch:
+        patch.setattr(desktop_backend.uvicorn, "Server", Server)
+        patch.setattr(desktop_backend.app.state, "request_shutdown", None, raising=False)
+        patch.setattr(sys, "stdout", None)
+        patch.setattr(sys, "stderr", None)
+        desktop_backend.main()
+    assert len(started) == 1
 
 
 def test_fresh_user_starts_with_empty_v4_library_and_no_external_credentials(monkeypatch):

@@ -116,6 +116,8 @@ mpv.exe
 
 ## 修改纪律
 
+2026-10-12 用户明确允许本机安装自测：`build_installer.bat` 默认构建本机测试包，沿用标准输出，并随安装内容标记 `LOCAL_TEST_ONLY.txt`。该模式校验运行文件哈希与配置、排除个人弹幕历史，不更改公开发布材料状态；`--public-release` 仍执行下面的公开发布审核要求。
+
 1. 所有配置项必须能追溯到 MPV 官方手册（https://mpv.io/manual/stable/）或项目自有需求；**禁止**从第三方整合包复制不明配置、插件、字体、着色器或辅助工具（可作为形态参考，但落地的每一项都要能说清来源与理由）。
 2. 修改配置或脚本后，在 `docs/MPV运行时演进记录.md` 追加一条简短记录：本次新增、调整或移除了什么，以及验证结论；二进制来源与 SHA-256 由 `runtime-manifest.json` 单独记录，配置变化还要同步其中的 `configuration_version`。
 3. 接入或升级二进制、DLL、辅助运行文件时，必须更新符合 `runtime-manifest.schema.json` 的 `runtime-manifest.json`；进入 `runtime/` 的文件必须具备明确来源、版本与 SHA-256。

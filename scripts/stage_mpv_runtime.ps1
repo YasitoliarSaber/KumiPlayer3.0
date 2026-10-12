@@ -1,5 +1,6 @@
 ﻿param(
-    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot)
+    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [switch]$LocalTest
 )
 
 Set-StrictMode -Version Latest
@@ -55,10 +56,10 @@ if (-not (Test-Path -LiteralPath $manifestSource -PathType Leaf)) {
 
 # 校验清单当前允许进入正式安装包，否则明确拦截。
 $manifest = Get-Content -LiteralPath $manifestSource -Raw -Encoding UTF8 | ConvertFrom-Json
-if ($manifest.distribution_status -eq 'development-only') {
+if (-not $LocalTest -and $manifest.distribution_status -eq 'development-only') {
     throw 'MPV runtime staging refused: distribution_status is development-only. 第三方许可证与发布材料尚未补齐，内置 MPV 暂不能进入正式安装包。'
 }
-& (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot $mpvSource -Layout source
+& (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot $mpvSource -Layout source -LocalTest:$LocalTest
 
 New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
 if (Test-Path -LiteralPath $staging) {
@@ -75,6 +76,7 @@ foreach ($entry in $manifest.files) {
 $stagedConfig = Join-Path $staging 'portable_config'
 New-Item -ItemType Directory -Path $stagedConfig -Force | Out-Null
 Get-ChildItem -LiteralPath $configSource -Force |
+    Where-Object { $_.Name -ne 'danmaku-history.json' } |
     Copy-Item -Destination $stagedConfig -Recurse -Force
 
 # 2b. KumiPlayer 自有层（kumiplayer，不可替换：自有脚本 + 强制配置）
@@ -94,8 +96,13 @@ foreach ($material in @('components-manifest.json', 'distribution-manifest.json'
 # 不把整个 sources/ 研究目录递归混入用户安装包。
 $distribution = Get-Content -LiteralPath (Join-Path $mpvSource 'distribution-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 New-Item -ItemType Directory -Path (Join-Path $staging 'sources') -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $mpvSource $distribution.source_archive.path) -Destination (Join-Path $staging $distribution.source_archive.path)
-& (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot $staging -Layout staged
+if ($LocalTest) {
+    $marker = 'LOCAL TEST ONLY. This installer is for private installation testing. Public release review and complete corresponding-source materials are not finished. See distribution-manifest.json for the current status.'
+    [IO.File]::WriteAllText((Join-Path $staging 'LOCAL_TEST_ONLY.txt'), $marker, [Text.UTF8Encoding]::new($false))
+} else {
+    Copy-Item -LiteralPath (Join-Path $mpvSource $distribution.source_archive.path) -Destination (Join-Path $staging $distribution.source_archive.path)
+}
+& (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot $staging -Layout staged -LocalTest:$LocalTest
 
 # 移除旧的 mpv-plugins 暂存目标（仅暂存目录，不碰开发/用户 MPV）
 foreach ($oldTarget in $obsoleteTargets) {

@@ -34,11 +34,13 @@ build_installer.bat
 
 默认后端端口为 37821。构建入口会先检查运行中程序和残留后端；不要手工结束无法确认身份的端口占用进程。
 
-安装包入口随后汇总检查本机的 Python 3.12、后端模块与 PyInstaller、Node.js/npm、Rust 和内置 MPV 发布材料，未通过时保留错误窗口，不开始编译。自动化调用可设置 `KUMIPLAYER_BUILD_NO_PAUSE=1`，失败仍返回非零退出码。
+安装包入口随后汇总检查本机的 Python 3.12、后端模块与 PyInstaller、Node.js/npm、Rust 和内置 MPV 文件，未通过时保留错误窗口，不开始编译。入口会自动激活 `backend/.venv`。自动化调用可设置 `KUMIPLAYER_BUILD_NO_PAUSE=1`，失败仍返回非零退出码。
 
 从备份恢复源码不会恢复开发环境：Windows 商店的 `python` 占位入口不是真实 Python；备份中的 `backend/.venv` 和 `.cargo/config.toml` 可能仍引用旧电脑的绝对路径。重新安装构建工具后，从 `backend/uv.lock` 恢复环境，在同一 Python 环境安装 PyInstaller，并激活该环境再运行安装包入口。前端依赖残缺时，入口会用 `npm ci` 从锁文件恢复。
 
-普通用户应运行已经生成的 `release/KumiPlayer-Setup.exe`。当前项目的内置 MPV 发布材料尚未完成，因此安装包检查仍会拦截；具体缺项见 `mpv/distribution-manifest.json`。
+双击 `build_installer.bat` 默认生成本机安装自测包，仍使用标准输出 `release/KumiPlayer-Setup.exe`，安装内容附带 `runtime/mpv/LOCAL_TEST_ONLY.txt`。该模式核对播放器文件清单、哈希和配置，不将未完成的公开发布审核伪装为已完成。`build_installer.bat --public-release` 保留公开发布检查；具体材料状态见 `mpv/distribution-manifest.json`。普通用户只需运行已生成的安装包。
+
+恢复后端构建环境：先安装 Python 3.12 与 uv，再执行 `uv sync --project backend --locked --extra dev --extra installer --python 3.12`。PyInstaller 与其依赖已由 `installer` extra 锁定，不需另外向系统 Python 手工安装模块。
 
 ## 脚本目录
 

@@ -2,6 +2,9 @@
 chcp 65001 >nul
 setlocal EnableExtensions
 cd /d "%~dp0"
+set "KUMIPLAYER_INSTALLER_LOCAL_TEST=-LocalTest"
+if /I "%~1"=="--public-release" set "KUMIPLAYER_INSTALLER_LOCAL_TEST="
+if defined KUMIPLAYER_INSTALLER_LOCAL_TEST echo LOCAL TEST ONLY: this installer has not completed public release review.
 
 echo ============================================
 echo KumiPlayer complete Windows installer build
@@ -12,7 +15,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\ensure_kumiplayer_r
 if errorlevel 1 goto :failed
 
 echo Checking this computer before building...
-powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\check_installer_prerequisites.ps1"
+if exist "backend\.venv\Scripts\activate.bat" call "backend\.venv\Scripts\activate.bat"
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\check_installer_prerequisites.ps1" %KUMIPLAYER_INSTALLER_LOCAL_TEST%
 if errorlevel 1 goto :failed
 
 echo [1/9] Building the self-contained Python backend...
@@ -24,7 +28,7 @@ if not exist "packaging\runtime\backend\KumiPlayerBackend.exe" (
 )
 
 echo [2/9] Staging KumiPlayer built-in MPV runtime and portable configuration...
-powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\stage_mpv_runtime.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\stage_mpv_runtime.ps1" %KUMIPLAYER_INSTALLER_LOCAL_TEST%
 if errorlevel 1 goto :failed
 
 echo [3/9] Checking frontend dependencies...
@@ -56,7 +60,7 @@ call npm run tauri build -- --config src-tauri\tauri.installer.conf.json --bundl
 if errorlevel 1 goto :failed
 
 echo [8/9] Verifying installer contents...
-powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\verify_installer_bundle.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\verify_installer_bundle.ps1" %KUMIPLAYER_INSTALLER_LOCAL_TEST%
 if errorlevel 1 goto :failed
 
 echo [9/9] Publishing release\KumiPlayer-Setup.exe...

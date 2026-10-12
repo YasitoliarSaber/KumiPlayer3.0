@@ -1,5 +1,6 @@
 """Exercise new-computer build failures without compiling or modifying user data."""
 
+import hashlib
 import json
 import os
 import shutil
@@ -13,8 +14,13 @@ POWERSHELL = shutil.which("powershell.exe")
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows installer entrypoint")
 
 
+def _powershell_env():
+    # A parent PowerShell 7 module path cannot be reused by Windows PowerShell 5.
+    return {key: value for key, value in os.environ.items() if key.casefold() != "psmodulepath"}
+
+
 def _run(script: Path, root: Path, commands: Path):
-    env = dict(os.environ, PATH=str(commands))
+    env = dict(_powershell_env(), PATH=str(commands))
     return subprocess.run(
         [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script),
          "-ProjectRoot", str(root)],
@@ -82,7 +88,7 @@ def test_ready_tools_and_successful_release_verification_pass(tmp_path):
     shutil.copyfile(ROOT / "scripts/check_installer_prerequisites.ps1", script)
     # Isolate prerequisite orchestration; the real release gate is covered above.
     (scripts / "verify_mpv_distribution.ps1").write_text(
-        "param($MpvRoot, $Layout)\n"
+        "param($MpvRoot, $Layout, [switch]$LocalTest)\n"
         "if ($Layout -ne 'source') { throw 'incorrect layout' }\n"
         "Write-Output 'fixture release verification passed'", encoding="utf-8",
     )
@@ -114,7 +120,7 @@ def test_batch_failure_keeps_error_and_returns_failure_without_building(tmp_path
     (scripts / "check_installer_prerequisites.ps1").write_text(
         "Write-Output 'fixture prerequisites missing'; exit 1", encoding="utf-8",
     )
-    env = dict(os.environ, KUMIPLAYER_BUILD_NO_PAUSE="1")
+    env = dict(_powershell_env(), KUMIPLAYER_BUILD_NO_PAUSE="1")
     result = subprocess.run(
         [os.environ["COMSPEC"], "/d", "/c", str(root / "build_installer.bat")],
         capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=30,
@@ -128,3 +134,51 @@ def test_batch_failure_keeps_error_and_returns_failure_without_building(tmp_path
     assert content.startswith(b"@echo off\r\nchcp 65001 >nul\r\n")
     assert b"\n" not in content.replace(b"\r\n", b"")
     assert 'if /I not "%KUMIPLAYER_BUILD_NO_PAUSE%"=="1" pause' in content.decode("utf-8")
+
+
+@pytest.mark.parametrize("layout", ["source", "staged"])
+def test_local_installation_verifies_hashes_and_keeps_public_gate(tmp_path, layout):
+    root = tmp_path / "mpv"
+    binary_root = root / "runtime" if layout == "source" else root
+    binary_root.mkdir(parents=True)
+    binary = binary_root / "mpv.exe"
+    binary.write_bytes(b"player fixture")
+    (root / "runtime-manifest.json").write_text(json.dumps({
+        "distribution_status": "development-only",
+        "files": [{"path": "mpv.exe", "sha256": hashlib.sha256(binary.read_bytes()).hexdigest()}],
+    }), encoding="utf-8")
+    config_root = root / "config" if layout == "source" else root
+    for name in ("portable_config/mpv.conf", "kumiplayer/mpv.conf", "kumiplayer/scripts/kumiplayer_bindings.lua"):
+        path = config_root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("fixture", encoding="utf-8")
+    if layout == "staged":
+        (root / "LOCAL_TEST_ONLY.txt").write_text("local test", encoding="utf-8")
+    command = [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+               str(ROOT / "scripts/verify_mpv_distribution.ps1"), "-MpvRoot", str(root), "-Layout", layout]
+    env = _powershell_env()
+    public = subprocess.run(command, capture_output=True, text=True, errors="replace", env=env, timeout=30)
+    assert public.returncode != 0
+    assert "only public-release" in public.stderr
+    local = subprocess.run(command + ["-LocalTest"], capture_output=True, text=True, errors="replace", env=env, timeout=30)
+    assert local.returncode == 0, local.stdout + local.stderr
+    assert "LOCAL TEST ONLY" in local.stdout
+    if layout == "source":
+        for name in ("components-manifest.json", "distribution-manifest.json"):
+            (root / name).write_text('{"source_archive":{"path":null}}', encoding="utf-8")
+        for name in ("THIRD_PARTY_NOTICES.md", "SOURCE_CODE.txt"):
+            (root / name).write_text("fixture", encoding="utf-8")
+        (root / "licenses").mkdir()
+        history = config_root / "portable_config/danmaku-history.json"
+        history.write_bytes(b"personal history sentinel")
+        stage_command = [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                         str(ROOT / "scripts/stage_mpv_runtime.ps1"), "-ProjectRoot", str(tmp_path), "-LocalTest"]
+        staged = subprocess.run(stage_command, capture_output=True, text=True, errors="replace", env=env, timeout=30)
+        assert staged.returncode == 0, staged.stdout + staged.stderr
+        assert (tmp_path / "packaging/runtime/mpv/LOCAL_TEST_ONLY.txt").exists()
+        assert not (tmp_path / "packaging/runtime/mpv/portable_config/danmaku-history.json").exists()
+        assert history.read_bytes() == b"personal history sentinel"
+    binary.write_bytes(b"corrupt player")
+    corrupt = subprocess.run(command + ["-LocalTest"], capture_output=True, text=True, errors="replace", env=env, timeout=30)
+    assert corrupt.returncode != 0
+    assert "missing, empty or changed" in corrupt.stderr

@@ -3,7 +3,8 @@
     # Optional extra literals to reject inside the staged mpv runtime. The generic
     # drive-letter check below is the primary defence; this exists so a specific
     # string can be banned without editing this script.
-    [string[]]$ForbiddenLiteral = @()
+    [string[]]$ForbiddenLiteral = @(),
+    [switch]$LocalTest
 )
 
 Set-StrictMode -Version Latest
@@ -101,19 +102,24 @@ if (-not (Test-Path -LiteralPath $requiredBindings -PathType Leaf)) {
 
 # 第三方许可证与发布材料尚未补齐：development-only 的内置 MPV 不得进入正式安装包。
 $stagedManifestJson = Get-Content -LiteralPath $stagedManifest -Raw -Encoding UTF8 | ConvertFrom-Json
-if ($stagedManifestJson.distribution_status -eq 'development-only') {
+if (-not $LocalTest -and $stagedManifestJson.distribution_status -eq 'development-only') {
     throw 'Installer blocked: built-in MPV is development-only. 第三方许可证与发布材料尚未补齐，内置 MPV 暂不能进入正式安装包。'
 }
-& (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot $stagedMpv -Layout staged
+& (Join-Path $PSScriptRoot 'verify_mpv_distribution.ps1') -MpvRoot $stagedMpv -Layout staged -LocalTest:$LocalTest
 
 # 内置 MPV 运行文件必须与清单一致，且不得泄露本地绝对路径。
-$absolutePathPattern = '[A-Za-z]:\\'
+$absolutePathPattern = '(?<![A-Za-z0-9_])[A-Za-z]:\\(?=[^\s])'
 $scanExtensions = @('.json', '.conf', '.lua', '.md')
 $scanTargets = @(Get-ChildItem -LiteralPath $stagedMpv -Recurse -Force -File |
     Where-Object { $scanExtensions -contains $_.Extension.ToLowerInvariant() })
 foreach ($scanTarget in $scanTargets) {
     $relativePath = $scanTarget.FullName.Substring($resolvedRoot.Length).TrimStart('\')
-    $pathHit = Select-String -LiteralPath $scanTarget.FullName -Pattern $absolutePathPattern -Encoding UTF8 -List
+    # Upstream code and documentation contain these generic Windows examples.
+    # They are not machine-specific paths; all other drive paths remain blocked.
+    $scanLines = @(Get-Content -LiteralPath $scanTarget.FullName -Encoding UTF8 | ForEach-Object {
+        $_.Replace('C:\\foo', '').Replace('C:\\Windows\\Temp', '').Replace('C:\Users\Tony\Downloads\example.xml', '')
+    })
+    $pathHit = $scanLines | Select-String -Pattern $absolutePathPattern -List
     if ($pathHit) {
         throw "Staged KumiPlayer built-in MPV leaks a local absolute path: $relativePath line $($pathHit.LineNumber)."
     }
@@ -124,6 +130,9 @@ foreach ($scanTarget in $scanTargets) {
             throw "Staged MPV runtime contains a forbidden literal in $relativePath line $($literalHit.LineNumber)."
         }
     }
+}
+if (Test-Path -LiteralPath (Join-Path $stagedMpv 'portable_config\danmaku-history.json')) {
+    throw 'The installer must not contain the personal danmaku history.'
 }
 
 $setupFiles = @(Get-ChildItem -LiteralPath $bundleRoot -Filter '*setup.exe' -File)

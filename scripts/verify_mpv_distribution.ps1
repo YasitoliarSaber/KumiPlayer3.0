@@ -1,6 +1,7 @@
 ﻿param(
     [Parameter(Mandatory = $true)][string]$MpvRoot,
-    [ValidateSet('source', 'staged')][string]$Layout = 'source'
+    [ValidateSet('source', 'staged')][string]$Layout = 'source',
+    [switch]$LocalTest
 )
 
 Set-StrictMode -Version Latest
@@ -42,6 +43,28 @@ function Assert-FileHash([string]$Path, [string]$ExpectedHash) {
 }
 
 $manifest = Get-Content -LiteralPath (Join-Path $root 'runtime-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($LocalTest) {
+    # Explicit local installation tests verify the actual player, without claiming release approval.
+    $binaryRoot = if ($Layout -eq 'source') { Join-Path $root 'runtime' } else { $root }
+    $metadata = @('README.md', 'runtime-manifest.json', 'components-manifest.json', 'distribution-manifest.json', 'THIRD_PARTY_NOTICES.md', 'SOURCE_CODE.txt', 'LOCAL_TEST_ONLY.txt')
+    $binaryFiles = @(Get-ChildItem -LiteralPath $binaryRoot -File -Force | Where-Object { $_.Name -notin $metadata })
+    if ($binaryFiles.Count -eq 0 -or (Compare-Object @($binaryFiles.Name) @($manifest.files | ForEach-Object { $_.path }))) {
+        throw 'Local MPV test refused: runtime file set differs from runtime-manifest.json.'
+    }
+    foreach ($entry in $manifest.files) {
+        Assert-FileHash (Resolve-BundledPath $entry.path) $entry.sha256
+    }
+    foreach ($config in @('portable_config/mpv.conf', 'kumiplayer/mpv.conf', 'kumiplayer/scripts/kumiplayer_bindings.lua')) {
+        if (-not (Test-Path -LiteralPath (Resolve-BundledPath $config) -PathType Leaf)) {
+            throw "Local MPV test refused: required config missing: $config"
+        }
+    }
+    if ($Layout -eq 'staged' -and -not (Test-Path -LiteralPath (Join-Path $root 'LOCAL_TEST_ONLY.txt') -PathType Leaf)) {
+        throw 'Local MPV test refused: LOCAL_TEST_ONLY.txt marker is missing.'
+    }
+    Write-Output "LOCAL TEST ONLY: verified $($binaryFiles.Count) MPV runtime hashes. Public release review remains incomplete."
+    return
+}
 if ($manifest.distribution_status -ne 'public-release') {
     throw 'MPV distribution refused: only public-release may enter an installer; qualified, development-only and unknown states are blocked.'
 }
