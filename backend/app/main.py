@@ -25,6 +25,7 @@ from app.api.system import router as system_router
 from app.api.tasks_v4 import router as tasks_router
 from app.api.tracking_v4 import router as tracking_router
 from app.core.api_security import ApiSessionMiddleware
+from app.core.config import ConfigReadError
 from app.media_v4.assets.service import ArtworkService
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.projection.refresh import ProjectionRefreshScheduler
@@ -182,6 +183,11 @@ app.include_router(tracking_router)
 app.include_router(tasks_router)
 app.include_router(openlist_router)
 app.include_router(system_router)
+
+
+@app.exception_handler(ConfigReadError)
+async def config_read_error(_request: Request, exc: ConfigReadError):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 @app.get("/api/health")

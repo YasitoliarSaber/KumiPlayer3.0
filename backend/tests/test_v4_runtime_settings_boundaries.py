@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from app.api import config, system
-from app.core.config import AppConfig
+from app.core.config import AppConfig, load_config, save_config
 from app.media_v4.persistence.database import V4Database
 from fastapi import HTTPException
 
@@ -13,18 +13,16 @@ from .test_system_open_folder import _confirmed_asset
 
 def test_setup_without_mirror_preserves_existing_player_and_storage(monkeypatch, tmp_path):
     current = AppConfig(mirror_dir="historical-value", mpv_anime4k_mode="b")
-    monkeypatch.setattr(config, "load_config", lambda: current)
+    save_config(current)
     monkeypatch.setattr(config, "check_mpv_runtime", lambda **_: {
         "available": True, "manifest_valid": True, "files_valid": True,
         "configuration_available": True,
     })
     monkeypatch.setattr(config, "_probe_media_path_states", lambda *args: ([True], False))
-    saved = []
-    monkeypatch.setattr(config, "save_config", saved.append)
     result = config.complete_setup(config.SetupCompleteRequest(local_root=str(tmp_path)))
     assert result["setup_completed"] is True
-    assert saved[0].mirror_dir == "historical-value"
-    assert saved[0].mpv_anime4k_mode == "b"
+    assert load_config().mirror_dir == "historical-value"
+    assert load_config().mpv_anime4k_mode == "b"
 
 
 def test_setup_never_creates_requested_historical_mirror(monkeypatch, tmp_path):

@@ -291,13 +291,26 @@ fn project_root() -> std::path::PathBuf {
         })
 }
 
-fn bundled_backend_path() -> Option<std::path::PathBuf> {
-    let executable_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    let candidate = executable_dir
+pub fn has_bundled_layout(executable_dir: &Path) -> bool {
+    executable_dir.join("runtime").is_dir()
+        || executable_dir
+            .join("runtime")
+            .join("backend")
+            .join("KumiPlayerBackend.exe")
+            .is_file()
+}
+
+pub fn required_bundled_backend(install_root: &Path) -> Result<PathBuf, String> {
+    let executable = install_root
         .join("runtime")
         .join("backend")
         .join("KumiPlayerBackend.exe");
-    candidate.is_file().then_some(candidate)
+    if !executable.is_file() {
+        return Err(
+            "安装包缺少内置后端，请重新安装完整安装包；普通用户不需要安装 Python".to_string(),
+        );
+    }
+    Ok(executable)
 }
 
 impl RuntimeContext {
@@ -342,13 +355,15 @@ impl RuntimeContext {
     }
 
     pub fn discover() -> Result<Self, String> {
-        let bundled = bundled_backend_path().is_some();
+        let executable_dir = std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(Path::to_path_buf))
+            .unwrap_or_else(project_root);
+        // 部分安装文件丢失时仍保持安装模式，避免误读源码版数据或要求用户装 Python。
+        let bundled = has_bundled_layout(&executable_dir);
         let kind = if bundled { "bundled" } else { "source" }.to_string();
         let install_root = if bundled {
-            std::env::current_exe()
-                .ok()
-                .and_then(|path| path.parent().map(Path::to_path_buf))
-                .unwrap_or_else(project_root)
+            executable_dir
         } else {
             project_root()
         };
@@ -571,9 +586,10 @@ fn diagnostic_log_file(context: &RuntimeContext) -> Result<std::fs::File, String
 }
 
 fn start_bundled_backend(context: &RuntimeContext) -> Result<Option<ManagedBackend>, String> {
-    let Some(backend_executable) = bundled_backend_path() else {
+    if context.kind != "bundled" {
         return Ok(None);
-    };
+    }
+    let backend_executable = required_bundled_backend(&context.install_root)?;
     let runtime_dir = backend_executable
         .parent()
         .and_then(|path| path.parent())

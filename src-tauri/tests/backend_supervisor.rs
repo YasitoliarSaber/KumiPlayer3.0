@@ -37,6 +37,35 @@ fn test_context() -> RuntimeContext {
     )
 }
 
+#[test]
+fn incomplete_installation_keeps_bundled_identity_and_requires_reinstall() {
+    let root = std::env::temp_dir().join(format!(
+        "kumi-bundle-compat-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let backend_dir = root.join("runtime").join("backend");
+    std::fs::create_dir_all(&backend_dir).unwrap();
+    assert!(supervisor::has_bundled_layout(&root));
+    let error = supervisor::required_bundled_backend(&root).unwrap_err();
+    assert!(error.contains("重新安装完整安装包"));
+    assert!(!error.contains("backend/requirements.txt"));
+    let executable = backend_dir.join("KumiPlayerBackend.exe");
+    std::fs::write(&executable, b"fixture only; never executed").unwrap();
+    assert_eq!(
+        supervisor::required_bundled_backend(&root).unwrap(),
+        executable
+    );
+    std::fs::remove_file(executable).unwrap();
+    assert!(supervisor::has_bundled_layout(&root));
+    std::fs::remove_dir(backend_dir).unwrap();
+    std::fs::remove_dir(root.join("runtime")).unwrap();
+    std::fs::remove_dir(root).unwrap();
+}
+
 fn fast_timings() -> RestartTimings {
     RestartTimings {
         port_release: Duration::from_millis(50),

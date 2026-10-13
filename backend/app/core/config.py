@@ -161,6 +161,10 @@ _cached_config: AppConfig | None = None
 _field_revisions: dict[str, int] = {}
 
 
+class ConfigReadError(RuntimeError):
+    """原配置无法安全读取，禁止用默认配置覆盖。"""
+
+
 class ConfigChangedError(RuntimeError):
     """A newer user action superseded the fields being validated."""
 
@@ -297,6 +301,14 @@ def _persist_config_payload(config: AppConfig, *, cleared_keys: set[str] | None 
 
     assert_test_process_does_not_touch_real_data(get_config_file())
     with DATA_WRITE_LOCK:
+        config_file = get_config_file()
+        if config_file.exists():
+            try:
+                existing = json.loads(config_file.read_text(encoding="utf-8-sig"))
+                if not isinstance(existing, dict):
+                    raise ValueError("invalid configuration root")
+            except (OSError, UnicodeError, ValueError):
+                raise ConfigReadError("原配置无法安全读取，已保留原文件；请先修复文件或恢复备份，再保存设置") from None
         payload = asdict(config)
         written: list[tuple[str, str]] = []  # (key, 旧值)
         cleared = cleared_keys or set()
@@ -418,8 +430,10 @@ def _load_config(force_reload: bool = False) -> AppConfig:
     data: dict = {}
     if config_file.exists():
         try:
-            with open(config_file, encoding="utf-8") as f:
+            with open(config_file, encoding="utf-8-sig") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                raise json.JSONDecodeError("配置文件必须是 JSON 对象", "", 0)
             legacy_config = "setup_completed" not in data
             # 只取 AppConfig 中定义的字段
             valid_keys = {f.name for f in AppConfig.__dataclass_fields__.values()}
@@ -460,7 +474,8 @@ def _load_config(force_reload: bool = False) -> AppConfig:
                 _persist_config_payload_guarded(config)
             elif migrated_credentials:
                 _persist_config_payload_guarded(config)
-        except (OSError, json.JSONDecodeError):
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            data = {}
             config = AppConfig()
     else:
         config = AppConfig()

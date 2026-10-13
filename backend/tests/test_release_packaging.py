@@ -65,7 +65,7 @@ def test_tauri_release_verifier_checks_bundled_api_url_and_runtime_files():
 
 
 def test_desktop_launcher_reports_missing_runtime_instead_of_silently_exiting():
-    launcher = (ROOT / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
+    launcher = (ROOT / "src-tauri" / "src" / "desktop.rs").read_text(encoding="utf-8")
     supervisor = (ROOT / "src-tauri" / "src" / "supervisor.rs").read_text(encoding="utf-8")
     job = (ROOT / "src-tauri" / "src" / "backend_job.rs").read_text(encoding="utf-8")
     cargo = (ROOT / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8")
@@ -74,8 +74,8 @@ def test_desktop_launcher_reports_missing_runtime_instead_of_silently_exiting():
     assert "MessageDialogKind::Error" in launcher
     assert "KumiPlayerBackend.exe" in supervisor
     assert "start_bundled_backend" in supervisor
-    assert "完整安装包" in launcher
-    assert "普通用户不需要安装 Python" in launcher
+    assert "完整安装包" in supervisor
+    assert "普通用户不需要安装 Python" in supervisor
     assert "import fastapi, uvicorn, httpx, multipart, websockets" in supervisor
     assert 'pub const BACKEND_PORT: u16 = 37821;' in supervisor
     assert '"8520"' not in supervisor
@@ -94,10 +94,10 @@ def test_desktop_launcher_reports_missing_runtime_instead_of_silently_exiting():
 def test_backend_default_port_matches_desktop_port():
     """后端默认配置必须和桌面壳、前端固定地址保持一致。"""
     config = (ROOT / "backend" / "app" / "core" / "config.py").read_text(encoding="utf-8")
-    env_file = (ROOT / ".env").read_text(encoding="utf-8")
+    client = (ROOT / "src" / "api" / "client.ts").read_text(encoding="utf-8")
 
     assert "server_port: int = 37821" in config
-    assert "VITE_API_BASE=http://127.0.0.1:37821" in env_file
+    assert "http://127.0.0.1:37821" in client
 
 
 def test_installer_build_stages_builtin_mpv_but_blocks_development_only_release():
@@ -261,11 +261,12 @@ def test_mpv_staging_refuses_development_only_runtime(tmp_path):
     assert not staged.exists()
 
 
-def test_first_run_uses_builtin_mpv_and_does_not_ask_user_to_pick_external_player():
+def test_first_run_supports_builtin_and_optional_external_player():
     page = (ROOT / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
 
     assert "内置播放器" in page
     assert "安装包不包含 mpv.exe" not in page
-    assert "选择 MPV" not in page
-    assert "保留该播放器原有的界面、快捷键和插件" not in page
+    assert 'value="internal" label="内置播放器"' in page
+    assert 'value="external" label="外部播放器"' in page
+    assert '外部 MPV 路径' in page
     assert "getMpvRuntime" in page

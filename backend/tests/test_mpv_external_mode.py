@@ -221,15 +221,14 @@ def test_external_open_config_uses_saved_pack(monkeypatch, tmp_path):
 
 def test_external_setup_preserves_mode_without_requiring_builtin(monkeypatch, tmp_path):
     from app.api import config
-    from app.core.config import AppConfig
+    from app.core.config import AppConfig, save_config
     from app.main import app
     from app.playback import mpv_runtime
 
     exe = tmp_path / "mpv.exe"
     exe.write_bytes(b"mpv")
     saved = AppConfig(player_mode="external", external_mpv_path=str(exe))
-    monkeypatch.setattr(config, "load_config", lambda: saved)
-    monkeypatch.setattr(config, "save_config", lambda candidate: None)
+    save_config(saved)
     monkeypatch.setattr(config, "check_mpv_runtime", lambda **kwargs: pytest.fail("must not require builtin"))
     monkeypatch.setattr(mpv_runtime, "read_mpv_version", lambda path: ("mpv v0.41.0", ""))
     response = TestClient(app).post("/api/config/setup/complete", json={
@@ -242,25 +241,24 @@ def test_external_setup_preserves_mode_without_requiring_builtin(monkeypatch, tm
 
 def test_first_setup_can_select_external_player_when_builtin_is_unavailable(monkeypatch, tmp_path):
     from app.api import config
-    from app.core.config import AppConfig
+    from app.core.config import AppConfig, load_config, save_config
     from app.main import app
     from app.playback import mpv_runtime
 
     exe = tmp_path / "mpv.exe"
     exe.write_bytes(b"mpv")
     original = AppConfig()
-    saved = []
-    monkeypatch.setattr(config, "load_config", lambda: original)
-    monkeypatch.setattr(config, "save_config", saved.append)
+    save_config(original)
     monkeypatch.setattr(config, "check_mpv_runtime", lambda **kwargs: pytest.fail("must not require builtin"))
     monkeypatch.setattr(mpv_runtime, "read_mpv_version", lambda path: ("mpv v0.41.0", ""))
     response = TestClient(app).post("/api/config/setup/complete", json={
         "player_mode": "external", "external_mpv_path": str(tmp_path), "local_root": str(tmp_path),
     })
     assert response.status_code == 200
-    assert saved[0].player_mode == "external"
-    assert saved[0].external_mpv_path == str(tmp_path)
-    assert saved[0].setup_completed
+    saved = load_config()
+    assert saved.player_mode == "external"
+    assert saved.external_mpv_path == str(tmp_path)
+    assert saved.setup_completed
     assert original.player_mode == "internal" and not original.setup_completed
 
 
