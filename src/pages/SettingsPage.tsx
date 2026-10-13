@@ -33,6 +33,7 @@ import OpenListSourceRoutes from '../components/settings/OpenListSourceRoutes';
 import OngoingUpdateSettingsPanel from '../components/settings/OngoingUpdateSettingsPanel';
 import PosterWallSettingsPanel from '../components/settings/PosterWallSettingsPanel';
 import WindowSettingsPanel from '../components/settings/WindowSettingsPanel';
+import TmdbImageConnectionPanel from '../components/settings/TmdbImageConnectionPanel';
 import '../styles/settings-media-sources.css';
 import '../styles/settings-navigation.css';
 type SettingsTab = 'application' | 'appearance' | 'sources' | 'openlist' | 'scrape' | 'player' | 'bangumi';
@@ -437,8 +438,9 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
             <ConfigRow label="API 读取访问令牌" value={config.tmdb_configured ? 'configured' : ''} secret placeholder="粘贴 TMDB API 读取访问令牌" onSave={saveTmdbCredential} />
           </div>
           <div className="settings-actions">
-            <GhostButton onClick={() => testConfig('tmdb')}>测试 TMDB 连接</GhostButton>
+            <GhostButton onClick={() => testConfig('tmdb')}>验证 TMDB 令牌</GhostButton>
           </div>
+          <TmdbImageConnectionPanel enabled={Boolean(config.tmdb_configured)} revisionKey={config.proxy_url} />
         </SettingsSection>
       )}
       {config && (

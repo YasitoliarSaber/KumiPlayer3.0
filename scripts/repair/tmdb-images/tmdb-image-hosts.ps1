@@ -2,13 +2,19 @@
 param(
     [Parameter(ParameterSetName = 'Restore')][switch]$Restore,
     [Parameter(ParameterSetName = 'Diagnose')][switch]$Diagnose,
-    [switch]$NoPause
+    [switch]$NoPause,
+    [switch]$Headless,
+    [string]$CandidatesJson = ''
 )
 
 # Windows PowerShell 5.1：源文件采用 UTF-8 BOM，启动器为 UTF-8 无 BOM + CRLF。
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$script:WindowsDirectory = [Environment]::GetFolderPath([Environment+SpecialFolder]::Windows)
+$env:PSModulePath = [IO.Path]::Combine($script:WindowsDirectory, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules')
+$script:EmbeddedCandidatesJson = $CandidatesJson
+$script:RepairOutcome = 10
 $script:ImageDomain = 'image.tmdb.org'
 $script:BeginMarker = '# BEGIN KumiPlayer TMDB image repair'
 $script:EndMarker = '# END KumiPlayer TMDB image repair'
@@ -85,11 +91,27 @@ function Invoke-RepairCurl([string]$CurlPath, [string[]]$CurlArguments, [int]$Ti
     } finally { $process.Dispose() }
 }
 
+function New-RepairTemporaryDirectory {
+    $path = [IO.Path]::Combine([IO.Path]::GetTempPath(), ('kumi-tmdb-' + [guid]::NewGuid().ToString('N')))
+    $acl = New-Object Security.AccessControl.DirectorySecurity
+    $acl.SetAccessRuleProtection($true, $false)
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $acl.SetOwner($identity)
+    foreach ($sid in @($identity, (New-Object Security.Principal.SecurityIdentifier('S-1-5-18')))) {
+        $rule = New-Object Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($rule)
+    }
+    [void][IO.Directory]::CreateDirectory($path, $acl)
+    Assert-PlainPath $path
+    return $path
+}
+
 function Test-TmdbImage([string]$CurlPath, [string]$Ip = '', [string[]]$Urls = $script:SampleUrls) {
     if ($Ip -and -not (Test-PublicIPv4 $Ip)) {
         return [pscustomobject]@{ Ip = $Ip; Ok = $false; Seconds = 0; Kind = 'invalid_ip' }
     }
-    $temporary = [IO.Path]::Combine([IO.Path]::GetTempPath(), ('kumi-tmdb-' + [guid]::NewGuid().ToString('N') + '.img'))
+    $temporaryDirectory = New-RepairTemporaryDirectory
+    $temporary = [IO.Path]::Combine($temporaryDirectory, 'probe.img')
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $kind = 'network'
     try {
@@ -129,14 +151,17 @@ function Test-TmdbImage([string]$CurlPath, [string]$Ip = '', [string[]]$Urls = $
     } catch { $kind = 'network' }
     finally {
         $timer.Stop()
-        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+        if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) }
+        [IO.Directory]::Delete($temporaryDirectory, $false)
     }
     return [pscustomobject]@{ Ip = $Ip; Ok = $false; Seconds = $timer.Elapsed.TotalSeconds; Kind = $kind }
 }
 
 function Get-TmdbCandidates([string]$CurlPath, [string]$SeedPath) {
     $ips = New-Object 'Collections.Generic.List[string]'
-    $seed = [IO.File]::ReadAllText($SeedPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+    $json = if ($script:EmbeddedCandidatesJson) { $script:EmbeddedCandidatesJson } else { [IO.File]::ReadAllText($SeedPath, [Text.Encoding]::UTF8) }
+    if ($json.Length -gt 65536) { throw '候选清单过大。' }
+    $seed = $json | ConvertFrom-Json
     if ($seed.domain -ne $script:ImageDomain -or @($seed.candidates).Count -gt 64) { throw '候选清单格式无效。' }
     foreach ($item in $seed.candidates) { if (Test-PublicIPv4 $item.ip) { $ips.Add($item.ip) } }
     # 只对本次查询指定服务器，不修改网卡 DNS；失败不会删除历史候选。
@@ -171,7 +196,7 @@ function Test-TmdbCandidates([string]$CurlPath, [string[]]$Candidates) {
     $jobs = New-Object Collections.ArrayList
     $results = New-Object Collections.ArrayList
     $definitions = 'Set-StrictMode -Version Latest; $ErrorActionPreference = "Stop";'
-    foreach ($name in @('Test-PublicIPv4', 'Invoke-RepairCurl', 'Test-TmdbImage')) {
+    foreach ($name in @('Assert-PlainPath', 'New-RepairTemporaryDirectory', 'Test-PublicIPv4', 'Invoke-RepairCurl', 'Test-TmdbImage')) {
         $definitions += 'function ' + $name + ' {' + (Get-Item ('function:' + $name)).Definition + '};'
     }
     try {
@@ -331,6 +356,7 @@ function Restore-TmdbHosts([string]$HostsPath, [string]$Directory) {
     Set-GuardedBytes $HostsPath $hash $original $Directory
     $state.status = 'restored'
     Save-RepairState $Directory $state
+    $script:RepairOutcome = 0
     Write-Host '已恢复修复前的 hosts，其他网络设置保持原样。' -ForegroundColor Green
 }
 
@@ -369,9 +395,9 @@ function Apply-TmdbHosts([string]$HostsPath, [string]$Directory, [string[]]$Ips,
 }
 
 function Invoke-TmdbImageRepair(
-    [string]$HostsPath = [IO.Path]::Combine($env:SystemRoot, 'System32', 'drivers', 'etc', 'hosts'),
-    [string]$Directory = [IO.Path]::Combine($env:SystemRoot, 'System32', 'drivers', 'etc', 'KumiPlayer-TMDB-backups'),
-    [string]$CurlPath = [IO.Path]::Combine($env:SystemRoot, 'System32', 'curl.exe')
+    [string]$HostsPath = [IO.Path]::Combine($script:WindowsDirectory, 'System32', 'drivers', 'etc', 'hosts'),
+    [string]$Directory = [IO.Path]::Combine($script:WindowsDirectory, 'System32', 'drivers', 'etc', 'KumiPlayer-TMDB-backups'),
+    [string]$CurlPath = [IO.Path]::Combine($script:WindowsDirectory, 'System32', 'curl.exe')
 ) {
     if (-not (Test-Path -LiteralPath $curlPath)) { throw 'Windows curl 不可用，请先更新 Windows；没有修改任何网络设置。' }
     Assert-PlainPath $hostsPath
@@ -380,7 +406,7 @@ function Invoke-TmdbImageRepair(
     if ($Restore) {
         Initialize-RepairDirectory $directory
         Restore-TmdbHosts $hostsPath $directory
-        [void](Invoke-RepairCurl ([IO.Path]::Combine($env:SystemRoot, 'System32', 'ipconfig.exe')) @('/flushdns'))
+        [void](Invoke-RepairCurl ([IO.Path]::Combine($script:WindowsDirectory, 'System32', 'ipconfig.exe')) @('/flushdns'))
         return
     }
     Write-Host '正在检查当前图片连接…'
@@ -390,7 +416,8 @@ function Invoke-TmdbImageRepair(
         return
     }
     Write-Host '正在获取多个候选地址并进行本机测试，通常需要一到两分钟…'
-    $candidates = @(Get-TmdbCandidates $curlPath ([IO.Path]::Combine($PSScriptRoot, 'candidates.json')))
+    $candidatePath = if ($script:EmbeddedCandidatesJson) { '' } else { [IO.Path]::Combine($PSScriptRoot, 'candidates.json') }
+    $candidates = @(Get-TmdbCandidates $curlPath $candidatePath)
     Write-Host ("已取得 {0} 个候选；其他电脑的测试结果不会影响本机选择。" -f $candidates.Count)
     $results = @(Test-TmdbCandidates $curlPath $candidates)
     $good = @($results | Where-Object { $_.Ok } | Sort-Object Seconds | Select-Object -ExpandProperty Ip -Unique)
@@ -400,16 +427,17 @@ function Invoke-TmdbImageRepair(
     Initialize-RepairDirectory $directory
     try {
         Apply-TmdbHosts $hostsPath $directory $good {
-            [void](Invoke-RepairCurl ([IO.Path]::Combine($env:SystemRoot, 'System32', 'ipconfig.exe')) @('/flushdns'))
+            [void](Invoke-RepairCurl ([IO.Path]::Combine($script:WindowsDirectory, 'System32', 'ipconfig.exe')) @('/flushdns'))
             $resolved = @([Net.Dns]::GetHostAddresses('image.tmdb.org') | ForEach-Object { $_.ToString() })
             if (@($resolved | Where-Object { $_ -in $good }).Count -eq 0) { return $false }
             return (Test-TmdbImage $curlPath).Ok
         }
     } catch {
         # 回滚后同步清除本次解析缓存，避免继续使用已经撤回的映射。
-        [void](Invoke-RepairCurl ([IO.Path]::Combine($env:SystemRoot, 'System32', 'ipconfig.exe')) @('/flushdns'))
+        [void](Invoke-RepairCurl ([IO.Path]::Combine($script:WindowsDirectory, 'System32', 'ipconfig.exe')) @('/flushdns'))
         throw
     }
+    $script:RepairOutcome = 0
     Write-Host '图片连接已恢复，原设置已备份。' -ForegroundColor Green
     Write-Host '请正常重启 KumiPlayer，在媒体管理点击“重新下载媒体图片”。'
     Write-Host '如需撤回，双击同目录的“恢复原设置.cmd”。'
@@ -429,7 +457,8 @@ try {
             $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '"'
             if ($Restore) { $arguments += ' -Restore' }
             if ($NoPause) { $arguments += ' -NoPause' }
-            $child = Start-Process -FilePath ([IO.Path]::Combine($env:SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')) -ArgumentList $arguments -Verb RunAs -WindowStyle Normal -Wait -PassThru
+            if ($Headless) { $arguments += ' -Headless' }
+            $child = Start-Process -FilePath ([IO.Path]::Combine($script:WindowsDirectory, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')) -ArgumentList $arguments -Verb RunAs -WindowStyle Normal -Wait -PassThru
             exit $child.ExitCode
         }
         $repairMutex = New-Object Threading.Mutex($false, 'Global\KumiPlayerTmdbImageHostsRepair')
@@ -445,5 +474,6 @@ try {
     if ($lockTaken) { $repairMutex.ReleaseMutex() }
     if ($repairMutex) { $repairMutex.Dispose() }
 }
-if (-not $NoPause) { [void](Read-Host '按回车关闭') }
+if (-not $NoPause -and -not $Headless) { [void](Read-Host '按回车关闭') }
+if ($Headless -and $exitCode -eq 0) { exit $script:RepairOutcome }
 exit $exitCode

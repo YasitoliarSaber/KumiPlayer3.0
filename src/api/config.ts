@@ -158,6 +158,29 @@ export const configApi = {
   saveTmdbCredential: (token: string) => api.post<PublicConfig>('/api/config/setup/credentials/tmdb', { tmdb_bearer_token: token }),
   completeSetup: (payload: SetupCompletePayload) => api.post<PublicConfig>('/api/config/setup/complete', payload),
   testTmdb: () => api.post<{ ok: boolean; message: string }>('/api/config/test/tmdb'),
+  testTmdbImages: () => api.post<TmdbImageDiagnostic>('/api/config/test/tmdb-images'),
+  repairTmdbImages: (operation: 'repair' | 'restore', diagnosticId = '') =>
+    api.post<TmdbImageRepairJob>('/api/config/tmdb-images/repair', { operation, diagnostic_id: diagnosticId }),
+  getTmdbImageRepair: (jobId: string) =>
+    api.get<TmdbImageRepairJob>('/api/config/tmdb-images/repair/' + encodeURIComponent(jobId)),
   testDeepseek: () => api.post<{ ok: boolean; message: string }>('/api/config/test/deepseek'),
   testMediaPaths: () => api.post<MediaPathValidationResponse>('/api/config/test/media-paths'),
+}
+
+export interface TmdbImageDiagnostic {
+  ok: boolean
+  reason: string
+  message: string
+  diagnostic_id: string
+  repair_available: boolean
+  restore_available: boolean
+}
+
+export interface TmdbImageRepairJob {
+  job_id: string
+  operation: 'repair' | 'restore'
+  status: 'running' | 'completed' | 'failed' | 'cancelled'
+  message: string
+  changed: boolean
+  queued_images: number
 }

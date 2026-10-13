@@ -90,6 +90,24 @@ class ArtworkService:
             conn.execute("UPDATE artwork_resources SET state='pending',retry_at=0,error_kind='' "
                          "WHERE resource_id=? AND state IN ('retry','failed','cancelled')", (resource_id,))
 
+    def retry_failed_tmdb_downloads(self) -> int:
+        """网络恢复后只重试当前有效的失败图片；不恢复取消项、不改媒体事实。"""
+        count = 0
+        with self.database.connect() as conn:
+            rows = conn.execute(
+                "SELECT resource_id FROM artwork_resources WHERE state IN ('retry','failed') "
+                "AND source_url LIKE 'https://image.tmdb.org/t/p/%' "
+                "AND error_kind<>'invalid_manual_source' ORDER BY created_at LIMIT 2048"
+            ).fetchall()
+            for row in rows:
+                if not self._live_bindings(conn, row["resource_id"]):
+                    continue
+                count += conn.execute(
+                    "UPDATE artwork_resources SET state='pending',retry_at=0,error_kind='',attempts=0 "
+                    "WHERE resource_id=? AND state IN ('retry','failed')", (row["resource_id"],)
+                ).rowcount
+        return count
+
     def process_available(self, limit: int = 64) -> int:
         # 一次最多处理64个需求，只为正在执行的槽位领取租约。
         if not self._process_lock.acquire(blocking=False):

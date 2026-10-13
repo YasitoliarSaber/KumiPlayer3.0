@@ -37,6 +37,7 @@ from app.core.media_path_probe import (
     probe_media_path_states as _probe_media_path_states,
 )
 from app.core.runtime import get_mpv_config_dir, get_mpv_runtime_dir
+from app.core.tmdb_image_repair import image_repair_manager
 from app.integrations.bangumi import BangumiClient, BangumiError
 from app.playback.mpv_runtime import check_mpv_runtime, inspect_external_mpv, resolve_external_mpv_path
 from app.scrape.tmdb_client import TMDBClient
@@ -460,6 +461,33 @@ def complete_setup(req: SetupCompleteRequest):
 # ============================================================
 # 测试端点
 # ============================================================
+
+class TmdbImageRepairRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["repair", "restore"] = "repair"
+    diagnostic_id: str = Field(default="", max_length=32, pattern=r"^[a-f0-9]*$")
+
+
+@router.post("/test/tmdb-images")
+def test_tmdb_images():
+    return image_repair_manager.diagnose()
+
+
+@router.post("/tmdb-images/repair")
+def repair_tmdb_images(req: TmdbImageRepairRequest):
+    try:
+        return image_repair_manager.start(req.operation, req.diagnostic_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/tmdb-images/repair/{job_id}")
+def tmdb_image_repair_status(job_id: str):
+    try:
+        return image_repair_manager.status(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="修复任务已失效，请重新检测") from None
+
 
 @router.get("/mpv-runtime")
 def get_mpv_runtime_status():

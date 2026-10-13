@@ -7,6 +7,7 @@ import { SettingsFeedback, SettingsField } from '../components/ui/SettingsPrimit
 import { useBangumiStore } from '../stores/bangumi';
 import { pickFile, pickFolder } from '../platform/folderPicker';
 import '../styles/first-run-refinement.css';
+import TmdbImageConnectionPanel from '../components/settings/TmdbImageConnectionPanel';
 
 interface FirstRunSetupProps {
   initialConfig: PublicConfig;
@@ -355,6 +356,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                     <a href={TMDB_API_SETTINGS_URL} target="_blank" rel="noreferrer">前往 TMDB API 设置 <ExternalLink size={14} /></a>
                     <CredentialField provider="TMDB" label="TMDB API 读取访问令牌" value={form.tmdb_bearer_token || ''} saved={credentialSaved.tmdb} busy={credentialBusy.tmdb} feedback={credentialFeedback.tmdb} disabled={finishing}
                       onChange={(value) => update('tmdb_bearer_token', value)} onSave={() => void saveCredential('tmdb')} />
+                    <TmdbImageConnectionPanel enabled={credentialSaved.tmdb} />
                   </article>
                   <article className="first-run-credential-card">
                     <div className="first-run-credential-title"><KeyRound size={18} /><div><strong>Bangumi 个人访问令牌</strong><small>可选 · 用于同步收藏与已看集数</small></div></div>

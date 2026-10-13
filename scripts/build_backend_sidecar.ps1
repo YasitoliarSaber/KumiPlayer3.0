@@ -40,6 +40,8 @@ $arguments = @(
     '--hidden-import', 'uvicorn.loops.auto',
     '--hidden-import', 'uvicorn.protocols.http.auto',
     '--hidden-import', 'uvicorn.protocols.websockets.auto',
+    '--add-data', ((Join-Path $resolvedRoot 'scripts\repair\tmdb-images\tmdb-image-hosts.ps1') + ':tmdb-repair'),
+    '--add-data', ((Join-Path $resolvedRoot 'scripts\repair\tmdb-images\candidates.json') + ':tmdb-repair'),
     $entrypoint
 )
 & python @arguments

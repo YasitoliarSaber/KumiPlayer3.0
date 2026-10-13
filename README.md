@@ -152,7 +152,9 @@ TMDB 需要的是“API 读取访问令牌”，不是 32 位 API Key。以后�
 
 ### TMDB 图片下载失败
 
-双击 [修复TMDB图片.cmd](scripts/repair/tmdb-images/修复TMDB图片.cmd)，允许 Windows 权限提示并等待完成；成功后正常重启软件，在媒体管理点击“重新下载媒体图片”。工具自动查询、验证多个地址并备份，只修改图片域名的 hosts；双击 [恢复原设置.cmd](scripts/repair/tmdb-images/恢复原设置.cmd) 可撤回。文件须一起保留，详见 [简短使用说明](scripts/repair/tmdb-images/README.md)。
+在“设置 → 元数据与图片”检测图片连接；首次引导保存 TMDB 令牌后和导入图片失败时也会自动检测。连接异常时点击“一键修复图片连接”，允许 Windows 权限提示并等待完成；复检成功后自动重试当前有效的失败图片，不必重新导入。点击“恢复修复前设置”可撤回。
+
+独立入口 [修复TMDB图片.cmd](scripts/repair/tmdb-images/修复TMDB图片.cmd) 和 [恢复原设置.cmd](scripts/repair/tmdb-images/恢复原设置.cmd) 继续保留，详见 [简短使用说明](scripts/repair/tmdb-images/README.md)。工具只修改图片域名的 hosts，也会影响其他软件访问同一域名。
 
 ## 日常使用路径
 
