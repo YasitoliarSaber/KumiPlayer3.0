@@ -359,6 +359,11 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
   const renderApplication = () => (
     <PanelStack>
       <SectionIntro title="应用" />
+      <SettingsSection title="设置引导" description="重新检查播放器、媒体目录与账户；保留已有配置和媒体库。" action={
+        <GhostButton onClick={() => config && onOpenSetup?.(config)} disabled={!config || !onOpenSetup}>
+          <RotateCcw size={16} aria-hidden="true" />打开设置引导
+        </GhostButton>
+      }>{null}</SettingsSection>
       <WindowSettingsPanel />
       {config && (
         <SettingsSection title="界面连接监测">
@@ -630,14 +635,6 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
             </div>
           )}
         </>}
-        <div className="settings-support-row">
-          <div>
-            <p>可随时重新打开设置引导，不会清空现有配置或媒体库。</p>
-          </div>
-          <GhostButton onClick={() => config && onOpenSetup?.(config)} disabled={!onOpenSetup}>
-            <RotateCcw size={16} aria-hidden="true" />打开设置引导
-          </GhostButton>
-        </div>
       </SettingsSection>
     </PanelStack>
   );

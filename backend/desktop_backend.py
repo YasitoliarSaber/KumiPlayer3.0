@@ -1,13 +1,13 @@
 """PyInstaller 桌面后端入口；普通用户无需安装 Python。"""
 
+import multiprocessing
 import os
-
-import uvicorn
-
-from app.main import app
 
 
 def main() -> None:
+    import uvicorn
+    from app.main import app
+
     host = os.environ.get("KUMIPLAYER_HOST", "127.0.0.1")
     try:
         port = int(os.environ.get("KUMIPLAYER_PORT", "37821"))
@@ -23,4 +23,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Frozen workers must dispatch before importing or starting the server.
+    multiprocessing.freeze_support()
     main()

@@ -681,3 +681,89 @@ class TestTestDeepseek:
         data = resp.json()
         assert data["ok"] is True
         assert "成功" in data["message"]
+
+
+class TestStepSetupSaving:
+    def test_sources_validate_and_save_before_completion(self, client, temp_config, tmp_path):
+        folder = tmp_path / "本地媒体 spaces"
+        folder.mkdir()
+        save_config(AppConfig(bangumi_access_token=BANGUMI_TOKEN))
+        response = client.post("/api/config/setup/sources", json={"local_root": str(folder)})
+        assert response.status_code == 200
+        assert response.json()["setup_completed"] is False
+        invalidate_config_cache()
+        assert load_config().local_root == str(folder)
+        assert load_config().bangumi_access_token == BANGUMI_TOKEN
+
+    def test_invalid_directory_reports_path_without_saving(self, client, temp_config, tmp_path):
+        save_config(AppConfig(local_root=str(tmp_path), setup_completed=True))
+        before = temp_config.read_bytes()
+        missing = tmp_path / "不存在"
+        response = client.post("/api/config/setup/sources", json={"local_root": str(missing)})
+        assert response.status_code == 400
+        assert "本地媒体目录不存在或不可访问" in response.json()["detail"]
+        assert str(missing) in response.json()["detail"]
+        assert temp_config.read_bytes() == before
+
+    def test_optional_tree_directory_is_checked_before_saving(self, client, temp_config, tmp_path):
+        response = client.post("/api/config/setup/sources", json={
+            "local_root": str(tmp_path), "directory_tree_dir": str(tmp_path / "missing-tree"),
+        })
+        assert response.status_code == 400
+        assert "目录树文件目录" in response.json()["detail"]
+        assert load_config().local_root == ""
+
+    def test_timeout_is_distinct_from_a_missing_directory(self, client, temp_config, tmp_path, monkeypatch):
+        monkeypatch.setattr("app.api.config._probe_media_path_states", lambda *args: ([False], True))
+        response = client.post("/api/config/setup/sources", json={"local_root": str(tmp_path)})
+        assert response.status_code == 400
+        assert "检查超时" in response.json()["detail"]
+
+    def test_independent_tmdb_save_survives_later_setup_failure(self, client, temp_config, tmp_path):
+        token = _fake_credential("tmdb_bearer_token")
+        save_config(AppConfig(bangumi_access_token=BANGUMI_TOKEN, local_root=str(tmp_path)))
+        with patch("app.api.config.TMDBClient") as tmdb:
+            tmdb.return_value.__enter__.return_value.test_authentication.return_value = (True, "通过")
+            response = client.post("/api/config/setup/credentials/tmdb", json={"tmdb_bearer_token": token})
+        assert response.status_code == 200
+        assert response.json()["tmdb_configured"] is True
+        assert token not in response.text
+        with patch("app.api.config.check_mpv_runtime", return_value={
+            "available": True, "manifest_valid": True, "files_valid": True, "configuration_available": True,
+        }):
+            response = client.post("/api/config/setup/complete", json={"local_root": str(tmp_path / "missing")})
+        assert response.status_code == 400
+        invalidate_config_cache()
+        assert load_config().tmdb_bearer_token == token
+        assert load_config().bangumi_access_token == BANGUMI_TOKEN
+        assert load_config().setup_completed is False
+
+    def test_rejected_tmdb_credential_preserves_saved_token(self, client, temp_config):
+        old = _fake_credential("old_tmdb")
+        save_config(AppConfig(tmdb_bearer_token=old))
+        with patch("app.api.config.TMDBClient") as tmdb:
+            tmdb.return_value.__enter__.return_value.test_authentication.return_value = (False, "认证失败")
+            response = client.post("/api/config/setup/credentials/tmdb", json={"tmdb_bearer_token": _fake_credential("new_tmdb")})
+        assert response.status_code == 400
+        invalidate_config_cache()
+        assert load_config().tmdb_bearer_token == old
+
+    def test_tmdb_api_key_is_rejected_before_network_verification(self, client, temp_config):
+        with patch("app.api.config.TMDBClient") as tmdb:
+            response = client.post("/api/config/setup/credentials/tmdb", json={"tmdb_bearer_token": "a" * 32})
+        assert response.status_code == 400
+        assert "API 密钥" in response.json()["detail"]
+        tmdb.assert_not_called()
+
+    def test_bangumi_save_keeps_tmdb_saved_during_its_verification(self, client, temp_config):
+        new_tmdb = _fake_credential("concurrent_tmdb")
+        def verified_account(**kwargs):
+            save_config(AppConfig(tmdb_bearer_token=new_tmdb))
+            return {"id": 123, "username": "fixture"}
+        with patch("app.api.bangumi.BangumiClient") as bangumi:
+            bangumi.return_value.get_me.side_effect = verified_account
+            response = client.post("/api/integrations/bangumi/token", json={"access_token": BANGUMI_TOKEN})
+        assert response.status_code == 200
+        invalidate_config_cache()
+        assert load_config().tmdb_bearer_token == new_tmdb
+        assert load_config().bangumi_access_token == BANGUMI_TOKEN

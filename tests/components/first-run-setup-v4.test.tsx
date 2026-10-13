@@ -17,10 +17,14 @@ const api = vi.hoisted(() => ({
     message: '内置播放器已就绪',
   })),
   completeSetup: vi.fn(),
+  saveSetupSources: vi.fn(async () => ({})),
+  saveTmdbCredential: vi.fn(async () => ({})),
+  saveBangumiToken: vi.fn(async () => {}),
   testMpv: vi.fn(async () => ({ ok: true, message: '播放器可用' })),
 }));
 
 vi.mock('../../src/api/config', () => ({ configApi: api }));
+vi.mock('../../src/stores/bangumi', () => ({ useBangumiStore: (selector: (state: unknown) => unknown) => selector({ setToken: api.saveBangumiToken }) }));
 vi.mock('../../src/platform/folderPicker', () => ({ pickFolder: vi.fn(), pickFile: vi.fn() }));
 const closeWindow = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true }));
@@ -54,12 +58,11 @@ describe('FirstRunSetup V4 引导', () => {
     await screen.findByText('内置播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '准备开始使用' });
     fireEvent.click(screen.getByRole('button', { name: /海报与观看同步/ }));
     fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('媒体来源不可访问');
-    fireEvent.click(screen.getByRole('button', { name: '返回' }));
     expect(screen.getByRole('textbox', { name: '本地媒体根目录' })).toHaveValue('D:\\Missing');
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '返回播放器' }));
     expect(screen.getByRole('heading', { name: '选择播放器' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: '关闭引导，进入软件' }));
@@ -75,6 +78,7 @@ describe('FirstRunSetup V4 引导', () => {
     await screen.findByText('内置播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '准备开始使用' });
     fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
     fireEvent.click(screen.getByRole('button', { name: '返回' }));
     await act(async () => { resolve({ ...config, setup_completed: true } as never); });
@@ -98,6 +102,7 @@ describe('FirstRunSetup V4 引导', () => {
     await screen.findByText('外部播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '准备开始使用' });
     fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
     await waitFor(() => expect(api.completeSetup).toHaveBeenCalledWith(expect.objectContaining({ player_mode: 'external', external_mpv_path: 'D:\\OtherPlayer' })));
   });
@@ -145,6 +150,7 @@ describe('FirstRunSetup V4 引导', () => {
     fireEvent.click(screen.getByRole('radio', { name: /本地文件夹/ }));
     expect(screen.getByRole('textbox', { name: '本地媒体根目录' })).toHaveValue('D:\\Anime');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '准备开始使用' });
     expect(screen.queryByLabelText('TMDB API 读取访问令牌')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /海报与观看同步/ }));
     expect(screen.getByLabelText('TMDB API 读取访问令牌')).toBeVisible();
@@ -209,5 +215,94 @@ describe('FirstRunSetup V4 引导', () => {
     fireEvent.click(screen.getByRole('radio', { name: /百度网盘/ }));
     fireEvent.change(screen.getByRole('textbox', { name: '百度网盘挂载位置' }), { target: { value: 'H:\\Baidu' } });
     expect(screen.getByRole('button', { name: '继续' })).toBeEnabled();
+  });
+});
+
+
+async function reachSources() {
+  fireEvent.click(screen.getByRole('button', { name: '继续' }));
+  await screen.findByText('内置播放器已就绪');
+  fireEvent.click(screen.getByRole('button', { name: '继续' }));
+}
+
+async function reachCredentials() {
+  await reachSources();
+  fireEvent.click(screen.getByRole('button', { name: '继续' }));
+  await screen.findByRole('heading', { name: '准备开始使用' });
+  fireEvent.click(screen.getByRole('button', { name: /海报与观看同步/ }));
+}
+
+describe('逐项验证与保存', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  test('继续时验证尚未保存的目录，失败停在来源步骤并保留输入', async () => {
+    api.saveSetupSources.mockRejectedValueOnce(new Error('本地媒体目录不存在或不可访问：D:/Missing'));
+    render(<FirstRunSetup initialConfig={{ ...config, local_root: 'D:/Missing' } as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
+    await reachSources();
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('D:/Missing');
+    expect(screen.getByRole('textbox', { name: '本地媒体根目录' })).toHaveValue('D:/Missing');
+    expect(screen.queryByRole('heading', { name: '准备开始使用' })).not.toBeInTheDocument();
+    expect(api.completeSetup).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole('textbox', { name: '本地媒体根目录' }), { target: { value: 'D:/Media' } });
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByText('已验证并保存 1 个来源');
+    expect(api.saveSetupSources).toHaveBeenLastCalledWith(expect.objectContaining({ local_root: 'D:/Media' }));
+  });
+
+  test('目录检查等待时仍可返回，迟到结果不能再次跳步', async () => {
+    let resolve!: (value: object) => void;
+    api.saveSetupSources.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    render(<FirstRunSetup initialConfig={{ ...config, local_root: 'D:/Media' } as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
+    await reachSources();
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    expect(screen.getByRole('button', { name: '正在检查目录…' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    await act(async () => resolve({}));
+    expect(screen.getByRole('heading', { name: '选择播放器' })).toBeVisible();
+  });
+
+  test('TMDB 与 Bangumi 分别验证并保存，来源失败后保存结果仍保留', async () => {
+    api.completeSetup.mockRejectedValueOnce(new Error('本地媒体目录不存在或不可访问：D:/Media'));
+    render(<FirstRunSetup initialConfig={{ ...config, local_root: 'D:/Media' } as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
+    await reachCredentials();
+    fireEvent.change(screen.getByLabelText('TMDB API 读取访问令牌'), { target: { value: 'fixture:tmdb-read-token' } });
+    fireEvent.change(screen.getByLabelText('Bangumi 个人访问令牌'), { target: { value: 'fixture:bangumi-token' } });
+    fireEvent.click(screen.getByRole('button', { name: '验证并保存 TMDB' }));
+    await waitFor(() => expect(screen.getByLabelText('TMDB API 读取访问令牌')).toHaveValue(''));
+    expect(api.saveTmdbCredential).toHaveBeenCalledWith('fixture:tmdb-read-token');
+    expect(screen.getByLabelText('Bangumi 个人访问令牌')).toHaveValue('fixture:bangumi-token');
+    fireEvent.click(screen.getByRole('button', { name: '验证并保存 Bangumi' }));
+    await waitFor(() => expect(screen.getByLabelText('Bangumi 个人访问令牌')).toHaveValue(''));
+    expect(api.saveBangumiToken).toHaveBeenCalledWith('fixture:bangumi-token');
+    fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
+    await screen.findByRole('textbox', { name: '本地媒体根目录' });
+    expect(api.completeSetup.mock.calls[0][0]).not.toHaveProperty('tmdb_bearer_token');
+    expect(api.completeSetup.mock.calls[0][0]).not.toHaveProperty('bangumi_access_token');
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '准备开始使用' });
+    fireEvent.click(screen.getByRole('button', { name: /海报与观看同步/ }));
+    expect(screen.getAllByPlaceholderText('已保存；输入新令牌可替换')).toHaveLength(2);
+  });
+
+  test('单项验证失败保留令牌便于重试，不调用最后一步', async () => {
+    api.saveTmdbCredential.mockRejectedValueOnce(new Error('认证失败，请检查令牌'));
+    render(<FirstRunSetup initialConfig={{ ...config, local_root: 'D:/Media' } as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
+    await reachCredentials();
+    fireEvent.change(screen.getByLabelText('TMDB API 读取访问令牌'), { target: { value: 'fixture:bad-token' } });
+    fireEvent.click(screen.getByRole('button', { name: '验证并保存 TMDB' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('认证失败');
+    expect(screen.getByLabelText('TMDB API 读取访问令牌')).toHaveValue('fixture:bad-token');
+    expect(api.completeSetup).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '返回' })).toBeEnabled();
+  });
+
+  test('完成前提示分别保存新令牌，避免默默丢弃输入', async () => {
+    render(<FirstRunSetup initialConfig={{ ...config, local_root: 'D:/Media' } as never} onComplete={vi.fn()} onCancel={vi.fn()} />);
+    await reachCredentials();
+    fireEvent.change(screen.getByLabelText('Bangumi 个人访问令牌'), { target: { value: 'fixture:unsaved' } });
+    fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('验证并保存');
+    expect(api.completeSetup).not.toHaveBeenCalled();
   });
 });

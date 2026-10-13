@@ -110,3 +110,14 @@ def test_unknown_host_is_rejected():
     )
 
     assert response.status_code == 400
+
+
+def test_setup_partial_saves_require_session_authentication(monkeypatch):
+    monkeypatch.setenv("KUMIPLAYER_API_TOKEN", "test-session-token")
+    client = TestClient(app)
+    for route, payload in [
+        ("/api/config/setup/sources", {"local_root": "fixture"}),
+        ("/api/config/setup/credentials/tmdb", {"tmdb_bearer_token": "fixture"}),
+        ("/api/integrations/bangumi/token", {"access_token": "fixture"}),
+    ]:
+        assert client.post(route, json=payload).status_code == 401

@@ -124,6 +124,8 @@ export interface SetupCompletePayload {
   bangumi_access_token?: string
 }
 
+export type SetupSourcesPayload = Pick<SetupCompletePayload, 'pan115_root' | 'baidu_root' | 'local_root' | 'directory_tree_dir'>
+
 export interface MediaPathValidationItem {
   source: 'pan115' | 'baidu' | 'quark' | 'local' | 'openlist'
   ok: boolean
@@ -151,6 +153,8 @@ export const configApi = {
     : api.post<MpvValidationResult>('/api/config/test/mpv'),
   testMpvPath: (mpvPath: string, playerMode?: PublicConfig['player_mode']) => api.post<MpvValidationResult>('/api/config/test/mpv-path', { mpv_path: mpvPath, ...(playerMode ? { player_mode: playerMode } : {}) }),
   deferSetup: () => api.post<PublicConfig>('/api/config/setup/defer'),
+  saveSetupSources: (payload: SetupSourcesPayload) => api.post<PublicConfig>('/api/config/setup/sources', payload),
+  saveTmdbCredential: (token: string) => api.post<PublicConfig>('/api/config/setup/credentials/tmdb', { tmdb_bearer_token: token }),
   completeSetup: (payload: SetupCompletePayload) => api.post<PublicConfig>('/api/config/setup/complete', payload),
   testTmdb: () => api.post<{ ok: boolean; message: string }>('/api/config/test/tmdb'),
   testDeepseek: () => api.post<{ ok: boolean; message: string }>('/api/config/test/deepseek'),

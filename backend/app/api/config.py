@@ -9,12 +9,11 @@ POST  /api/config/test/media-paths 轻量验证网盘挂载与视频样本
 """
 
 import copy
-import json
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,25 +23,19 @@ from app.core.config import (
     load_config,
     save_config,
 )
+from app.core.data_lock import DATA_WRITE_LOCK
+from app.core.media_path_probe import (
+    MEDIA_PATH_PROBE_TIMEOUT_SECONDS as _MEDIA_PATH_PROBE_TIMEOUT_SECONDS,
+)
+from app.core.media_path_probe import (
+    probe_media_path_states as _probe_media_path_states,
+)
 from app.core.runtime import get_mpv_config_dir, get_mpv_runtime_dir
 from app.integrations.bangumi import BangumiClient, BangumiError
 from app.playback.mpv_runtime import check_mpv_runtime, inspect_external_mpv, resolve_external_mpv_path
 from app.scrape.tmdb_client import TMDBClient
 
 router = APIRouter(prefix="/api/config", tags=["config"])
-_MEDIA_PATH_PROBE_TIMEOUT_SECONDS = 4
-_MEDIA_PATH_PROBE_CODE = (
-    "import json, os, sys\n"
-    "checks = json.loads(sys.stdin.read())\n"
-    "states = []\n"
-    "for item in checks:\n"
-    "    try:\n"
-    "        states.append(os.path.isdir(item['path']) if item['kind'] == 'dir' "
-    "else os.path.isfile(item['path']))\n"
-    "    except OSError:\n"
-    "        states.append(False)\n"
-    "sys.stdout.write(json.dumps(states))\n"
-)
 
 
 # ============================================================
@@ -99,18 +92,27 @@ class ConfigPatch(BaseModel):
     auto_shutdown_on_heartbeat_timeout: bool | None = None
 
 
-class SetupCompleteRequest(BaseModel):
+class SetupSourcesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    pan115_root: str = ""
+    baidu_root: str = ""
+    local_root: str = ""
+    directory_tree_dir: str = ""
+
+
+class TmdbCredentialRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tmdb_bearer_token: str = Field(min_length=1)
+
+
+class SetupCompleteRequest(SetupSourcesRequest):
     # Omitted fields preserve the saved choice when re-running setup.
     player_mode: Literal["internal", "external"] | None = None
     external_mpv_path: str | None = None
     mpv_path: str = ""
     mirror_dir: str | None = None
-    pan115_root: str = ""
-    baidu_root: str = ""
-    local_root: str = ""
-    directory_tree_dir: str = ""
     tmdb_bearer_token: str = ""
     bangumi_access_token: str = ""
 
@@ -126,42 +128,6 @@ class MpvConfigDirectoryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     player_mode: Literal["internal", "external"] = "internal"
-
-
-def _probe_media_path_states(
-    root: Path,
-    sample_paths: list[Path],
-) -> tuple[list[bool], bool]:
-    """在可终止子进程中探测挂载路径，避免离线盘符无限阻塞请求线程。"""
-    checks = [
-        {"kind": "dir", "path": str(root)},
-        *({"kind": "file", "path": str(path)} for path in sample_paths),
-    ]
-    run_kwargs: dict[str, Any] = {}
-    create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    if create_no_window:
-        run_kwargs["creationflags"] = create_no_window
-    try:
-        result = subprocess.run(
-            [sys.executable, "-c", _MEDIA_PATH_PROBE_CODE],
-            input=json.dumps(checks, ensure_ascii=True),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=_MEDIA_PATH_PROBE_TIMEOUT_SECONDS,
-            **run_kwargs,
-        )
-        if result.returncode != 0:
-            return [False] * len(checks), False
-        states = json.loads(result.stdout)
-        if not isinstance(states, list) or len(states) != len(checks):
-            return [False] * len(checks), False
-        return [bool(state) for state in states], False
-    except subprocess.TimeoutExpired:
-        return [False] * len(checks), True
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        return [False] * len(checks), False
 
 
 # ============================================================
@@ -352,6 +318,62 @@ def defer_setup():
     return config.to_public_dict()
 
 
+def _validate_setup_sources(req: SetupSourcesRequest) -> dict[str, str]:
+    sources = {key: str(Path(value.strip()).expanduser()) if value.strip() else ""
+               for key, value in req.model_dump(include={
+                   "pan115_root", "baidu_root", "local_root", "directory_tree_dir",
+               }).items()}
+    if not any(sources[key] for key in ("pan115_root", "baidu_root", "local_root")):
+        raise HTTPException(status_code=400, detail="请至少配置一个可访问的媒体来源")
+    labels = {"pan115_root": "115 网盘目录", "baidu_root": "百度网盘目录",
+              "local_root": "本地媒体目录", "directory_tree_dir": "目录树文件目录"}
+    configured = [(key, path) for key, path in sources.items() if path]
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        states = list(executor.map(lambda item: _probe_media_path_states(Path(item[1]), []), configured))
+    for (key, path), (available, timed_out) in zip(configured, states, strict=True):
+        if not available[0]:
+            reason = "检查超时，请确认磁盘或挂载连接后重试" if timed_out else "不存在或不可访问"
+            raise HTTPException(status_code=400, detail=f"{labels[key]}{reason}：{path}")
+    return sources
+
+
+def _validate_tmdb_credential(token: str) -> None:
+    if not token:
+        raise HTTPException(status_code=400, detail="请填写 TMDB API 读取访问令牌")
+    if len(token) == 32 and all(char in "0123456789abcdefABCDEF" for char in token):
+        raise HTTPException(status_code=400, detail="你粘贴的是 TMDB API 密钥；KumiPlayer 需要页面上方较长的 API 读取访问令牌。")
+    try:
+        with TMDBClient(bearer_token=token, timeout=8, max_retries=1) as client:
+            ok, message = client.test_authentication()
+    except Exception as exc:
+        # Do not echo arbitrary transport exceptions which may contain credentials.
+        raise HTTPException(status_code=400, detail="TMDB 验证未完成，请检查网络连接后重试") from exc
+    if not ok:
+        raise HTTPException(status_code=400, detail=f"TMDB Token 验证失败: {message}")
+
+
+@router.post("/setup/sources")
+def save_setup_sources(req: SetupSourcesRequest):
+    sources = _validate_setup_sources(req)
+    with DATA_WRITE_LOCK:
+        config = copy.deepcopy(load_config())
+        for key, value in sources.items():
+            setattr(config, key, value)
+        save_config(config)
+    return config.to_public_dict()
+
+
+@router.post("/setup/credentials/tmdb")
+def save_setup_tmdb_credential(req: TmdbCredentialRequest):
+    token = req.tmdb_bearer_token.strip()
+    _validate_tmdb_credential(token)
+    with DATA_WRITE_LOCK:
+        config = copy.deepcopy(load_config())
+        config.tmdb_bearer_token = token
+        save_config(config)
+    return config.to_public_dict()
+
+
 @router.post("/setup/complete")
 def complete_setup(req: SetupCompleteRequest):
     # Validate the requested selection before persisting any setup changes.
@@ -377,52 +399,17 @@ def complete_setup(req: SetupCompleteRequest):
         if not runtime_status["configuration_available"]:
             raise HTTPException(status_code=400, detail="KumiPlayer 播放配置不完整，无法完成设置")
 
-    source_roots = {
-        "115 网盘": req.pan115_root.strip(),
-        "百度网盘": req.baidu_root.strip(),
-        "本地媒体": req.local_root.strip(),
-    }
-    configured_sources = {name: value for name, value in source_roots.items() if value}
-    if not configured_sources:
-        raise HTTPException(status_code=400, detail="请至少配置一个可访问的媒体来源")
-    with ThreadPoolExecutor(max_workers=len(configured_sources)) as executor:
-        source_states = list(executor.map(
-            lambda item: (item[0], _probe_media_path_states(Path(item[1]).expanduser(), [])[0][0]),
-            configured_sources.items(),
-        ))
-    invalid_sources = [name for name, available in source_states if not available]
-    if invalid_sources:
-        raise HTTPException(status_code=400, detail=f"媒体来源不可访问: {', '.join(invalid_sources)}")
-
-    directory_tree_dir = req.directory_tree_dir.strip()
-    if (
-        directory_tree_dir
-        and not _probe_media_path_states(Path(directory_tree_dir).expanduser(), [])[0][0]
-    ):
-        raise HTTPException(status_code=400, detail="目录树文件目录不存在或不可访问")
+    sources = _validate_setup_sources(req)
 
     # Preserve the legacy field for old clients; explicit selection uses external_mpv_path.
     requested_mpv_path = req.mpv_path.strip()
     if requested_mpv_path:
         config.mpv_path = requested_mpv_path
-    config.pan115_root = req.pan115_root.strip()
-    config.baidu_root = req.baidu_root.strip()
-    config.local_root = req.local_root.strip()
-    config.directory_tree_dir = directory_tree_dir
+    for key, value in sources.items():
+        setattr(config, key, value)
     tmdb_bearer_token = req.tmdb_bearer_token.strip()
     if tmdb_bearer_token:
-        if len(tmdb_bearer_token) == 32 and all(char in "0123456789abcdefABCDEF" for char in tmdb_bearer_token):
-            raise HTTPException(
-                status_code=400,
-                detail="你粘贴的是 TMDB API 密钥；KumiPlayer 需要页面上方较长的 API 读取访问令牌。",
-            )
-        try:
-            with TMDBClient(bearer_token=tmdb_bearer_token) as client:
-                token_ok, token_message = client.test_authentication()
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"TMDB 验证异常: {exc}") from exc
-        if not token_ok:
-            raise HTTPException(status_code=400, detail=f"TMDB Token 验证失败: {token_message}")
+        _validate_tmdb_credential(tmdb_bearer_token)
         config.tmdb_bearer_token = tmdb_bearer_token
     bangumi_access_token = req.bangumi_access_token.strip()
     if bangumi_access_token:

@@ -235,14 +235,18 @@ describe('SettingsPage 信息架构', () => {
     expect(document.getElementById('settings-panel-sources')).toHaveTextContent('115 网盘挂载位置');
     expect(document.getElementById('settings-panel-sources')).toHaveTextContent('来源维护');
     expect(document.getElementById('settings-panel-sources')).not.toHaveTextContent('镜像目录');
-    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('打开设置引导');
+    expect(document.getElementById('settings-panel-sources')).not.toHaveTextContent('打开设置引导');
+    expect(document.getElementById('settings-panel-application')).toHaveTextContent('打开设置引导');
     expect(document.getElementById('settings-panel-scrape')).toHaveTextContent('网络代理');
   });
 
   test('设置可重新打开引导，并传入当前保存的配置', async () => {
     const onOpenSetup = vi.fn();
     render(<SettingsPage onOpenSetup={onOpenSetup} />);
-    fireEvent.click(await screen.findByRole('button', { name: '媒体来源', exact: true }));
+    fireEvent.click(await screen.findByRole('button', { name: '应用', exact: true }));
+    const guide = screen.getByRole('heading', { name: '设置引导', exact: true }).closest('section')!;
+    expect(guide.closest('details')).toBeNull();
+    expect(guide).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: '打开设置引导', exact: true }));
     expect(onOpenSetup).toHaveBeenCalledWith(expect.objectContaining({ local_root: config.local_root, player_mode: config.player_mode }));
   });

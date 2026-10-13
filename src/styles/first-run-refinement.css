@@ -1,3 +1,5 @@
+.app-main:has(.first-run-refined) { overflow: clip !important; }
+
 .first-run-shell.first-run-refined {
   display: block;
   height: calc(100dvh - 80px);
@@ -28,7 +30,8 @@
 .first-run-refined .first-run-header { flex-shrink: 0; background: transparent; padding: 0 24px; }
 .first-run-refined .first-run-content { min-height: 0; padding: 24px 28px 0; }
 .first-run-refined .first-run-scroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 0 8px 8px; }
-.first-run-refined .first-run-footer { flex-shrink: 0; margin: 16px auto 0; padding: 16px 0 0; }
+.first-run-refined .first-run-panel { max-width: 880px; margin: 0; }
+.first-run-refined .first-run-footer { flex-shrink: 0; width: min(880px, 100%); margin: 16px 0 0; padding: 16px 8px 0; }
 .first-run-refined .first-run-steps { overflow-y: auto; background: transparent; padding: 24px 12px; }
 .first-run-defer-notice { margin: 0 20px 16px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--surface-soft); }
 .first-run-refined .first-run-step { width: 100%; min-height: 48px; text-align: left; font: inherit; background: transparent; cursor: pointer; }
@@ -57,12 +60,17 @@
 .first-run-refined .first-run-options .first-run-path-field { margin-bottom: 0; }
 .first-run-refined .first-run-path-example { padding: 12px 0 0; border: 0; border-radius: 0; background: transparent; font-size: 12px; }
 .first-run-refined .first-run-credential-grid { grid-template-columns: 1fr; gap: 18px; }
-.first-run-refined .first-run-credential-card { padding: 0; background: transparent; border: 0; border-radius: 0; }
+.first-run-refined .first-run-credential-card { padding: 0; gap: 8px; background: transparent; border: 0; border-radius: 0; }
+.first-run-refined .first-run-credential-card + .first-run-credential-card { padding-top: 18px; border-top: 1px solid var(--border); }
+.first-run-refined .first-run-credential-field { margin-top: 0; display: grid; gap: 8px; }
+.first-run-refined .first-run-credential-field .fui-Field__label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.first-run-refined .first-run-credential-field .kp-settings-field-controls { align-items: start; }
+.first-run-refined .first-run-credential-field .fui-Input__input { width: 100%; min-width: 0; }
 .first-run-refined .first-run-summary > div { grid-template-columns: 24px 94px minmax(0, 1fr); padding: 10px 12px; }
 .first-run-refined .first-run-summary strong { font-size: 13px; font-weight: 600; }
 .first-run-refined .first-run-summary p { white-space: normal; overflow-wrap: anywhere; }
 .first-run-refined button:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
-.first-run-refined .first-run-error { color: var(--text); }
+.first-run-refined .first-run-error { width: min(880px, 100%); margin: 12px 0 0; color: var(--text); overflow-wrap: anywhere; }
 .first-run-refined .first-run-result { margin: 0 0 16px; }
 .first-run-refined .first-run-header-actions { flex-wrap: wrap; justify-content: flex-end; }
 .first-run-refined .first-run-header-actions .first-run-close { display: inline-flex; align-items: center; gap: 6px; }
@@ -88,4 +96,6 @@
   .first-run-refined .first-run-header-actions > span { display: none; }
   .first-run-refined .first-run-path-field > div { flex-wrap: wrap; }
   .first-run-refined .first-run-path-field input { flex-basis: 180px; }
+  .first-run-refined .first-run-credential-field .kp-settings-field-controls--action { grid-template-columns: minmax(0, 1fr); }
+  .first-run-refined .first-run-credential-field .kp-settings-field-action { justify-content: flex-end; }
 }

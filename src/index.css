@@ -2147,8 +2147,8 @@
 .first-run-credential-security { color: var(--text-muted); font-size: 12px; line-height: 1.55; }
 .first-run-credential-card p { flex: 1; margin: 0; }
 .first-run-credential-card a { display: inline-flex; align-items: center; gap: 5px; width: fit-content; color: var(--accent-strong); font-size: 12px; font-weight: 750; }
-.first-run-credential-card input { width: 100%; height: 40px; padding: 0 11px; border: 1px solid var(--border); border-radius: 8px; outline: none; color: var(--text); background: var(--control-bg); font: inherit; font-size: 12px; }
-.first-run-credential-card input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.first-run-credential-card input:not(.fui-Input__input) { width: 100%; height: 40px; padding: 0 11px; border: 1px solid var(--border); border-radius: 8px; outline: none; color: var(--text); background: var(--control-bg); font: inherit; font-size: 12px; }
+.first-run-credential-card input:not(.fui-Input__input):focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .first-run-credential-security { margin: 10px 0 0; }
 
 .first-run-footer { width: min(700px, 100%); display: flex; align-items: center; justify-content: space-between; margin: 24px auto 0; padding-top: 18px; border-top: 1px solid var(--border); }

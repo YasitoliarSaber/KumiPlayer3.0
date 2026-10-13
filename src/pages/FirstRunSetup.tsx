@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Accordion, AccordionHeader, AccordionItem, AccordionPanel, Radio, RadioGroup } from '@fluentui/react-components';
+import { Accordion, AccordionHeader, AccordionItem, AccordionPanel, Button, Input, Radio, RadioGroup } from '@fluentui/react-components';
 import { CheckCircle2, ChevronLeft, ChevronRight, ExternalLink, FolderOpen, KeyRound, Play, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { configApi, type MpvRuntimeStatus, type PublicConfig, type SetupCompletePayload } from '../api/config';
 import { BANGUMI_ACCESS_TOKEN_URL, getTmdbCredentialError, TMDB_API_SETTINGS_URL } from '../config/credentials';
+import { SettingsFeedback, SettingsField } from '../components/ui/SettingsPrimitives';
+import { useBangumiStore } from '../stores/bangumi';
 import { pickFile, pickFolder } from '../platform/folderPicker';
 import '../styles/first-run-refinement.css';
 
@@ -38,6 +40,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
   const playerLabel = externalPlayer ? '外部播放器' : '内置播放器';
   const checkRevision = useRef(0);
   const finishRevision = useRef(0);
+  const sourceRevision = useRef(0);
   const scrollArea = useRef<HTMLDivElement>(null);
   const errorNotice = useRef<HTMLDivElement>(null);
   const [mpvStatus, setMpvStatus] = useState<MpvRuntimeStatus | null>(null);
@@ -47,6 +50,12 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
   const [checkingMpv, setCheckingMpv] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState('');
+  const [checkingSources, setCheckingSources] = useState(false);
+  const [sourcesVerified, setSourcesVerified] = useState(false);
+  const [credentialBusy, setCredentialBusy] = useState({ tmdb: false, bangumi: false });
+  const [credentialFeedback, setCredentialFeedback] = useState<Record<'tmdb' | 'bangumi', { ok: boolean; message: string } | null>>({ tmdb: null, bangumi: null });
+  const [credentialSaved, setCredentialSaved] = useState({ tmdb: Boolean(initialConfig.tmdb_configured), bangumi: Boolean(initialConfig.bangumi_configured) });
+  const saveBangumiToken = useBangumiStore((state) => state.setToken);
 
   const sourceCount = useMemo(
     () => [form.pan115_root, form.baidu_root, form.local_root].filter((value) => value?.trim()).length,
@@ -83,7 +92,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, form.player_mode]);
 
-  useEffect(() => () => { checkRevision.current += 1; finishRevision.current += 1; }, []);
+  useEffect(() => () => { checkRevision.current += 1; finishRevision.current += 1; sourceRevision.current += 1; }, []);
 
   useEffect(() => { scrollArea.current?.scrollTo?.({ top: 0 }); }, [step]);
   useEffect(() => { if (error) errorNotice.current?.scrollIntoView?.({ block: 'nearest' }); }, [error]);
@@ -97,18 +106,24 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
   };
 
   const returnToStep = (target: number) => {
+    sourceRevision.current += 1;
     finishRevision.current += 1;
     setError('');
     setStep(target);
   };
 
   const dismiss = () => {
+    sourceRevision.current += 1;
     finishRevision.current += 1;
     onCancel();
   };
 
   const update = (key: keyof SetupCompletePayload, value: string) => {
     if (key === 'external_mpv_path') resetPlayerCheck();
+    if (sourceOptions.some((source) => source.key === key) || key === 'directory_tree_dir') setSourcesVerified(false);
+    if (key === 'tmdb_bearer_token' || key === 'bangumi_access_token') {
+      setCredentialFeedback((current) => ({ ...current, [key === 'tmdb_bearer_token' ? 'tmdb' : 'bangumi']: null }));
+    }
     setForm((current) => ({ ...current, [key]: value }));
     setError('');
   };
@@ -138,19 +153,61 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
     && mpvStatus.configuration_available,
   ));
 
-  const goNext = () => {
+  const goNext = async () => {
     if (step === 1 && !mpvReady) {
       setError(`请先确认${playerLabel}可用`);
       return;
     }
     if (step === 2) {
-      if (sourceCount === 0) {
-        setError('请至少配置一个媒体来源');
-        return;
+      if (sourceCount === 0 || checkingSources) return;
+      const revision = ++sourceRevision.current;
+      setCheckingSources(true);
+      setError('');
+      try {
+        await configApi.saveSetupSources({
+          pan115_root: form.pan115_root, baidu_root: form.baidu_root,
+          local_root: form.local_root, directory_tree_dir: form.directory_tree_dir,
+        });
+        if (revision !== sourceRevision.current) return;
+        setSourcesVerified(true);
+        setStep(3);
+      } catch (reason) {
+        if (revision === sourceRevision.current) {
+          setSourcesVerified(false);
+          setError(reason instanceof Error ? reason.message : '目录检查失败，请重试');
+        }
+      } finally {
+        setCheckingSources(false);
       }
+      return;
     }
     setError('');
     setStep((current) => Math.min(steps.length - 1, current + 1));
+  };
+
+  const saveCredential = async (provider: 'tmdb' | 'bangumi') => {
+    const field = provider === 'tmdb' ? 'tmdb_bearer_token' : 'bangumi_access_token';
+    const token = form[field]?.trim() || '';
+    if (!token || credentialBusy[provider]) return;
+    const credentialError = provider === 'tmdb' ? getTmdbCredentialError(token) : '';
+    if (credentialError) {
+      setCredentialFeedback((current) => ({ ...current, [provider]: { ok: false, message: credentialError } }));
+      return;
+    }
+    setCredentialBusy((current) => ({ ...current, [provider]: true }));
+    setCredentialFeedback((current) => ({ ...current, [provider]: null }));
+    try {
+      if (provider === 'tmdb') await configApi.saveTmdbCredential(token);
+      else await saveBangumiToken(token);
+      setCredentialSaved((current) => ({ ...current, [provider]: true }));
+      setForm((current) => ({ ...current, [field]: '' }));
+      setCredentialFeedback((current) => ({ ...current, [provider]: { ok: true, message: '验证成功，已保存' } }));
+      setError('');
+    } catch (reason) {
+      setCredentialFeedback((current) => ({ ...current, [provider]: { ok: false, message: reason instanceof Error ? reason.message : '验证失败，请重试' } }));
+    } finally {
+      setCredentialBusy((current) => ({ ...current, [provider]: false }));
+    }
   };
 
   const finish = async () => {
@@ -159,20 +216,31 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
       setError(tmdbCredentialError);
       return;
     }
+    if (credentialBusy.tmdb || credentialBusy.bangumi || finishing) return;
+    if (form.tmdb_bearer_token?.trim() || form.bangumi_access_token?.trim()) {
+      setError('请先点击对应令牌右侧的“验证并保存”，再完成设置。');
+      return;
+    }
     const revision = ++finishRevision.current;
     setFinishing(true);
     setError('');
     try {
-      // 空输入表示保留已有凭据，不发送清空值。
-      const { tmdb_bearer_token, bangumi_access_token, ...paths } = form;
+      // 凭据已独立验证并保存；完成设置只提交播放器与目录。
       const config = await configApi.completeSetup({
-        ...paths,
-        ...(tmdb_bearer_token?.trim() ? { tmdb_bearer_token: tmdb_bearer_token.trim() } : {}),
-        ...(bangumi_access_token?.trim() ? { bangumi_access_token: bangumi_access_token.trim() } : {}),
+        player_mode: form.player_mode, external_mpv_path: form.external_mpv_path,
+        pan115_root: form.pan115_root, baidu_root: form.baidu_root,
+        local_root: form.local_root, directory_tree_dir: form.directory_tree_dir,
       });
       if (revision === finishRevision.current) onComplete(config);
     } catch (reason) {
-      if (revision === finishRevision.current) setError(reason instanceof Error ? reason.message : '初始化失败，请检查配置');
+      if (revision === finishRevision.current) {
+        const message = reason instanceof Error ? reason.message : '初始化失败，请检查配置';
+        if (['本地媒体目录', '115 网盘目录', '百度网盘目录', '目录树文件目录', '媒体来源不可访问', '请至少配置'].some((prefix) => message.startsWith(prefix))) {
+          setSourcesVerified(false);
+          setStep(2);
+        }
+        setError(message);
+      }
     } finally {
       setFinishing(false);
     }
@@ -246,15 +314,15 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                 <h1>你的媒体放在哪里</h1>
                 <p>先选择一个本地或已挂载的媒体目录。需要多个来源时，切换类型继续填写，已填路径会保留。</p>
                 <RadioGroup className="first-run-source-options" aria-label="媒体来源类型" layout="horizontal" value={activeSource} onChange={(_, data) => setActiveSource(data.value as SourceKey)}>
-                  {sourceOptions.map((source) => <Radio key={source.key} value={source.key} label={`${source.name}${form[source.key]?.trim() ? ' · 已配置' : ''}`} />)}
+                  {sourceOptions.map((source) => <Radio key={source.key} value={source.key} label={`${source.name}${form[source.key]?.trim() ? ' · 已填写' : ''}`} />)}
                 </RadioGroup>
-                <SetupPathField label={selectedSource.label} value={form[activeSource] || ''} placeholder={selectedSource.placeholder} onChange={(value) => update(activeSource, value)} onPick={() => chooseDirectory(activeSource, `选择${selectedSource.label}`)} />
-                <p>网盘媒体通过本地挂载播放；目录树和 OpenList 只提供目录信息。作品资料与图片缓存由应用独立保存。</p>
+                <SetupPathField disabled={checkingSources} label={selectedSource.label} value={form[activeSource] || ''} placeholder={selectedSource.placeholder} onChange={(value) => update(activeSource, value)} onPick={() => chooseDirectory(activeSource, `选择${selectedSource.label}`)} />
+                <p>点击“继续”会检查并保存已填写的目录；无法访问时留在当前步骤。网盘媒体通过本地挂载播放；目录树和 OpenList 只提供目录信息。作品资料与图片缓存由应用独立保存。</p>
                 <Accordion className="first-run-options" collapsible defaultOpenItems={form.directory_tree_dir ? ['tree'] : []}>
                   <AccordionItem value="tree">
                     <AccordionHeader>导入目录树（可选）{form.directory_tree_dir?.trim() ? ' · 已配置' : ''}</AccordionHeader>
                     <AccordionPanel>
-                      <SetupPathField label="目录树文件目录（可选）" value={form.directory_tree_dir || ''} placeholder="保存网盘目录树 TXT 的文件夹" onChange={(value) => update('directory_tree_dir', value)} onPick={() => chooseDirectory('directory_tree_dir', '选择目录树文件目录')} />
+                      <SetupPathField disabled={checkingSources} label="目录树文件目录（可选）" value={form.directory_tree_dir || ''} placeholder="保存网盘目录树 TXT 的文件夹" onChange={(value) => update('directory_tree_dir', value)} onPick={() => chooseDirectory('directory_tree_dir', '选择目录树文件目录')} />
                     </AccordionPanel>
                   </AccordionItem>
                 </Accordion>
@@ -272,7 +340,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                 <p>完成前会检查播放器和目录是否可用。海报与观看同步可以稍后设置。</p>
                 <div className="first-run-summary">
                   <SummaryRow label={playerLabel} value={mpvReady ? '已就绪' : '未就绪'} ok={mpvReady} />
-                  <SummaryRow label="媒体来源" value={`已配置 ${sourceCount} 个来源`} ok={sourceCount > 0} />
+                  <SummaryRow label="媒体来源" value={sourcesVerified ? `已验证并保存 ${sourceCount} 个来源` : '需要重新检查'} ok={sourcesVerified} />
                 </div>
                 <Accordion className="first-run-options" collapsible>
                   <AccordionItem value="credentials">
@@ -283,16 +351,18 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                     <div className="first-run-credential-title"><KeyRound size={18} /><div><strong>TMDB API 读取访问令牌</strong><small>可选 · 用于刮削元数据与图片</small></div></div>
                     <p>复制页面上方较长的“API 读取访问令牌”，不是下方的 API 密钥。</p>
                     <a href={TMDB_API_SETTINGS_URL} target="_blank" rel="noreferrer">前往 TMDB API 设置 <ExternalLink size={14} /></a>
-                    <input aria-label="TMDB API 读取访问令牌" type="password" value={form.tmdb_bearer_token || ''} onChange={(event) => update('tmdb_bearer_token', event.target.value)} placeholder="粘贴 API 读取访问令牌" autoComplete="off" />
+                    <CredentialField provider="TMDB" label="TMDB API 读取访问令牌" value={form.tmdb_bearer_token || ''} saved={credentialSaved.tmdb} busy={credentialBusy.tmdb} feedback={credentialFeedback.tmdb} disabled={finishing}
+                      onChange={(value) => update('tmdb_bearer_token', value)} onSave={() => void saveCredential('tmdb')} />
                   </article>
                   <article className="first-run-credential-card">
                     <div className="first-run-credential-title"><KeyRound size={18} /><div><strong>Bangumi 个人访问令牌</strong><small>可选 · 用于同步收藏与已看集数</small></div></div>
                     <p>在 Bangumi 官方页面创建 Access Token，再复制到这里。</p>
                     <a href={BANGUMI_ACCESS_TOKEN_URL} target="_blank" rel="noreferrer">前往 Bangumi 令牌页面 <ExternalLink size={14} /></a>
-                    <input aria-label="Bangumi 个人访问令牌" type="password" value={form.bangumi_access_token || ''} onChange={(event) => update('bangumi_access_token', event.target.value)} placeholder="粘贴个人 Access Token" autoComplete="off" />
+                    <CredentialField provider="Bangumi" label="Bangumi 个人访问令牌" value={form.bangumi_access_token || ''} saved={credentialSaved.bangumi} busy={credentialBusy.bangumi} feedback={credentialFeedback.bangumi} disabled={finishing}
+                      onChange={(value) => update('bangumi_access_token', value)} onSave={() => void saveCredential('bangumi')} />
                   </article>
                 </div>
-                <p className="first-run-credential-security">留空会保留已保存的凭据。新凭据验证后保存在 Windows 凭据管理器中。</p>
+                <p className="first-run-credential-security">两项可分别验证并保存，无需等待完成引导；已保存的令牌会保留。凭据保存在 Windows 凭据管理器中。</p>
                     </AccordionPanel>
                   </AccordionItem>
                 </Accordion>
@@ -307,10 +377,10 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                 <button
                   className="first-run-primary"
                   onClick={goNext}
-                  disabled={(step === 1 && !mpvReady) || (step === 2 && sourceCount === 0)}
-                >继续<ChevronRight size={17} /></button>
+                  disabled={(step === 1 && !mpvReady) || (step === 2 && (sourceCount === 0 || checkingSources))}
+                >{checkingSources ? '正在检查目录…' : '继续'}<ChevronRight size={17} /></button>
               ) : (
-                <button className="first-run-primary" onClick={finish} disabled={finishing}>{finishing ? '正在验证…' : '验证并完成'}<CheckCircle2 size={17} /></button>
+                <button className="first-run-primary" onClick={finish} disabled={finishing || credentialBusy.tmdb || credentialBusy.bangumi}>{finishing ? '正在验证…' : '验证并完成'}<CheckCircle2 size={17} /></button>
               )}
             </footer>
           </div>
@@ -320,13 +390,31 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
   );
 }
 
-function SetupPathField({ label, value, placeholder, onChange, onPick, actionLabel = '选择文件夹', compact = false }: { label: string; value: string; placeholder: string; onChange: (value: string) => void; onPick: () => void; actionLabel?: string; compact?: boolean }) {
+function SetupPathField({ label, value, placeholder, onChange, onPick, actionLabel = '选择文件夹', compact = false, disabled = false }: { label: string; value: string; placeholder: string; onChange: (value: string) => void; onPick: () => void; actionLabel?: string; compact?: boolean; disabled?: boolean }) {
   return (
     <label className={`first-run-path-field ${compact ? 'compact' : ''}`}>
       <span>{label}</span>
-      <div><input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /><button type="button" aria-label={`选择${label}`} onClick={onPick}><FolderOpen size={16} />{actionLabel}</button></div>
+      <div><input disabled={disabled} aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /><button type="button" disabled={disabled} aria-label={`选择${label}`} onClick={onPick}><FolderOpen size={16} />{actionLabel}</button></div>
     </label>
   );
+}
+
+function CredentialField({ provider, label, value, saved, busy, feedback, disabled, onChange, onSave }: {
+  provider: string; label: string; value: string; saved: boolean; busy: boolean;
+  feedback: { ok: boolean; message: string } | null; disabled: boolean;
+  onChange: (value: string) => void; onSave: () => void;
+}) {
+  return <div className="first-run-credential-field">
+    <SettingsField label={label} action={
+      <Button aria-label={`验证并保存 ${provider}`} onClick={onSave} disabled={disabled || busy || !value.trim()}>{busy ? '正在验证…' : '验证并保存'}</Button>
+    }>
+      <Input type="password" value={value} disabled={disabled || busy} onChange={(_, data) => onChange(data.value)}
+        placeholder={saved ? '已保存；输入新令牌可替换' : '粘贴访问令牌'} autoComplete="off" />
+    </SettingsField>
+    {busy ? <SettingsFeedback busy>正在验证 {provider}…</SettingsFeedback>
+      : feedback ? <SettingsFeedback intent={feedback.ok ? 'success' : 'error'}>{feedback.message}</SettingsFeedback>
+      : saved ? <SettingsFeedback intent="success">{provider} 令牌已保存</SettingsFeedback> : null}
+  </div>;
 }
 
 function SummaryRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {

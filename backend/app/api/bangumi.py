@@ -1,5 +1,6 @@
 """Bangumi integration API."""
 
+import copy
 import hashlib
 import json
 import mimetypes
@@ -15,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.media_v4 import get_database
 from app.core.config import DEFAULT_BANGUMI_USER_AGENT, load_config, save_config
 from app.core.credential_store import SECURE_CREDENTIAL_STORE
+from app.core.data_lock import DATA_WRITE_LOCK
 from app.core.paths import get_cache_dir
 from app.integrations.bangumi import (
     AUTH_INVALID,
@@ -160,15 +162,17 @@ def _session_payload(snapshot: BangumiAccountSnapshot, *, credential_state: str)
 @router.post("/token")
 def set_token(req: TokenRequest):
     """保存 Bangumi token 并验证它；验证成功才落盘并写账户快照。"""
-    config = load_config()
     user_agent = DEFAULT_BANGUMI_USER_AGENT
     try:
         me = BangumiClient(access_token=req.access_token, user_agent=user_agent, timeout=12.0).get_me(purpose="manual_verify")
     except BangumiError as e:
         raise _http_error(e) from e
-    config.bangumi_access_token = req.access_token
-    config.bangumi_user_agent = DEFAULT_BANGUMI_USER_AGENT
-    save_config(config)
+    # Read after verification so another independently saved credential survives.
+    with DATA_WRITE_LOCK:
+        config = copy.deepcopy(load_config())
+        config.bangumi_access_token = req.access_token
+        config.bangumi_user_agent = DEFAULT_BANGUMI_USER_AGENT
+        save_config(config)
     now = _now_iso()
     save_account_snapshot(BangumiAccountSnapshot(
         user_id=me.get("id"),
