@@ -27,6 +27,12 @@ from app.core.config import (
     update_config,
 )
 from app.core.data_lock import DATA_WRITE_LOCK
+from app.core.local_roots import (
+    apply_primary_change,
+    normalize_records as normalize_local_root_records,
+    public_records,
+    validate_records as validate_local_root_records,
+)
 from app.core.media_path_probe import (
     MEDIA_PATH_PROBE_TIMEOUT_SECONDS as _MEDIA_PATH_PROBE_TIMEOUT_SECONDS,
 )
@@ -63,6 +69,7 @@ class ConfigPatch(BaseModel):
     baidu_root: str | None = None
     quark_root: str | None = None
     local_root: str | None = None
+    local_roots: list[dict] | None = None
     directory_tree_dir: str | None = None
     openlist_server_url: str | None = None
     openlist_remote_root: str | None = None
@@ -188,6 +195,13 @@ def _patch_config(req: ConfigPatch):
     if "player_mode" in patch_dict and patch_dict["player_mode"] not in {"internal", "external"}:
         raise HTTPException(status_code=400, detail="player_mode 只能是 internal|external")
 
+    # 本地来源登记条目：写入期校验绝对路径、重复路径与名称长度，
+    # root_id 由路径推导，忽略客户端传入值。
+    if "local_roots" in patch_dict:
+        try:
+            patch_dict["local_roots"] = validate_local_root_records(patch_dict["local_roots"])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     # 敏感/凭据字段：空字符串表示不修改
     from app.core.config import _CREDENTIAL_FIELDS
     # 修改 OpenList 账号但未提供新密码：禁止把旧账号密码套给新账号，
@@ -216,6 +230,13 @@ def _patch_config(req: ConfigPatch):
         if key in _CREDENTIAL_FIELDS:
             continue
         setattr(candidate, key, value)
+
+    # 单值 local_root 与 local_roots 列表共用同一语义：非空提升为第一条本地
+    # 来源（不覆盖其它条目），空值清空登记；避免两个写入通道结果不一致。
+    if "local_root" in patch_dict and "local_roots" not in patch_dict:
+        candidate.local_roots = apply_primary_change(
+            normalize_local_root_records(config.local_roots), patch_dict["local_root"]
+        )
 
     # OpenList 字段：通用 PATCH 仍然可以改（既有契约与测试如此），但必须补上
     # 专用端点拥有的核心不变量，否则这条通道会留下真实危害：
@@ -591,18 +612,33 @@ def test_deepseek():
 def test_media_paths():
     """轻量验证来源挂载根，不读取旧快照或媒体库计划。"""
     config = load_config()
-    roots = {
-        "pan115": config.pan115_root,
-        "baidu": config.baidu_root,
-        "quark": config.quark_root,
-        "local": config.local_root,
-        "openlist": config.openlist_mount_root,
-    }
+    local_records = public_records(config)
+    roots: list[tuple[str, str, str]] = [
+        ("pan115", config.pan115_root, ""),
+        ("baidu", config.baidu_root, ""),
+        ("quark", config.quark_root, ""),
+    ]
+    if local_records:
+        # 已登记本地来源时逐条检查，不再重复报告兼容镜像 local_root。
+        # 单条登记保留既有的 "local" 键（旧前端与既有契约依赖它）；
+        # 多条登记时逐条使用唯一键，避免列表项互相覆盖。
+        if len(local_records) == 1:
+            record = local_records[0]
+            roots.append(("local", record["path"], record["name"]))
+        else:
+            roots.extend(
+                (f"local:{record['root_id']}", record["path"], record["name"])
+                for record in local_records
+            )
+    else:
+        roots.append(("local", config.local_root, ""))
+    roots.append(("openlist", config.openlist_mount_root, ""))
 
-    def validate_source(source: str, configured_root: str) -> dict:
+    def validate_source(source: str, configured_root: str, label: str) -> dict:
         if not configured_root:
             return {
                 "source": source,
+                "label": label,
                 "ok": False,
                 "status": "unavailable",
                 "configured_root": "",
@@ -611,13 +647,13 @@ def test_media_paths():
                 "checked_count": 0,
                 "existing_count": 0,
                 "example_path": "",
-                "message": "尚未配置挂载目录",
+                "message": "尚未配置挂载目录" if not label else "尚未选择目录",
             }
         root = Path(configured_root).expanduser()
         try:
             states, probe_timed_out = _probe_media_path_states(root, [])
         except MediaPathProbeError:
-            return {"source": source, "ok": False, "status": "unavailable",
+            return {"source": source, "label": label, "ok": False, "status": "unavailable",
                     "configured_root": configured_root, "resolved_root": configured_root,
                     "scope_name": "", "checked_count": 0, "existing_count": 0, "example_path": "",
                     "message": "目录检测程序未能运行，请重新检测或重启应用；这不表示目录不存在"}
@@ -625,6 +661,7 @@ def test_media_paths():
         ok = root_ok
         return {
                 "source": source,
+                "label": label,
                 "ok": ok,
                 "status": "verified" if ok else ("unavailable" if not root_ok else "mismatch"),
                 "configured_root": configured_root,
@@ -644,6 +681,6 @@ def test_media_paths():
             }
 
     with ThreadPoolExecutor(max_workers=3) as executor:
-        results = list(executor.map(lambda item: validate_source(*item), roots.items()))
+        results = list(executor.map(lambda item: validate_source(*item), roots))
     configured = [item for item in results if item["configured_root"]]
     return {"ok": bool(configured) and all(item["ok"] for item in configured), "sources": results}

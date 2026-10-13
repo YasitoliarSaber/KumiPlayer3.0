@@ -10,6 +10,12 @@ from pathlib import Path
 from app.core.atomic_json import write_json_atomic
 from app.core.credential_store import SECURE_CREDENTIAL_STORE, CredentialStoreError
 from app.core.data_lock import DATA_WRITE_LOCK
+from app.core.local_roots import (
+    LocalRootConfig,
+    apply_primary_change,
+    normalize_records as normalize_local_root_records,
+    sync_local_roots,
+)
 from app.core.openlist_connections import (
     OpenListConnectionConfig,
     credential_bindings,
@@ -66,7 +72,10 @@ class AppConfig:
     pan115_root: str = ""
     baidu_root: str = ""
     quark_root: str = ""
+    # local_root 是 local_roots 第一条记录的兼容镜像，始终由 sync_local_roots 同步。
     local_root: str = ""
+    # 本地来源条目：一个分类下可登记多条本地目录（动画库 / 影视库等）。
+    local_roots: list = field(default_factory=list)
     directory_tree_dir: str = ""
 
     # 旧 OpenList 连接字段保持兼容；新增连接以稳定标识隔离配置与凭据。
@@ -188,6 +197,13 @@ def update_config(changes: dict, *, expected_revisions: dict[str, int] | None = 
             raise ConfigChangedError("设置已更新，已保留最新保存的配置，请重新检查后继续")
         current = load_config()
         candidate = copy.deepcopy(current)
+        if "local_root" in changes and "local_roots" not in changes:
+            # 单值 local_root（首次启动引导、来源校验端点与兼容客户端）表示
+            # “把这个目录设为主来源”：已登记则移到首位，未登记则新增为第一条，
+            # 不覆盖其它已登记条目；传空值表示清空本地来源登记。
+            candidate.local_roots = apply_primary_change(
+                normalize_local_root_records(current.local_roots), changes["local_root"]
+            )
         unchanged = {key for key, value in changes.items() if getattr(current, key) == value}
         for key, value in changes.items():
             setattr(candidate, key, value)
@@ -456,6 +472,12 @@ def _load_config(force_reload: bool = False) -> AppConfig:
             if len({c.connection_id for c in connections}) != len(connections):
                 raise ValueError("OpenList 连接标识重复")
             filtered["openlist_connections"] = connections
+            local_roots_raw = filtered.get("local_roots")
+            filtered["local_roots"] = (
+                normalize_local_root_records(local_roots_raw)
+                if isinstance(local_roots_raw, list)
+                else []
+            )
             config = AppConfig(**filtered)
             try:
                 migrated_credentials = _hydrate_secure_credentials(config, data)
@@ -480,6 +502,10 @@ def _load_config(force_reload: bool = False) -> AppConfig:
     else:
         config = AppConfig()
 
+    # 本地来源条目与兼容镜像 local_root 始终一致；旧单目录配置在读取时迁移为
+    # 第一条记录，不因读取就回写配置文件。
+    sync_local_roots(config)
+
     if "auto_shutdown_on_heartbeat_timeout" not in data and os.environ.get("KUMIPLAYER_AUTO_SHUTDOWN_ON_HEARTBEAT_TIMEOUT") == "1":
         config.auto_shutdown_on_heartbeat_timeout = True
     heartbeat_timeout = os.environ.get("KUMIPLAYER_HEARTBEAT_TIMEOUT")
@@ -502,6 +528,9 @@ def save_config(config: AppConfig, *, cleared_keys: set[str] | None = None) -> N
     """
     global _cached_config
     with DATA_WRITE_LOCK:
+        # 写入前统一规范化：任何调用方（含首次启动引导写单值 local_root）
+        # 都不会让 local_roots 与 local_root 在磁盘上分叉。
+        sync_local_roots(config)
         previous = load_config()
         _persist_config_payload(config, cleared_keys=cleared_keys)
         for key in AppConfig.__dataclass_fields__:

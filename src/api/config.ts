@@ -35,6 +35,11 @@ export interface PublicConfig {
   baidu_root: string
   quark_root?: string
   local_root: string
+  /**
+   * 本地来源登记条目：一个分类下可保存多条本地目录（动画库 / 影视库等）。
+   * 旧后端不返回该字段，因此保持可选。
+   */
+  local_roots?: LocalRootRecord[]
   directory_tree_dir: string
   ongoing_update_on_startup?: boolean
   ongoing_update_interval_minutes?: number
@@ -126,8 +131,18 @@ export interface SetupCompletePayload {
 
 export type SetupSourcesPayload = Pick<SetupCompletePayload, 'pan115_root' | 'baidu_root' | 'local_root' | 'directory_tree_dir'>
 
+export interface LocalRootRecord {
+  /** 由后端按路径推导的稳定标识；提交时以路径为准。 */
+  root_id: string
+  /** 展示名称；留空由后端回退到目录名。 */
+  name: string
+  path: string
+}
+
 export interface MediaPathValidationItem {
-  source: 'pan115' | 'baidu' | 'quark' | 'local' | 'openlist'
+  source: string
+  /** 已登记本地来源的展示名；旧来源无此字段时前端回退到内置标签。 */
+  label?: string
   ok: boolean
   status: 'verified' | 'unavailable' | 'mismatch'
   configured_root: string

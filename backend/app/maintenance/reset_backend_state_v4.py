@@ -56,13 +56,25 @@ def _is_link_or_junction(path: Path) -> bool:
 
 def _configured_source_roots() -> list[Path]:
     config = load_config()
-    values = (
+    values = [
         config.pan115_root,
         config.baidu_root,
         config.local_root,
         getattr(config, "openlist_mount_root", "") or "",
-    )
+    ]
+    # 已登记的多条本地来源同样属于用户真实媒体根，一并纳入删除保护。
+    values.extend(_local_root_paths(config))
     return [_safe_resolve(Path(value)) for value in values if str(value).strip()]
+
+
+def _local_root_paths(config) -> list[str]:
+    paths: list[str] = []
+    for record in getattr(config, "local_roots", ()) or ():
+        if isinstance(record, dict):
+            paths.append(str(record.get("path") or ""))
+        else:
+            paths.append(str(getattr(record, "path", "") or ""))
+    return paths
 
 
 def _is_protected(path: Path) -> bool:
