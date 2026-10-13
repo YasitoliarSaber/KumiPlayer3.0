@@ -128,11 +128,23 @@ def test_job_retests_before_queue_and_handles_cancel(manager, monkeypatch, code,
     diagnostic = manager.diagnose()
     calls = []
     monkeypatch.setattr(repair, "run_elevated", lambda _op: code)
-    monkeypatch.setattr(repair, "probe_images", lambda: result(healthy))
+    probes = iter([result(), result(healthy)])
+    monkeypatch.setattr(repair, "probe_images", lambda: next(probes))
     monkeypatch.setattr(repair, "resume_failed_images", lambda: calls.append("queued") or 3)
     job = wait_job(manager, manager.start("repair", diagnostic["diagnostic_id"]))
     assert job["status"] == status and job["changed"] is changed
     assert len(calls) == queues
+
+
+def test_healthy_chain_retries_without_uac_or_hosts(manager, monkeypatch):
+    monkeypatch.setattr(repair, "probe_images", lambda: result(True))
+    diagnostic = manager.diagnose()
+    monkeypatch.setattr(repair, "run_elevated", lambda _op: pytest.fail("healthy connection requested UAC"))
+    monkeypatch.setattr(repair, "resume_failed_images", lambda: 4)
+    job = wait_job(manager, manager.start("repair", diagnostic["diagnostic_id"]))
+    assert job["status"] == "completed"
+    assert job["queued_images"] == 4 and not job["changed"]
+    assert "4" in job["message"]
 
 
 def test_duplicate_click_does_not_launch_twice(manager, monkeypatch):

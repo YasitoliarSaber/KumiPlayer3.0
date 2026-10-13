@@ -275,13 +275,13 @@ class ImageRepairManager:
                 raise ValueError("已有修复操作正在进行")
             if operation == "repair":
                 d = self._diagnostic
-                if not d or d["public"]["diagnostic_id"] != diagnostic_id or not d["public"]["repair_available"] or time.monotonic() - d["time"] > 300 or d["route"] != _route_signature():
+                if not d or d["public"]["diagnostic_id"] != diagnostic_id or not (d["public"]["repair_available"] or d["public"]["ok"]) or time.monotonic() - d["time"] > 300 or d["route"] != _route_signature():
                     raise ValueError("请先重新检测图片连接")
             elif not restore_available():
                 raise ValueError("没有可恢复的修复记录")
             self._job = {
                 "job_id": uuid.uuid4().hex, "operation": operation, "status": "running",
-                "message": "请允许 Windows 管理员授权，正在验证并处理图片连接…",
+                "message": "正在检查图片下载并准备重试…",
                 "changed": False, "queued_images": 0,
             }
             result = dict(self._job)
@@ -298,20 +298,28 @@ class ImageRepairManager:
         changed = False
         queued = 0
         try:
-            code = run_elevated(operation)
+            # 先检查实际软件链路；已可下载时直接重试图片，不无谓提权或改 hosts。
+            images = probe_images() if operation == "repair" else None
+            if images and images["ok"]:
+                code = 10
+            else:
+                with self._lock:
+                    if self._job:
+                        self._job["message"] = "请允许 Windows 管理员授权，正在验证图片连接…"
+                code = run_elevated(operation)
             changed = code == 0
             if code == 1223:
                 status, message = "cancelled", "已取消 Windows 授权，没有执行修复"
             elif code not in {0, 10}:
                 status, message = "failed", "未能完成操作；请重新检测。备份或其他程序的 hosts 改动会保留"
             else:
-                images = probe_images()
+                images = images if images and images["ok"] else probe_images()
                 if operation == "restore":
                     status, message = "completed", "已恢复修复前的设置" if changed else "设置无需恢复"
                 elif images["ok"]:
                     try:
                         queued = resume_failed_images()
-                        status, message = "completed", "图片连接正常，已开始重试失败的图片"
+                        status, message = "completed", f"图片连接正常，已安排 {queued} 张失败图片重试" if queued else "图片连接正常，没有等待重试的失败图片"
                     except Exception:
                         status, message = "completed", "图片连接正常；图片任务未能自动重试，请在媒体管理重新下载图片"
                 else:

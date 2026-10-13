@@ -183,7 +183,8 @@ def _download_artwork(url: str, path: Path, *, client: httpx.Client) -> str:
         if (parsed.hostname != "image.tmdb.org" or parsed.query or parsed.fragment
                 or "\\" in decoded_path or any(part in {".", ".."} for part in decoded_path.split("/"))):
             return ""
-        assert_public_dns_resolution(parsed.hostname)
+        # 与独立图片服务一致：兼容代理 Fake-IP，保留 HTTPS/路径/重定向校验。
+        assert_public_dns_resolution(parsed.hostname, allow_proxy_fake_ip=True)
     except ValueError:
         return ""
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")

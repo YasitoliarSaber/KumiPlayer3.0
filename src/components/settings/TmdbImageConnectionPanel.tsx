@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@fluentui/react-components'
 import { configApi, type TmdbImageDiagnostic, type TmdbImageRepairJob } from '../../api/config'
+import { ApiError } from '../../api/client'
 import { SettingsFeedback } from '../ui/SettingsPrimitives'
 
 /** 设置、首次引导、图片失败进度共用一个入口，不接受命令或系统路径。 */
@@ -59,8 +60,12 @@ export default function TmdbImageConnectionPanel({ enabled = true, failureOnly =
         setJob(next)
         setError('')
         if (next.status !== 'running') { void check(); return }
-      } catch {
+      } catch (reason) {
         if (cancelled) return
+        if (reason instanceof ApiError && reason.status === 404) {
+          setJob({ ...job, status: 'failed', message: '后台已重启，请重新检测图片连接' })
+          return
+        }
         setError('暂时无法读取修复进度，正在重新连接；请勿重复执行')
       }
       if (!cancelled) timer = setTimeout(() => void poll(), 1500)
@@ -76,10 +81,17 @@ export default function TmdbImageConnectionPanel({ enabled = true, failureOnly =
     setStarting(true)
     setError('')
     try {
-      const result = await configApi.repairTmdbImages(operation, diagnostic?.diagnostic_id)
+      const latest = operation === 'repair' ? await configApi.testTmdbImages() : diagnostic
+      if (!mounted.current) return
+      if (latest) setDiagnostic(latest)
+      if (operation === 'repair' && latest && !latest.ok && !latest.repair_available) {
+        setError(latest.message)
+        return
+      }
+      const result = await configApi.repairTmdbImages(operation, latest?.diagnostic_id)
       if (mounted.current) setJob(result)
-    } catch {
-      if (mounted.current) { setError('操作未开始，请重新检测图片连接后重试'); void check() }
+    } catch (reason) {
+      if (mounted.current) setError(reason instanceof ApiError ? reason.message : '操作未开始，请重新检测图片连接后重试')
     } finally {
       startingRef.current = false
       if (mounted.current) setStarting(false)
@@ -87,18 +99,18 @@ export default function TmdbImageConnectionPanel({ enabled = true, failureOnly =
   }
 
   if (!enabled) return null
-  if (failureOnly && diagnostic?.ok && !job && !error) return null
   return <div className="kp-settings-section-body" aria-label="TMDB 图片连接">
     {(checking || diagnostic || job || error) && <SettingsFeedback
       intent={error || (job && ['failed', 'cancelled'].includes(job.status)) || (!busy && diagnostic && !diagnostic.ok) ? 'error' : diagnostic?.ok ? 'success' : 'info'}
       busy={busy}>
-      {error || (checking ? '正在检测图片下载…' : diagnostic && !diagnostic.ok && job?.status === 'completed' ? diagnostic.message : job?.message || diagnostic?.message)}
+      {error || (starting ? '正在检查修复条件…' : checking ? '正在检测图片下载…' : diagnostic && !diagnostic.ok && job?.status === 'completed' ? diagnostic.message : job?.message || diagnostic?.message)}
     </SettingsFeedback>}
     <div className="settings-actions">
       <Button appearance="secondary" disabled={busy} onClick={() => { setJob(null); void check() }}>检测图片连接</Button>
       {!diagnostic?.ok && diagnostic?.repair_available && <Button appearance="primary" disabled={busy} onClick={() => void start('repair')}>
-        {job?.status === 'running' ? '正在修复…' : '一键修复图片连接'}
+        {starting ? '正在检查…' : job?.status === 'running' ? '正在修复…' : '一键修复图片连接'}
       </Button>}
+      {diagnostic?.ok && <Button appearance={failureOnly ? 'primary' : 'secondary'} disabled={busy} onClick={() => void start('repair')}>重新下载失败图片</Button>}
       {(diagnostic?.restore_available || job?.changed) && <Button appearance="secondary" disabled={busy} onClick={() => void start('restore')}>恢复修复前设置</Button>}
     </div>
     {!diagnostic?.ok && diagnostic?.repair_available && <p className="kp-settings-description">

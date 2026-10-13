@@ -215,7 +215,8 @@ class ArtworkService:
         if (parsed.hostname != 'image.tmdb.org' or parsed.query or parsed.fragment
                 or '\\' in decoded or any(part in {'.', '..'} for part in decoded.split('/'))):
             raise ValueError('Untrusted artwork source')
-        assert_public_dns_resolution(parsed.hostname)
+        # 白名单 TMDB 图片可经本机代理的 Fake-IP 访问；其他私网地址仍拒绝。
+        assert_public_dns_resolution(parsed.hostname, allow_proxy_fake_ip=True)
         deadline = time.monotonic() + 45
         with _DOWNLOAD_LIMIT, _artwork_client(load_config()) as client:
             with client.stream('GET', url, follow_redirects=False) as response:

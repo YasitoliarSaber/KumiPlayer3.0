@@ -1,9 +1,13 @@
 """TMDB 产物下载安全边界；只使用模拟传输与临时文件。"""
 
 import hashlib
+import io
 
 import httpx
 import pytest
+from PIL import Image
+
+from app.media_v4.assets import service
 from app.media_v4.jobs import metadata_artifacts as module
 
 JPEG = b"\xff\xd8\xff\xe0fixture"
@@ -100,3 +104,39 @@ def test_interrupted_stream_never_publishes(tmp_path):
             module._download_artwork(URL, path, client=client)
     assert path.read_bytes() == b"old"
     assert list(tmp_path.glob(".*.tmp")) == []
+
+
+def test_both_tmdb_download_paths_accept_proxy_fake_ip_with_https(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.core.url_guard.socket.getaddrinfo", lambda *_a, **_k: [
+        (None, None, None, None, ("198.18.0.31", 443)),
+    ])
+    output = io.BytesIO()
+    Image.new("RGB", (2, 2)).save(output, "PNG")
+    payload = output.getvalue()
+    calls = []
+
+    def request(req):
+        calls.append(str(req.url))
+        assert req.url.host == "image.tmdb.org" and req.url.scheme == "https"
+        return httpx.Response(200, headers={"content-type": "image/png"}, content=payload)
+
+    monkeypatch.setattr(service, "_artwork_client", lambda _config: httpx.Client(transport=httpx.MockTransport(request)))
+    assert service.ArtworkService(None, data_root=tmp_path)._download(URL) == payload
+    with httpx.Client(transport=httpx.MockTransport(request)) as client:
+        assert module._download_artwork(URL, tmp_path / "result.png", client=client) == hashlib.sha256(payload).hexdigest()
+    assert calls == [URL, URL]
+
+
+@pytest.mark.parametrize("addresses", [
+    ["127.0.0.1"], ["192.168.1.1"], ["169.254.169.254"], ["::1"],
+    ["198.18.0.31", "127.0.0.1"],
+])
+def test_fake_ip_exception_does_not_allow_private_or_mixed_dns(monkeypatch, tmp_path, addresses):
+    monkeypatch.setattr("app.core.url_guard.socket.getaddrinfo", lambda *_a, **_k: [
+        (None, None, None, None, (address, 443)) for address in addresses
+    ])
+    monkeypatch.setattr(service, "_artwork_client", lambda _config: pytest.fail("private address reached client"))
+    with pytest.raises(ValueError, match="非公网"):
+        service.ArtworkService(None, data_root=tmp_path)._download(URL)
+    with httpx.Client(transport=httpx.MockTransport(lambda _req: pytest.fail("private address reached transport"))) as client:
+        assert module._download_artwork(URL, tmp_path / "result.png", client=client) == ""

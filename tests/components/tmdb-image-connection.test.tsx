@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import TmdbImageConnectionPanel from '../../src/components/settings/TmdbImageConnectionPanel'
+import { ApiError } from '../../src/api/client'
 
 const api = vi.hoisted(() => ({ testTmdbImages: vi.fn(), repairTmdbImages: vi.fn(), getTmdbImageRepair: vi.fn() }))
 vi.mock('../../src/api/config', () => ({ configApi: api }))
@@ -72,4 +73,37 @@ test('StrictMode 检测结束后按钮可用，检测失败不会直接允许系
   render(<TmdbImageConnectionPanel />)
   await screen.findByText('图片检测未完成，请重新检测')
   expect(screen.queryByRole('button', { name: '一键修复图片连接' })).toBeNull()
+})
+
+test('点击时刷新诊断标识，旧检测不会导致修复被拒绝', async () => {
+  api.testTmdbImages.mockResolvedValueOnce(failed).mockResolvedValue({ ...failed, diagnostic_id: 'b'.repeat(32) })
+  render(<TmdbImageConnectionPanel />)
+  fireEvent.click(await screen.findByRole('button', { name: '一键修复图片连接' }))
+  await waitFor(() => expect(api.repairTmdbImages).toHaveBeenCalledWith('repair', 'b'.repeat(32)))
+})
+
+test('启动错误不会被自动检测清掉，用户能看到具体失败原因', async () => {
+  api.repairTmdbImages.mockRejectedValue(new ApiError(409, '修复组件不可用，请检查安装文件'))
+  render(<TmdbImageConnectionPanel />)
+  fireEvent.click(await screen.findByRole('button', { name: '一键修复图片连接' }))
+  expect(await screen.findByText('修复组件不可用，请检查安装文件')).toBeVisible()
+  expect(api.testTmdbImages).toHaveBeenCalledTimes(2)
+})
+
+test('实际连接正常后仍可一键重试失败图片', async () => {
+  api.testTmdbImages.mockResolvedValue(healthy)
+  render(<TmdbImageConnectionPanel failureOnly />)
+  fireEvent.click(await screen.findByRole('button', { name: '重新下载失败图片' }))
+  await waitFor(() => expect(api.repairTmdbImages).toHaveBeenCalledWith('repair', healthy.diagnostic_id))
+})
+
+test('后台重启导致任务消失时结束轮询，允许重新检测', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  api.getTmdbImageRepair.mockRejectedValue(new ApiError(404, 'task expired'))
+  render(<TmdbImageConnectionPanel />)
+  fireEvent.click(await screen.findByRole('button', { name: '一键修复图片连接' }))
+  await screen.findByRole('button', { name: '正在修复…' })
+  await act(async () => { await vi.advanceTimersByTimeAsync(600) })
+  expect(await screen.findByText('后台已重启，请重新检测图片连接')).toBeVisible()
+  expect(screen.getByRole('button', { name: '检测图片连接' })).toBeEnabled()
 })
