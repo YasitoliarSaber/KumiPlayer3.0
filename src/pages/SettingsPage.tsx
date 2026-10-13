@@ -283,8 +283,10 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
       const updated = await configApi.patchConfig(patch);
       setConfig(updated);
       report('配置已保存');
+      return true;
     } catch (err) {
       report(`保存失败：${(err as Error).message}`);
+      return false;
     } finally {
       setConfigLoading(false);
     }
@@ -315,9 +317,9 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
     const credentialError = getTmdbCredentialError(value);
     if (credentialError) {
       report(credentialError);
-      return;
+      return Promise.resolve(false);
     }
-    void saveConfig({ tmdb_bearer_token: value.trim() });
+    return saveConfig({ tmdb_bearer_token: value.trim() });
   };
 
   const loginBangumi = () => runAction('Bangumi 登录', async () => {
@@ -826,14 +828,28 @@ function SectionIntro({ title }: { title: string }) {
   );
 }
 
-function ConfigRow({ label, value, onSave, secret = false, placeholder = '', folder = false }: { label: string; value: string; onSave: (value: string) => void; secret?: boolean; placeholder?: string; folder?: boolean }) {
+function ConfigRow({ label, value, onSave, secret = false, placeholder = '', folder = false }: { label: string; value: string; onSave: (value: string) => Promise<boolean>; secret?: boolean; placeholder?: string; folder?: boolean }) {
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const initialDraft = secret ? '' : value || '';
   const [draft, setDraft] = useState(initialDraft);
   useEffect(() => setDraft(secret ? '' : value || ''), [secret, value]);
   const resolvedPlaceholder = secret && value ? '已配置；粘贴新凭据可替换' : placeholder;
+  const save = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const ok = await onSave(draft);
+      if (ok && secret) setDraft((current) => current === draft ? '' : current);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
   return (
-    <SettingsField label={label} className="settings-config-row settings-config-row--with-action" action={<GhostButton onClick={() => { onSave(draft); if (secret) setDraft(''); }} disabled={secret && !draft.trim()}>保存</GhostButton>}>
-      {folder ? <FolderPathInput label={label} value={draft} onChange={setDraft} placeholder={placeholder} /> : <Input type={secret ? 'password' : 'text'} value={draft} onChange={(_, data) => setDraft(data.value)} placeholder={resolvedPlaceholder} autoComplete={secret ? 'off' : undefined} />}
+    <SettingsField label={label} className="settings-config-row settings-config-row--with-action" action={<GhostButton onClick={() => void save()} disabled={saving || (secret && !draft.trim())}>{saving ? '正在保存…' : '保存'}</GhostButton>}>
+      {folder ? <FolderPathInput disabled={saving} label={label} value={draft} onChange={setDraft} placeholder={placeholder} /> : <Input disabled={saving} type={secret ? 'password' : 'text'} value={draft} onChange={(_, data) => setDraft(data.value)} placeholder={resolvedPlaceholder} autoComplete={secret ? 'off' : undefined} />}
     </SettingsField>
   );
 }

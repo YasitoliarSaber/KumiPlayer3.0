@@ -48,7 +48,7 @@ test('保存稍后设置后的下次启动进入首页，设置可用最新配�
   expect(screen.getByText('recently-saved')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '稍后设置' }));
   expect(await screen.findByRole('button', { name: '打开设置引导' })).toBeVisible();
-  expect(api.deferSetup).not.toHaveBeenCalled();
+  expect(api.deferSetup).toHaveBeenCalledOnce();
 });
 
 test('后台保存失败也能立即离开引导，不会困在出错页面', async () => {

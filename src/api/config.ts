@@ -153,6 +153,7 @@ export const configApi = {
     : api.post<MpvValidationResult>('/api/config/test/mpv'),
   testMpvPath: (mpvPath: string, playerMode?: PublicConfig['player_mode']) => api.post<MpvValidationResult>('/api/config/test/mpv-path', { mpv_path: mpvPath, ...(playerMode ? { player_mode: playerMode } : {}) }),
   deferSetup: () => api.post<PublicConfig>('/api/config/setup/defer'),
+  saveSetupPlayer: (payload: Pick<SetupCompletePayload, 'player_mode' | 'external_mpv_path'>) => api.post<PublicConfig>('/api/config/setup/player', payload),
   saveSetupSources: (payload: SetupSourcesPayload) => api.post<PublicConfig>('/api/config/setup/sources', payload),
   saveTmdbCredential: (token: string) => api.post<PublicConfig>('/api/config/setup/credentials/tmdb', { tmdb_bearer_token: token }),
   completeSetup: (payload: SetupCompletePayload) => api.post<PublicConfig>('/api/config/setup/complete', payload),

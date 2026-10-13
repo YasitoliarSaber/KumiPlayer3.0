@@ -89,6 +89,11 @@ const EMPTY_VIEW: BangumiSessionView = {
   lastErrorMessage: '',
 };
 
+// User account changes supersede older background responses. Background reads
+// wait for the next normal refresh while a credential action is in progress.
+let sessionRevision = 0;
+let pendingMutations = 0;
+
 export const useBangumiStore = create<BangumiState>()((set) => ({
   ...EMPTY_VIEW,
   loading: false,
@@ -96,13 +101,17 @@ export const useBangumiStore = create<BangumiState>()((set) => ({
   firstConnectionRevision: 0,
 
   restoreSession: async () => {
+    if (pendingMutations) return null;
+    const revision = ++sessionRevision;
     // 只读本地（Credential 三态 + 账户快照），0 个远程请求；单次，不重试
     set({ loading: true, sessionStatus: 'checking', error: null });
     try {
       const session = await bangumiApi.getSession();
+      if (revision !== sessionRevision) return null;
       applySession(set, session);
       return session;
     } catch (error) {
+      if (revision !== sessionRevision) return null;
       // 本地会话接口失败（后端不可达）：保守保留上次本地状态，不伪装退出。
       // 但**必须离开 checking**：否则界面会永远停在"正在检查登录状态"（实测卡死，
       // 且看不到"重新验证"入口）。有已保存凭据时落到"已保存但当前离线/未验证"。
@@ -116,13 +125,17 @@ export const useBangumiStore = create<BangumiState>()((set) => ({
   },
 
   verifySession: async () => {
+    if (pendingMutations) return null;
+    const revision = ++sessionRevision;
     // 显式远程验证：失败由后端分类进快照并返回 200；网络级失败保留本地状态
     set({ loading: true, error: null });
     try {
       const session = await bangumiApi.verifySession();
+      if (revision !== sessionRevision) return null;
       applySession(set, session);
       return session;
     } catch (error) {
+      if (revision !== sessionRevision) return null;
       // 同上：异常时必须收敛到终态，不能让面板停在 checking。
       set((state) => ({
         loading: false,
@@ -134,9 +147,12 @@ export const useBangumiStore = create<BangumiState>()((set) => ({
   },
 
   setToken: async (token: string) => {
+    const revision = ++sessionRevision;
+    pendingMutations += 1;
     set({ loading: true, error: null });
     try {
       const result = await bangumiApi.setToken(token);
+      if (revision !== sessionRevision) return;
       set((state) => ({
         user: result.me,
         isLoggedIn: true,
@@ -155,15 +171,20 @@ export const useBangumiStore = create<BangumiState>()((set) => ({
         firstConnectionRevision: state.firstConnectionRevision || 1,
       }));
     } catch (error) {
-      set({ loading: false, error: (error as Error).message });
+      if (revision === sessionRevision) set({ loading: false, error: (error as Error).message });
       throw error;
+    } finally {
+      pendingMutations -= 1;
     }
   },
 
   clearToken: async () => {
+    const revision = ++sessionRevision;
+    pendingMutations += 1;
     set({ loading: true, error: null });
     try {
       await bangumiApi.clearToken();
+      if (revision !== sessionRevision) return;
       set({
         ...EMPTY_VIEW,
         sessionStatus: 'signed_out',
@@ -172,8 +193,10 @@ export const useBangumiStore = create<BangumiState>()((set) => ({
         error: null,
       });
     } catch (error) {
-      set({ loading: false, error: (error as Error).message });
+      if (revision === sessionRevision) set({ loading: false, error: (error as Error).message });
       throw error;
+    } finally {
+      pendingMutations -= 1;
     }
   },
 }));

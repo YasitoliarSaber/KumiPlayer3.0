@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
     message: '内置播放器已就绪',
   })),
   completeSetup: vi.fn(),
+  saveSetupPlayer: vi.fn(async () => ({})),
   saveSetupSources: vi.fn(async () => ({})),
   saveTmdbCredential: vi.fn(async () => ({})),
   saveBangumiToken: vi.fn(async () => {}),
@@ -57,6 +58,7 @@ describe('FirstRunSetup V4 引导', () => {
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByText('内置播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '你的媒体放在哪里' });
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByRole('heading', { name: '准备开始使用' });
     fireEvent.click(screen.getByRole('button', { name: /海报与观看同步/ }));
@@ -77,6 +79,7 @@ describe('FirstRunSetup V4 引导', () => {
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByText('内置播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '你的媒体放在哪里' });
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByRole('heading', { name: '准备开始使用' });
     fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
@@ -101,10 +104,11 @@ describe('FirstRunSetup V4 引导', () => {
     fireEvent.click(screen.getByRole('button', { name: '重新检测' }));
     await screen.findByText('外部播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '你的媒体放在哪里' });
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByRole('heading', { name: '准备开始使用' });
     fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
-    await waitFor(() => expect(api.completeSetup).toHaveBeenCalledWith(expect.objectContaining({ player_mode: 'external', external_mpv_path: 'D:\\OtherPlayer' })));
+    await waitFor(() => expect(api.saveSetupPlayer).toHaveBeenCalledWith({ player_mode: 'external', external_mpv_path: 'D:\\OtherPlayer' }));
   });
 
   test('切换模式后忽略上一次尚未完成的检测结果', async () => {
@@ -143,6 +147,7 @@ describe('FirstRunSetup V4 引导', () => {
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByText('内置播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '你的媒体放在哪里' });
     expect(screen.getByRole('textbox', { name: '本地媒体根目录' })).toHaveValue('D:\\Anime');
     expect(screen.queryByRole('textbox', { name: '115 网盘挂载根目录' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: /115 网盘/ }));
@@ -155,10 +160,10 @@ describe('FirstRunSetup V4 引导', () => {
     fireEvent.click(screen.getByRole('button', { name: /海报与观看同步/ }));
     expect(screen.getByLabelText('TMDB API 读取访问令牌')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: '验证并完成' }));
-    await waitFor(() => expect(api.completeSetup).toHaveBeenCalledWith(expect.objectContaining({ local_root: 'D:\\Anime', pan115_root: 'H:\\Media' })));
+    await waitFor(() => expect(api.saveSetupSources).toHaveBeenCalledWith(expect.objectContaining({ local_root: 'D:\\Anime', pan115_root: 'H:\\Media' })));
     expect(api.completeSetup.mock.calls[0][0]).not.toHaveProperty('tmdb_bearer_token');
     expect(api.completeSetup.mock.calls[0][0]).not.toHaveProperty('bangumi_access_token');
-    expect(api.completeSetup.mock.calls[0][0]).not.toHaveProperty('mirror_dir');
+    expect(api.completeSetup).toHaveBeenCalledWith({});
   });
 
   test('文件夹选择失败时可见报错，手动输入仍然可用', async () => {
@@ -167,6 +172,7 @@ describe('FirstRunSetup V4 引导', () => {
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByText('内置播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '你的媒体放在哪里' });
     fireEvent.click(screen.getByRole('button', { name: '选择本地媒体根目录' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('目录选择不可用');
     fireEvent.change(screen.getByRole('textbox', { name: '本地媒体根目录' }), { target: { value: 'D:\\Anime' } });
@@ -210,6 +216,7 @@ describe('FirstRunSetup V4 引导', () => {
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await screen.findByText('内置播放器已就绪');
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '你的媒体放在哪里' });
     expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
     expect(screen.queryByLabelText('目录树文件目录（可选）')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: /百度网盘/ }));
@@ -223,6 +230,7 @@ async function reachSources() {
   fireEvent.click(screen.getByRole('button', { name: '继续' }));
   await screen.findByText('内置播放器已就绪');
   fireEvent.click(screen.getByRole('button', { name: '继续' }));
+  await screen.findByRole('heading', { name: '你的媒体放在哪里' });
 }
 
 async function reachCredentials() {
@@ -305,4 +313,28 @@ describe('逐项验证与保存', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('验证并保存');
     expect(api.completeSetup).not.toHaveBeenCalled();
   });
+
+
+test('外部播放器验证成功即保存，直接稍后设置也保留选择', async () => {
+  const onCancel = vi.fn();
+  render(<FirstRunSetup initialConfig={{ ...config, player_mode: 'external', external_mpv_path: 'D:/Player/mpv.exe' } as never} onComplete={vi.fn()} onCancel={onCancel} />);
+  fireEvent.click(screen.getByRole('button', { name: '继续' }));
+  await screen.findByText('外部播放器已就绪');
+  expect(api.saveSetupPlayer).toHaveBeenCalledWith({ player_mode: 'external', external_mpv_path: 'D:/Player/mpv.exe' });
+  fireEvent.click(screen.getByRole('button', { name: '关闭引导，进入软件' }));
+  expect(onCancel).toHaveBeenCalledOnce();
+});
+
+test('播放器保存失败时仍可返回与关闭，不误进入来源步骤', async () => {
+  api.saveSetupPlayer.mockRejectedValueOnce(new Error('模拟写入失败'));
+  const onCancel = vi.fn();
+  render(<FirstRunSetup initialConfig={config as never} onComplete={vi.fn()} onCancel={onCancel} />);
+  fireEvent.click(screen.getByRole('button', { name: '继续' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('模拟写入失败');
+  expect(screen.getByRole('heading', { name: '选择播放器' })).toBeVisible();
+  expect(screen.getByRole('button', { name: '返回' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: '关闭引导，进入软件' }));
+  expect(onCancel).toHaveBeenCalledOnce();
+});
+
 });

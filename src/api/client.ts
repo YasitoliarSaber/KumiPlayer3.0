@@ -32,24 +32,44 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE}${path}`
+  return requestJson<T>(`${API_BASE}${path}`, options)
+}
 
+export async function requestJson<T>(url: string, options: RequestInit = {}, timeoutMs = 30000): Promise<T> {
   const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), 30000)
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
 
-  let response: Response
+  // Keep the timeout active until the response body is read as well.
+  const cancel = () => controller.abort()
+  options.signal?.addEventListener('abort', cancel, { once: true })
+  if (options.signal?.aborted) controller.abort()
   const isForm = options.body instanceof FormData
   try {
-    response = await authorizedFetch(url, {
-    headers: {
-      ...(isForm ? {} : { 'Content-Type': 'application/json' }),
-      ...options.headers,
-    },
+    const response = await authorizedFetch(url, {
       ...options,
-      signal: options.signal ?? controller.signal,
+      headers: {
+        ...(isForm ? {} : { 'Content-Type': 'application/json' }),
+        ...options.headers,
+      },
+      signal: controller.signal,
     })
+    if (!response.ok) {
+      let message = `HTTP ${response.status}`
+      try {
+        const body = await response.json()
+        message = body.detail || message
+      } catch (error) {
+        if (controller.signal.aborted) throw error
+      }
+      throw new ApiError(response.status, message)
+    }
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      throw new ApiError(502, '后端返回了非 JSON 响应，请确认 KumiPlayer 后端已正常启动。')
+    }
+    return await response.json()
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (controller.signal.aborted) {
       throw new ApiError(408, '请求超时，请重试')
     }
     if (error instanceof TypeError) {
@@ -58,28 +78,8 @@ async function request<T>(
     throw error
   } finally {
     window.clearTimeout(timeout)
+    options.signal?.removeEventListener('abort', cancel)
   }
-
-  if (!response.ok) {
-    let message = `HTTP ${response.status}`
-    try {
-      const body = await response.json()
-      message = body.detail || message
-    } catch {
-      // ignore
-    }
-    throw new ApiError(response.status, message)
-  }
-
-  const contentType = response.headers.get('content-type') || ''
-  if (!contentType.includes('application/json')) {
-    throw new ApiError(
-      502,
-      '后端返回了非 JSON 响应，请确认 KumiPlayer 后端已正常启动。',
-    )
-  }
-
-  return response.json()
 }
 
 export const api = {

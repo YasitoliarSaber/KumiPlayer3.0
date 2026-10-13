@@ -7,6 +7,10 @@ from pathlib import Path
 MEDIA_PATH_PROBE_TIMEOUT_SECONDS = 4
 
 
+class MediaPathProbeError(RuntimeError):
+    """The probe failed internally; no filesystem verdict is available."""
+
+
 def _probe_worker(connection, checks: list[tuple[str, str]]) -> None:
     try:
         states = []
@@ -38,10 +42,10 @@ def probe_media_path_states(
             return failed, True
         states = receiver.recv()
         if not isinstance(states, list) or len(states) != len(checks) or any(type(state) is not bool for state in states):
-            return failed, False
+            raise MediaPathProbeError("Invalid filesystem worker response")
         return states, False
-    except (OSError, EOFError, ValueError, RuntimeError):
-        return failed, False
+    except (OSError, EOFError, ValueError, RuntimeError) as exc:
+        raise MediaPathProbeError("Filesystem worker unavailable") from exc
     finally:
         receiver.close()
         sender.close()

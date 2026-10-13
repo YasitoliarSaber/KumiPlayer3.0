@@ -1,5 +1,7 @@
 """Exercise actual spawn IPC instead of assuming the executable accepts Python -c."""
 
+import pytest
+
 from app.core import media_path_probe
 
 
@@ -48,4 +50,5 @@ def test_broken_worker_does_not_report_success(tmp_path, monkeypatch):
     context.Pipe.return_value = receiver, sender
     context.Process.return_value = worker
     monkeypatch.setattr(media_path_probe.multiprocessing, "get_context", lambda method: context)
-    assert media_path_probe.probe_media_path_states(tmp_path, []) == ([False], False)
+    with pytest.raises(media_path_probe.MediaPathProbeError):
+        media_path_probe.probe_media_path_states(tmp_path, [])

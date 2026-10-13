@@ -58,8 +58,8 @@ export default function App() {
     setSetupOverride(false);
     setSetupDismissed(true);
     setSetupSaveError('');
-    if (!appConfig || appConfig.setup_completed || appConfig.setup_deferred) return;
-    // 进入软件不等待保存成功；后台故障也不能把用户困在引导中。
+    if (!appConfig) return;
+    // 每次离开都通知后端，取消旧的完成请求；进入软件不等待保存成功。
     void configApi.deferSetup().then((config) => {
       setAppConfig((current) => current
         ? (current.setup_completed ? current : { ...current, setup_deferred: config.setup_deferred })

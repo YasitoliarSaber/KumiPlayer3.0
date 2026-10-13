@@ -169,6 +169,7 @@ describe('SettingsPage 信息架构', () => {
     expect(screen.getByText(/只发送作品名称与年份/)).toBeVisible();
   });
   beforeEach(() => {
+    vi.clearAllMocks();
     api.getConfig.mockResolvedValue(config);
     api.getMpvRuntime.mockResolvedValue({
       available: true,
@@ -416,4 +417,32 @@ describe('SettingsPage 信息架构', () => {
     expect(input).toHaveValue('J:\\115');
     expect(pickFolder).toHaveBeenLastCalledWith('J:\\115', '选择115 网盘挂载位置');
   });
+
+
+test('保存失败保留令牌草稿，重试成功后才清空', async () => {
+  api.patchConfig.mockRejectedValueOnce(new Error('模拟写入失败'));
+  render(<SettingsPage />);
+  fireEvent.click(await screen.findByRole('button', { name: '元数据与图片' }));
+  const input = screen.getByLabelText('API 读取访问令牌');
+  const row = input.closest('.settings-config-row')!;
+  fireEvent.change(input, { target: { value: 'fixture:tmdb-read-token' } });
+  fireEvent.click(within(row).getByRole('button', { name: '保存' }));
+  expect(await screen.findByText(/保存失败：模拟写入失败/)).toBeVisible();
+  expect(input).toHaveValue('fixture:tmdb-read-token');
+  api.patchConfig.mockResolvedValueOnce({ ...config, tmdb_configured: true });
+  fireEvent.click(within(row).getByRole('button', { name: '保存' }));
+  await waitFor(() => expect(input).toHaveValue(''));
+});
+
+test('贴错 TMDB 密钥时保留输入且不提交保存', async () => {
+  render(<SettingsPage />);
+  fireEvent.click(await screen.findByRole('button', { name: '元数据与图片' }));
+  const input = screen.getByLabelText('API 读取访问令牌');
+  fireEvent.change(input, { target: { value: '0123456789abcdef0123456789abcdef' } });
+  fireEvent.click(within(input.closest('.settings-config-row')!).getByRole('button', { name: '保存' }));
+  expect(await screen.findByText(/你粘贴的是 32 位 API 密钥/)).toBeVisible();
+  expect(input).toHaveValue('0123456789abcdef0123456789abcdef');
+  expect(api.patchConfig).not.toHaveBeenCalled();
+});
+
 });

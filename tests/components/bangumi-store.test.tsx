@@ -133,3 +133,42 @@ test('valid + online + user 才是已登录', async () => {
   expect(useBangumiStore.getState().isLoggedIn).toBe(true);
   expect(useBangumiStore.getState().sessionStatus).toBe('connected');
 });
+
+
+test.each(['restore', 'verify'])('晚到的 %s 响应不会撤销退出登录', async (kind) => {
+  let resolve!: (value: typeof connectedSession) => void;
+  vi.spyOn(bangumiApi, kind === 'restore' ? 'getSession' : 'verifySession').mockReturnValue(new Promise(done => { resolve = done; }));
+  vi.spyOn(bangumiApi, 'clearToken').mockResolvedValue({ ok: true });
+  const pending = kind === 'restore' ? useBangumiStore.getState().restoreSession() : useBangumiStore.getState().verifySession();
+  await useBangumiStore.getState().clearToken();
+  resolve(connectedSession);
+  await pending;
+  expect(useBangumiStore.getState().sessionStatus).toBe('signed_out');
+  expect(useBangumiStore.getState().user).toBeNull();
+});
+
+test('旧账号验证的晚到异常不会覆盖新账号已连接状态', async () => {
+  let reject!: (error: Error) => void;
+  vi.spyOn(bangumiApi, 'verifySession').mockReturnValue(new Promise((_done, fail) => { reject = fail; }));
+  vi.spyOn(bangumiApi, 'setToken').mockResolvedValue({ ok: true, me: { ...cachedUser, id: 2, username: 'new-account' } });
+  const pending = useBangumiStore.getState().verifySession();
+  await useBangumiStore.getState().setToken('fixture:new');
+  reject(new Error('fixture old response failed'));
+  await pending;
+  expect(useBangumiStore.getState().sessionStatus).toBe('connected');
+  expect(useBangumiStore.getState().user?.id).toBe(2);
+  expect(useBangumiStore.getState().error).toBeNull();
+});
+
+test('保存账号期间后台恢复不覆盖正在进行的用户操作', async () => {
+  let resolve!: (value: { ok: boolean; me: typeof cachedUser }) => void;
+  vi.spyOn(bangumiApi, 'setToken').mockReturnValue(new Promise(done => { resolve = done; }));
+  const restore = vi.spyOn(bangumiApi, 'getSession').mockResolvedValue({ ...connectedSession, credential_state: 'not_found', credential_saved: false, user: null });
+  const pending = useBangumiStore.getState().setToken('fixture:new');
+  await useBangumiStore.getState().restoreSession();
+  expect(restore).not.toHaveBeenCalled();
+  resolve({ ok: true, me: { ...cachedUser, id: 2, username: 'new-account' } });
+  await pending;
+  expect(useBangumiStore.getState().user?.id).toBe(2);
+  expect(useBangumiStore.getState().sessionStatus).toBe('connected');
+});

@@ -1,6 +1,5 @@
 """Bangumi integration API."""
 
-import copy
 import hashlib
 import json
 import mimetypes
@@ -14,7 +13,13 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.media_v4 import get_database
-from app.core.config import DEFAULT_BANGUMI_USER_AGENT, load_config, save_config
+from app.core.config import (
+    DEFAULT_BANGUMI_USER_AGENT,
+    ConfigChangedError,
+    load_config,
+    snapshot_config,
+    update_config,
+)
 from app.core.credential_store import SECURE_CREDENTIAL_STORE
 from app.core.data_lock import DATA_WRITE_LOCK
 from app.core.paths import get_cache_dir
@@ -162,30 +167,32 @@ def _session_payload(snapshot: BangumiAccountSnapshot, *, credential_state: str)
 @router.post("/token")
 def set_token(req: TokenRequest):
     """保存 Bangumi token 并验证它；验证成功才落盘并写账户快照。"""
+    _, revisions = snapshot_config({"bangumi_access_token"})
     user_agent = DEFAULT_BANGUMI_USER_AGENT
     try:
         me = BangumiClient(access_token=req.access_token, user_agent=user_agent, timeout=12.0).get_me(purpose="manual_verify")
     except BangumiError as e:
         raise _http_error(e) from e
-    # Read after verification so another independently saved credential survives.
     with DATA_WRITE_LOCK:
-        config = copy.deepcopy(load_config())
-        config.bangumi_access_token = req.access_token
-        config.bangumi_user_agent = DEFAULT_BANGUMI_USER_AGENT
-        save_config(config)
-    now = _now_iso()
-    save_account_snapshot(BangumiAccountSnapshot(
-        user_id=me.get("id"),
-        username=str(me.get("username") or ""),
-        nickname=str(me.get("nickname") or ""),
-        avatar_url=_avatar_url(me.get("avatar")) or "",
-        sign=me.get("sign", ""),
-        auth_status="valid",
-        connectivity="online",
-        last_verified_at=now,
-        last_success_at=now,
-        last_http_status=200,
-    ))
+        try:
+            config = update_config({"bangumi_access_token": req.access_token,
+                                    "bangumi_user_agent": DEFAULT_BANGUMI_USER_AGENT},
+                                   expected_revisions=revisions)
+        except ConfigChangedError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        now = _now_iso()
+        save_account_snapshot(BangumiAccountSnapshot(
+            user_id=me.get("id"),
+            username=str(me.get("username") or ""),
+            nickname=str(me.get("nickname") or ""),
+            avatar_url=_avatar_url(me.get("avatar")) or "",
+            sign=me.get("sign", ""),
+            auth_status="valid",
+            connectivity="online",
+            last_verified_at=now,
+            last_success_at=now,
+            last_http_status=200,
+        ))
     return {"ok": True, "me": _public_me(me), "config": config.to_public_dict()}
 
 
@@ -196,10 +203,9 @@ def clear_token():
     ``cleared_keys`` 显式声明清除意图：空值语义默认是 KEEP，只有这里明确
     要求删除 ``bangumi_access_token``（REWORK：绝不隐式 CLEAR 其他凭据）。
     """
-    config = load_config()
-    config.bangumi_access_token = ""
-    save_config(config, cleared_keys={"bangumi_access_token"})
-    clear_account_snapshot()
+    with DATA_WRITE_LOCK:
+        update_config({"bangumi_access_token": ""}, cleared_keys={"bangumi_access_token"})
+        clear_account_snapshot()
     return {"ok": True}
 
 @router.get("/me")
@@ -219,9 +225,23 @@ def get_session():
     （found / not_found / unavailable）、上次验证结果（快照）、最近一次连接
     状态；真正的远程验证走 POST /session/verify。
     """
-    credential_state, _token = _read_bangumi_credential()
-    snapshot = load_account_snapshot()
-    return _session_payload(snapshot, credential_state=credential_state)
+    with DATA_WRITE_LOCK:
+        credential_state, _token = _read_bangumi_credential()
+        snapshot = load_account_snapshot()
+        return _session_payload(snapshot, credential_state=credential_state)
+
+
+def _publish_session_verification(snapshot: BangumiAccountSnapshot, token: str, revisions: dict[str, int]) -> dict:
+    with DATA_WRITE_LOCK:
+        _, current_revisions = snapshot_config({"bangumi_access_token"})
+        credential_state, current_token = _read_bangumi_credential()
+        if current_revisions == revisions and current_token == token:
+            save_account_snapshot(snapshot)
+        else:
+            # A background response for an old account must not replace a newly
+            # saved account or recreate its snapshot after logout.
+            snapshot = load_account_snapshot()
+        return _session_payload(snapshot, credential_state=credential_state)
 
 
 @router.post("/session/verify")
@@ -233,8 +253,10 @@ def verify_session():
     - 403 / 429 / 5xx / timeout / proxy / 网络 → 对应 connectivity 分类，
       一律保留凭据，绝不自动删除、绝不伪装成退出登录。
     """
-    credential_state, effective_token = _read_bangumi_credential()
-    snapshot = load_account_snapshot()
+    with DATA_WRITE_LOCK:
+        _, revisions = snapshot_config({"bangumi_access_token"})
+        credential_state, effective_token = _read_bangumi_credential()
+        snapshot = load_account_snapshot()
     if credential_state != "found":
         return _session_payload(snapshot, credential_state=credential_state)
 
@@ -259,8 +281,7 @@ def verify_session():
             snapshot.connectivity = "offline"
         else:
             snapshot.connectivity = "unknown"
-        save_account_snapshot(snapshot)
-        return _session_payload(snapshot, credential_state=credential_state)
+        return _publish_session_verification(snapshot, effective_token, revisions)
 
     snapshot.user_id = me.get("id")
     snapshot.username = me.get("username") or ""
@@ -274,8 +295,7 @@ def verify_session():
     snapshot.last_http_status = 200
     snapshot.last_error_code = ""
     snapshot.last_error_message = ""
-    save_account_snapshot(snapshot)
-    return _session_payload(snapshot, credential_state=credential_state)
+    return _publish_session_verification(snapshot, effective_token, revisions)
 @router.get("/avatar")
 def get_cached_avatar(url: str):
     """Proxy and cache Bangumi avatar images for the sidebar account card."""

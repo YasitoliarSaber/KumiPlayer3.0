@@ -20,12 +20,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import (
     AppConfig,
+    ConfigChangedError,
     load_config,
     save_config,
+    snapshot_config,
+    update_config,
 )
 from app.core.data_lock import DATA_WRITE_LOCK
 from app.core.media_path_probe import (
     MEDIA_PATH_PROBE_TIMEOUT_SECONDS as _MEDIA_PATH_PROBE_TIMEOUT_SECONDS,
+)
+from app.core.media_path_probe import (
+    MediaPathProbeError,
 )
 from app.core.media_path_probe import (
     probe_media_path_states as _probe_media_path_states,
@@ -117,6 +123,13 @@ class SetupCompleteRequest(SetupSourcesRequest):
     bangumi_access_token: str = ""
 
 
+class SetupPlayerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    player_mode: Literal["internal", "external"] = "internal"
+    external_mpv_path: str = ""
+
+
 class MpvPathRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -144,6 +157,11 @@ def get_config():
 
 @router.patch("")
 def patch_config(req: ConfigPatch):
+    with DATA_WRITE_LOCK:
+        return _patch_config(req)
+
+
+def _patch_config(req: ConfigPatch):
     """部分更新配置
 
     只更新传入的非 None 字段。
@@ -312,9 +330,7 @@ def test_mpv_path(req: MpvPathRequest):
 @router.post("/setup/defer")
 def defer_setup():
     # 只记录稍后设置；不验证播放器或来源，也不把未完成的配置标为完成。
-    config = copy.deepcopy(load_config())
-    config.setup_deferred = True
-    save_config(config)
+    config = update_config({"setup_deferred": True})
     return config.to_public_dict()
 
 
@@ -328,8 +344,11 @@ def _validate_setup_sources(req: SetupSourcesRequest) -> dict[str, str]:
     labels = {"pan115_root": "115 网盘目录", "baidu_root": "百度网盘目录",
               "local_root": "本地媒体目录", "directory_tree_dir": "目录树文件目录"}
     configured = [(key, path) for key, path in sources.items() if path]
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        states = list(executor.map(lambda item: _probe_media_path_states(Path(item[1]), []), configured))
+    try:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            states = list(executor.map(lambda item: _probe_media_path_states(Path(item[1]), []), configured))
+    except MediaPathProbeError as exc:
+        raise HTTPException(status_code=503, detail="目录检测程序未能运行，请重新检测或重启应用；这不表示目录不存在") from exc
     for (key, path), (available, timed_out) in zip(configured, states, strict=True):
         if not available[0]:
             reason = "检查超时，请确认磁盘或挂载连接后重试" if timed_out else "不存在或不可访问"
@@ -352,79 +371,90 @@ def _validate_tmdb_credential(token: str) -> None:
         raise HTTPException(status_code=400, detail=f"TMDB Token 验证失败: {message}")
 
 
+_SOURCE_FIELDS = {"pan115_root", "baidu_root", "local_root", "directory_tree_dir"}
+_PLAYER_FIELDS = {"player_mode", "external_mpv_path", "mpv_path"}
+
+
+def _save_changes(changes: dict, revisions: dict[str, int]) -> AppConfig:
+    try:
+        return update_config(changes, expected_revisions=revisions)
+    except ConfigChangedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+def _validate_setup_player(player_mode: str, player_path: str) -> None:
+    if player_mode == "external":
+        status = inspect_external_mpv(player_path)
+        if not status["ok"]:
+            raise HTTPException(status_code=400, detail=status["message"])
+        return
+    status = check_mpv_runtime(verify_files=True)
+    if not status["available"]:
+        raise HTTPException(status_code=400, detail="KumiPlayer 内置播放器未就绪，请修复后重试")
+    if not status["manifest_valid"]:
+        raise HTTPException(status_code=400, detail="KumiPlayer 内置 MPV 运行时清单缺失或非法，无法完成设置")
+    if not status["files_valid"]:
+        raise HTTPException(status_code=400, detail="KumiPlayer 内置 MPV 运行文件校验失败，无法完成设置")
+    if not status["configuration_available"]:
+        raise HTTPException(status_code=400, detail="KumiPlayer 播放配置不完整，无法完成设置")
+
+
+@router.post("/setup/player")
+def save_setup_player(req: SetupPlayerRequest):
+    _, revisions = snapshot_config(_PLAYER_FIELDS)
+    path = req.external_mpv_path.strip()
+    _validate_setup_player(req.player_mode, path)
+    config = _save_changes({"player_mode": req.player_mode, "external_mpv_path": path}, revisions)
+    return config.to_public_dict()
+
+
 @router.post("/setup/sources")
 def save_setup_sources(req: SetupSourcesRequest):
+    _, revisions = snapshot_config(_SOURCE_FIELDS)
     sources = _validate_setup_sources(req)
-    with DATA_WRITE_LOCK:
-        config = copy.deepcopy(load_config())
-        for key, value in sources.items():
-            setattr(config, key, value)
-        save_config(config)
-    return config.to_public_dict()
+    return _save_changes(sources, revisions).to_public_dict()
 
 
 @router.post("/setup/credentials/tmdb")
 def save_setup_tmdb_credential(req: TmdbCredentialRequest):
+    _, revisions = snapshot_config({"tmdb_bearer_token"})
     token = req.tmdb_bearer_token.strip()
     _validate_tmdb_credential(token)
-    with DATA_WRITE_LOCK:
-        config = copy.deepcopy(load_config())
-        config.tmdb_bearer_token = token
-        save_config(config)
-    return config.to_public_dict()
+    return _save_changes({"tmdb_bearer_token": token}, revisions).to_public_dict()
 
 
 @router.post("/setup/complete")
 def complete_setup(req: SetupCompleteRequest):
-    # Validate the requested selection before persisting any setup changes.
-    config = copy.deepcopy(load_config())
-    if req.player_mode is not None:
-        config.player_mode = req.player_mode
-    if req.external_mpv_path is not None:
-        config.external_mpv_path = req.external_mpv_path.strip()
-    if config.player_mode == "external":
-        player_path = (req.external_mpv_path.strip() if req.external_mpv_path is not None
-                       else config.external_mpv_path or config.mpv_path)
-        status = inspect_external_mpv(player_path)
-        if not status["ok"]:
-            raise HTTPException(status_code=400, detail=status["message"])
-    else:
-        runtime_status = check_mpv_runtime(verify_files=True)
-        if not runtime_status["available"]:
-            raise HTTPException(status_code=400, detail="KumiPlayer 内置播放器未就绪，请修复后重试")
-        if not runtime_status["manifest_valid"]:
-            raise HTTPException(status_code=400, detail="KumiPlayer 内置 MPV 运行时清单缺失或非法，无法完成设置")
-        if not runtime_status["files_valid"]:
-            raise HTTPException(status_code=400, detail="KumiPlayer 内置 MPV 运行文件校验失败，无法完成设置")
-        if not runtime_status["configuration_available"]:
-            raise HTTPException(status_code=400, detail="KumiPlayer 播放配置不完整，无法完成设置")
-
-    sources = _validate_setup_sources(req)
-
-    # Preserve the legacy field for old clients; explicit selection uses external_mpv_path.
-    requested_mpv_path = req.mpv_path.strip()
-    if requested_mpv_path:
-        config.mpv_path = requested_mpv_path
-    for key, value in sources.items():
+    # The current guide completes saved checkpoints. Older clients may still
+    # submit selections; merge those fields only, never a stale whole profile.
+    requested = req.model_dump(exclude_unset=True)
+    fields = _SOURCE_FIELDS | _PLAYER_FIELDS | {"setup_completed", "setup_deferred"}
+    fields |= {key for key in ("tmdb_bearer_token", "bangumi_access_token") if requested.get(key)}
+    config, revisions = snapshot_config(fields)
+    changes = {key: value.strip() if isinstance(value, str) else value
+               for key, value in requested.items() if value is not None}
+    changes.pop("mirror_dir", None)
+    for key in ("tmdb_bearer_token", "bangumi_access_token", "mpv_path"):
+        if not changes.get(key):
+            changes.pop(key, None)
+    for key, value in changes.items():
         setattr(config, key, value)
-    tmdb_bearer_token = req.tmdb_bearer_token.strip()
-    if tmdb_bearer_token:
-        _validate_tmdb_credential(tmdb_bearer_token)
-        config.tmdb_bearer_token = tmdb_bearer_token
-    bangumi_access_token = req.bangumi_access_token.strip()
-    if bangumi_access_token:
+    _validate_setup_player(config.player_mode, config.external_mpv_path or config.mpv_path)
+    normalized_sources = _validate_setup_sources(SetupSourcesRequest(**{
+        key: getattr(config, key) for key in _SOURCE_FIELDS
+    }))
+    changes.update({key: normalized_sources[key] for key in _SOURCE_FIELDS if key in requested})
+    if changes.get("tmdb_bearer_token"):
+        _validate_tmdb_credential(changes["tmdb_bearer_token"])
+    if changes.get("bangumi_access_token"):
         try:
-            BangumiClient(access_token=bangumi_access_token, timeout=12.0).get_me()
+            BangumiClient(access_token=changes["bangumi_access_token"], timeout=12.0).get_me()
         except BangumiError as exc:
             raise HTTPException(status_code=400, detail=f"Bangumi 个人访问令牌验证失败: {exc}") from exc
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Bangumi 验证异常: {exc}") from exc
-        config.bangumi_access_token = bangumi_access_token
-    config.setup_completed = True
-    config.setup_deferred = False
-    config.setup_version = 1
-    save_config(config)
-    return config.to_public_dict()
+            raise HTTPException(status_code=400, detail="Bangumi 验证未完成，请检查网络连接后重试") from exc
+    changes.update(setup_completed=True, setup_deferred=False, setup_version=1)
+    return _save_changes(changes, revisions).to_public_dict()
 
 
 # ============================================================
@@ -556,7 +586,13 @@ def test_media_paths():
                 "message": "尚未配置挂载目录",
             }
         root = Path(configured_root).expanduser()
-        states, probe_timed_out = _probe_media_path_states(root, [])
+        try:
+            states, probe_timed_out = _probe_media_path_states(root, [])
+        except MediaPathProbeError:
+            return {"source": source, "ok": False, "status": "unavailable",
+                    "configured_root": configured_root, "resolved_root": configured_root,
+                    "scope_name": "", "checked_count": 0, "existing_count": 0, "example_path": "",
+                    "message": "目录检测程序未能运行，请重新检测或重启应用；这不表示目录不存在"}
         root_ok = states[0]
         ok = root_ok
         return {

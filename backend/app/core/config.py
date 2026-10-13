@@ -1,5 +1,6 @@
 """配置模型与敏感字段脱敏"""
 
+import copy
 import json
 import logging
 import os
@@ -157,6 +158,41 @@ class AppConfig:
 
 
 _cached_config: AppConfig | None = None
+_field_revisions: dict[str, int] = {}
+
+
+class ConfigChangedError(RuntimeError):
+    """A newer user action superseded the fields being validated."""
+
+
+def snapshot_config(fields: set[str]) -> tuple[AppConfig, dict[str, int]]:
+    with DATA_WRITE_LOCK:
+        return copy.deepcopy(load_config()), {key: _field_revisions.get(key, 0) for key in fields}
+
+
+def update_config(changes: dict, *, expected_revisions: dict[str, int] | None = None,
+                  cleared_keys: set[str] | None = None) -> AppConfig:
+    """Merge only this action's fields into the latest saved configuration.
+
+    Slow validation runs outside the lock. A superseded action cannot write its
+    old selection back after a user returns, saves again, or defers setup.
+    """
+    with DATA_WRITE_LOCK:
+        if expected_revisions is not None and any(
+            _field_revisions.get(key, 0) != revision for key, revision in expected_revisions.items()
+        ):
+            raise ConfigChangedError("设置已更新，已保留最新保存的配置，请重新检查后继续")
+        current = load_config()
+        candidate = copy.deepcopy(current)
+        unchanged = {key for key, value in changes.items() if getattr(current, key) == value}
+        for key, value in changes.items():
+            setattr(candidate, key, value)
+        save_config(candidate, cleared_keys=cleared_keys)
+        # An explicit action (including deferring an already-deferred guide)
+        # also supersedes an older request even if the saved value is the same.
+        for key in unchanged:
+            _field_revisions[key] = _field_revisions.get(key, 0) + 1
+        return candidate
 
 
 def _credential_storage_enabled() -> bool:
@@ -368,12 +404,18 @@ def get_config_file() -> Path:
 
 
 def load_config(force_reload: bool = False) -> AppConfig:
+    with DATA_WRITE_LOCK:
+        return _load_config(force_reload)
+
+
+def _load_config(force_reload: bool = False) -> AppConfig:
     """加载配置文件，支持缓存"""
     global _cached_config
     if not force_reload and _cached_config is not None:
         return _cached_config
 
     config_file = get_config_file()
+    data: dict = {}
     if config_file.exists():
         try:
             with open(config_file, encoding="utf-8") as f:
@@ -423,10 +465,10 @@ def load_config(force_reload: bool = False) -> AppConfig:
     else:
         config = AppConfig()
 
-    if os.environ.get("KUMIPLAYER_AUTO_SHUTDOWN_ON_HEARTBEAT_TIMEOUT") == "1":
+    if "auto_shutdown_on_heartbeat_timeout" not in data and os.environ.get("KUMIPLAYER_AUTO_SHUTDOWN_ON_HEARTBEAT_TIMEOUT") == "1":
         config.auto_shutdown_on_heartbeat_timeout = True
     heartbeat_timeout = os.environ.get("KUMIPLAYER_HEARTBEAT_TIMEOUT")
-    if heartbeat_timeout:
+    if heartbeat_timeout and "heartbeat_timeout" not in data:
         try:
             config.heartbeat_timeout = max(3, int(heartbeat_timeout))
         except ValueError:
@@ -444,8 +486,13 @@ def save_config(config: AppConfig, *, cleared_keys: set[str] | None = None) -> N
     只有调用方明确传入的字段才会执行 DELETE（例如用户主动退出登录）。
     """
     global _cached_config
-    _persist_config_payload(config, cleared_keys=cleared_keys)
-    _cached_config = config
+    with DATA_WRITE_LOCK:
+        previous = load_config()
+        _persist_config_payload(config, cleared_keys=cleared_keys)
+        for key in AppConfig.__dataclass_fields__:
+            if getattr(previous, key) != getattr(config, key):
+                _field_revisions[key] = _field_revisions.get(key, 0) + 1
+        _cached_config = config
 
 def invalidate_config_cache() -> None:
     """清除配置缓存"""

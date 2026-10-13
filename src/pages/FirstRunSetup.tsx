@@ -69,9 +69,15 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
     try {
       if (externalPlayer) {
         const status = await configApi.testMpv(form.external_mpv_path?.trim() || '', 'external');
+        if (revision !== checkRevision.current) return;
+        if (status.ok) await configApi.saveSetupPlayer({ player_mode: 'external', external_mpv_path: form.external_mpv_path });
         if (revision === checkRevision.current) setExternalStatus(status);
       } else {
         const status = await configApi.getMpvRuntime();
+        if (revision !== checkRevision.current) return;
+        if (status.available && status.manifest_valid && status.files_valid && status.configuration_available) {
+          await configApi.saveSetupPlayer({ player_mode: 'internal', external_mpv_path: form.external_mpv_path });
+        }
         if (revision === checkRevision.current) setMpvStatus(status);
       }
     } catch (reason) {
@@ -225,12 +231,8 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
     setFinishing(true);
     setError('');
     try {
-      // 凭据已独立验证并保存；完成设置只提交播放器与目录。
-      const config = await configApi.completeSetup({
-        player_mode: form.player_mode, external_mpv_path: form.external_mpv_path,
-        pan115_root: form.pan115_root, baidu_root: form.baidu_root,
-        local_root: form.local_root, directory_tree_dir: form.directory_tree_dir,
-      });
+      // Player, directories and credentials are already saved at their steps.
+      const config = await configApi.completeSetup({});
       if (revision === finishRevision.current) onComplete(config);
     } catch (reason) {
       if (revision === finishRevision.current) {
@@ -300,7 +302,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                 {!checkingMpv && (mpvStatus || externalStatus) && (
                   <div className={`first-run-result ${mpvReady ? 'success' : 'error'}`}>
                     <strong>{mpvReady ? `${playerLabel}已就绪` : '播放器暂不可用'}</strong>
-                    <span>{mpvReady ? '可以继续下一步。' : (externalPlayer ? externalStatus?.message : mpvStatus?.message)}</span>
+                    <span>{mpvReady ? '已验证并保存，可以继续下一步，也可以稍后设置。' : (externalPlayer ? externalStatus?.message : mpvStatus?.message)}</span>
                   </div>
                 )}
                 <button className="first-run-secondary" onClick={checkMpv} disabled={checkingMpv || (externalPlayer && !form.external_mpv_path?.trim())}>{checkingMpv ? '正在检测…' : <><RefreshCw size={14} />重新检测</>}</button>

@@ -1,4 +1,4 @@
-import { API_BASE as GLOBAL_API_BASE, authorizedFetch } from './client';
+import { API_BASE as GLOBAL_API_BASE, requestJson } from './client';
 import { withApiSessionToken } from './sessionToken';
 
 const BASE_PATH = '/api/integrations/bangumi';
@@ -68,42 +68,8 @@ type FetchJsonOptions = RequestInit & {
 };
 
 async function fetchJson<T>(url: string, options: FetchJsonOptions = {}): Promise<T> {
-  const { timeoutMs = 10_000, signal, ...fetchOptions } = options;
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  if (signal?.aborted) {
-    controller.abort();
-  } else {
-    signal?.addEventListener('abort', abort, { once: true });
-  }
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-
-  let response: Response;
-  try {
-    response = await authorizedFetch(url, {
-    ...fetchOptions,
-    headers: {
-      'Content-Type': 'application/json',
-      ...fetchOptions.headers,
-    },
-      signal: controller.signal,
-  });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Bangumi 请求超时，请稍后再试');
-    }
-    throw error;
-  } finally {
-    window.clearTimeout(timer);
-    signal?.removeEventListener('abort', abort);
-  }
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
-  }
-
-  return response.json();
+  const { timeoutMs = 10_000, ...fetchOptions } = options;
+  return requestJson<T>(url, fetchOptions, timeoutMs);
 }
 
 export const bangumiApi = {

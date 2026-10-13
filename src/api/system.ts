@@ -1,4 +1,4 @@
-import { API_BASE as GLOBAL_API_BASE, authorizedFetch } from './client';
+import { API_BASE as GLOBAL_API_BASE, requestJson } from './client';
 
 const BASE_PATH = '/api/system';
 const API_BASE = GLOBAL_API_BASE ? `${GLOBAL_API_BASE}${BASE_PATH}` : BASE_PATH;
@@ -12,20 +12,7 @@ export interface OpenFolderResult {
 }
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await authorizedFetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return requestJson<T>(url, options);
 }
 
 export const systemApi = {
