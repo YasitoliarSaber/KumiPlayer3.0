@@ -4,3 +4,6 @@ mpv/sources/evidence/** -text whitespace=cr-at-eol
 mpv/licenses/material-icons-round/LICENSE -text
 # A unified diff uses a single space as its empty context-line marker.
 mpv/sources/evidence/**/*.patch whitespace=-blank-at-eol
+# Windows 双击修复入口及 PowerShell 5.1 源文件必须保留 CRLF。
+scripts/repair/tmdb-images/*.cmd text eol=crlf
+scripts/repair/tmdb-images/*.ps1 text eol=crlf

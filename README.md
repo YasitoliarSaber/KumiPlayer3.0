@@ -150,6 +150,10 @@ release\KumiPlayer-Setup.exe
 
 TMDB 需要的是“API 读取访问令牌”，不是 32 位 API Key。以后可在“设置 → 应用 → 设置引导”重新打开。已验证并保存的设置会保留，未提交的输入不会覆盖已有配置。
 
+### TMDB 图片下载失败
+
+双击 [修复TMDB图片.cmd](scripts/repair/tmdb-images/修复TMDB图片.cmd)，允许 Windows 权限提示并等待完成；成功后正常重启软件，在媒体管理点击“重新下载媒体图片”。工具自动查询、验证多个地址并备份，只修改图片域名的 hosts；双击 [恢复原设置.cmd](scripts/repair/tmdb-images/恢复原设置.cmd) 可撤回。文件须一起保留，详见 [简短使用说明](scripts/repair/tmdb-images/README.md)。
+
 ## 日常使用路径
 
 ### 建立媒体库

@@ -1,0 +1,13 @@
+{
+  "domain": "image.tmdb.org",
+  "checked_on": "2026-10-13",
+  "note": "公开网页历史候选；不保证仍有效。每次必须在运行者本机通过 HTTPS 图片校验，失败结果不从此清单删除。",
+  "candidates": [
+    {"ip": "143.244.49.180", "source": "https://emby.media/community/topic/109242-weird-problem-about-tmdb-scrap/"},
+    {"ip": "89.187.169.47", "source": "https://emby.media/community/topic/122168-moviedb-plugin-rund-in-timeout-since-1730/"},
+    {"ip": "13.227.73.57", "source": "https://blog.darler.cn/jellyfin/index.html"},
+    {"ip": "169.150.249.166", "source": "https://webtechsurvey.com/website/image.tmdb.org"},
+    {"ip": "185.93.1.251", "source": "https://www.ipaddress.com/website/image.tmdb.org/"},
+    {"ip": "143.244.60.195", "source": "https://www.ipaddress.com/website/image.tmdb.org/"}
+  ]
+}
