@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Dropdown, Field, FluentProvider, Input, MessageBar, MessageBarBody, Option, ProgressBar, Radio, RadioGroup, Select, Spinner, Tooltip } from '@fluentui/react-components'
+import { Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Dropdown, Field, FluentProvider, Input, MessageBar, MessageBarBody, Option, ProgressBar, Radio, RadioGroup, Select, Spinner } from '@fluentui/react-components'
 import { openlistConnections, selectOpenlistConnection } from '../api/openlistConnections'
 import OpenListConnectionPicker from '../components/settings/OpenListConnectionPicker'
 import {
@@ -16,8 +16,6 @@ import {
   Database24Regular,
   DocumentText24Regular,
   Warning24Regular,
-  ChevronDown24Regular,
-  ChevronRight24Regular,
   Edit24Regular,
   Folder24Regular,
   FolderOpen24Regular,
@@ -33,7 +31,8 @@ import ActionToast from '../components/ui/ActionToast'
 import { openlistApi } from '../api/openlist'
 import { tasksApi } from '../api/tasks'
 import type { OpenListRoute, ProviderId } from '../api/types'
-import { MediaProviderIcon, providerVisualFor } from '../components/media/MediaProviderIcon'
+import { MediaProviderIcon } from '../components/media/MediaProviderIcon'
+import SourceLibraryCard from '../components/media/SourceLibraryCard'
 import OpenListFolderBrowser from '../components/media/OpenListFolderBrowser'
 import { V4ExecutionProgress as V4ExecutionProgressView } from '../components/media/V4ExecutionProgress'
 import { V4RecognitionSummary, type OverrideDraft } from '../components/media/V4RecognitionSummary'
@@ -1598,93 +1597,32 @@ export default function MediaManagementPage() {
             const resumeIcon = deletionRetry ? <Delete24Regular /> : activeTask?.kind === 'scan' || card.phase === 'review' ? <DocumentText24Regular /> : <Database24Regular />
             const expanded = Boolean(expandedSourceCards[card.root_id])
             const toggleDetails = () => setExpandedSourceCards((current) => ({ ...current, [card.root_id]: !current[card.root_id] }))
-            return <article className={`media-v4-library-source-card ${active ? 'active' : 'settled'} ${expanded ? 'expanded' : ''}`} key={card.root_id} aria-labelledby={`source-card-${card.root_id}`}>
-              <div className="media-v4-source-card-identity">
-                <div className="media-v4-source-card-heading">
-                  <h3 id={`source-card-${card.root_id}`} title={card.display_name}>{card.display_name}</h3>
-                  <span className={`media-v4-source-card-state media-v4-source-card-state-${card.overall_status ?? 'completed'}`}>{stateLabel}</span>
-                  <Tooltip content={expanded ? '收起来源详情' : '展开来源详情'} relationship="description">
-                    <Button className="media-v4-source-card-expand" appearance="subtle" size="small" aria-expanded={expanded} aria-label={`${expanded ? '收起' : '展开'}${card.display_name}来源详情`} icon={expanded ? <ChevronDown24Regular /> : <ChevronRight24Regular />} onClick={toggleDetails} />
-                  </Tooltip>
-                </div>
-                <div className="media-v4-library-source-card-top">
-                  <Tooltip content={`${providerLabel(card.provider)} · ${sourceMethodLabel(card)}`} relationship="label">
-                    <span className="media-v4-source-provider-icon" role="img" aria-label={`${providerLabel(card.provider)}，${sourceMethodLabel(card)}`}><MediaProviderIcon provider={providerVisualFor(card.provider)} size={20} /></span>
-                  </Tooltip>
-                  <span className="media-v4-source-card-provider-label">{providerLabel(card.provider)}</span><span className="media-v4-source-card-method-label">{sourceMethodLabel(card)}</span>
-                  {card.attention_count > 0 && <Tooltip content={`${card.attention_count} 个待处理事项`} relationship="label"><span className="media-v4-source-card-problem-icon" role="img" aria-label={`${card.attention_count} 个待处理事项`}><Warning24Regular aria-hidden="true" /></span></Tooltip>}
-                </div>
-                {(card.tree_file_path || card.source_locator || card.display_path) && <span className="media-v4-source-card-locator" title={card.tree_file_path || card.source_locator || card.display_path}>{card.tree_file_path || card.source_locator || card.display_path}</span>}
-                {card.last_error && card.overall_status === 'needs_attention' && <span className="media-v4-source-card-error" role="alert">{card.last_error}</span>}
-              </div>
-              <div className="media-v4-source-card-scale">
-                <div className="media-v4-source-card-stats">{(() => {
-                  // 阶段化计量（STEP-001）：作品数、视频文件数各自只属于一个生命周期。
-                  // 扫描阶段还没有作品归属，显示已观察量；草稿显示待确认量；已确认显示已入库量。
-                  // 旧后端（无 counts_scope）保持原有“部作品 / 个文件”摘要。
-                  const scale = sourceCardScale(card)
-                  return <>{scale.works && <span>{scale.works}</span>}{scale.files && <span>{scale.files}</span>}</>
-                })()}</div>
-                {!expanded && <div className="media-v4-source-card-compact-summary">
-                  <span>{progressLabel}</span>
-                  {(card.artwork_total_count ?? 0) > 0 && <span>图片 {card.artwork_ready_count ?? 0} / {card.artwork_total_count} 张</span>}
-                  {card.attention_count > 0 && <span className="attention">{card.attention_count} 项待处理</span>}
-                </div>}
-                {!expanded && <div className="media-v4-source-card-compact-action">
-                  <Tooltip content={resumeLabel} relationship="description"><Button className={`media-v4-source-card-action ${resumeAppearance}`} appearance={resumeAppearance} icon={resumeIcon} aria-label={resumeLabel} disabled={retiredCleanup && active} onClick={() => {
-                    if (deletionRetry) {
-                      setSourceDeletionPreview(null)
-                      setSourceDeletionQueued(false)
-                      setSourceCardPendingDelete(card)
-                      void loadSourceDeletionPreview(card)
-                    } else void resumeSourceCard(card)
-                  }} /></Tooltip>
-                  <Tooltip content="导出问题分析（包含必要目录路径）" relationship="description"><Button appearance="subtle" icon={<DocumentText24Regular />} aria-label={`导出${card.display_name}问题分析，包含必要目录路径`} onClick={() => void exportSourceDiagnostics(card.root_id, card.display_name)} /></Tooltip>
-                </div>}
-                {expanded && <>
-                <div className="media-v4-source-card-status">
-                <div className="media-v4-source-card-progress" role="status"><span>{progressLabel}</span></div>
-                {/* 在线资料就绪量只来自 confirmed 当前作品的 metadata_state；
-                    不能再用 work_count - attention_count 把“没有识别问题”冒充成
-                    “已正确刮削”。draft/scan 或后端不可用时该行为 null，直接隐藏。 */}
-                {typeof card.metadata_ready_work_count === 'number' && (card.work_count ?? 0) > 0 && (
-                  <div className="media-v4-source-card-scrape">
-                    <strong>{card.metadata_ready_work_count}</strong>
-                    <span>/ {card.work_count} 部在线资料已就绪</span>
-                    {(card.metadata_ready_retained_count ?? 0) > 0 && <span className="media-v4-source-card-retained">（其中 {card.metadata_ready_retained_count} 部沿用上次成功资料）</span>}
-                  </div>
-                )}
-                {card.attention_count > 0 && <span className="media-v4-source-card-attention">有 {card.attention_count} 个待处理事项</span>}
-                {(card.relation_pending_count ?? 0) > 0 && <span className="media-v4-source-card-notice">{card.relation_pending_count} 项关联信息待补全，不影响入库和播放</span>}
-                {pendingCleanup && <span className="media-v4-source-card-notice">{cleanupActive ? '正在清理上次生成文件' : '上次生成文件清理未完成'}</span>}
-                </div>
-                <div className="media-v4-source-card-actions" role="group" aria-label="导入与更新">
-                  <Button className={`media-v4-source-card-action ${resumeAppearance}`} appearance={resumeAppearance} icon={resumeIcon} disabled={retiredCleanup && active} onClick={() => {
-                    if (deletionRetry) {
-                      setSourceDeletionPreview(null)
-                      setSourceDeletionQueued(false)
-                      setSourceCardPendingDelete(card)
-                      void loadSourceDeletionPreview(card)
-                    } else void resumeSourceCard(card)
-                  }}>{resumeLabel}</Button>
-                  {pendingCleanup && <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<Delete24Regular />} disabled={cleanupActive} onClick={() => {
-                    setSourceDeletionPreview(null)
-                    setSourceDeletionQueued(false)
-                    setSourceCardPendingDelete(card)
-                    void loadSourceDeletionPreview(card)
-                  }}>{cleanupActive ? '清理中' : '重试清理'}</Button>}
-                  <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<DocumentText24Regular />} aria-label={`导出${card.display_name}问题分析，包含必要目录路径`} title="导出问题分析（包含必要目录路径）" onClick={() => void exportSourceDiagnostics(card.root_id, card.display_name)}>导出问题分析</Button>
-                  {!retiredCleanup && !deletionRetry && (activeTask?.can_cancel || activeTask?.status === 'cancelling'
-                    ? <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<Dismiss24Regular />} disabled={activeTask?.status === 'cancelling'} onClick={() => void terminateSourceTask(card)}>{activeTask?.status === 'cancelling' ? '正在终止…' : '终止任务'}</Button>
-                    : <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<ArrowSync24Regular />} disabled={active} onClick={() => prepareSourceUpdate(card)}>检查更新</Button>)}
-                </div>
-                {!active && !cleanupActive && !retiredCleanup && !deletionRetry && <div className="media-v4-source-card-actions media-v4-source-card-management" role="group" aria-label="来源卡管理">
-                  {!active && <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<Edit24Regular />} aria-label={`重命名来源卡：${card.display_name}`} onClick={() => openSourceCardRename(card)}>重命名</Button>}
-                  {!active && <Button className="media-v4-source-card-action secondary media-v4-source-card-action-danger" appearance="secondary" icon={<Delete24Regular />} aria-label={`删除来源卡：${card.display_name}`} onClick={() => setSourceCardPendingDelete(card)}>删除来源卡</Button>}
-                </div>}
-                </>}
-              </div>
-            </article>
+            return <SourceLibraryCard key={card.root_id} card={card}
+              providerLabel={providerLabel(card.provider)} methodLabel={sourceMethodLabel(card)}
+              stateLabel={stateLabel} progressLabel={progressLabel} scale={sourceCardScale(card)}
+              expanded={expanded} onToggleDetails={toggleDetails}
+              primary={{ label: resumeLabel, icon: resumeIcon, appearance: resumeAppearance, disabled: retiredCleanup && active, onClick: () => {
+                if (deletionRetry) {
+                  setSourceDeletionPreview(null)
+                  setSourceDeletionQueued(false)
+                  setSourceCardPendingDelete(card)
+                  void loadSourceDeletionPreview(card)
+                } else void resumeSourceCard(card)
+              } }}
+              canUpdate={!retiredCleanup && !deletionRetry} updateDisabled={active}
+              canManage={!active && !cleanupActive && !retiredCleanup && !deletionRetry}
+              canCancel={Boolean(activeTask?.can_cancel || activeTask?.status === 'cancelling')}
+              cancelling={activeTask?.status === 'cancelling'} cleanupActive={cleanupActive}
+              onUpdate={() => prepareSourceUpdate(card)} onCancel={() => void terminateSourceTask(card)}
+              onRetryCleanup={() => {
+                setSourceDeletionPreview(null)
+                setSourceDeletionQueued(false)
+                setSourceCardPendingDelete(card)
+                void loadSourceDeletionPreview(card)
+              }}
+              onExport={() => void exportSourceDiagnostics(card.root_id, card.display_name)}
+              onRename={() => openSourceCardRename(card)} onRemove={() => setSourceCardPendingDelete(card)}
+            />
           })}
         </div>}
       </section>}

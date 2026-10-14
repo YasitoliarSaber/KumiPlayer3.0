@@ -131,7 +131,7 @@ test('来源卡使用图标与状态徽标，不再出现文字方块', async ()
   expandSourceDetails()
   expect(screen.getByText('需要处理')).toBeVisible()
   expect(screen.getByText('磁盘写入失败')).toBeVisible()
-  expect(screen.getByText('有 2 个待处理事项')).toBeVisible()
+  expect(screen.getByText('2 项待处理')).toBeVisible()
   expect(document.querySelector('.media-provider-icon.provider-pan115')).not.toBeNull()
   expect(screen.queryByText('115', { selector: '.media-v4-provider-mark' })).not.toBeInTheDocument()
 })
@@ -336,12 +336,14 @@ test.each(['queued', 'running', 'failed', 'cancelled'])('重扫卡保留旧清�
   expect(await screen.findByText('正在扫描的夸克来源')).toBeVisible()
   expandSourceDetails('正在扫描的夸克来源')
   expect(screen.getByRole('button', { name: '查看进度' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: '正在扫描的夸克来源更多操作' }))
   if (status === 'failed' || status === 'cancelled') {
-    fireEvent.click(screen.getByRole('button', { name: '重试清理' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '重试清理' }))
     await waitFor(() => expect(api.sourceLibraryDeletionPreview).toHaveBeenCalledWith('root-c'))
     expect(await screen.findByText(/该来源仍有进行中的扫描/)).toBeVisible()
     expect(screen.queryByRole('button', { name: '确认删除媒体库' })).not.toBeInTheDocument()
   } else {
-    expect(screen.getByRole('button', { name: '清理中' })).toBeDisabled()
+    // Fluent MenuItem 以 aria-disabled 表达禁用态，jsdom 的 toBeDisabled 不识别非表单元素。
+    expect(screen.getByRole('menuitem', { name: '清理中' })).toHaveAttribute('aria-disabled', 'true')
   }
 })

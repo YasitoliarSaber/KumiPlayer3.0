@@ -246,7 +246,8 @@ test('来源卡终止任务失败时不向页面透传技术错误', async () =>
   render(<MediaManagementPage />)
 
   fireEvent.click(await screen.findByRole('button', { name: '展开115 动画来源详情' }))
-  fireEvent.click(await screen.findByRole('button', { name: '终止任务' }))
+  fireEvent.click(screen.getByRole('button', { name: '115 动画更多操作' }))
+  fireEvent.click(await screen.findByRole('menuitem', { name: '终止任务' }))
   expect(await screen.findByText('终止任务失败，请稍后重试')).toBeVisible()
   expect(screen.queryByText(/OperationalError|database is locked/)).not.toBeInTheDocument()
 })
@@ -331,18 +332,18 @@ test('来源卡默认紧凑收起，展开后显示来源路径和更新操作',
   expect(collapsedCard).not.toBeNull()
   expect(collapsedCard).not.toHaveClass('expanded')
   const sourceCardStyles = readFileSync(join(__dirname, '../../src/styles/media-import-controls.css'), 'utf-8')
-  expect(sourceCardStyles).toMatch(/\.media-v4-library-source-card:not\(\.expanded\) \.media-v4-source-card-locator,[\s\S]*?\.media-v4-source-card-actions \{\s*display: none;/)
-  expect(screen.queryByRole('button', { name: '检查更新' })).not.toBeInTheDocument()
+  expect(sourceCardStyles).not.toMatch(/\.media-v4-source-card-actions \{\s*display: none;/)
+  expect(screen.getByRole('button', { name: '检查更新' })).toBeVisible()
   expect(screen.queryByRole('list', { name: '作品预览' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: '查看进度' })).toBeVisible()
-  expect(screen.getByRole('button', { name: '导出115 动画问题分析，包含必要目录路径' })).toBeVisible()
+  expect(screen.getByRole('button', { name: '115 动画更多操作' })).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: '展开115 动画来源详情' }))
   expect(screen.getByRole('button', { name: '收起115 动画来源详情' })).toHaveAttribute('aria-expanded', 'true')
   expect(screen.getByText('/115/Anime')).toBeVisible()
   expect(screen.getByRole('button', { name: '检查更新' })).toBeVisible()
 })
 
-test('来源卡管理操作仅在展开来源详情后出现', async () => {
+test('来源卡维护操作始终由更多菜单进入，不随详情展开改变', async () => {
   api.sourceLibraries.mockResolvedValue({ cards: [cardFixture({
     overall_status: 'completed',
     revision_state: 'completed',
@@ -355,13 +356,12 @@ test('来源卡管理操作仅在展开来源详情后出现', async () => {
   })] })
   render(<MediaManagementPage />)
 
-  const expand = await screen.findByRole('button', { name: '展开115 动画来源详情' })
-  expect(screen.queryByRole('group', { name: '来源卡管理' })).not.toBeInTheDocument()
-  fireEvent.click(expand)
-
-  expect(screen.getByRole('group', { name: '来源卡管理' })).toBeVisible()
-  expect(screen.getByRole('button', { name: '重命名来源卡：115 动画' })).toBeVisible()
-  expect(screen.getByRole('button', { name: '删除来源卡：115 动画' })).toBeVisible()
+  const primary = await screen.findByRole('button', { name: '查看上次导入' })
+  fireEvent.click(screen.getByRole('button', { name: '展开115 动画来源详情' }))
+  expect(screen.getByRole('button', { name: '查看上次导入' })).toBe(primary)
+  fireEvent.click(screen.getByRole('button', { name: '115 动画更多操作' }))
+  expect(screen.getByRole('menuitem', { name: '重命名来源卡：115 动画' })).toBeVisible()
+  expect(screen.getByRole('menuitem', { name: '删除来源卡：115 动画' })).toBeVisible()
 })
 
 test('部分失败后显示重试按钮并调用 resume API', async () => {
