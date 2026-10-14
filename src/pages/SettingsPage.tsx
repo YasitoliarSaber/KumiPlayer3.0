@@ -27,6 +27,8 @@ import { SettingsField, SettingsSection } from '../components/ui/SettingsPrimiti
 import OpenListSettingsPanel, { type OpenListDraft } from '../components/settings/OpenListSettingsPanel';
 import OpenListConnectionPicker from '../components/settings/OpenListConnectionPicker';
 import FolderPathInput from '../components/settings/FolderPathInput';
+import LocalRootsPanel from '../components/settings/LocalRootsPanel';
+import ActionToast from '../components/ui/ActionToast';
 import PlayerTuningPage from './PlayerTuningPage';
 import { openlistConnections, selectOpenlistConnection } from '../api/openlistConnections';
 import OpenListSourceRoutes from '../components/settings/OpenListSourceRoutes';
@@ -44,7 +46,7 @@ const sectionTabs: Array<{ key: SettingsTab; label: string; icon: LucideIcon }> 
   { key: 'application', label: '应用', icon: Settings2 },
   { key: 'appearance', label: '外观', icon: Palette },
   { key: 'sources', label: '媒体来源', icon: Database },
-  { key: 'openlist', label: 'OpenList 设置', icon: Network },
+  { key: 'openlist', label: 'WebDAV 目录', icon: Network },
   { key: 'scrape', label: '元数据与图片', icon: KeyRound },
   { key: 'player', label: '播放', icon: PlaySquare },
 ];
@@ -83,9 +85,12 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
   const setAppearanceMode = useUiStore((state) => state.setAppearanceMode);
   const ongoingCategoryName = useUiStore((state) => state.ongoingCategoryName) || '新番';
   const setOngoingCategoryName = useUiStore((state) => state.setOngoingCategoryName);
-  const [activeSection, setActiveSection] = useState<SettingsTab>('bangumi');
+  const requestedSection = useUiStore(state => state.settingsSection);
+  const persistSettingsSection = useUiStore(state => state.setSettingsSection);
+  const requestedConnection = useUiStore(state => state.settingsConnectionId);
+  const [activeSection, setActiveSection] = useState<SettingsTab>(requestedSection || 'application');
   const [baseConfig, setConfig] = useState<PublicConfig | null>(null);
-  const [selectedConnectionId, setSelectedConnectionId] = useState('legacy');
+  const [selectedConnectionId, setSelectedConnectionId] = useState(requestedConnection || 'legacy');
   const [connectionBusy, setConnectionBusy] = useState('');
   const config = useMemo(() => baseConfig ? selectOpenlistConnection(baseConfig, selectedConnectionId) : null, [baseConfig, selectedConnectionId]);
   const selectedConnectionRef = useRef(selectedConnectionId);
@@ -114,6 +119,8 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
   useEffect(() => {
     void loadCore();
   }, []);
+  useEffect(() => { setActiveSection(requestedSection || 'application'); }, [requestedSection]);
+  useEffect(() => { setSelectedConnectionId(requestedConnection || 'legacy'); }, [requestedConnection]);
 
   useEffect(() => {
     if (activeSection !== 'scrape') return;
@@ -193,6 +200,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
           remote_prefix: route.remote_prefix,
           provider_id: route.provider_id,
           enabled: route.enabled,
+          local_root: route.local_root || '',
         })));
       })
       .catch(() => {
@@ -219,12 +227,12 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
 
   const selectSection = (key: SettingsTab) => {
     setActiveSection(key);
+    persistSettingsSection(key);
     document.querySelector<HTMLElement>('.app-main')?.scrollTo({ top: 0, behavior: 'auto' });
   };
 
   const report = (message: string) => {
     setOperationMessage(message);
-    console.debug(`[settings] ${message}`);
   };
 
   const runAction = async (label: string, action: () => Promise<void>) => {
@@ -362,12 +370,12 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
   const renderApplication = () => (
     <PanelStack>
       <SectionIntro title="应用" />
-      <SettingsSection title="设置引导" description="重新检查播放器、媒体目录与账户；保留已有配置和媒体库。" action={
+      <SettingsSection title="设置引导" action={
         <GhostButton onClick={() => config && onOpenSetup?.(config)} disabled={!config || !onOpenSetup}>
           <RotateCcw size={16} aria-hidden="true" />打开设置引导
         </GhostButton>
       }>{null}</SettingsSection>
-      <WindowSettingsPanel />
+      <WindowSettingsPanel active={activeSection === 'application'} />
       {config && (
         <SettingsSection title="界面连接监测">
           <div className="settings-field-list">
@@ -488,7 +496,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
 
   const renderOpenList = () => (
     <PanelStack>
-      <SectionIntro title="OpenList 设置" />
+      <SectionIntro title="WebDAV 目录" />
       {baseConfig && <div className="settings-connection-toolbar">
         <OpenListConnectionPicker connections={openlistConnections(baseConfig)} value={selectedConnectionId} disabled={Boolean(activeAction || connectionBusy)} onChange={(identity) => {
           setSelectedConnectionId(identity);
@@ -516,6 +524,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
           <OpenListSettingsPanel
             key={selectedConnectionId}
             config={config}
+            active={activeSection === 'openlist'}
             draft={openlistDraft}
             onChangeDraft={updateOpenlistDraft}
             onSaveConnection={async (payload, skipVerification) => {
@@ -530,7 +539,6 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
               setOpenlistNotice(result.message);
               await loadConfig();
               setOpenlistDraft((current) => ({ ...current, username: '', password: '' }));
-              report(result.message);
               // 由面板决定是否显示"连接正常"：只有后端确实探测成功才算
               return { verified: result.verified === true };
               } finally { setConnectionBusy(''); }
@@ -541,8 +549,6 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
               // REWORK P0：allow_insecure_http 由面板风险确认状态决定，
               // 不在父级 hardcode true；返回后端 machine status code
               const result = await openlistApi.testConnection(payload);
-              setOpenlistNoticeKind(result.ok ? 'success' : 'error');
-              setOpenlistNotice(result.message);
               return result;
               } finally { setConnectionBusy(''); }
             }}
@@ -580,9 +586,9 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
                 remote_prefix: route.remote_prefix,
                 provider_id: route.provider_id,
                 enabled: route.enabled,
+                local_root: route.local_root || '',
               })));
               setRouteNotice('来源目录已保存。可前往媒体管理选择目录并导入。');
-              report('来源目录已保存');
               } finally { setConnectionBusy(''); }
             }}
             onUpdateDraft={updateRouteDraft}
@@ -614,7 +620,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
         </SettingsSection>
       )}
       {config && <SettingsSection title="本地目录">
-        <ConfigRow folder label="本地扫描目录" value={config.local_root} onSave={(value) => saveConfig({ local_root: value })} />
+        <LocalRootsPanel config={config} onSave={saveConfig} externalBusy={Boolean(configLoading || activeAction)} />
       </SettingsSection>}
       {config && <SettingsSection title="TXT 文件选择" collapsible>
         <ConfigRow folder label="TXT 默认选择目录" value={config.directory_tree_dir} onSave={(value) => saveConfig({ directory_tree_dir: value })} />
@@ -629,7 +635,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
               {mediaPathValidation.sources.map((item) => (
                 <div key={item.source} className={`media-path-validation-item ${item.ok ? 'is-ok' : item.configured_root ? 'is-error' : ''}`}>
                   <div>
-                    <strong>{sourceLabels[item.source]}</strong>
+                    <strong>{item.label || sourceLabels[item.source as keyof typeof sourceLabels] || item.source}</strong>
                     <span>{item.ok ? '目录可访问' : item.configured_root ? '需要处理' : '未配置'}</span>
                   </div>
                   <p>{item.message}</p>
@@ -770,9 +776,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
             {activeAction ? `${activeAction}中…` : '保存或加载中…'}
           </div>
         )}
-        {operationMessage && !activeAction && (
-          <div className="settings-operation-status" role="status">{operationMessage}</div>
-        )}
+        <ActionToast message={activeAction ? '' : operationMessage} intent={/失败|不可访问|无法|请输入/.test(operationMessage) ? 'error' : 'success'} onDismiss={() => setOperationMessage('')} />
         <div className="settings-page-stack settings-unified-stack">
           {sectionTabs.map((tab) => (
             <section

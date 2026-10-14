@@ -47,6 +47,7 @@ from app.integrations.openlist.providers import (
     is_ancestor_or_self,
     new_route_id,
     normalize_route_prefix,
+    resolve_local_path,
 )
 from app.media_v4.sources import health as source_health
 
@@ -147,6 +148,7 @@ class RouteItem(BaseModel):
     remote_prefix: str = ""
     provider_id: str = PROVIDER_OTHER
     enabled: bool = True
+    local_root: str = ""
 
 
 class SaveRoutesRequest(BaseModel):
@@ -269,9 +271,9 @@ def _route_public(route: OpenListRouteConfig, config) -> dict:
     local_path = ""
     local_available = False
     mount_root = (config.openlist_mount_root or "").strip()
-    if mount_root:
+    if mount_root or route.local_root:
         try:
-            local_path = derive_local_path(mount_root, _remote_root(config), route.remote_prefix)
+            local_path = resolve_local_path(mount_root, _remote_root(config), route.remote_prefix, [route])
             local_available = Path(local_path).expanduser().is_dir()
         except (OSError, ValueError, HTTPException):
             local_path = ""
@@ -283,6 +285,7 @@ def _route_public(route: OpenListRouteConfig, config) -> dict:
         "enabled": route.enabled,
         "local_path": local_path,
         "local_available": local_available,
+        "local_root": route.local_root,
     }
 
 
@@ -648,6 +651,12 @@ def save_routes(req: SaveRoutesRequest):
         provider_id = item.provider_id or PROVIDER_OTHER
         if provider_id not in ROUTABLE_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"未知内容提供商：{provider_id}")
+        local_root = item.local_root.strip()
+        if local_root:
+            try:
+                local_root = derive_local_path(local_root, prefix, prefix)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from None
         seen.add(prefix)
         routes.append(
             OpenListRouteConfig(
@@ -656,6 +665,7 @@ def save_routes(req: SaveRoutesRequest):
                 remote_prefix=prefix,
                 provider_id=provider_id,
                 enabled=bool(item.enabled),
+                local_root=local_root,
             )
         )
     candidate = copy.deepcopy(config)

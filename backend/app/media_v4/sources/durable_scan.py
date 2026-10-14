@@ -50,6 +50,7 @@ def _accepts_parameter(fn: Callable, name: str) -> bool:
 _STAGE_ORDER = {
     "queued": 0,
     "reading_source": 1,
+    "verifying_playback_paths": 1,
     # recognizing 是 v14 及更早扫描行的兼容读数；新任务使用更细的
     # parsing/normalizing 阶段，但旧任务不能因为新增列而倒退或改名。
     "recognizing": 2,
@@ -64,6 +65,7 @@ _STAGE_ORDER = {
 _STAGE_LABELS = {
     "queued": "准备读取媒体来源",
     "reading_source": "读取媒体来源",
+    "verifying_playback_paths": "核对真实媒体播放位置",
     "recognizing": "离线识别与整理",
     "parsing": "解析媒体条目",
     "normalizing": "整理识别结果",

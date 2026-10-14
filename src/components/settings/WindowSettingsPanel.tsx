@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, Spinner, Switch } from '@fluentui/react-components';
 import { SettingsFeedback, SettingsSection } from '../ui/SettingsPrimitives';
 import { getWindowPreferences, hideToTray, saveWindowPreferences, type WindowPreferences } from '../../platform/windowPreferences';
+import ActionToast from '../ui/ActionToast';
 
-export default function WindowSettingsPanel() {
+export default function WindowSettingsPanel({ active = true }: { active?: boolean }) {
   const [preferences, setPreferences] = useState<WindowPreferences | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -55,7 +56,7 @@ export default function WindowSettingsPanel() {
     finally { saving.current = false; setBusy(false); }
   };
 
-  return <SettingsSection title="窗口与托盘" description="点击托盘图标或再次打开快捷方式可显示窗口；彻底退出请使用托盘菜单中的“退出”。">
+  return <SettingsSection title="窗口与托盘">
     {loading && <SettingsFeedback busy>正在读取窗口设置…</SettingsFeedback>}
     {preferences && <>
       <Switch label="最小化到托盘" labelPosition="before" className="settings-toggle-row" checked={preferences.minimize_to_tray} disabled={loading || busy}
@@ -66,8 +67,7 @@ export default function WindowSettingsPanel() {
       <Button appearance="secondary" disabled={loading || busy} onClick={() => void hide()}
         icon={busy ? <Spinner size="tiny" /> : undefined}>立即收到托盘</Button>
     </>}
-    {error && <SettingsFeedback intent="error">{error}</SettingsFeedback>}
+    <ActionToast message={active ? error || (saved ? '窗口设置已保存' : '') : ''} intent={error ? 'error' : 'success'} onDismiss={() => { setError(''); setSaved(false); }} />
     {!preferences && !loading && <Button appearance="secondary" onClick={() => void reload()}>重新读取</Button>}
-    {saved && !error && <SettingsFeedback intent="success">窗口设置已保存</SettingsFeedback>}
   </SettingsSection>;
 }

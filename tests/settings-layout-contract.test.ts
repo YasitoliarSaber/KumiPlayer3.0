@@ -8,7 +8,7 @@ const page = readFileSync(new URL('../src/pages/SettingsPage.tsx', import.meta.u
 
 test('设置导航由责任样式维护，不再依赖末尾第二套归一化覆盖', () => {
   assert.doesNotMatch(index, /设置页版式归一化（用户反馈"文字重叠"）/)
-  assert.match(navigation, /\.settings-focused[\s\S]{0,240}max-width:\s*1280px/)
+  assert.match(navigation, /\.settings-focused[\s\S]{0,240}max-width:\s*1600px/)
   assert.match(navigation, /\.settings-focused[\s\S]{0,240}padding:\s*24px/)
   assert.doesNotMatch(navigation, /\.settings-focused \.fui-Button\s*\{[^}]*font-size/)
 })

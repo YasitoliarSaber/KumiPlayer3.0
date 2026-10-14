@@ -46,6 +46,12 @@ def connection_fingerprint(config) -> str:
     raw = "\x1f".join((normalize_openlist_server_url(config.openlist_server_url), user,
                        normalize_remote_path(config.openlist_remote_root or "/"),
                        config.openlist_mount_root.strip().replace("\\", "/").casefold()))
+    explicit_mappings = sorted(
+        (normalize_remote_path(route.remote_prefix), route.local_root.strip().replace("\\", "/").casefold(), route.enabled)
+        for route in config.openlist_routes if route.local_root.strip()
+    )
+    if explicit_mappings:
+        raw += "\x1f" + repr(explicit_mappings)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

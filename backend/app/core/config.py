@@ -11,10 +11,11 @@ from app.core.atomic_json import write_json_atomic
 from app.core.credential_store import SECURE_CREDENTIAL_STORE, CredentialStoreError
 from app.core.data_lock import DATA_WRITE_LOCK
 from app.core.local_roots import (
-    LocalRootConfig,
     apply_primary_change,
-    normalize_records as normalize_local_root_records,
     sync_local_roots,
+)
+from app.core.local_roots import (
+    normalize_records as normalize_local_root_records,
 )
 from app.core.openlist_connections import (
     OpenListConnectionConfig,
@@ -135,7 +136,7 @@ class AppConfig:
     # poster: 系列作品卡片默认使用竖版封面；fanart: 使用横向海报/横幅图。
     series_card_image_mode: str = "poster"
     # 分类页卡片尺寸，前端滑块读取并持久化。
-    poster_size: int = 180
+    poster_size: int = 8
 
     # 追更更新只消费显式新番来源，默认不自动访问来源。
     ongoing_update_on_startup: bool = False

@@ -485,6 +485,20 @@ test('图片产物缺失时显示简短提示与重新下载入口', () => {
   expect(artifacts).toHaveBeenCalledWith('w-degraded')
 })
 
+test('导入执行页仅保留作品进度与恢复操作，不常驻图片连接配置', () => {
+  render(<V4ExecutionProgress
+    progress={makeProgress([workUnit('pending-artwork', '正在导入的作品', 'running_artwork', {
+      metadata_state: 'ready', artwork: { status: 'pending', total: 2, counts: { ready: 1, pending: 1 } },
+    })])}
+    busyRetryId="" onRetry={vi.fn()} resolvingWorkId="" onResolveMetadata={vi.fn()}
+  />)
+  expect(screen.getByText('正在导入的作品')).toBeVisible()
+  expect(screen.getByText('图片准备中')).toBeVisible()
+  expect(screen.queryByRole('button', { name: '检测图片连接' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '一键修复图片连接' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '重新下载失败图片' })).not.toBeInTheDocument()
+})
+
 test('必需图片准备中不显示完成项，缺失来源提示重新获取资料', () => {
   const retry = vi.fn()
   render(<V4ExecutionProgress progress={makeProgress([

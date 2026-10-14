@@ -85,7 +85,7 @@ def hint_provider_for_name(name: str) -> str:
 class OpenListRouteConfig:
     """OpenList 提供商路由：把远端前缀归属到一个内容提供商。
 
-    - 不保存本地挂载根：本地路径由连接级 mount_root 统一推导；
+    - 可显式指定此前缀对应的本地根；未指定时兼容连接级映射；
     - 不保存 OpenList 地址/凭据：连接级单实例字段；
     - 路径名只生成建议，用户确认的 label / provider 才是权威事实。
     """
@@ -95,6 +95,7 @@ class OpenListRouteConfig:
     remote_prefix: str = ""
     provider_id: str = PROVIDER_OTHER
     enabled: bool = True
+    local_root: str = ""
 
 
 def new_route_id() -> str:
@@ -221,3 +222,17 @@ def derive_local_path(mount_root: str, remote_root: str, remote_path: str) -> st
 
     relative = PurePosixPath(rpath).relative_to(PurePosixPath(rroot))
     return str(_local_mapping_path(mount_root).joinpath(*relative.parts))
+
+
+def resolve_local_path(
+    mount_root: str, remote_root: str, remote_path: str,
+    routes: list[OpenListRouteConfig],
+) -> str:
+    """用明确的远端前缀 ↔ 本地根映射；绝不按同名目录猜测裁剪。"""
+    # 即便路由有本地根，也不能绕过连接远端范围。
+    if not is_ancestor_or_self(remote_root or "/", remote_path):
+        raise ValueError("选择的远端目录不在连接映射范围内")
+    route = match_route(routes, remote_path)
+    if route and route.local_root.strip():
+        return derive_local_path(route.local_root, route.remote_prefix, remote_path)
+    return derive_local_path(mount_root, remote_root, remote_path)

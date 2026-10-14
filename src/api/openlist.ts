@@ -99,6 +99,7 @@ export interface OpenListRouteItem {
   remote_prefix: string
   provider_id: ProviderId
   enabled: boolean
+  local_root?: string
 }
 
 export interface OpenListDiscoverItem {

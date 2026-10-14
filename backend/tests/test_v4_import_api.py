@@ -22,6 +22,14 @@ def _client(tmp_path, monkeypatch):
     return TestClient(application)
 
 
+def test_source_drafts_route_is_registered_exactly_once():
+    from app.api import media_v4
+
+    routes = [route for route in media_v4.router.routes
+              if route.path == '/api/v4/sources/drafts' and 'GET' in route.methods]
+    assert len(routes) == 1
+
+
 def _patch_database(tmp_path, monkeypatch):
     """给直接调用 scan_source 的测试提供隔离数据库，避免写入真实 data/。"""
 
@@ -425,6 +433,7 @@ def test_playback_refuses_unreachable_asset_without_launching_mpv(tmp_path, monk
 
 def test_scrape_failure_keeps_projection_queued(tmp_path):
     import pytest
+
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -744,8 +753,9 @@ def test_tree_scan_resolves_the_precise_sub_library_root_from_the_tree_location(
 
 
 def test_remote_tree_scan_requires_a_playback_mapping(tmp_path, monkeypatch):
-    from app.api import media_v4
     from fastapi import HTTPException
+
+    from app.api import media_v4
 
     tree = tmp_path / "tree.txt"
     tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
@@ -800,9 +810,10 @@ def test_local_scan_receives_all_configured_cloud_mount_roots(monkeypatch):
 
 
 def test_explicit_openlist_incremental_without_baseline_returns_actionable_409(monkeypatch):
+    from fastapi import HTTPException
+
     from app.api import media_v4
     from app.integrations.openlist.providers import OpenListRouteConfig
-    from fastapi import HTTPException
 
     config = SimpleNamespace(
         openlist_server_url="https://openlist.example.test",
@@ -834,6 +845,8 @@ def test_explicit_openlist_incremental_without_baseline_returns_actionable_409(m
 
 
 def test_openlist_auto_scan_rebuilds_missing_checkpoint_from_confirmed_revision(monkeypatch):
+    from dataclasses import replace
+
     from app.api import media_v4, openlist_v4
     from app.integrations.openlist.providers import OpenListRouteConfig
     from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
@@ -864,11 +877,20 @@ def test_openlist_auto_scan_rebuilds_missing_checkpoint_from_confirmed_revision(
     monkeypatch.setattr(media_v4, "_confirmed_source_evidence", lambda _root_id: baseline)
     monkeypatch.setattr(media_v4, "load_active_state", lambda _root_id: None)
     monkeypatch.setattr(openlist_v4, "_client", lambda _config: object())
+    # 本用例隔离基线/检查点恢复。真实挂载预检由专门路径回归覆盖。
+    monkeypatch.setattr('app.media_v4.sources.openlist_playback_mapping.collect_samples',
+                        lambda *a, **k: ['/Anime/Show/Show.S01E01.mkv'])
+    monkeypatch.setattr('app.media_v4.sources.openlist_playback_mapping.BoundedMetadataProbe',
+                        lambda **k: lambda path: {'status': 'file' if path == r'X:\OpenList\Anime\Show\Show.S01E01.mkv' else 'missing'})
+    monkeypatch.setattr(media_v4, '_connection_request_guard', lambda *a, **k: {})
     monkeypatch.setattr(media_v4, "scan_openlist_directory", lambda *_args, **_kwargs: pytest.fail("不应退回全量扫描"))
 
     def fake_incremental(_client, **kwargs):
         captured["state"] = kwargs["state"]
-        return "scan-incremental", baseline, kwargs["state"], {"requested_directories": 1}
+        observations = [replace(item, scan_id='scan-incremental', evidence_id='ev-incremental',
+                                source_locator='/Anime/Show/Show.S01E01.mkv',
+                                playback_locator=r'X:\OpenList\Anime\Show\Show.S01E01.mkv') for item in baseline]
+        return "scan-incremental", observations, kwargs["state"], {"requested_directories": 1}
 
     monkeypatch.setattr(media_v4, "scan_openlist_incremental", fake_incremental)
     monkeypatch.setattr(media_v4, "stage_scan_state", lambda scan_id, _state: captured.setdefault("scan_id", scan_id))
@@ -888,10 +910,13 @@ def test_openlist_auto_scan_rebuilds_missing_checkpoint_from_confirmed_revision(
 def test_plain_openlist_full_scan_confirm_enables_incremental_and_keeps_mode(tmp_path, monkeypatch):
     """普通 OpenList 完整扫描确认后即可增量；来源卡模式保持 openlist_full。"""
 
+    from dataclasses import replace
+
+    from fastapi import HTTPException
+
     from app.api import media_v4, openlist_v4
     from app.integrations.openlist.providers import OpenListRouteConfig
     from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
-    from fastapi import HTTPException
 
     config = SimpleNamespace(
         openlist_server_url="https://openlist.example.test",
@@ -907,6 +932,12 @@ def test_plain_openlist_full_scan_confirm_enables_incremental_and_keeps_mode(tmp
     monkeypatch.setattr(media_v4, "load_config", lambda: config)
     monkeypatch.setattr(media_v4, "resolve_openlist_credentials", lambda: ("kumi", "secret", "available"))
     monkeypatch.setattr(openlist_v4, "_client", lambda _config: object())
+    # fake adapter 只负责来源模式；样本属性探测在独立端到端测试使用真实临时媒体。
+    monkeypatch.setattr('app.media_v4.sources.openlist_playback_mapping.collect_samples',
+                        lambda *a, **k: ['/Anime/Show/Show.S01E01.mkv'])
+    monkeypatch.setattr('app.media_v4.sources.openlist_playback_mapping.BoundedMetadataProbe',
+                        lambda **k: lambda path: {'status': 'file' if path == r'X:\OpenList\Anime\Show\Show.S01E01.mkv' else 'missing'})
+    monkeypatch.setattr(media_v4, '_connection_request_guard', lambda *a, **k: {})
     monkeypatch.setattr(media_v4, "stage_scan_state", lambda _scan_id, _state: None)
     monkeypatch.setattr(media_v4, "activate_scan_state", lambda _scan_id: None)
     monkeypatch.setattr(media_v4, "load_active_state", lambda _root_id: None)
@@ -920,7 +951,7 @@ def test_plain_openlist_full_scan_confirm_enables_incremental_and_keeps_mode(tmp
                 ingest_method="openlist_api",
                 relative_path="Show/Show.S01E01.mkv",
                 source_key="Show/Show.S01E01.mkv",
-                source_locator="Show/Show.S01E01.mkv",
+                source_locator="/Anime/Show/Show.S01E01.mkv",
                 playback_locator="X:\\OpenList\\Anime\\Show\\Show.S01E01.mkv",
             ))
         ]
@@ -967,7 +998,8 @@ def test_plain_openlist_full_scan_confirm_enables_incremental_and_keeps_mode(tmp
 
     def fake_incremental(_client, **kwargs):
         captured["baseline"] = kwargs["baseline"]
-        return "scan-incr", kwargs["baseline"], kwargs["state"], {"requested_directories": 1}
+        observations = [replace(item, scan_id='scan-incr', evidence_id='ev-new-' + item.evidence_id) for item in kwargs['baseline']]
+        return "scan-incr", observations, kwargs["state"], {"requested_directories": 1}
 
     monkeypatch.setattr(media_v4, "scan_openlist_incremental", fake_incremental)
 
@@ -1099,8 +1131,9 @@ def test_openlist_status_endpoint_reports_no_baseline_for_unconfirmed_root(tmp_p
 
 
 def test_openlist_scan_rejects_an_unmapped_remote_root_before_network(monkeypatch):
-    from app.api import media_v4, openlist_v4
     from fastapi import HTTPException
+
+    from app.api import media_v4, openlist_v4
 
     config = SimpleNamespace(
         openlist_server_url="https://openlist.example.test",
@@ -1748,10 +1781,11 @@ def test_sync_and_durable_tree_entries_share_one_root_identity(tmp_path, monkeyp
     """
 
     _patch_database(tmp_path, monkeypatch)
-    from app.api import media_v4
-    from app.media_v4.sources.durable_scan import get_durable_scan
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import media_v4
+    from app.media_v4.sources.durable_scan import get_durable_scan
 
     database = media_v4.get_database()
     mount = tmp_path / "百度网盘"

@@ -130,7 +130,7 @@ test('只有路径不确定时在原预览确认候选，不生成猜测媒体�
   fireEvent.click(screen.getByRole('button', { name: '目录树 TXT' }))
   fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'D:/tree.txt' } })
   fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
-  expect(await screen.findByText('播放路径需要确认')).toBeVisible()
+  expect(await screen.findByText('播放路径尚未验证')).toBeVisible()
   expect(screen.getByText('J:/115open/动画/Show/e.mkv')).toBeVisible()
   expect(screen.getByText('J:/115open/Show/e.mkv')).toBeVisible()
   expect(api.preview).not.toHaveBeenCalled()
@@ -153,7 +153,7 @@ test('多目录歧义可筛选到后面的挂载分支并确认', async () => {
   fireEvent.click(screen.getByRole('button', { name: '目录树 TXT' }))
   fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'D:/tree.txt' } })
   fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
-  await screen.findByText('播放路径需要确认')
+  await screen.findByText('播放路径尚未验证')
   expect(screen.queryByRole('button', { name: '使用路径 35' })).toBeNull()
   fireEvent.change(screen.getByRole('textbox', { name: '筛选目录边界' }), { target: { value: 'Branch-34' } })
   fireEvent.click(await screen.findByRole('button', { name: '使用路径 35' }))
@@ -193,7 +193,7 @@ test('首次导入选择另一个连接后使用其目录、路由、基线和�
   const selector = await screen.findByRole('combobox', { name: 'OpenList 连接' })
   fireEvent.click(selector)
   fireEvent.click(await screen.findByRole('option', { name: '连接乙' }))
-  await waitFor(() => expect(openlist.browse).toHaveBeenLastCalledWith('/乙', 1, false, 100, 'ol-b'))
+  await waitFor(() => expect(openlist.browse).toHaveBeenLastCalledWith('/乙', 1, true, 100, 'ol-b'))
   await waitFor(() => expect(api.openlistStatus).toHaveBeenLastCalledWith('/乙', 'ol-b'))
   await waitFor(() => expect(screen.getByRole('button', { name: '完整扫描并建立基线' })).toBeEnabled())
   fireEvent.click(screen.getByRole('button', { name: '完整扫描并建立基线' }))
@@ -484,9 +484,82 @@ test('OpenList 未进入内容来源路由时不会猜测默认网盘提供商',
   await enterImport()
   fireEvent.click(screen.getByRole('button', { name: 'OpenList' }))
 
-  expect(await screen.findByText('当前目录尚未匹配播放路径')).toBeVisible()
-  expect(screen.getByText('请先进入一个已配置内容来源的目录，才能开始扫描。')).toBeVisible()
+  expect(await screen.findByText('请选择下面的网盘目录')).toBeVisible()
+  expect(screen.queryByText('未绑定本地播放位置')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '配置播放位置' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: '完整扫描并建立基线' })).toBeDisabled()
+})
+
+test('未绑定播放位置时显示错误，并直达当前连接的设置分类', async () => {
+  const unboundRoutes = routes.map(route => ({ ...route, local_path: '' }))
+  openlist.getRoutes.mockResolvedValue({ routes: unboundRoutes })
+  render(<MediaManagementPage />)
+  await enterImport()
+  fireEvent.click(screen.getByRole('button', { name: 'OpenList' }))
+  expect(await screen.findByText('未绑定本地播放位置')).toBeVisible()
+  expect(screen.getByText('未绑定本地播放位置').closest('.media-v4-mapping-note')).toHaveClass('is-error')
+  fireEvent.click(screen.getByRole('button', { name: '配置播放位置' }))
+  expect(useUiStore.getState()).toMatchObject({ page: 'settings', settingsSection: 'openlist', settingsConnectionId: 'legacy' })
+  expect(api.startDurableScan).not.toHaveBeenCalled()
+})
+
+test('OpenList 持久扫描未验证路径时停止生成草稿，先恢复挂载重试再提供设置兜底', async () => {
+  api.durableScan.mockResolvedValue({
+    scan_id: 'scan-durable', root_id: 'root', status: 'failed', started_at: '', finished_at: '',
+    error: '没有找到可达的媒体样本', entries: [],
+    path_validation: { state: 'invalid', requires_confirmation: true, reason: '请恢复本地挂载后重新检查。', selected_count: 1, choices: [] },
+  })
+  render(<MediaManagementPage />)
+  await enterImport()
+  fireEvent.click(screen.getByRole('button', { name: 'OpenList' }))
+  fireEvent.click(await screen.findByRole('button', { name: '打开文件夹 Anime' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: '完整扫描并建立基线' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: '完整扫描并建立基线' }))
+  expect(await screen.findByText('播放路径尚未验证')).toBeVisible()
+  expect(screen.getByText('请恢复本地挂载后重新检查。')).toBeVisible()
+  expect(screen.queryByRole('button', { name: /使用路径/ })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '确认并建立媒体库' })).not.toBeInTheDocument()
+  expect(api.preview).not.toHaveBeenCalled()
+  expect(api.confirm).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '重新检查播放位置' }))
+  await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledTimes(2))
+  expect(await screen.findByText('播放路径尚未验证')).toBeVisible()
+  expect(api.preview).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '到设置调整对应文件夹' }))
+  expect(useUiStore.getState()).toMatchObject({ page: 'settings', settingsSection: 'openlist', settingsConnectionId: 'legacy' })
+})
+
+test('OpenList 两条可达路径有歧义时显式选择，发送 OpenList 选择且重试失败不继续生成草稿', async () => {
+  const ambiguous = {
+    state: 'ambiguous', requires_confirmation: true, reason: '两种挂载对应都能访问样本，请核对实际目录。', selected_count: 2,
+    choices: [
+      { id: 'openlist-a', root: 'K:/', path_samples: ['K:/115/Anime/Show/1.mkv'], selected_count: 2, skipped_count: 0 },
+      { id: 'openlist-b', root: 'K:/', path_samples: ['K:/Anime/Show/1.mkv'], selected_count: 2, skipped_count: 0 },
+    ],
+  }
+  api.durableScan.mockResolvedValue({
+    scan_id: 'scan-durable', root_id: 'root', status: 'failed', started_at: '', finished_at: '',
+    error: ambiguous.reason, entries: [], path_validation: ambiguous,
+  })
+  render(<MediaManagementPage />)
+  await enterImport()
+  fireEvent.click(screen.getByRole('button', { name: 'OpenList' }))
+  fireEvent.click(await screen.findByRole('button', { name: '打开文件夹 Anime' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: '完整扫描并建立基线' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: '完整扫描并建立基线' }))
+  expect(await screen.findByText('播放路径尚未验证')).toBeVisible()
+  expect(screen.getByText('K:/115/Anime/Show/1.mkv')).toBeVisible()
+  expect(screen.getByText('K:/Anime/Show/1.mkv')).toBeVisible()
+  expect(api.preview).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '使用路径 B' }))
+  await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledTimes(2))
+  const selected = api.startDurableScan.mock.calls[1][0]
+  expect(selected).toMatchObject({ source: 'openlist', root_path: '/115/Anime', openlist_mapping_choice: 'openlist-b' })
+  expect(selected.tree_mapping_choice || '').toBe('')
+  expect(await screen.findByText('播放路径尚未验证')).toBeVisible()
+  expect(api.preview).not.toHaveBeenCalled()
+  expect(api.confirm).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: '确认并建立媒体库' })).not.toBeInTheDocument()
 })
 
 test('混合入口首次要求 TXT 基线且未确认前禁用增量', async () => {
@@ -622,7 +695,7 @@ test('来源卡可以回到同一 OpenList 来源执行更新', async () => {
 
   const sourcePicker = screen.getByRole('group', { name: '媒体来源类型' })
   expect(sourcePicker.querySelector('button[aria-label="OpenList"]')).toHaveAttribute('aria-pressed', 'true')
-  await waitFor(() => expect(openlist.browse).toHaveBeenCalledWith('/115/Anime', 1, false, 100))
+  await waitFor(() => expect(openlist.browse).toHaveBeenCalledWith('/115/Anime', 1, true, 100))
   // 已确认基线：来源卡恢复后默认动作是增量扫描。
   expect(await screen.findByRole('button', { name: '增量扫描' })).toBeEnabled()
 })

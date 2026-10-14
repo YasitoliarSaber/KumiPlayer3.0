@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Checkbox, Input } from '@fluentui/react-components';
-import { CheckCircle, Eye, EyeOff, Info, X, XCircle } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { openlistApi, type OpenListConfigPayload, type OpenListTestConnectionPayload, type OpenListTestResult, type OpenListTelemetrySummary } from '../../api/openlist';
 import type { PublicConfig } from '../../api/config';
 import FolderPathInput from './FolderPathInput';
 import { SettingsField } from '../ui/SettingsPrimitives';
+import ActionToast from '../ui/ActionToast';
 
 /**
  * OpenList 连接设置面板（OL-4：Settings IA）。
@@ -77,6 +78,7 @@ export function isNonLoopbackHttp(url: string): boolean {
 }
 
 interface OpenListSettingsPanelProps {
+  active?: boolean;
   config: PublicConfig;
   draft: OpenListDraft;
   onChangeDraft: (key: keyof OpenListDraft, value: string) => void;
@@ -149,6 +151,7 @@ export default function OpenListSettingsPanel({
   noticeKind,
   onNotice,
   externalBusy,
+  active = false,
 }: OpenListSettingsPanelProps) {
   const clearNotice = () => onNotice?.('', 'info');
   // 用户修改凭据/地址时自动清除旧错误提示，避免滞留
@@ -161,6 +164,15 @@ export default function OpenListSettingsPanel({
   const [allowOpenlistHttp, setAllowOpenlistHttp] = useState(false);
   const [actionLock, setActionLock] = useState<string | null>(null);
   const [telemetry, setTelemetry] = useState<OpenListTelemetrySummary | null>(null);
+  // 切换连接会重建面板，旧连接迟到的响应不得更新父级提示。
+  const mounted = useRef(false);
+  const operationGeneration = useRef(0);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   // 登录失败后是否展示「仍然保存（不验证）」兑底入口
   const [skipVerificationOffered, setSkipVerificationOffered] = useState(false);
   useEffect(() => {
@@ -228,12 +240,15 @@ export default function OpenListSettingsPanel({
 
   const runSave = async (skipVerification: boolean) => {
     if (actionLock) return; // 单操作锁：双击不产生并发
+    const generation = ++operationGeneration.current;
+    const current = () => mounted.current && operationGeneration.current === generation;
     setActionLock(skipVerification ? 'save-skip' : 'save');
     // 清除旧提示，避免旧错误在重新保存时滞留
     onNotice?.('', 'info');
     setSkipVerificationOffered(false);
     try {
       const outcome = await onSaveConnection(buildPayload(), skipVerification);
+      if (!current()) return;
       // **只有后端真的探测成功才允许显示"连接正常"**：后端按规范化后的值判断
       // 是否变更、前端按原始字符串判断，两者不等价时（例如把地址写成等价的
       // 带尾斜杠形式）后端会跳过探测——此时若仍按 remoteAffectingDirty 显示
@@ -246,6 +261,7 @@ export default function OpenListSettingsPanel({
         setProbeState(verified ? 'connected' : 'saved_unverified');
       }
     } catch (error) {
+      if (!current()) return;
       // 候选保存失败：后端保持旧提交状态。已有保存配置 → saved_unverified
       // （不得显示 unconfigured 让用户误以为旧连接丢失）；首次配置失败 → unconfigured
       setProbeState(saved ? 'saved_unverified' : 'unconfigured');
@@ -253,7 +269,7 @@ export default function OpenListSettingsPanel({
       onNotice?.(message, 'error');
       if (!skipVerification) setSkipVerificationOffered(true);
     } finally {
-      setActionLock(null);
+      if (current()) setActionLock(null);
     }
   };
 
@@ -262,24 +278,28 @@ export default function OpenListSettingsPanel({
 
   const handleTest = async () => {
     if (actionLock) return;
+    const generation = ++operationGeneration.current;
+    const current = () => mounted.current && operationGeneration.current === generation;
     setActionLock('test');
     setProbeState('checking');
     // 清除旧提示，避免旧错误在重新测试时滞留
     onNotice?.('', 'info');
     try {
       const result = await onTestConnection(buildTestPayload());
+      if (!current()) return;
       // 真实 machine status code 映射，不得全部折叠为 network_unavailable
       const nextState = result.ok ? 'connected' : mapProbeCode(result.code);
       setProbeState(nextState);
-      // 失败时显示后端返回的具体错误信息（如登录失败原因），而非空白
-      if (!result.ok && result.message) {
-        onNotice?.(result.message, 'error');
+      // 反馈在当前操作的生命周期内统一发送，父回调只返回结果。
+      if (result.message) {
+        onNotice?.(result.message, result.ok ? 'success' : 'error');
       }
     } catch {
+      if (!current()) return;
       setProbeState('network_unavailable');
       onNotice?.('无法连接 OpenList 服务，请检查服务地址是否可达', 'error');
     } finally {
-      setActionLock(null);
+      if (current()) setActionLock(null);
     }
   };
 
@@ -293,6 +313,13 @@ export default function OpenListSettingsPanel({
       ? '验证并保存'
       : '保存设置';
   const primaryAction = !hasDirty ? handleTest : handleSave;
+  const autoChecked = useRef(false);
+  useEffect(() => {
+    if (!active) { autoChecked.current = false; return; }
+    if (!saved || hasDirty || busy || autoChecked.current) return;
+    autoChecked.current = true;
+    void handleTest();
+  }, [active, saved, hasDirty, busy]);
 
   return (
     <div className="sources-openlist-card sources-connection">
@@ -385,21 +412,7 @@ export default function OpenListSettingsPanel({
 
         </fieldset>
       )}
-          {notice && (
-            <p role={noticeKind === 'error' ? 'alert' : 'status'} className={`settings-openlist-notice${noticeKind !== 'info' ? ` ${noticeKind}` : ''}`}>
-              {noticeKind === 'success' ? <CheckCircle size={14} /> : noticeKind === 'error' ? <XCircle size={14} /> : <Info size={14} />}
-              <span>{notice}</span>
-              <Button
-                type="button"
-                appearance="subtle"
-                size="small"
-                className="settings-openlist-notice-dismiss"
-                aria-label="关闭提示"
-                onClick={() => onNotice?.('', 'info')}
-                icon={<X size={12} />}
-              />
-            </p>
-          )}
+      <ActionToast message={notice} intent={noticeKind} onDismiss={() => onNotice?.('', 'info')} />
     </div>
   );
 }

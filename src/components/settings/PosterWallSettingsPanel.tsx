@@ -3,8 +3,9 @@ import { Button, Dropdown, Option } from '@fluentui/react-components';
 import type { PublicConfig } from '../../api/config';
 import { useUiStore, type SeriesCardImageMode } from '../../stores/ui';
 import { normalizePosterColumns } from '../library/posterGridMetrics';
-import { SettingsFeedback, SettingsField, SettingsSection } from '../ui/SettingsPrimitives';
+import { SettingsField, SettingsSection } from '../ui/SettingsPrimitives';
 import './PosterWallSettingsPanel.css';
+import ActionToast from '../ui/ActionToast';
 
 type PosterWallConfig = Pick<PublicConfig, 'poster_size' | 'series_card_image_mode'>;
 
@@ -167,8 +168,7 @@ export default function PosterWallSettingsPanel({ config, externalBusy = false, 
             还原
           </Button>
         </div>
-        {saving && <SettingsFeedback busy>正在保存作品墙设置…</SettingsFeedback>}
-        {notice && <SettingsFeedback intent={failed ? 'error' : 'success'}>{notice}</SettingsFeedback>}
+        <ActionToast message={notice} intent={failed ? 'error' : 'success'} onDismiss={() => setNotice('')} />
       </div>
     </SettingsSection>
   );

@@ -101,4 +101,6 @@ class BoundedMetadataProbe:
         parent_result = self._inspect(parent)
         if parent_result["status"] == "directory":
             return self._inspect(path)
+        if parent_result["status"] == "file":
+            return {"status": "missing", "error_kind": "parent_not_directory"}
         return parent_result

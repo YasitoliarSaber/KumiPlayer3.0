@@ -47,3 +47,12 @@ test('explicit folder navigation requests only that current page with upstream v
   await waitFor(() => expect(browse).toHaveBeenLastCalledWith('/Quark/Anime', 1, true, 100))
   expect(browse).toHaveBeenCalledTimes(2)
 })
+
+test('entering the browser verifies the current folder automatically', async () => {
+  browse.mockResolvedValue({ ...result(), connection_state: 'verified' })
+  const availability = vi.fn()
+  render(<OpenListFolderBrowser configured initialPath="/Quark" onPathChange={vi.fn()} onAvailabilityChange={availability} onGoSettings={vi.fn()} />)
+  expect(await screen.findByRole('button', { name: '打开文件夹 动画' })).toBeVisible()
+  expect(browse).toHaveBeenCalledExactlyOnceWith('/Quark', 1, true, 100)
+  expect(availability).toHaveBeenLastCalledWith(true)
+})

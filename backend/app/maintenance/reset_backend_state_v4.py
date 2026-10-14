@@ -59,11 +59,15 @@ def _configured_source_roots() -> list[Path]:
     values = [
         config.pan115_root,
         config.baidu_root,
+        getattr(config, "quark_root", "") or "",
         config.local_root,
         getattr(config, "openlist_mount_root", "") or "",
     ]
     # 已登记的多条本地来源同样属于用户真实媒体根，一并纳入删除保护。
     values.extend(_local_root_paths(config))
+    for connection in [config, *getattr(config, "openlist_connections", ())]:
+        values.append(getattr(connection, "openlist_mount_root", "") or "")
+        values.extend(getattr(route, "local_root", "") or "" for route in getattr(connection, "openlist_routes", ()))
     return [_safe_resolve(Path(value)) for value in values if str(value).strip()]
 
 

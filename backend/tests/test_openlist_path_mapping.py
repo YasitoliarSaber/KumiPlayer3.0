@@ -9,6 +9,7 @@ from app.integrations.openlist.providers import (
     derive_local_path,
     derive_remote_path,
     match_route,
+    resolve_local_path,
 )
 
 
@@ -72,3 +73,19 @@ def test_longest_route_remains_segment_bounded():
     assert match_route([parent, nested, disabled], "/Anime/Shows/Work/e.mkv") is nested
     assert match_route([parent, nested], "/Anime/Shows2/e.mkv") is parent
     assert match_route([parent, nested], "/Anime2/e.mkv") is None
+
+
+def test_route_mapping_prevents_duplicate_provider_folder_without_guessing():
+    route = OpenListRouteConfig(remote_prefix="/夸克", provider_id="quark", local_root="K:/夸克")
+    assert resolve_local_path("K:/夸克", "/", "/夸克/Show/e.mkv", [route]) == "K:\\夸克\\Show\\e.mkv"
+    # 真实的同名子目录必须保留。
+    assert resolve_local_path("K:/夸克", "/", "/夸克/夸克/e.mkv", [route]) == "K:\\夸克\\夸克\\e.mkv"
+    assert resolve_local_path("K:/夸克", "/", "/夸克/Show/e.mkv", []) == "K:\\夸克\\夸克\\Show\\e.mkv"
+
+
+def test_disabled_route_and_connection_boundary_cannot_override_mapping():
+    route = OpenListRouteConfig(remote_prefix="/夸克", local_root="K:/夸克", enabled=False)
+    assert resolve_local_path("K:/", "/", "/夸克/e.mkv", [route]) == "K:\\夸克\\e.mkv"
+    route.enabled = True
+    with pytest.raises(ValueError):
+        resolve_local_path("K:/", "/Other", "/夸克/e.mkv", [route])

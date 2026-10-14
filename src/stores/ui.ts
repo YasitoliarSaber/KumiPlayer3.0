@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type AppPage = 'home' | 'favorites' | 'recent' | 'category' | 'detail' | 'manage' | 'settings' | 'player-tuning';
+export type AppPage = 'home' | 'favorites' | 'recent' | 'category' | 'detail' | 'manage' | 'settings';
 export type CategoryKey = 'anime_series' | 'anime_movie' | 'live_series' | 'live_movie';
 export type LibraryView = CategoryKey | 'seasonal';
 export type StyleMode = 'gallery';
@@ -12,6 +12,7 @@ export type SourceId = 'all' | 'pan115' | 'baidu' | 'quark' | 'local' | 'openlis
 export type SeriesCardImageMode = 'poster' | 'fanart';
 export type SidebarMode = 'hidden' | 'compact' | 'expanded';
 export type ManageView = 'overview' | 'import' | 'maintenance';
+export type SettingsSectionId = 'application' | 'appearance' | 'sources' | 'openlist' | 'scrape' | 'player' | 'bangumi';
 type VisibleSidebarMode = Exclude<SidebarMode, 'hidden'>;
 
 export interface CategoryScrollRestore {
@@ -43,6 +44,8 @@ interface NavigationLocation {
   selectedWorkId: string | null;
   query: string;
   manageView: ManageView;
+  settingsSection?: SettingsSectionId;
+  settingsConnectionId?: string;
 }
 
 const MAX_NAVIGATION_HISTORY = 50;
@@ -58,6 +61,8 @@ interface UiState {
   activeCategory: LibraryView | null;
   selectedWorkId: string | null;
   manageView: ManageView;
+  settingsSection: SettingsSectionId;
+  settingsConnectionId: string;
   navigationHistory: NavigationLocation[];
   forwardHistory: NavigationLocation[];
   canGoBack: boolean;
@@ -85,7 +90,8 @@ interface UiState {
   goManage: () => void;
   goManageView: (view: ManageView) => void;
   goSettings: () => void;
-  goPlayerTuning: () => void;
+  goSettingsSection: (section: SettingsSectionId, connectionId?: string) => void;
+  setSettingsSection: (section: SettingsSectionId) => void;
   goBack: () => void;
   goForward: () => void;
   selectSeason: (seasonNumber: number | null) => void;
@@ -114,6 +120,8 @@ function currentLocation(state: UiState): NavigationLocation {
     selectedWorkId: state.selectedWorkId,
     query: state.query,
     manageView: state.manageView,
+    settingsSection: state.settingsSection,
+    settingsConnectionId: state.settingsConnectionId,
   };
 }
 
@@ -123,7 +131,9 @@ function navigate(state: UiState, target: NavigationLocation): Partial<UiState> 
     && current.activeCategory === target.activeCategory
     && current.selectedWorkId === target.selectedWorkId
     && current.query === target.query
-    && current.manageView === target.manageView;
+    && current.manageView === target.manageView
+    && (target.settingsSection === undefined || current.settingsSection === target.settingsSection)
+    && (target.settingsConnectionId === undefined || current.settingsConnectionId === target.settingsConnectionId);
 
   if (unchanged) return target;
 
@@ -144,6 +154,8 @@ export const useUiStore = create<UiState>()(
       activeCategory: null,
       selectedWorkId: null,
       manageView: 'overview',
+      settingsSection: 'application',
+      settingsConnectionId: '',
       navigationHistory: [],
       forwardHistory: [],
       canGoBack: false,
@@ -153,7 +165,7 @@ export const useUiStore = create<UiState>()(
       query: '',
       sort: 'recent',
       source: 'all',
-      posterSize: 180,
+      posterSize: 8,
       styleMode: 'gallery',
       motionMode: 'standard',
       appearanceMode: 'fluent',
@@ -195,7 +207,8 @@ export const useUiStore = create<UiState>()(
       goManage: () => set((state) => ({ ...navigate(state, { page: 'manage', activeCategory: null, selectedWorkId: null, query: '', manageView: 'overview' }), categoryScrollRestore: null })),
       goManageView: (view) => set((state) => ({ ...navigate(state, { page: 'manage', activeCategory: null, selectedWorkId: null, query: '', manageView: view }), categoryScrollRestore: null })),
       goSettings: () => set((state) => ({ ...navigate(state, { page: 'settings', activeCategory: null, selectedWorkId: null, query: '', manageView: state.manageView }), categoryScrollRestore: null })),
-      goPlayerTuning: () => set((state) => ({ ...navigate(state, { page: 'player-tuning', activeCategory: null, selectedWorkId: null, query: '', manageView: state.manageView }), categoryScrollRestore: null })),
+      goSettingsSection: (section, connectionId = '') => set((state) => ({ ...navigate(state, { page: 'settings', activeCategory: null, selectedWorkId: null, query: '', manageView: state.manageView, settingsSection: section, settingsConnectionId: connectionId }), categoryScrollRestore: null })),
+      setSettingsSection: (section) => set({ settingsSection: section }),
       goBack: () => set((state) => {
         const target = state.navigationHistory.at(-1);
         if (!target) return state;

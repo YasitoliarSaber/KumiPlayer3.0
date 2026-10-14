@@ -19,6 +19,7 @@ export interface OpenListRoute {
   enabled: boolean
   local_path?: string
   local_available?: boolean
+  local_root?: string
 }
 
 // 页面
@@ -42,28 +43,6 @@ export type SortId =
 export type ThemeId = 'light' | 'dark'
 
 // 媒体库
-export interface LibraryIndex {
-  works: WorkIndex[]
-  source_summary?: Record<string, SourceSummary>
-  summary?: Record<string, unknown>
-  generated_at: string
-  generation_id: string
-  updating: boolean
-}
-
-export interface SourceSummary {
-  work_count: number
-  episode_count: number
-  strm_count: number
-  missing_strm_count: number
-  orphan_strm_count: number
-  scraped_work_count: number
-  poster_count: number
-  fanart_count: number
-  clearlogo_count: number
-  warnings: string[]
-}
-
 export interface WorkIndex {
   artwork?: Partial<Record<'poster' | 'fanart' | 'clearlogo', ArtworkResource>>
   /** 来源明确选择的导入范围，与用户的观看状态分开。 */
@@ -90,7 +69,6 @@ export interface WorkIndex {
   provider_id?: ProviderId
   ingest_method?: IngestMethod
   source_route_id?: string
-  source_episode_ids?: Partial<Record<ImportSourceId, string>>
   card_type: 'main_series' | 'standalone'
   poster_path: string
   fanart_path: string

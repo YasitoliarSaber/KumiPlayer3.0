@@ -688,6 +688,7 @@ export const mediaV4Api = {
     api.get<V4OpenlistBaselineStatus>(`/api/v4/sources/openlist/status?remote_root=${encodeURIComponent(remoteRoot)}${connectionId ? `&connection_id=${encodeURIComponent(connectionId)}` : ''}`),
 
   startDurableScan: (request: {
+    openlist_mapping_choice?: string
     content_scope?: V4ContentScope
     /** 新导出 TXT 更新既有来源，服务端必须核验来源范围一致。 */
     target_root_id?: string

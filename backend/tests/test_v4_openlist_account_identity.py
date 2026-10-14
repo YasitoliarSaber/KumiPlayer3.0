@@ -5,13 +5,14 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
+
 from app.api import media_v4, tracking_v4
 from app.core.config import AppConfig
 from app.core.openlist_connections import OpenListConnectionConfig
 from app.integrations.openlist.providers import OpenListRouteConfig
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.sources.scanner import openlist_root_id
-from fastapi import HTTPException
 
 
 def _old_root():
@@ -193,6 +194,14 @@ def test_budget_resume_rejects_a_new_account_with_the_same_public_mask(database,
         return kwargs["scan_id"], []
 
     monkeypatch.setattr(media_v4, "scan_openlist_directory", scan)
+    # 这里只验证预算续扫的账户隔离，不用假 client 冒充真实路径验证；
+    # 可达样本与确认闭锁由 test_v4_openlist_playback_mapping 覆盖。
+    prepared_accounts = []
+    def prepare_identity_fixture(_database, selected_task, client, _runtime):
+        prepared_accounts.append(client.username)
+        return selected_task.request
+    monkeypatch.setattr("app.media_v4.sources.openlist_playback_mapping.prepare_mapping",
+                        prepare_identity_fixture)
     # 第一轮执行后换账号，第二轮从持久队列恢复时仍须拒绝新账户。
     with pytest.raises(SourceScanDeferred):
         scan_handlers.scan_openlist_full_source(database, task, runtime)
@@ -200,3 +209,4 @@ def test_budget_resume_rejects_a_new_account_with_the_same_public_mask(database,
     with pytest.raises(ValueError, match="账号或映射已改变"):
         scan_handlers.scan_openlist_full_source(database, task, runtime)
     assert accounts == ["alice"]
+    assert prepared_accounts == ["alice"]

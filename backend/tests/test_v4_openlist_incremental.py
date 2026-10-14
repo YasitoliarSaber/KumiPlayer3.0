@@ -23,6 +23,22 @@ def _baseline():
     ]
 
 
+def test_explicit_route_mapping_applies_to_retained_and_new_incremental_files():
+    from app.integrations.openlist.providers import OpenListRouteConfig
+    from app.media_v4.sources.incremental import build_tree_baseline_state, scan_openlist_incremental
+
+    baseline = _baseline()
+    _, evidence, _, _ = scan_openlist_incremental(
+        _FakeClient(), baseline=baseline,
+        state=build_tree_baseline_state("root-hybrid", "/Anime", baseline),
+        mapping_root="/", mount_root="K:/Anime",
+        routes=[OpenListRouteConfig(remote_prefix="/Anime", provider_id="pan115", local_root="K:/Anime")],
+        default_provider="pan115", verification_budget=1,
+    )
+    assert any(item.relative_path.endswith("S01E02.mkv") for item in evidence)
+    assert all(item.playback_locator == "K:\\Anime\\" + item.relative_path.replace("/", "\\") for item in evidence)
+
+
 class _FakeClient:
     def __init__(self, *, overlap: bool = True):
         from app.integrations.openlist.models import OpenListDirPage, OpenListEntry

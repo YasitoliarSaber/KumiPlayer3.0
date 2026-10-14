@@ -85,7 +85,7 @@ test('导入工作台使用全宽单列轨道，空媒体库有紧凑的引导�
 
 test('第三步总体摘要位于建立媒体库页头右侧，详情展开保留实际刮削结果', () => {
   assert.match(page, /media-v4-execution-header-summary/)
-  // 完成作品数与资料完整数按同一投影统计，分别标明含义，镜像作为次级信息。
+  // 完成作品数与资料完整数按同一投影统计，分别标明含义。
   assert.match(page, /summarizeExecutionWorks/)
   assert.match(page, /executionCounts\?\.completed/)
   assert.match(page, /executionCounts\?\.metadataComplete/)
@@ -94,7 +94,8 @@ test('第三步总体摘要位于建立媒体库页头右侧，详情展开保�
   assert.match(page, /media-v4-execution-header-secondary/)
   assert.match(styles, /\.media-v4-execution-header-secondary\s*\{[^}]*font-size:\s*12px/s)
   assert.match(execution, /刮削结果/)
-  assert.match(execution, /季度结构/)
+  assert.match(execution, /detailSeasons/)
+  assert.doesNotMatch(execution, /TmdbImageConnectionPanel/)
   assert.doesNotMatch(execution, /episode\.scraped_plot/)
   assert.match(execution, /scrape\.plot/)
   assert.match(styles, /\.media-v4-execute-stage-header\s*\{[^}]*align-items:\s*flex-start/s)

@@ -21,8 +21,8 @@ from app.integrations.openlist.models import (
 )
 from app.integrations.openlist.providers import (
     OpenListRouteConfig,
-    derive_local_path,
     provider_for_remote,
+    resolve_local_path,
 )
 from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
 from app.media_v4.sources.file_identity import (
@@ -864,8 +864,8 @@ def scan_openlist_directory(
                 route_id, routed_provider = provider_for_remote(route_configs, remote_path)
                 provider = routed_provider if route_id else default_provider
                 playback_locator = ""
-                if mount_root:
-                    playback_locator = derive_local_path(mount_root, mapping_root, remote_path)
+                if mount_root or any(route.local_root for route in route_configs):
+                    playback_locator = resolve_local_path(mount_root, mapping_root, remote_path, route_configs)
                 item_evidence = to_source_evidence(
                     SourceEntry(
                         root_id=root_id,

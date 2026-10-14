@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Button, Checkbox, Dropdown, Input, Option } from '@fluentui/react-components';
 import { SettingsField } from '../ui/SettingsPrimitives';
+import ActionToast from '../ui/ActionToast';
+import FolderPathInput from './FolderPathInput';
 import { type OpenListDiscoverItem, type OpenListRouteItem } from '../../api/openlist';
 import type { OpenListRoute, ProviderId } from '../../api/types';
 
@@ -111,7 +113,7 @@ export default function OpenListSourceRoutes({
             {dirtyCount > 0 && <span className="sources-dirty-hint">有 {dirtyCount} 项更改尚未保存。</span>}
           </div>
 
-          {(notice || localError) && <p className={`settings-openlist-notice${localError ? ' error' : ''}`}>{localError || notice}</p>}
+          <ActionToast message={localError || notice} intent={localError ? 'error' : 'info'} onDismiss={() => setLocalError('')} />
           {draft.length === 0 && discoverItems.length === 0 && (
             <p className="settings-openlist-notice">尚未读取来源目录。点击「刷新来源目录」从 OpenList 顶层读取。</p>
           )}
@@ -139,7 +141,7 @@ export default function OpenListSourceRoutes({
                   </div>
                   <div className="settings-config-row settings-openlist-derived">
                     <span>本地播放位置</span>
-                    <output>{localPath || '保存来源目录后显示'}</output>
+                    <output>{localPath || '尚未绑定'}</output>
                   </div>
                   {isDirty && (
                     <span className="sources-dirty-hint">
@@ -148,6 +150,9 @@ export default function OpenListSourceRoutes({
                   )}
                   {isExpanded && (
                     <div className="sources-route-card-edit">
+                      <SettingsField label="对应的本地文件夹" description={`选择挂载后与 ${route.remote_prefix} 对应的文件夹。留空沿用连接映射。`} className="settings-config-row">
+                        <FolderPathInput label={`${route.label || route.remote_prefix}对应的本地文件夹`} value={route.local_root || ''} disabled={isBusy} onChange={local_root => handleUpdate(route.remote_prefix, { local_root })} />
+                      </SettingsField>
                       <SettingsField label="显示名称" className="settings-config-row">
                         <Input type="text" value={route.label} disabled={isBusy} onChange={(_, data) => handleUpdate(route.remote_prefix, { label: data.value })} />
                       </SettingsField>

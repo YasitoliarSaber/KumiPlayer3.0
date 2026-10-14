@@ -180,8 +180,9 @@ describe('OpenListSourceRoutes', () => {
     });
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.click(screen.getByText('保存更改'));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(screen.getByText('保存失败')).toBeTruthy();
+    expect(await screen.findByRole('alert')).toHaveTextContent('保存失败');
+    expect(screen.getByText(/有 1 项更改尚未保存/)).toBeVisible();
+    expect(screen.getByRole('button', { name: '保存更改' })).toBeEnabled();
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 

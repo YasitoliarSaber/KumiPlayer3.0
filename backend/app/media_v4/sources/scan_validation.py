@@ -1,7 +1,8 @@
-"""目录树扫描验证的 SQLite 持久化（v5 tree_scan_validation 表）。
+"""目录树映射确认的 SQLite 持久化（tree_scan_validation 表）。
 
-验证事实进入事务约束的 SQLite，不再依赖可丢失的旁路 JSON：缺失、损坏、
-过期、根变化或样本当前不可达都会让 confirm 失败关闭（fail-closed）。
+生产确认检查扫描身份、映射状态和播放根一致性。TXT 支持离线导入，
+不以样本可达性或本模块历史 TTL 辅助函数作为生产确认条件。
+OpenList 在线扫描的真实样本门控见 openlist_playback_mapping。
 """
 
 from __future__ import annotations

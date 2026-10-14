@@ -3045,7 +3045,7 @@ class V4RevisionService:
             if not ok:
                 raise ValueError(reason)
 
-    def confirm(self, revision_id: str, *, auto_append: bool = False) -> None:
+    def confirm(self, revision_id: str, *, auto_append: bool = False, require_openlist_mapping: bool = False) -> None:
         with self.database.connect() as conn:
             revision = conn.execute(
                 "SELECT status, root_id, scan_id FROM import_revisions WHERE revision_id = ?",
@@ -3057,6 +3057,9 @@ class V4RevisionService:
                 return
             if revision["status"] != "draft":
                 raise RuntimeError(f"revision 状态不可确认: {revision['status']}")
+        from app.media_v4.sources.openlist_playback_mapping import require_verified_mapping
+
+        require_verified_mapping(self.database, str(revision["scan_id"]), require=require_openlist_mapping)
         self.create_draft(
             revision_id,
             [],

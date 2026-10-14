@@ -99,7 +99,7 @@ export default function OpenListFolderBrowser({
   useEffect(() => {
     if (!configured || initialized.current) return
     initialized.current = true
-    void browse(initialPath || '/')
+    void browse(initialPath || '/', 1, true)
   }, [configured, initialPath, connectionId])
 
   const crumbs = useMemo(

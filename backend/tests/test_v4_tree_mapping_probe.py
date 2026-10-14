@@ -38,3 +38,8 @@ def test_request_budget_includes_parent_checks():
     assert probe("Z:/Show/1.mkv")["status"] == "file"
     assert probe("Z:/Show/2.mkv")["status"] == "unavailable"
     assert len(calls) == 2
+
+
+def test_file_parent_never_proves_a_child_file_exists():
+    probe = BoundedMetadataProbe(inspect=lambda _: {'status': 'file'})
+    assert probe('Z:/not-a-directory/1.mkv')['status'] == 'missing'

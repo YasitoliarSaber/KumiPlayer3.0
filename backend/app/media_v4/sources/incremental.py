@@ -24,7 +24,7 @@ from app.integrations.openlist.models import (
     OpenListNotFoundError,
     OpenListScanLimitExceeded,
 )
-from app.integrations.openlist.providers import OpenListRouteConfig, derive_local_path, provider_for_remote
+from app.integrations.openlist.providers import OpenListRouteConfig, provider_for_remote, resolve_local_path
 from app.media_v4.domain.models import SourceEvidence
 from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
 from app.media_v4.sources.scanner import (
@@ -312,12 +312,13 @@ def scan_openlist_incremental(
     actual_scan_id = scan_id or ("scan_" + uuid.uuid4().hex)
     next_state = copy.deepcopy(state)
     directories: dict[str, dict] = next_state["directories"]
+    route_configs = list(routes or [])
     files = {}
     for baseline_item in baseline:
         remote_path = _join_remote(remote_root, baseline_item.relative_path)
         playback_locator = (
-            derive_local_path(mount_root, mapping_root, remote_path)
-            if mount_root else baseline_item.playback_locator
+            resolve_local_path(mount_root, mapping_root, remote_path, route_configs)
+            if mount_root or any(route.local_root for route in route_configs) else baseline_item.playback_locator
         )
         files[baseline_item.relative_path] = _clone_for_scan(
             baseline_item,
@@ -338,7 +339,6 @@ def scan_openlist_incremental(
     skipped_counter = [0]
     #: 上游已不存在的"幽灵目录"（父目录仍列出它，但 fs/list 返回 object not found）
     missing_directories: list[str] = []
-    route_configs = routes or []
     first_root_entries: list[OpenListEntry] | None = None
     pending: list[SourceEvidence] = []
     effective_batch_size = max(1, int(batch_size))
@@ -466,8 +466,8 @@ def scan_openlist_incremental(
             route_id, routed_provider = provider_for_remote(route_configs, remote_path)
             provider = routed_provider if route_id else default_provider
             playback_locator = (
-                derive_local_path(mount_root, mapping_root, remote_path)
-                if mount_root else ""
+                resolve_local_path(mount_root, mapping_root, remote_path, route_configs)
+                if mount_root or any(route.local_root for route in route_configs) else ""
             )
             current_evidence = to_source_evidence(SourceEntry(
                 root_id=root_id,

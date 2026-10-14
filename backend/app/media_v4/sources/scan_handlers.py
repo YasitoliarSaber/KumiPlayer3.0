@@ -224,6 +224,7 @@ def _routes_from(request) -> tuple:
             remote_prefix=str(item.get("remote_prefix") or ""),
             provider_id=str(item.get("provider_id") or ""),
             enabled=bool(item.get("enabled", True)),
+            local_root=str(item.get("local_root") or ""),
         )
         for item in (request.get("routes") or ())
     )
@@ -247,13 +248,17 @@ def scan_openlist_full_source(database, task, runtime):
     _assert_connection_unchanged(config, request)
     directory_observations: dict[str, float | None] = dict(request.get("_directory_observations") or {})
     scan_stats: dict = {}
+    client = _guarded_openlist_client(config, request)
+    from app.media_v4.sources.openlist_playback_mapping import prepare_mapping
+
+    request = prepare_mapping(database, task, client, runtime)
 
     def mark_directory(**kwargs):
         _save_directory_observations(database, task, directory_observations)
         scan_frontier.mark_directory(database, scan_id=task.scan_id, **kwargs)
 
     _scan_id, evidence = scan_openlist_directory(
-        _guarded_openlist_client(config, request),
+        client,
         remote_root=str(request.get("remote_root") or ""),
         mapping_root=str(request.get("mapping_root") or _remote_root(config)),
         mount_root=str(request.get("mount_root") or ""),
@@ -314,8 +319,13 @@ def scan_openlist_incremental_source(database, task, runtime):
     mapping_root = str(request.get("mapping_root") or _remote_root(config))
     if not state or state.get("remote_root") != remote_root:
         state = build_tree_baseline_state(task.root_id, remote_root, baseline)
+    client = _guarded_openlist_client(config, request)
+    from app.media_v4.sources.openlist_playback_mapping import prepare_mapping
+
+    request = prepare_mapping(database, task, client, runtime)
+    mapping_root = str(request.get("mapping_root") or _remote_root(config))
     _scan_id, evidence, next_state, _stats = scan_openlist_incremental(
-        _guarded_openlist_client(config, request),
+        client,
         baseline=baseline,
         state=state,
         mapping_root=mapping_root,

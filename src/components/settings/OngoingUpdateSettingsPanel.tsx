@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Dropdown, Input, Option, Switch } from '@fluentui/react-components';
 import type { PublicConfig } from '../../api/config';
-import { SettingsFeedback, SettingsField } from '../ui/SettingsPrimitives';
+import { SettingsField } from '../ui/SettingsPrimitives';
+import ActionToast from '../ui/ActionToast';
 
 type UpdateSettings = Pick<PublicConfig, 'ongoing_update_on_startup' | 'ongoing_update_interval_minutes'>;
 
@@ -82,7 +83,6 @@ export default function OngoingUpdateSettingsPanel({ config, onSave, externalBus
         {options.map(option => <Option value={String(option.value)} key={option.value}>{option.label}</Option>)}
       </Dropdown>
     </SettingsField>
-    {saving && <SettingsFeedback busy>正在保存新番更新设置…</SettingsFeedback>}
-    {notice && <SettingsFeedback intent={failed ? 'error' : 'success'}>{notice}</SettingsFeedback>}
+    <ActionToast message={notice} intent={failed ? 'error' : 'success'} onDismiss={() => setNotice('')} />
   </div>;
 }

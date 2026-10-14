@@ -123,7 +123,7 @@ def draft_finalizer(
             source_metadata={
                 "display_name": display_name or str(root["display_name"] or ""),
                 "source_locator": str(root["source_locator"] or ""),
-                "playback_locator": str(root["playback_locator"] or ""),
+                "playback_locator": str(request.get("effective_playback_root") or root["playback_locator"] or ""),
                 "route_id": str(root["route_id"] or ""),
                 "root_container": root_container,
             },

@@ -4,10 +4,11 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
+
 from app.core import config as config_module
 from app.core.config import AppConfig, load_config, save_config
 from app.main import app
-from fastapi.testclient import TestClient
 
 
 def create(client, name):
@@ -135,6 +136,14 @@ def test_durable_import_and_restarted_handler_keep_selected_connection(monkeypat
     captured = []
     monkeypatch.setattr(openlist_v4, '_client', lambda config: captured.append(config) or object())
     monkeypatch.setattr(media_v4, 'scan_openlist_directory', lambda _client, **kw: (kw['scan_id'], []))
+    # 本用例隔离连接身份与恢复契约；真实可达闭锁由
+    # test_v4_openlist_playback_mapping 独立覆盖，不探测夹具之外的挂载盘。
+    prepared_connections = []
+    def prepare_identity_fixture(_database, selected_task, _client, _runtime):
+        prepared_connections.append(selected_task.request['connection_id'])
+        return selected_task.request
+    monkeypatch.setattr('app.media_v4.sources.openlist_playback_mapping.prepare_mapping',
+                        prepare_identity_fixture)
     runtime = SimpleNamespace(cancellation_requested=lambda: False, persist_evidence_batch=lambda _: None,
                               report_progress=lambda **_: None)
     task = SimpleNamespace(request=request, root_id=roots[1], scan_id=row['scan_id'])
@@ -163,12 +172,14 @@ def test_durable_import_and_restarted_handler_keep_selected_connection(monkeypat
     save_selected_connection(selected)
     with pytest.raises(ValueError, match='映射已改变'):
         scan_handlers.scan_openlist_full_source(database, task, runtime)
+    assert prepared_connections == [b, b]
 
 
 def test_stale_connection_snapshot_never_receives_another_account_credentials():
+    from fastapi import HTTPException
+
     from app.api import openlist_v4
     from app.core.openlist_connections import save_selected_connection
-    from fastapi import HTTPException
     client = TestClient(app)
     identity = create(client, '甲')
     save(client, identity)

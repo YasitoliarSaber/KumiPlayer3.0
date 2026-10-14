@@ -37,3 +37,16 @@ test('从侧栏重新进入媒体管理时回到来源卡概览', () => {
 
   expect(useUiStore.getState()).toMatchObject({ page: 'manage', manageView: 'overview' })
 })
+
+test('指定设置分类与连接进入历史，前进后退保留目的地', () => {
+  useUiStore.getState().goManageView('import')
+  useUiStore.getState().goSettingsSection('openlist', 'connection-a')
+  useUiStore.getState().goSettingsSection('openlist', 'connection-b')
+  expect(useUiStore.getState()).toMatchObject({ page: 'settings', settingsConnectionId: 'connection-b' })
+  useUiStore.getState().goBack()
+  expect(useUiStore.getState()).toMatchObject({ page: 'settings', settingsSection: 'openlist', settingsConnectionId: 'connection-a' })
+  useUiStore.getState().goBack()
+  expect(useUiStore.getState()).toMatchObject({ page: 'manage', manageView: 'import' })
+  useUiStore.getState().goForward()
+  expect(useUiStore.getState()).toMatchObject({ page: 'settings', settingsSection: 'openlist', settingsConnectionId: 'connection-a' })
+})

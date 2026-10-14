@@ -23,5 +23,5 @@ test('switching connection drops stale directory replies and requests the select
   expect(await screen.findByRole('button', { name: '打开文件夹 连接乙目录' })).toBeInTheDocument()
   await act(async () => finishA(result('连接甲迟到目录')))
   expect(screen.queryByRole('button', { name: '打开文件夹 连接甲迟到目录' })).not.toBeInTheDocument()
-  expect(browse).toHaveBeenLastCalledWith('/', 1, false, 100, 'b')
+  expect(browse).toHaveBeenLastCalledWith('/', 1, true, 100, 'b')
 })

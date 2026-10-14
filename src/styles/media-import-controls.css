@@ -13,6 +13,10 @@
 .media-v4-workspace .settings-connection-field { display: grid; gap: 6px; min-width: 0; }
 .media-v4-workspace .settings-connection-field > .fui-Field__label { font-size: 13px; line-height: 20px; }
 .media-v4-workspace .settings-connection-dropdown { width: 100%; max-width: 480px; }
+.media-v4-page .media-v4-mapping-note.is-error { border-color: var(--colorStatusDangerBorder1); }
+.media-v4-page .media-v4-mapping-note.is-error strong { color: var(--colorStatusDangerForeground1); }
+.media-v4-page .media-v4-mapping-note span { overflow-wrap: anywhere; }
+.media-v4-page .workspace-local .fui-Dropdown { min-width: 0; width: 100%; max-width: 480px; }
 .media-v4-hybrid-grid .media-v4-field-copy { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 10px; }
 .media-v4-hybrid-grid .media-v4-field-copy > span:last-child { grid-column: 2; }
 .media-v4-hybrid-grid .media-v4-openlist-browser { margin: 0; }

@@ -20,7 +20,6 @@ import { listenForTreeFileDrop } from './platform/fileDrop';
 
 const WorkDetailPage = lazy(() => import('./pages/WorkDetailPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const PlayerTuningPage = lazy(() => import('./pages/PlayerTuningPage'));
 const MediaManagementPage = lazy(() => import('./pages/MediaManagementPage'));
 const FirstRunSetup = lazy(() => import('./pages/FirstRunSetup'));
 
@@ -233,8 +232,6 @@ export default function App() {
         return <MediaManagementPage />;
       case 'settings':
         return <SettingsPage onOpenSetup={(config) => { setAppConfig(config); setSetupOverride(true); }} />;
-      case 'player-tuning':
-        return <PlayerTuningPage />;
       default:
         return <HomePage />;
     }
@@ -259,7 +256,7 @@ export default function App() {
           </Suspense> : <>
             {setupSaveError && <div role="status" className="first-run-defer-notice">{setupSaveError}</div>}
             <div className="app-page-source-scope" data-source={activeSource}>
-              <Suspense fallback={null}>
+              <Suspense fallback={<LoadingState label="正在打开页面" />}>
                 <div
                   key={visiblePage}
                   className="app-page-transition"

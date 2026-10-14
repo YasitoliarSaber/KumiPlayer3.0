@@ -11,7 +11,6 @@ import { Button, ProgressBar, Spinner } from '@fluentui/react-components'
 import { CheckmarkCircle24Filled, ChevronDown24Regular, ChevronRight24Regular, DismissCircle24Regular, ErrorCircle24Regular, SpinnerIosRegular, Warning24Regular } from '@fluentui/react-icons'
 import type { V4ExecutionProgress, V4WorkExecutionDetail, V4WorkProgressUnit } from '../../api/mediaV4'
 import { STAGE_LABELS, WORK_PROGRESS_LABELS, sortWorkUnits } from '../../lib/mediaSummary'
-import TmdbImageConnectionPanel from '../settings/TmdbImageConnectionPanel'
 
 export interface V4ExecutionProgressProps {
   progress: V4ExecutionProgress
@@ -572,9 +571,6 @@ export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingW
           <ErrorCircle24Regular aria-hidden="true" />
           <span>媒体库更新阶段未能完成，请检查资料和发布任务后重试。</span>
         </div>
-      )}
-      {progress.work_units.some((unit) => unit.artwork?.status === 'failed') && (
-        <TmdbImageConnectionPanel failureOnly revisionKey={progress.revision_id} />
       )}
       <div className="media-v4-work-progress-list" aria-label="作品进度">
         {active.map((unit) => renderWorkUnit(unit))}

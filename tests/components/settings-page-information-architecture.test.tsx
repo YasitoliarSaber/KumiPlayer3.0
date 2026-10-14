@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import SettingsPage from '../../src/pages/SettingsPage';
+import { openlistApi } from '../../src/api/openlist';
 import { pickFolder } from '../../src/platform/folderPicker';
 vi.mock('../../src/platform/folderPicker', () => ({ pickFolder: vi.fn(), pickFile: vi.fn() }));
 
@@ -55,6 +56,8 @@ vi.mock('../../src/stores/ui', () => ({
   useUiStore: (selector?: (state: unknown) => unknown) => {
     const state = {
       appearanceMode: 'fluent',
+      settingsSection: 'bangumi',
+      setSettingsSection: vi.fn(),
       ongoingCategoryName: '新番',
       setOngoingCategoryName: api.setOngoingCategoryName,
       setAppearanceMode: vi.fn(),
@@ -65,7 +68,7 @@ vi.mock('../../src/stores/ui', () => ({
   },
 }));
 vi.mock('../../src/components/settings/OpenListSettingsPanel', () => ({
-  default: ({ config }: { config: { openlist_server_url: string } }) => <div data-testid="openlist-settings-panel">既有 OpenList 连接设置<span>{config.openlist_server_url}</span></div>,
+  default: ({ config, onTestConnection }: { config: { openlist_server_url: string }; onTestConnection: (payload: object) => Promise<unknown> }) => <div data-testid="openlist-settings-panel">既有 OpenList 连接设置<span>{config.openlist_server_url}</span><button onClick={() => void onTestConnection({ server_url: config.openlist_server_url, remote_root: '/', username: '', password: '' })}>模拟连接检测</button></div>,
 }));
 vi.mock('../../src/components/settings/OpenListSourceRoutes', () => ({
   default: () => <div data-testid="openlist-source-routes">既有 OpenList 来源目录</div>,
@@ -95,6 +98,15 @@ const config = {
 };
 
 describe('SettingsPage 信息架构', () => {
+  test('连接检测回调只返回结果，反馈交给当前连接面板而不绕过生命周期保护', async () => {
+    vi.mocked(openlistApi.testConnection).mockResolvedValueOnce({ ok: false, code: 'root_not_found', phase: 'list', message: '迟到的连接检测失败' });
+    render(<SettingsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'WebDAV 目录' }));
+    fireEvent.click(screen.getByRole('button', { name: '模拟连接检测' }));
+    await waitFor(() => expect(openlistApi.testConnection).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.getByRole('button', { name: '模拟连接检测' })).toBeEnabled());
+    expect(screen.queryByText('迟到的连接检测失败')).not.toBeInTheDocument();
+  });
   test('令牌输入和数值设置具有可访问标签，保存仍只修改对应字段', async () => {
     render(<SettingsPage />);
     expect(await screen.findByLabelText('Bangumi 个人访问令牌')).toHaveAttribute('type', 'password');
@@ -190,10 +202,10 @@ describe('SettingsPage 信息架构', () => {
     };
   });
 
-  test('OpenList 设置导航定位到既有 OpenList 面板，媒体来源不再重复展示', async () => {
+  test('WebDAV 目录导航定位到既有 OpenList 面板，媒体来源不再重复展示', async () => {
     render(<SettingsPage />);
 
-    const openListNavigation = await screen.findByRole('button', { name: /OpenList 设置/ });
+    const openListNavigation = await screen.findByRole('button', { name: /WebDAV 目录/ });
     const openListSection = document.getElementById('settings-panel-openlist');
     const sourceSection = document.getElementById('settings-panel-sources');
 
@@ -215,7 +227,7 @@ describe('SettingsPage 信息架构', () => {
       { ...config, connection_id: 'legacy', name: '连接甲', openlist_routes: [] }, b,
     ] });
     render(<SettingsPage />);
-    fireEvent.click(await screen.findByRole('button', { name: 'OpenList 设置' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'WebDAV 目录' }));
     fireEvent.click(await screen.findByRole('combobox', { name: 'OpenList 连接' }));
     fireEvent.click(await screen.findByRole('option', { name: '连接乙' }));
     expect(await screen.findByText('https://second.example.test')).toBeVisible();
@@ -305,7 +317,7 @@ describe('SettingsPage 信息架构', () => {
   test('隐藏构建与赞助信息，并将播放器状态收敛为用户可理解的结果', async () => {
     render(<SettingsPage />);
 
-    await screen.findByRole('button', { name: /OpenList 设置/ });
+    await screen.findByRole('button', { name: /WebDAV 目录/ });
     fireEvent.click(screen.getByRole('button', { name: /^播放$/ }));
 
     expect(screen.queryByText('构建来源')).not.toBeInTheDocument();
@@ -369,7 +381,7 @@ describe('SettingsPage 信息架构', () => {
     HTMLElement.prototype.scrollTo = scrollTo;
     render(<div className="app-main"><SettingsPage /></div>);
 
-    fireEvent.click(await screen.findByRole('button', { name: /OpenList 设置/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /WebDAV 目录/ }));
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'auto' });
     expect(document.getElementById('settings-panel-openlist')).toBeVisible();
@@ -382,7 +394,7 @@ describe('SettingsPage 信息架构', () => {
     const mounts = screen.getByRole('region', { name: '目录树播放位置' });
     expect(within(mounts).getByRole('textbox', { name: '百度网盘挂载位置' })).toBeVisible();
     expect(within(mounts).queryByRole('textbox', { name: 'TXT 默认选择目录' })).not.toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: '本地扫描目录' })).toBeVisible();
+    expect(screen.getByRole('textbox', { name: '目录 1 路径' })).toBeVisible();
     expect(screen.getByLabelText('TXT 默认选择目录')).not.toBeVisible();
     expect(screen.getByRole('button', { name: '检查配置目录', hidden: true })).not.toBeVisible();
     expect(screen.queryByRole('heading', { name: '重新配置基础来源' })).not.toBeInTheDocument();
@@ -407,7 +419,7 @@ describe('SettingsPage 信息架构', () => {
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
     fireEvent.click(screen.getByText('TXT 文件选择', { selector: 'summary h3' }));
-    for (const name of ['115 网盘挂载位置', '百度网盘挂载位置', '夸克网盘挂载位置', '本地扫描目录', 'TXT 默认选择目录']) {
+    for (const name of ['115 网盘挂载位置', '百度网盘挂载位置', '夸克网盘挂载位置', '目录 1 路径', 'TXT 默认选择目录']) {
       expect(screen.getByRole('button', { name: `选择${name}` })).toBeVisible();
     }
     const input = screen.getByRole('textbox', { name: '115 网盘挂载位置' });

@@ -43,10 +43,10 @@ test('全局 TXT 拖放仍只进入 V4 媒体导入页', () => {
   assert.doesNotMatch(page, /DroppedTreeDialog|importsApi|mediaPresetsApi/);
 });
 
-test('低频页面保持按需加载且不显示旧准备中遮罩', () => {
+test('低频页面保持按需加载并显示轻量加载反馈', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   assert.match(app, /lazy\(\(\) => import\('\.\/pages\/MediaManagementPage'\)\)/);
-  assert.match(app, /<Suspense fallback=\{null\}>/);
+  assert.match(app, /<Suspense fallback=\{<LoadingState label="正在打开页面" \/>\}>/);
   assert.doesNotMatch(app, /正在准备页面|正在载入界面组件/);
 });
 

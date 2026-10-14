@@ -1,0 +1,12 @@
+@layer components {
+  .kp-action-toast {
+    position: fixed;
+    z-index: 1100;
+    right: 24px;
+    bottom: 24px;
+    width: min(480px, calc(100vw - 32px));
+    background: transparent;
+  }
+  .kp-action-toast .fui-MessageBar { box-shadow: var(--shadow-flyout); overflow-wrap: anywhere; }
+  @media (max-width: 640px) { .kp-action-toast { right: 16px; bottom: 16px; } }
+}

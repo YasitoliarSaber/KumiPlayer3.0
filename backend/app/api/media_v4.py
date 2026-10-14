@@ -18,7 +18,12 @@ from app.core.config import load_config, resolve_openlist_credentials
 from app.core.paths import get_data_dir
 from app.integrations.openlist.client import normalize_remote_path
 from app.integrations.openlist.models import OpenListError
-from app.integrations.openlist.providers import derive_local_path, provider_for_remote
+from app.integrations.openlist.providers import (
+    OpenListRouteConfig,
+    derive_local_path,
+    provider_for_remote,
+    resolve_local_path,
+)
 from app.media_v4.domain.models import SourceEvidence
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.jobs.scrape import V4ScrapeService
@@ -199,6 +204,7 @@ class SourceScanRequest(BaseModel):
     tree_mapping_scope: str = ""
     tree_mapping_choice: str = ""
     tree_verify_paths: bool = True
+    openlist_mapping_choice: str = ""
     scan_mode: Literal["auto", "full", "incremental"] = "auto"
     revision_id: str = ""
     source_display_name: str = ""
@@ -229,7 +235,7 @@ def _mapped_openlist_playback_root(config, remote_root: str) -> str:
     if not str(config.openlist_mount_root or "").strip():
         raise HTTPException(status_code=409, detail="当前内容来源尚未配置本地挂载路径，请先在设置页完成来源映射")
     try:
-        return derive_local_path(config.openlist_mount_root, _remote_root(config), remote_root)
+        return resolve_local_path(config.openlist_mount_root, _remote_root(config), remote_root, list(config.openlist_routes or []))
     except (ValueError, OpenListError):
         raise HTTPException(status_code=409, detail="OpenList 目录无法映射到本地，请核对设置中的远端根目录与本地挂载位置") from None
 
@@ -397,12 +403,14 @@ def _configured_cloud_roots(config) -> list[str]:
     roots = [
         str(getattr(config, "pan115_root", "") or ""),
         str(getattr(config, "baidu_root", "") or ""),
+        str(getattr(config, "quark_root", "") or ""),
         str(getattr(config, "openlist_mount_root", "") or ""),
     ]
     for route in getattr(config, "openlist_routes", ()) or ():
-        local_path = route.get("local_path", "") if isinstance(route, dict) else getattr(route, "local_path", "")
+        local_path = (route.get("local_root", "") or route.get("local_path", "")) if isinstance(route, dict) else getattr(route, "local_root", "")
         roots.append(str(local_path or ""))
     roots.extend(str(record.openlist_mount_root or "") for record in getattr(config, "openlist_connections", ()))
+    roots.extend(str(route.local_root or "") for record in getattr(config, "openlist_connections", ()) for route in record.openlist_routes)
     return [root for root in roots if root.strip()]
 
 
@@ -421,7 +429,8 @@ def _configured_tree_roots(config, provider: str) -> list[str]:
             prefix = route.get("remote_prefix", "") if isinstance(route, dict) else getattr(route, "remote_prefix", "")
             if enabled and route_provider == provider and prefix:
                 try:
-                    roots.append(derive_local_path(mount_root, remote_root, str(prefix)))
+                    explicit_root = route.get("local_root", "") if isinstance(route, dict) else getattr(route, "local_root", "")
+                    roots.append(derive_local_path(str(explicit_root or mount_root), str(prefix) if explicit_root else remote_root, str(prefix)))
                 except ValueError:
                     # 其他路由不在本次挂载范围内，不能拼接成这个 TXT 的播放位置。
                     continue
@@ -455,7 +464,7 @@ def _tree_mapping_fingerprint(config, roots: list[str], provider: str) -> str:
 
     def routes(items):
         return [{key: r.get(key) if isinstance(r, dict) else getattr(r, key, None)
-                 for key in ("route_id", "provider_id", "remote_prefix", "local_path", "enabled")} for r in items]
+                 for key in ("route_id", "provider_id", "remote_prefix", "local_root", "enabled")} for r in items]
     return hashlib.sha256(json.dumps({
         "provider": provider, "roots": roots,
         "defaults": [str(getattr(config, name, "") or "") for name in ("pan115_root", "baidu_root", "openlist_mount_root", "openlist_remote_root")],
@@ -995,15 +1004,28 @@ def scan_source(request: SourceScanRequest):
                 raise HTTPException(status_code=409, detail="当前 OpenList 目录未匹配已保存的内容来源路由")
             content_provider = routed_provider
             root_id = _source_openlist_root_id(config, username, remote_root, connection_id=request.connection_id)
-            openlist_playback_root = _mapped_openlist_playback_root(config, remote_root)
             baseline = _confirmed_source_evidence(root_id)
+            if request.scan_mode == "incremental" and not baseline:
+                raise HTTPException(status_code=409, detail="此 OpenList 目录尚无已确认基线，请先完成并确认首次完整扫描，或使用 TXT 建立大库基线")
+            from app.media_v4.sources.openlist_playback_mapping import (
+                PlaybackMappingError,
+                choose_mapping,
+                collect_samples,
+            )
+
+            client = _client(config)
+            try:
+                proof = choose_mapping(remote_root=remote_root, mapping_root=_remote_root(config),
+                                       mount_root=config.openlist_mount_root, routes=routes,
+                                       samples=collect_samples(client, remote_root), choice_id=request.openlist_mapping_choice)
+            except PlaybackMappingError as exc:
+                return {"scan_id": "", "root_id": "", "status": "mapping_required", "entries": [],
+                        "path_validation": exc.preview, "scan_mode": request.scan_mode,
+                        "source_mode": "openlist_full"}
+            mapping_routes = [OpenListRouteConfig(**item) for item in proof['routes']]
+            openlist_playback_root = proof['effective_root']
             state = load_active_state(root_id)
             existing_mode = _source_root_mode(root_id)
-            if request.scan_mode == "incremental" and not baseline:
-                raise HTTPException(
-                    status_code=409,
-                    detail="此 OpenList 目录尚无已确认基线，请先完成并确认首次完整扫描，或使用 TXT 建立大库基线",
-                )
             if request.scan_mode == "incremental" or (request.scan_mode == "auto" and baseline):
                 if not state or state.get("remote_root") != remote_root:
                     state = build_tree_baseline_state(root_id, remote_root, baseline)
@@ -1012,26 +1034,26 @@ def scan_source(request: SourceScanRequest):
                 # tree_openlist），未知根才默认回落到 openlist_full。
                 root_source_mode = existing_mode or "openlist_full"
                 scan_id, evidence, next_state, scan_stats = scan_openlist_incremental(
-                    _client(config),
+                    client,
                     baseline=baseline,
                     state=state,
-                    mapping_root=_remote_root(config),
-                    mount_root=config.openlist_mount_root,
+                    mapping_root=proof['mapping_root'],
+                    mount_root=proof['mount_root'],
                     default_provider=content_provider,
-                    routes=routes,
+                    routes=mapping_routes,
                 )
             else:
                 effective_scan_mode = "full"
                 root_source_mode = "openlist_full"
                 directory_observations: dict[str, float | None] = {}
                 scan_id, evidence = scan_openlist_directory(
-                    _client(config),
+                    client,
                     remote_root=remote_root,
-                    mapping_root=_remote_root(config),
-                    mount_root=config.openlist_mount_root,
+                    mapping_root=proof['mapping_root'],
+                    mount_root=proof['mount_root'],
                     root_id=root_id,
                     default_provider=content_provider,
-                    routes=routes,
+                    routes=mapping_routes,
                     directory_observations=directory_observations,
                 )
                 next_state = build_full_scan_state(root_id, remote_root, directory_observations)
@@ -1049,6 +1071,19 @@ def scan_source(request: SourceScanRequest):
                 content_scope=request.content_scope,
             )
             # 根范围核验成功后才保存扫描检查点；失败请求不留下孤立暂存文件。
+            from app.media_v4.sources.source_scan_runner import register_source_scan
+
+            persisted_request = _openlist_scan_request(request, content_provider, remote_root, config, routes, username=username)
+            persisted_request.update(playback_mapping=proof, effective_playback_root=openlist_playback_root)
+            with get_database().connect() as conn:
+                register_source_scan(get_database(), scan_id=scan_id, root_id=root_id,
+                                     scan_kind=effective_scan_mode, source_mode=root_source_mode,
+                                     request=persisted_request, conn=conn)
+                conn.execute("UPDATE source_scans SET status='validated', stage='completed', finished_at=heartbeat_at WHERE scan_id=?", (scan_id,))
+            V4Repository(get_database()).save_scan_evidence_bulk(evidence)
+            with get_database().connect() as conn:
+                conn.execute("UPDATE source_scans SET status='completed', processed_count=?, total_count=? WHERE scan_id=?",
+                             (len(evidence), len(evidence), scan_id))
             stage_scan_state(scan_id, next_state)
             effective_playback_root = openlist_playback_root
         else:
@@ -1241,7 +1276,7 @@ def confirm(revision_id: str):
     )
     try:
         service.validate_playback_paths(revision_id)
-        service.confirm(revision_id)
+        service.confirm(revision_id, require_openlist_mapping=True)
     except (RevisionBlockedError, ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except KeyError as exc:
@@ -1418,9 +1453,6 @@ def _source_evidence_from_row(row) -> SourceEvidence:
         observed_at=str(row["observed_at"] or ""),
         presence_state=str(row["presence_state"] or "present"),
     )
-
-
-@router.get("/sources/drafts")
 
 
 @router.get("/sources/drafts")
@@ -1650,6 +1682,8 @@ def _openlist_scan_request(
 
     return {
         "remote_root": remote_root,
+        "verify_openlist_playback": True,
+        "openlist_mapping_choice": request.openlist_mapping_choice,
         "connection_id": request.connection_id or "legacy",
         **_connection_request_guard(config, username=username),
         "mapping_root": _remote_root(config),
@@ -1661,6 +1695,7 @@ def _openlist_scan_request(
                 "remote_prefix": str(getattr(route, "remote_prefix", "") or ""),
                 "provider_id": str(getattr(route, "provider_id", "") or ""),
                 "enabled": bool(getattr(route, "enabled", True)),
+                "local_root": str(getattr(route, "local_root", "") or ""),
             }
             for route in routes
         ],
@@ -1993,6 +2028,18 @@ def get_durable_scan(scan_id: str, include_entries: bool = False):
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"扫描任务不存在: {scan_id}") from exc
+    with get_database().connect() as conn:
+        row = conn.execute('SELECT request_json FROM source_scan_requests WHERE scan_id=?', (scan_id,)).fetchone()
+    if row:
+        saved_request = json.loads(row[0])
+        if saved_request.get('path_validation'):
+            result['path_validation'] = saved_request['path_validation']
+        elif saved_request.get('playback_mapping'):
+            from app.media_v4.sources.openlist_playback_mapping import mapping_preview
+
+            result['path_validation'] = mapping_preview(saved_request['playback_mapping'])
+        if saved_request.get('effective_playback_root'):
+            result['effective_playback_root'] = saved_request['effective_playback_root']
     return result
 
 
