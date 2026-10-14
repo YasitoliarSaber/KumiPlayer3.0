@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from tests.artwork_fixtures import ready_artwork
 
 
 def _client(tmp_path, monkeypatch):
@@ -514,9 +515,29 @@ def test_preview_confirm_and_library_use_revision_work_and_job_identities(tmp_pa
     confirmed_evidence = media_v4._confirmed_source_evidence("root-api")
     assert [item.relative_path for item in confirmed_evidence] == ["Show/Show.S01E01.mkv"]
 
+    from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.projection.library import V4LibraryProjection
 
-    V4LibraryProjection(media_v4.get_database()).rebuild()  # 测试应用无后台生命周期。
+    database = media_v4.get_database()
+    with database.connect() as conn:
+        work_id = str(conn.execute("SELECT work_id FROM works LIMIT 1").fetchone()["work_id"])
+    # 投影发布要求资料 ready 且海报、背景与正片预览齐备：先跑一次资料作业并
+    # 用共享夹具登记已准备图片，再断言卡片的作品身份；图片门槛自身由
+    # test_v4_artwork_publication_gate.py 覆盖。
+    scrape_job = V4ScrapeService(database).enqueue_for_revision("rev-api")[0]
+    V4ScrapeService(database).process(scrape_job["job_id"], lambda target: {
+        "provider": "tmdb", "provider_id": "42", "metadata_state": "ready", "title": "Show",
+        "poster_url": "https://image.tmdb.org/poster.jpg",
+        "fanart_url": "https://image.tmdb.org/fanart.jpg",
+        "episode_mappings": [{
+            "episode_id": episode["episode_id"], "provider_episode_id": "1",
+            "title": "Episode", "still_url": "https://image.tmdb.org/still.jpg",
+        } for episode in target["episodes"]],
+    })
+    with database.connect() as conn:
+        ready_artwork(conn, work_id)
+
+    V4LibraryProjection(database).rebuild()  # 测试应用无后台生命周期。
     library = client.get("/api/v4/library")
     assert library.status_code == 200, library.text
     assert library.json()["cards"][0]["title"] == "Show"
@@ -1664,6 +1685,10 @@ def test_metadata_manual_confirm_requeues_scrape_and_refreshes_projection(tmp_pa
     assert metadata["mapped_count"] == metadata["total_count"] == 1
     from app.media_v4.projection.library import V4LibraryProjection
 
+    # 资料已 ready；投影发布还要求海报、背景与正片预览齐备，用共享夹具
+    # 登记已准备图片，不绕过图片门槛。
+    with media_v4._database.connect() as conn:
+        ready_artwork(conn, work_id)
     card = V4LibraryProjection(media_v4._database).rebuild().cards[0]
     assert card["metadata"]["metadata_state"] == "ready"
     assert card["metadata"]["episode_mappings"][0]["title"] == "Online Episode"

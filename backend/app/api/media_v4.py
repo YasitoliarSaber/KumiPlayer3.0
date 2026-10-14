@@ -1010,6 +1010,9 @@ def scan_source(request: SourceScanRequest):
             if not config.openlist_mount_root:
                 raise HTTPException(status_code=409, detail="OpenList 导入需要先配置本地挂载根，才能建立可播放 Asset")
             remote_root = normalize_remote_path(request.root_path.strip() or _remote_root(config))
+            # 与 durable 入口共用同一失败闭锁：挂载根解析不了本地路径时，
+            # 在接触客户端与登记扫描前就以 409 拒绝，不把配置冲突伪装成失联。
+            _mapped_openlist_playback_root(config, remote_root)
             routes = _configured_routes(config)
             route_id, routed_provider = provider_for_remote(routes, remote_root)
             if not route_id:
