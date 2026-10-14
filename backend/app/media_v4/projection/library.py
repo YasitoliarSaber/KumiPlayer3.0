@@ -23,7 +23,7 @@ COMPACT_METADATA_FIELDS = (
     'provider', 'original_title', 'rating', 'plot', 'genres', 'sources', 'show_type', 'card_type',
     'regular_season_count', 'special_season_count', 'latest_episode_number', 'poster_url', 'fanart_url', 'clearlogo_url',
     'local_poster_path', 'local_fanart_path', 'local_clearlogo_path', 'clearlogo_path',
-    'metadata_state', 'preserve_identity_title', 'title', 'related_works', 'collection_related_works', 'collections', 'content_scope',
+    'metadata_state', 'preserve_identity_title', 'title', 'related_works', 'collections', 'content_scope',
 )
 
 
@@ -434,9 +434,7 @@ class V4LibraryProjection:
                     metadata["show_type"] = show_type
                     metadata["card_type"] = card_type
                     metadata['content_scope'] = row['content_scope'] or ''
-                    metadata.update(local_collections.get(str(row["work_id"]), {
-                        "collections": [], "collection_related_works": [],
-                    }))
+                    metadata.update(local_collections.get(str(row["work_id"]), {"collections": []}))
                     metadata["preserve_identity_title"] = preserve_identity_title(
                         str(row["work_id"]), row["media_type"], metadata, identity_title_ids, shared_tv_ids,
                     )

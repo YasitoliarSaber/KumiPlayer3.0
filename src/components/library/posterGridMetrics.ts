@@ -33,6 +33,13 @@ export interface PosterGridMetrics {
   rowHeight: number;
 }
 
+/** 标题字号只随网格测得的卡片宽度变化，不在滚动帧中测量或更新。 */
+export function posterCardTitleFontSize(columnWidth: number): number {
+  if (!Number.isFinite(columnWidth) || columnWidth <= 0) return 16;
+  const size = 13 + ((columnWidth - 150) / 150) * 4;
+  return Math.round(Math.max(13, Math.min(17, size)) * 10) / 10;
+}
+
 const MIN_CARD_WIDTH: Record<PosterGridImageMode, number> = {
   poster: 140,
   fanart: 190,

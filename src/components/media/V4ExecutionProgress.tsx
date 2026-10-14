@@ -21,6 +21,8 @@ export interface V4ExecutionProgressProps {
   onRetryMetadata?: (workId: string) => void
   onRetryArtifacts?: (workId: string) => void
   fetchWorkDetail?: (revisionId: string, workId: string, episodeOffset?: number) => Promise<V4WorkExecutionDetail>
+  artworkReadyCount?: number
+  artworkTotalCount?: number
 }
 
 const STAGE_KEYS = ['metadata', 'artwork', 'projection'] as const
@@ -51,7 +53,7 @@ function attentionSummary(unit: V4WorkProgressUnit): string {
   return unit.metadata_reason || '在线资料待处理。'
 }
 
-function StageSummary({ stageKey, progress }: { stageKey: (typeof STAGE_KEYS)[number]; progress: V4ExecutionProgress }) {
+function StageSummary({ stageKey, progress, artworkReadyCount, artworkTotalCount }: { stageKey: (typeof STAGE_KEYS)[number]; progress: V4ExecutionProgress; artworkReadyCount?: number; artworkTotalCount?: number }) {
   const summary = progress.stage_summary[stageKey]
   if (!summary) return null
   const done = summary.succeeded + summary.failed + summary.cancelled
@@ -59,7 +61,9 @@ function StageSummary({ stageKey, progress }: { stageKey: (typeof STAGE_KEYS)[nu
   return (
     <div className={`media-v4-stage-pill media-v4-stage-${summary.status}`}>
       <strong>{STAGE_LABELS[stageKey]}</strong>
-      <span>{summary.total > 0 ? `${done}/${summary.total} 个任务${attention > 0 ? ` · ${attention} 待处理` : ''}` : '未开始'}</span>
+      <span>{stageKey === 'artwork' && artworkTotalCount != null
+        ? `图片 ${artworkReadyCount ?? 0}/${artworkTotalCount} 张${attention > 0 ? ` · ${attention} 待处理` : ''}`
+        : summary.total > 0 ? `${done}/${summary.total} 个任务${attention > 0 ? ` · ${attention} 待处理` : ''}` : '未开始'}</span>
     </div>
   )
 }
@@ -127,7 +131,7 @@ function candidateDecisionLabel(decision: string): string {
   return decision || '未记录候选决策'
 }
 
-function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loadMoreEpisodes, busyRetryId, onRetry, resolvingWorkId, onResolveMetadata, onRetryMetadata, onRetryArtifacts }: {
+function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loadMoreEpisodes, busyRetryId, onRetry, resolvingWorkId, onResolveMetadata, onRetryMetadata, onRetryArtifacts, expanded, diagnosticsExpanded, onExpandedChange, onDiagnosticsExpandedChange }: {
   unit: V4WorkProgressUnit
   getWorkDetail: (workId: string, cacheKey: string) => WorkDetailState | undefined
   requestWorkDetail: (workId: string, cacheKey: string) => void
@@ -139,10 +143,12 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
   onResolveMetadata: (workId: string) => void
   onRetryMetadata?: (workId: string) => void
   onRetryArtifacts?: (workId: string) => void
+  expanded: boolean
+  diagnosticsExpanded: boolean
+  onExpandedChange: (expanded: boolean) => void
+  onDiagnosticsExpandedChange: (expanded: boolean) => void
 }) {
   // 处理入口常驻摘要；详细结果只在用户主动展开时读取。
-  const [expanded, setExpanded] = useState(false)
-  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false)
   const failedJob = unit.overall_status === 'failed'
     ? (unit.metadata.status === 'failed' ? unit.metadata : null)
     : null
@@ -222,8 +228,8 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
   return (
     <article className={`media-v4-work-progress media-v4-work-progress-${unit.overall_status}`} aria-label={unit.title}>
       <button type="button" className="media-v4-work-progress-head" aria-expanded={expanded} aria-controls={detailPanelId} onClick={() => {
-        if (expanded) setDiagnosticsExpanded(false)
-        setExpanded(!expanded)
+        if (expanded) onDiagnosticsExpandedChange(false)
+        onExpandedChange(!expanded)
       }}>
         <span className="media-v4-work-progress-state" aria-hidden="true">
           {artworkPreparing ? <SpinnerIosRegular /> : unit.overall_status === 'completed' ? <CheckmarkCircle24Filled />
@@ -311,7 +317,7 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
                     </span>
                   ))}
                 </div>}
-                <Button size="small" appearance="subtle" aria-expanded={diagnosticsExpanded} aria-controls={`${detailPanelId}-diagnostics`} onClick={() => setDiagnosticsExpanded((value) => !value)}>
+                <Button size="small" appearance="subtle" aria-expanded={diagnosticsExpanded} aria-controls={`${detailPanelId}-diagnostics`} onClick={() => onDiagnosticsExpandedChange(!diagnosticsExpanded)}>
                   {diagnosticsExpanded ? '收起诊断详情' : '查看诊断详情'}
                 </Button>
               </div>
@@ -449,8 +455,10 @@ function WorkUnit({ unit, getWorkDetail, requestWorkDetail, retryWorkDetail, loa
   )
 }
 
-export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingWorkId, onResolveMetadata, onRetryMetadata, onRetryArtifacts, fetchWorkDetail }: V4ExecutionProgressProps) {
+export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingWorkId, onResolveMetadata, onRetryMetadata, onRetryArtifacts, fetchWorkDetail, artworkReadyCount, artworkTotalCount }: V4ExecutionProgressProps) {
   const [completedOpen, setCompletedOpen] = useState(false)
+  const [workUiState, setWorkUiState] = useState<Record<string, { expanded: boolean; diagnosticsExpanded: boolean }>>({})
+  const previousView = useRef<{ revisionId: string; order: string[]; activeIds: Set<string> }>({ revisionId: '', order: [], activeIds: new Set() })
   // 3.1：作品执行详情缓存。键 = workId + 两个任务状态；任务重新执行后
   // 状态变化使旧键失效，下一次展开重新读取。
   const [detailStates, setDetailStates] = useState<Map<string, WorkDetailState>>(new Map())
@@ -526,9 +534,24 @@ export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingW
         })
       })
   }
+  const browsingDetails = Object.values(workUiState).some(state => state.expanded)
   const sorted = sortWorkUnits(progress.work_units)
-  const active = sorted.filter((unit) => unit.overall_status !== 'completed' || isArtworkPreparing(unit))
-  const completed = sorted.filter((unit) => unit.overall_status === 'completed' && !isArtworkPreparing(unit))
+  if (browsingDetails && previousView.current.revisionId === progress.revision_id) {
+    const positions = new Map(previousView.current.order.map((id, index) => [id, index]))
+    sorted.sort((left, right) => (positions.get(left.work_id) ?? Infinity) - (positions.get(right.work_id) ?? Infinity))
+  }
+  const completedUnits = sorted.filter((unit) => unit.overall_status === 'completed' && !isArtworkPreparing(unit))
+  // 用户正在查看的作品保留在当前列表位置；后台状态更新不会把展开详情移入
+  // 折叠的“已完成”分组，也不会替换当前焦点作品。
+  const active = sorted.filter((unit) => unit.overall_status !== 'completed' || isArtworkPreparing(unit) || workUiState[unit.work_id]?.expanded
+    || (browsingDetails && previousView.current.revisionId === progress.revision_id && previousView.current.activeIds.has(unit.work_id)))
+  const activeIds = new Set(active.map(unit => unit.work_id))
+  const completed = completedUnits.filter((unit) => !activeIds.has(unit.work_id))
+  useEffect(() => {
+    if (!browsingDetails || previousView.current.revisionId !== progress.revision_id) {
+      previousView.current = { revisionId: progress.revision_id, order: sorted.map(unit => unit.work_id), activeIds }
+    }
+  })
   const visibleCompleted = completedOpen ? completed : completed.slice(0, COMPLETED_PREVIEW_COUNT)
   const publicationStages = STAGE_KEYS.map((key) => progress.stage_summary[key]).filter((stage) => stage != null)
   const publicationTotal = publicationStages.reduce((total, stage) => total + stage.total, 0)
@@ -554,6 +577,10 @@ export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingW
       onResolveMetadata={onResolveMetadata}
       onRetryMetadata={onRetryMetadata}
       onRetryArtifacts={onRetryArtifacts}
+      expanded={workUiState[unit.work_id]?.expanded ?? false}
+      diagnosticsExpanded={workUiState[unit.work_id]?.diagnosticsExpanded ?? false}
+      onExpandedChange={(expanded) => setWorkUiState((current) => ({ ...current, [unit.work_id]: { ...current[unit.work_id], expanded, diagnosticsExpanded: expanded ? (current[unit.work_id]?.diagnosticsExpanded ?? false) : false } }))}
+      onDiagnosticsExpandedChange={(diagnosticsExpanded) => setWorkUiState((current) => ({ ...current, [unit.work_id]: { ...current[unit.work_id], expanded: current[unit.work_id]?.expanded ?? false, diagnosticsExpanded } }))}
     />
   )
 
@@ -564,7 +591,7 @@ export function V4ExecutionProgress({ progress, busyRetryId, onRetry, resolvingW
       </div>
       <ProgressBar value={publicationTotal > 0 ? publicationDone / publicationTotal : 0} max={1} aria-label="总体进度" />
       <div className="media-v4-stage-pills" role="group" aria-label="用户阶段">
-        {STAGE_KEYS.map((stageKey) => <StageSummary key={stageKey} stageKey={stageKey} progress={progress} />)}
+        {STAGE_KEYS.map((stageKey) => <StageSummary key={stageKey} stageKey={stageKey} progress={progress} artworkReadyCount={artworkReadyCount} artworkTotalCount={artworkTotalCount} />)}
       </div>
       {projectionFailed && (
         <div className="media-v4-projection-error" role="alert">

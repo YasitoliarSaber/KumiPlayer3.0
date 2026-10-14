@@ -141,6 +141,9 @@ class AppConfig:
     # 追更更新只消费显式新番来源，默认不自动访问来源。
     ongoing_update_on_startup: bool = False
     ongoing_update_interval_minutes: int = 0
+    ongoing_update_schedule_mode: str = "interval"
+    ongoing_update_time: str = "09:00"
+    ongoing_update_weekday: int = 0
 
     # 心跳
     heartbeat_enabled: bool = True

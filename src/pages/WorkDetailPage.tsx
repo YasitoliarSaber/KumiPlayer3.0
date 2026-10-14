@@ -28,6 +28,7 @@ import { useDismissiblePopover } from '../hooks/useDismissiblePopover';
 import { listenForVideoFileDrop } from '../platform/fileDrop';
 import DecodedImage from '../components/ui/DecodedImage';
 import DetailSeasonPicker from '../components/media/DetailSeasonPicker';
+import WorkCustomizationTags from '../components/detail/WorkCustomizationTags';
 import {
   mergeActiveSessionProgress,
   resolvePlaybackActionLabel,
@@ -851,10 +852,10 @@ export default function WorkDetailPage() {
   const seasons = orderDetailSeasons(work.seasons || []);
   const currentSeason = findSelectedSeason(work, selectedSeasonKey, selectedSeasonNumber);
   const explicitRelatedWorks = Array.isArray(work.related_works) ? work.related_works : [];
-  const relatedWorks = mergeRelatedWorks(
-    explicitRelatedWorks,
-    explicitRelatedWorks.length > 0 ? [] : buildRelatedWorksFallback(work, works),
-  );
+  // 关联只消费后端已确认的在线关系，空关系不按标题或文件夹猜测。
+  const relatedWorks = explicitRelatedWorks.filter((item: any, index: number, items: any[]) =>
+    item?.work_id && (item.local_poster_path || item.poster_path)
+    && items.findIndex(other => other?.work_id === item.work_id) === index);
   const isMovie = work.media_type === 'movie'
     || work.show_type === 'anime_movie'
     || work.show_type === 'live_movie';
@@ -924,7 +925,6 @@ export default function WorkDetailPage() {
     : 'Bangumi 未匹配';
   const bangumiStatusLabel = auxiliaryReady ? resolvedBangumiStatusLabel : 'Bangumi 状态载入中';
   const bangumiCollectionLabel = auxiliaryReady && bangumiCollection ? ` · ${collectionLabel(bangumiCollection.type)}` : '';
-  const hasDetailTags = workSources.length > 0 || titleTags.length > 0 || (isSeries && seasons.length > 0) || (!isSeries && !!work.year) || work.rating > 0 || (workDetailV4Capabilities.bangumiBinding && !!bangumiStatusLabel);
   const manualScrapeScope = currentSeason
     ? `${currentSeason.label || `第 ${currentSeason.season_number} 季`} · ${normalizedGroupType(currentSeason.group_type) || 'season'}`
     : (isSeries ? '当前作品' : '电影条目');
@@ -1481,26 +1481,36 @@ export default function WorkDetailPage() {
           )}
           {work.content_scope === 'ongoing' && <span>追更中</span>}
         </div>
-        {hasDetailTags && (
-          <div className="detail-hero-tags">
-            {workSources.map((source) => <Tag strong key={source}>{workSourceLabel(source, work)}</Tag>)}
-            {titleTags.slice(0, 5).map((tag: string) => <Tag key={tag}>{tag}</Tag>)}
-            {workDetailV4Capabilities.bangumiBinding && <button
-              ref={bangumiTriggerRef}
-              type="button"
-              className={`detail-sync-status ${auxiliaryReady && bangumiMatch ? 'matched' : auxiliaryReady ? '' : 'loading'}`}
-              disabled={!auxiliaryReady}
-              aria-busy={!auxiliaryReady}
-              aria-expanded={bangumiPanelOpen}
-              aria-haspopup="dialog"
-              aria-controls="detail-bangumi-panel"
-              onClick={() => setBangumiPanelOpen((open) => !open)}
-            >
-              {auxiliaryReady && bangumiMatch ? <CheckCircle2 size={14} /> : <Circle size={14} />}
-              {bangumiStatusLabel}{bangumiCollectionLabel}
-            </button>}
-          </div>
-        )}
+        <div className="detail-hero-tags">
+          <WorkCustomizationTags
+            key={work.work_id}
+            workId={work.work_id}
+            sources={workSources.map((source) => workSourceLabel(source, work))}
+            typeTags={titleTags}
+            metadataStatus={(
+              <>
+                {work.metadata_source && <Tag>{`资料：${metadataSourceLabel(work.metadata_source)}`}</Tag>}
+                {work.refresh_status && <Tag>{`同步：${metadataRefreshLabel(work.refresh_status)}`}</Tag>}
+                {workDetailV4Capabilities.bangumiBinding && (
+                  <button
+                    ref={bangumiTriggerRef}
+                    type="button"
+                    className={`detail-sync-status ${auxiliaryReady && bangumiMatch ? 'matched' : auxiliaryReady ? '' : 'loading'}`}
+                    disabled={!auxiliaryReady}
+                    aria-busy={!auxiliaryReady}
+                    aria-expanded={bangumiPanelOpen}
+                    aria-haspopup="dialog"
+                    aria-controls="detail-bangumi-panel"
+                    onClick={() => setBangumiPanelOpen((open) => !open)}
+                  >
+                    {auxiliaryReady && bangumiMatch ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+                    {bangumiStatusLabel}{bangumiCollectionLabel}
+                  </button>
+                )}
+              </>
+            )}
+          />
+        </div>
         {work.plot && (
           <button
             type="button"
@@ -2123,6 +2133,21 @@ function Tag({ children, strong = false }: { children: ReactNode; strong?: boole
   );
 }
 
+function metadataSourceLabel(source: string) {
+  if (source === 'retained') return '保留资料';
+  if (source === 'tmdb') return 'TMDB';
+  if (source === 'anilist') return 'AniList';
+  return source;
+}
+
+function metadataRefreshLabel(status: string) {
+  if (status === 'failed') return '上次刷新失败';
+  if (status === 'pending' || status === 'queued') return '等待同步';
+  if (status === 'running') return '正在同步';
+  if (status === 'ready' || status === 'success' || status === 'completed') return '已同步';
+  return status;
+}
+
 function categoryLabel(showType: string) {
   if (showType === 'anime_series') return '番剧';
   if (showType === 'anime_movie') return '动画电影';
@@ -2329,93 +2354,4 @@ function bangumiSubjectImageUrl(subject: any) {
   const image = direct || fromImages;
   if (!image) return '';
   return buildBangumiImageUrl(String(image), 'subject');
-}
-
-function buildRelatedWorksFallback(work: any, works: any[]) {
-  const currentKeys = collectRelatedTitleKeys(work);
-  if (!currentKeys.size) return [];
-
-  return (works || [])
-    .filter((item) => item && item.work_id && item.work_id !== work.work_id && item.source === work.source)
-    .map((item) => {
-      const candidateKeys = collectRelatedTitleKeys(item);
-      const sameSeries = currentKeys.has(`series:${relatedTitleKey(item.series_group)}`) || candidateKeys.has(`series:${relatedTitleKey(work.series_group)}`);
-      const overlap = hasRelatedTitleOverlap(currentKeys, candidateKeys);
-      if (!sameSeries && !overlap) return null;
-
-      return {
-        work_id: item.work_id,
-        title: item.title || item.original_title || item.work_title || '',
-        year: item.year ?? null,
-        card_type: item.card_type || '',
-        relation_type: item.card_type === 'standalone' ? 'movie' : (item.group_type || 'related'),
-        poster_path: item.poster_path || '',
-        fanart_path: item.fanart_path || '',
-        show_type: item.show_type || '',
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 12);
-}
-
-function collectRelatedTitleKeys(work: any) {
-  const keys = new Set<string>();
-  for (const value of [work?.title, work?.original_title, work?.series_group]) {
-    const key = relatedTitleKey(value);
-    if (key) keys.add(key);
-    const stripped = relatedTitleKey(stripRelatedSuffixes(value));
-    if (stripped) keys.add(stripped);
-  }
-  const series = relatedTitleKey(work?.series_group);
-  if (series) keys.add(`series:${series}`);
-  return keys;
-}
-
-function hasRelatedTitleOverlap(a: Set<string>, b: Set<string>) {
-  for (const key of a) {
-    if (b.has(key)) return true;
-  }
-  const aValues = [...a];
-  const bValues = [...b];
-  for (const left of aValues) {
-    for (const right of bValues) {
-      if (left === right) return true;
-      if (left.length >= 3 && right.length >= 3 && (left.startsWith(right) || right.startsWith(left))) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function relatedTitleKey(value: any) {
-  const text = stripRelatedSuffixes(value);
-  if (!text) return '';
-  return text
-    .toLowerCase()
-    .replace(/[·・]/g, ' ')
-    .replace(/[._/\\-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function stripRelatedSuffixes(value: any) {
-  return cleanDisplayTitle(
-    String(value || '')
-      .replace(/\s*[\[(（【][^\])）】]*[\])）】]\s*$/g, ' ')
-      .replace(/\s*(?:剧场版|电影版|电影|movie|film|ova|oad|oav|特别篇|番外篇|总集篇|前篇|后篇|上篇|下篇|sp|specials?)\s*$/gi, '')
-      .replace(/\s*(?:第\s*\d+\s*季|season\s*\d+|s\d{1,2})\s*$/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim(),
-    ''
-  );
-}
-
-function mergeRelatedWorks(primary: any[], fallback: any[]) {
-  const map = new Map<string, any>();
-  for (const item of [...primary, ...fallback]) {
-    if (!item?.work_id || map.has(item.work_id)) continue;
-    map.set(item.work_id, item);
-  }
-  return [...map.values()];
 }

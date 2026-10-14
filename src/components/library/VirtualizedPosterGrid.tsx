@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
 import PosterCard from './PosterCard';
 import { useUiStore } from '../../stores/ui';
-import { calculatePosterGridMetrics } from './posterGridMetrics';
+import { calculatePosterGridMetrics, posterCardTitleFontSize } from './posterGridMetrics';
 import { PosterImageContext, PosterImageLifecycle } from './posterImageLifecycle';
 import { recordScrollDiagnostic, subscribeScrollDiagnostics } from '../../utils/scrollDiagnostics';
 import { startPosterPresentation } from './posterPresentation';
@@ -194,6 +194,7 @@ export default function VirtualizedPosterGrid({
 
   // 分类页卡片走派生缩略图，降低本地 w780 原图的解码与内存开销
   const thumbnailWidth = columnWidth > 0 ? pickThumbnailWidth(columnWidth, seriesCardImageMode === 'fanart') : 0;
+  const titleFontSize = posterCardTitleFontSize(columnWidth);
 
   const firstRow = virtualRows.length > 0 ? virtualRows[0].index : -1;
   const lastRow = virtualRows.length > 0 ? virtualRows[virtualRows.length - 1].index : -1;
@@ -262,6 +263,7 @@ export default function VirtualizedPosterGrid({
                   work={work}
                   recentLabel={recentLabel}
                   thumbnailWidth={thumbnailWidth}
+                  titleFontSize={titleFontSize}
                   deferImage={thumbnailWidth === 0}
                   managedImage
                   localArtworkOnly={localArtworkOnly}

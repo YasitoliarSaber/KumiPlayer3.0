@@ -111,6 +111,7 @@ def list_source_cards(database: V4Database) -> list[dict]:
         bound_assets = defaultdict(set)
         bound_episodes = defaultdict(set)
         bound_evidence_files = defaultdict(set)
+        artwork_counts: dict[str, dict[str, int]] = defaultdict(lambda: {"ready": 0, "total": 0})
         pending_relations: dict[str, int] = defaultdict(int)
         job_rows = []
         if revision_ids:
@@ -136,6 +137,22 @@ def list_source_cards(database: V4Database) -> list[dict]:
                 # 去重才是「已入库的视频文件数」，不能用 asset_id 或 bindings 行数代替。
                 if row["asset_id"] is not None:
                     bound_evidence_files[revision_key].add(str(row["evidence_id"]))
+            # 图片进度按 SQLite 中现有的图片资源需求统计，不把作品/任务数当成图片数。
+            # 普通来源卡 GET 只聚合状态，不触发图片下载、文件扫描或缓存生成。
+            for row in conn.execute(
+                f"""SELECT b.revision_id,
+                           COUNT(DISTINCT b.candidate_id) AS total,
+                           COUNT(DISTINCT CASE WHEN r.state='ready' THEN b.candidate_id END) AS ready
+                    FROM artwork_bindings b
+                    JOIN artwork_resources r ON r.resource_id=b.candidate_id
+                    WHERE b.revision_id IN ({placeholders})
+                    GROUP BY b.revision_id""",
+                revision_ids,
+            ).fetchall():
+                artwork_counts[str(row["revision_id"])] = {
+                    "ready": int(row["ready"] or 0),
+                    "total": int(row["total"] or 0),
+                }
             for row in conn.execute(
                 f"SELECT revision_id, evidence_id, message FROM revision_issues WHERE revision_id IN ({placeholders}) "
                 "AND resolved = 0 AND code = 'unresolved_parent_relation'",
@@ -473,6 +490,8 @@ def list_source_cards(database: V4Database) -> list[dict]:
             "metadata_ready_work_count": metadata_ready_work_count,
             "metadata_ready_current_count": metadata_ready_current_count,
             "metadata_ready_retained_count": metadata_ready_retained_count,
+            "artwork_ready_count": artwork_counts[revision_id]["ready"],
+            "artwork_total_count": artwork_counts[revision_id]["total"],
             "relation_pending_count": pending_relations.get(revision_id, 0) if phase == "execute" else 0,
             "last_error": last_error,
             "deletion_retry_required": deletion_retry_required,

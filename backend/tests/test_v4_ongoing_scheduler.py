@@ -50,9 +50,10 @@ def test_restart_does_not_repeat_the_same_timer_window(tmp_path, monkeypatch):
 
 def test_update_configuration_preserves_legacy_defaults_and_rejects_tight_intervals():
     import pytest
+    from pydantic import ValidationError
+
     from app.api.config import ConfigPatch
     from app.core.config import AppConfig
-    from pydantic import ValidationError
 
     config = AppConfig()
     assert config.ongoing_update_on_startup is False
@@ -60,3 +61,69 @@ def test_update_configuration_preserves_legacy_defaults_and_rejects_tight_interv
     with pytest.raises(ValidationError):
         ConfigPatch(ongoing_update_interval_minutes=1)
     assert ConfigPatch(ongoing_update_interval_minutes=60).ongoing_update_interval_minutes == 60
+
+
+def test_calendar_schedule_uses_local_clock_and_persists_daily_slot(tmp_path, monkeypatch):
+    from app.media_v4.persistence.database import V4Database
+    from app.media_v4.tracking import scheduler
+
+    database = V4Database(tmp_path / "daily.db")
+    database.initialize()
+    config = SimpleNamespace(ongoing_update_on_startup=False, ongoing_update_interval_minutes=0,
+                             ongoing_update_schedule_mode="daily", ongoing_update_time="09:30",
+                             ongoing_update_weekday=0)
+    monkeypatch.setattr(scheduler, "load_config", lambda: config)
+    calls = []
+    monkeypatch.setattr(scheduler, "trigger_updates", lambda database: calls.append(database))
+    # astimezone() 的无参数转换使用运行电脑的时区；夹具也采用同一个本地时区。
+    before = datetime(2026, 10, 14, 9, 29).astimezone()
+    instance = scheduler.OngoingScheduler(database)
+    instance.tick(now=before)
+    assert not calls
+    instance.tick(now=before + timedelta(minutes=1))
+    scheduler.OngoingScheduler(database).tick(now=before + timedelta(hours=6))
+    assert len(calls) == 1
+    instance.tick(now=before + timedelta(days=1, minutes=1))
+    assert len(calls) == 2
+
+
+def test_weekly_schedule_honors_weekday_time_and_off_mode(tmp_path, monkeypatch):
+    from app.media_v4.persistence.database import V4Database
+    from app.media_v4.tracking import scheduler
+
+    database = V4Database(tmp_path / "weekly.db")
+    database.initialize()
+    config = SimpleNamespace(ongoing_update_on_startup=False, ongoing_update_interval_minutes=60,
+                             ongoing_update_schedule_mode="weekly", ongoing_update_time="20:00",
+                             ongoing_update_weekday=2)
+    monkeypatch.setattr(scheduler, "load_config", lambda: config)
+    calls = []
+    monkeypatch.setattr(scheduler, "trigger_updates", lambda database: calls.append(database))
+    instance = scheduler.OngoingScheduler(database)
+    wednesday = datetime(2026, 10, 14, 20, 0).astimezone()
+    instance.tick(now=wednesday - timedelta(days=1))
+    instance.tick(now=wednesday - timedelta(minutes=1))
+    assert not calls
+    instance.tick(now=wednesday)
+    instance.tick(now=wednesday + timedelta(days=1))
+    assert len(calls) == 1
+    instance.tick(now=wednesday + timedelta(days=7))
+    assert len(calls) == 2
+    config.ongoing_update_schedule_mode = "off"
+    instance.tick(now=wednesday + timedelta(days=14))
+    assert len(calls) == 2
+
+
+def test_calendar_config_contract_rejects_invalid_clock_and_weekday():
+    import pytest
+    from pydantic import ValidationError
+
+    from app.api.config import ConfigPatch
+
+    for clock in ("24:00", "09:60", "9:30", "not-a-time"):
+        with pytest.raises(ValidationError):
+            ConfigPatch(ongoing_update_time=clock)
+    with pytest.raises(ValidationError):
+        ConfigPatch(ongoing_update_weekday=7)
+    assert ConfigPatch(ongoing_update_schedule_mode="weekly", ongoing_update_time="20:15",
+                       ongoing_update_weekday=6).ongoing_update_time == "20:15"

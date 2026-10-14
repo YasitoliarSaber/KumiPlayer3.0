@@ -5,12 +5,12 @@ import sqlite3
 from dataclasses import asdict, replace
 
 import pytest
+from backend.tests.test_v4_structure_context import resolve as _resolve
+
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.library import V4LibraryProjection
 from app.media_v4.resolution.candidates import merge_graph
 from app.media_v4.revisions.service import V4RevisionService
-
-from backend.tests.test_v4_structure_context import resolve as _resolve
 
 
 def resolve(paths, **kwargs):
@@ -56,9 +56,9 @@ def test_ordinary_standalone_movie_keeps_online_canonical_title(tmp_path, parsed
 def test_verified_movie_title_is_stable_across_projection_detail_and_refresh(tmp_path, monkeypatch, scope):
     from dataclasses import replace
 
-    from app.api import library_v4
-
     from backend.tests.test_v4_library_projection import _entry
+
+    from app.api import library_v4
 
     db = V4Database(tmp_path / "canonical-title.db")
     db.initialize()
@@ -129,6 +129,24 @@ def test_shared_tv_title_guard_is_identical_in_list_and_detail(tmp_path, monkeyp
         assert library_v4.get_work_detail(work["work_id"])["title"] == work["title"]
 
 
+def test_shared_tv_uses_reliable_chinese_online_title():
+    from app.media_v4.projection.presentation import display_work_title, preserve_identity_title
+
+    metadata = {"title": "来自深渊", "provider": "tmdb", "provider_id": "42",
+                "media_type": "tv", "collections": [{"collection_id": "set"}]}
+    preserve = preserve_identity_title("work", "tv", metadata, {"work"}, {"work"})
+    assert preserve is False
+    assert display_work_title("來自深淵 烈日的黃金鄉", metadata, preserve_identity=preserve) == "来自深渊"
+    assert display_work_title("來自深淵 烈日的黃金鄉", metadata, preserve_identity=preserve,
+                              override={"title": "用户覆盖标题"}) == "用户覆盖标题"
+
+    english_metadata = {**metadata, "title": "ReLIFE"}
+    preserve_english = preserve_identity_title("work", "tv", english_metadata, {"work"}, {"work"})
+    assert preserve_english is True
+    assert display_work_title("ReLIFE 完结篇", english_metadata,
+                              preserve_identity=preserve_english) == "ReLIFE 完结篇"
+
+
 @pytest.mark.parametrize("scope", ["confirmed_parent", "shared_tv_identity"])
 def test_confirmed_child_identity_protects_title_without_collection(tmp_path, scope):
     db = V4Database(tmp_path / "child-title.db")
@@ -196,7 +214,7 @@ def test_confirmed_collection_persists_projects_and_obeys_retirement(tmp_path, m
     first = V4LibraryProjection(db).rebuild()
     assert len(first.cards) == 2
     assert all(card["metadata"]["collections"][0]["title"] == "物语系列" for card in first.cards)
-    assert all(len(card["metadata"]["collection_related_works"]) == 1 for card in first.cards)
+    assert all("collection_related_works" not in card["metadata"] for card in first.cards)
     assert {card["title"] for card in first.cards} == {"化物语", "伪物语"}
     from app.api import library_v4
     monkeypatch.setattr(library_v4, "get_database", lambda: db)
@@ -205,7 +223,7 @@ def test_confirmed_collection_persists_projects_and_obeys_retirement(tmp_path, m
     assert set(library["collections"][0]["work_ids"]) == {card["work_id"] for card in first.cards}
     detail = library_v4.get_work_detail(first.cards[0]["work_id"])
     assert detail["collections"][0]["title"] == "物语系列"
-    assert len(detail["related_works"]) == 1
+    assert detail["related_works"] == []
     with db.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM media_collections").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM revision_collection_members").fetchone()[0] == 2
@@ -228,7 +246,7 @@ def test_hidden_work_is_not_reintroduced_through_collection_relations(tmp_path):
                      (hidden, json.dumps({"hidden": True}), "now", "now"))
         value = collection_metadata(conn)
         assert hidden not in value
-        assert value[visible]["collection_related_works"] == []
+        assert "collection_related_works" not in value[visible]
 
 
 def test_v25_physical_fixture_migration_preserves_existing_confirmed_data(tmp_path):

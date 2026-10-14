@@ -164,8 +164,17 @@ def history(limit: int = 50, work_id: str | None = None):
             + where + " ORDER BY h.played_at DESC, h.event_id LIMIT ?",
             (*params, bounded),
         ).fetchall()
-        # 与详情页消费同一份最近成功资料；每个 Work 只读取一次，
-        # 按 Episode 身份取图，绝不把作品 fanart 当成分集缩略图。
+        from app.media_v4.assets.catalog import get_episode_artwork_many
+
+        episode_ids = list(dict.fromkeys(
+            str(row["episode_id"])
+            for row in rows
+            if str(row["episode_id"] or "")
+            and str(row["episode_id"]) != f"movie:{row['work_id']}"
+        ))
+        artwork_by_episode = get_episode_artwork_many(conn, episode_ids)
+        # 历史分集标题继续消费最近成功的 metadata snapshot；缩略图只读已发布的
+        # Episode artwork 资源，绝不把旧 still_url 或作品 fanart 当成本地图片。
         mappings_by_work: dict[str, dict[str, dict]] = {}
         items: list[dict] = []
         for row in rows:
@@ -174,9 +183,8 @@ def history(limit: int = 50, work_id: str | None = None):
             if key not in mappings_by_work:
                 mappings_by_work[key] = _history_episode_metadata(conn, key)
             episode = mappings_by_work[key].get(str(item["episode_id"]), {})
-            item["thumb_path"] = str(
-                episode.get("local_thumb_path") or episode.get("still_url") or episode.get("thumb_path") or ""
-            )
+            variants = artwork_by_episode.get(str(item["episode_id"]), {}).get("episode_thumb", {}).get("variants", {})
+            item["thumb_path"] = variants.get("768") or variants.get("384") or ""
             item["episode_title"] = str(episode.get("title") or item["episode_title"])
             item["completed"] = bool(item["completed"])
             items.append(item)

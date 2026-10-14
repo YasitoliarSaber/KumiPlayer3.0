@@ -68,3 +68,24 @@ test('外部保存进行时不允许并行写入', () => {
   fireEvent.click(startup);
   expect(onSave).not.toHaveBeenCalled();
 });
+
+test('每天与每周选择固定本机时间，星期和时间保存同一配置', async () => {
+  const onSave = vi.fn().mockResolvedValue(undefined);
+  const { rerender } = render(<OngoingUpdateSettingsPanel config={{}} onSave={onSave} />);
+  fireEvent.click(screen.getByRole('combobox', { name: '新番更新间隔' }));
+  fireEvent.click(screen.getByRole('option', { name: '每天' }));
+  await waitFor(() => expect(onSave).toHaveBeenCalledWith({ ongoing_update_schedule_mode: 'daily', ongoing_update_time: '09:00', ongoing_update_weekday: 0 }));
+  rerender(<OngoingUpdateSettingsPanel config={{ ongoing_update_schedule_mode: 'weekly', ongoing_update_time: '20:00', ongoing_update_weekday: 2 }} onSave={onSave} />);
+  expect(screen.getByRole('combobox', { name: '更新星期' })).toHaveTextContent('星期三');
+  fireEvent.click(screen.getByRole('combobox', { name: '更新星期' }));
+  fireEvent.click(screen.getByRole('option', { name: '星期六' }));
+  fireEvent.change(screen.getByLabelText('更新时间'), { target: { value: '21:30' } });
+  fireEvent.click(screen.getByRole('button', { name: '保存时间' }));
+  await waitFor(() => expect(onSave).toHaveBeenLastCalledWith({ ongoing_update_time: '21:30', ongoing_update_weekday: 5 }));
+});
+
+test('旧的滚动24小时配置明确显示为分钟，不冒充固定每天时间', () => {
+  render(<OngoingUpdateSettingsPanel config={{ ongoing_update_interval_minutes: 1440 }} onSave={vi.fn()} />);
+  expect(screen.getByRole('combobox', { name: '新番更新间隔' })).toHaveTextContent('每 1440 分钟');
+  expect(screen.queryByLabelText('更新时间')).not.toBeInTheDocument();
+});

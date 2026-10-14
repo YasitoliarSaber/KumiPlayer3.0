@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Dropdown, Field, FluentProvider, Input, MessageBar, MessageBarBody, Option, ProgressBar, Radio, RadioGroup, Select, Spinner } from '@fluentui/react-components'
+import { Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Dropdown, Field, FluentProvider, Input, MessageBar, MessageBarBody, Option, ProgressBar, Radio, RadioGroup, Select, Spinner, Tooltip } from '@fluentui/react-components'
 import { openlistConnections, selectOpenlistConnection } from '../api/openlistConnections'
 import OpenListConnectionPicker from '../components/settings/OpenListConnectionPicker'
 import {
@@ -15,6 +15,9 @@ import {
   ShieldCheckmark24Regular,
   Database24Regular,
   DocumentText24Regular,
+  Warning24Regular,
+  ChevronDown24Regular,
+  ChevronRight24Regular,
   Edit24Regular,
   Folder24Regular,
   FolderOpen24Regular,
@@ -43,6 +46,7 @@ import { getKumiFluentTheme } from '../design/fluentTheme'
 import '../styles/media-import-controls.css'
 import { summarizeExecutionWorks } from '../lib/mediaSummary'
 import { presentScanProgress } from '../lib/scanProgress'
+import type { V4SourceDirectoryCheck } from '../api/mediaV4'
 
 type ImportKind = 'local' | 'tree' | 'openlist' | 'hybrid'
 type WorkflowStage = 'source' | 'review' | 'execute'
@@ -309,7 +313,7 @@ export default function MediaManagementPage() {
   const [treePathPreview, setTreePathPreview] = useState<V4TreePathPreview | null>(null)
   const [mappingFilter, setMappingFilter] = useState('')
   const mappingChoices = useMemo(() => (treePathPreview?.choices || []).map((choice, index) => ({ ...choice, index })).filter(choice =>
-    [choice.mapping_scope || '', choice.root, ...choice.path_samples].join('\n').toLocaleLowerCase().includes(mappingFilter.toLocaleLowerCase())
+    [choice.mapping_scope || '', choice.root].join('\n').toLocaleLowerCase().includes(mappingFilter.toLocaleLowerCase())
   ), [treePathPreview, mappingFilter])
   const [provider, setProvider] = useState<Exclude<ProviderId, 'local' | 'other'>>('pan115')
   const [remoteRoot, setRemoteRoot] = useState('')
@@ -323,6 +327,7 @@ export default function MediaManagementPage() {
   const [openlistBaseline, setOpenlistBaseline] = useState<V4OpenlistBaselineStatus | null>(null)
   const openlistBaselineRequest = useRef(0)
   const [sourceCards, setSourceCards] = useState<V4SourceLibraryCard[]>([])
+  const [expandedSourceCards, setExpandedSourceCards] = useState<Record<string, boolean>>({})
   const [sourceCardsLoading, setSourceCardsLoading] = useState(true)
   const [sourceCardPendingDelete, setSourceCardPendingDelete] = useState<V4SourceLibraryCard | null>(null)
   const [sourceCardDeleting, setSourceCardDeleting] = useState(false)
@@ -354,6 +359,7 @@ export default function MediaManagementPage() {
     scan_stats?: { requested_directories?: number; rolling_verified?: number; changed_directories?: number; verified_directories?: number; unknown_directories?: number }
     source_metadata: SourceCardMetadata
   } | null>(null)
+  const [directoryCheck, setDirectoryCheck] = useState<V4SourceDirectoryCheck | null>(null)
   const [preview, setPreview] = useState<V4Preview | null>(null)
   const [jobs, setJobs] = useState<V4Job[]>([])
   const [busy, setBusy] = useState<'scan' | 'preview' | 'override' | 'confirm' | ''>('')
@@ -459,6 +465,26 @@ export default function MediaManagementPage() {
     void refreshSourceCards()
   }, [refreshSourceCards])
 
+  useEffect(() => {
+    if (pageMode !== 'import' || workflowStage !== 'review' || !scan?.scan_id) return
+    let cancelled = false
+    setDirectoryCheck(null)
+    mediaV4Api.sourceScanDirectoryCheck(scan.scan_id)
+      .then((result) => { if (!cancelled) setDirectoryCheck(result) })
+      .catch(() => {
+        if (!cancelled) setDirectoryCheck({
+          scan_id: scan.scan_id,
+          state: 'unavailable',
+          sampled_directories: 0,
+          reachable_directories: 0,
+          missing_directories: 0,
+          message: '未能连接后台完成目录抽查；当前没有可确认的访问结果。',
+          scope: '没有读取视频；本次核对失败不代表目录或全部视频可用。',
+        })
+      })
+    return () => { cancelled = true }
+  }, [pageMode, workflowStage, scan?.scan_id])
+
   // 当前任务和仍在回收的旧产物驱动轮询；历史 job_summary 不驱动页面状态。
   const hasActiveSourceJobs = sourceCards.some((card) => Boolean(card.active_task)
     || card.pending_cleanup?.status === 'queued' || card.pending_cleanup?.status === 'running')
@@ -511,6 +537,9 @@ export default function MediaManagementPage() {
   const executionPublicationTotal = executionPublicationStages.reduce((total, stage) => total + stage.total, 0)
   const executionPublicationDone = executionPublicationStages.reduce((total, stage) => total + stage.succeeded + stage.failed + stage.cancelled, 0)
   const executionCounts = executeProgress ? summarizeExecutionWorks(executeProgress) : null
+  const executionSourceCard = executeProgress
+    ? sourceCards.find((card) => card.latest_revision_id === executeProgress.revision_id)
+    : null
   useEffect(() => {
     if (!revisionId || !hasActiveJobs) return
     let cancelled = false
@@ -635,6 +664,7 @@ export default function MediaManagementPage() {
   const clearResultState = () => {
     setTreePathPreview(null)
     setScan(null)
+    setDirectoryCheck(null)
     setPreview(null)
     setJobs([])
     setRevisionId('')
@@ -956,6 +986,20 @@ export default function MediaManagementPage() {
       return false
     } finally {
       setBusy('')
+    }
+  }
+
+  const exportSourceDiagnostics = async (rootId: string, displayName = 'media-source') => {
+    try {
+      const report = await mediaV4Api.sourceDiagnostics(rootId)
+      const href = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json;charset=utf-8' }))
+      const anchor = document.createElement('a')
+      anchor.href = href
+      anchor.download = `${displayName.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) || 'media-source'}-diagnostics.json`
+      anchor.click()
+      URL.revokeObjectURL(href)
+    } catch (cause) {
+      setError(userFacingPageError(cause, '导出问题分析失败，请稍后重试'))
     }
   }
 
@@ -1552,13 +1596,24 @@ export default function MediaManagementPage() {
             const resumeLabel = deletionRetry ? '重试清理' : retiredCleanup ? '清理中' : activeTask ? '查看进度' : card.scan?.status === 'paused' ? '继续扫描' : card.overall_status === 'cancelled' ? (executionTerminated ? '查看执行结果' : '重新扫描') : card.overall_status === 'needs_attention' && card.phase === 'scan' ? '重新扫描' : card.phase === 'review' ? '查看识别结果' : card.can_resume ? '查看进度' : '查看上次导入'
             const resumeAppearance = deletionRetry || (card.can_resume && (card.overall_status ?? 'completed') !== 'completed') ? 'primary' : 'secondary'
             const resumeIcon = deletionRetry ? <Delete24Regular /> : activeTask?.kind === 'scan' || card.phase === 'review' ? <DocumentText24Regular /> : <Database24Regular />
-            return <article className={`media-v4-library-source-card ${active ? 'active' : 'settled'}`} key={card.root_id} aria-labelledby={`source-card-${card.root_id}`}>
+            const expanded = Boolean(expandedSourceCards[card.root_id])
+            const toggleDetails = () => setExpandedSourceCards((current) => ({ ...current, [card.root_id]: !current[card.root_id] }))
+            return <article className={`media-v4-library-source-card ${active ? 'active' : 'settled'} ${expanded ? 'expanded' : ''}`} key={card.root_id} aria-labelledby={`source-card-${card.root_id}`}>
               <div className="media-v4-source-card-identity">
                 <div className="media-v4-source-card-heading">
                   <h3 id={`source-card-${card.root_id}`} title={card.display_name}>{card.display_name}</h3>
                   <span className={`media-v4-source-card-state media-v4-source-card-state-${card.overall_status ?? 'completed'}`}>{stateLabel}</span>
+                  <Tooltip content={expanded ? '收起来源详情' : '展开来源详情'} relationship="description">
+                    <Button className="media-v4-source-card-expand" appearance="subtle" size="small" aria-expanded={expanded} aria-label={`${expanded ? '收起' : '展开'}${card.display_name}来源详情`} icon={expanded ? <ChevronDown24Regular /> : <ChevronRight24Regular />} onClick={toggleDetails} />
+                  </Tooltip>
                 </div>
-                <div className="media-v4-library-source-card-top"><MediaProviderIcon provider={providerVisualFor(card.provider)} size={20} /><span className="media-v4-source-card-provider-label">{providerLabel(card.provider)}</span><span className="media-v4-source-card-method-label">{sourceMethodLabel(card)}</span></div>
+                <div className="media-v4-library-source-card-top">
+                  <Tooltip content={`${providerLabel(card.provider)} · ${sourceMethodLabel(card)}`} relationship="label">
+                    <span className="media-v4-source-provider-icon" role="img" aria-label={`${providerLabel(card.provider)}，${sourceMethodLabel(card)}`}><MediaProviderIcon provider={providerVisualFor(card.provider)} size={20} /></span>
+                  </Tooltip>
+                  <span className="media-v4-source-card-provider-label">{providerLabel(card.provider)}</span><span className="media-v4-source-card-method-label">{sourceMethodLabel(card)}</span>
+                  {card.attention_count > 0 && <Tooltip content={`${card.attention_count} 个待处理事项`} relationship="label"><span className="media-v4-source-card-problem-icon" role="img" aria-label={`${card.attention_count} 个待处理事项`}><Warning24Regular aria-hidden="true" /></span></Tooltip>}
+                </div>
                 {(card.tree_file_path || card.source_locator || card.display_path) && <span className="media-v4-source-card-locator" title={card.tree_file_path || card.source_locator || card.display_path}>{card.tree_file_path || card.source_locator || card.display_path}</span>}
                 {card.last_error && card.overall_status === 'needs_attention' && <span className="media-v4-source-card-error" role="alert">{card.last_error}</span>}
               </div>
@@ -1570,6 +1625,23 @@ export default function MediaManagementPage() {
                   const scale = sourceCardScale(card)
                   return <>{scale.works && <span>{scale.works}</span>}{scale.files && <span>{scale.files}</span>}</>
                 })()}</div>
+                {!expanded && <div className="media-v4-source-card-compact-summary">
+                  <span>{progressLabel}</span>
+                  {(card.artwork_total_count ?? 0) > 0 && <span>图片 {card.artwork_ready_count ?? 0} / {card.artwork_total_count} 张</span>}
+                  {card.attention_count > 0 && <span className="attention">{card.attention_count} 项待处理</span>}
+                </div>}
+                {!expanded && <div className="media-v4-source-card-compact-action">
+                  <Tooltip content={resumeLabel} relationship="description"><Button className={`media-v4-source-card-action ${resumeAppearance}`} appearance={resumeAppearance} icon={resumeIcon} aria-label={resumeLabel} disabled={retiredCleanup && active} onClick={() => {
+                    if (deletionRetry) {
+                      setSourceDeletionPreview(null)
+                      setSourceDeletionQueued(false)
+                      setSourceCardPendingDelete(card)
+                      void loadSourceDeletionPreview(card)
+                    } else void resumeSourceCard(card)
+                  }} /></Tooltip>
+                  <Tooltip content="导出问题分析（包含必要目录路径）" relationship="description"><Button appearance="subtle" icon={<DocumentText24Regular />} aria-label={`导出${card.display_name}问题分析，包含必要目录路径`} onClick={() => void exportSourceDiagnostics(card.root_id, card.display_name)} /></Tooltip>
+                </div>}
+                {expanded && <>
                 <div className="media-v4-source-card-status">
                 <div className="media-v4-source-card-progress" role="status"><span>{progressLabel}</span></div>
                 {/* 在线资料就绪量只来自 confirmed 当前作品的 metadata_state；
@@ -1601,6 +1673,7 @@ export default function MediaManagementPage() {
                     setSourceCardPendingDelete(card)
                     void loadSourceDeletionPreview(card)
                   }}>{cleanupActive ? '清理中' : '重试清理'}</Button>}
+                  <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<DocumentText24Regular />} aria-label={`导出${card.display_name}问题分析，包含必要目录路径`} title="导出问题分析（包含必要目录路径）" onClick={() => void exportSourceDiagnostics(card.root_id, card.display_name)}>导出问题分析</Button>
                   {!retiredCleanup && !deletionRetry && (activeTask?.can_cancel || activeTask?.status === 'cancelling'
                     ? <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<Dismiss24Regular />} disabled={activeTask?.status === 'cancelling'} onClick={() => void terminateSourceTask(card)}>{activeTask?.status === 'cancelling' ? '正在终止…' : '终止任务'}</Button>
                     : <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<ArrowSync24Regular />} disabled={active} onClick={() => prepareSourceUpdate(card)}>检查更新</Button>)}
@@ -1609,6 +1682,7 @@ export default function MediaManagementPage() {
                   {!active && <Button className="media-v4-source-card-action secondary" appearance="secondary" icon={<Edit24Regular />} aria-label={`重命名来源卡：${card.display_name}`} onClick={() => openSourceCardRename(card)}>重命名</Button>}
                   {!active && <Button className="media-v4-source-card-action secondary media-v4-source-card-action-danger" appearance="secondary" icon={<Delete24Regular />} aria-label={`删除来源卡：${card.display_name}`} onClick={() => setSourceCardPendingDelete(card)}>删除来源卡</Button>}
                 </div>}
+                </>}
               </div>
             </article>
           })}
@@ -1863,8 +1937,6 @@ export default function MediaManagementPage() {
         {(treePathPreview.choices?.length || 0) > 20 && <Field label="筛选目录边界"><Input value={mappingFilter} onChange={(_, data) => setMappingFilter(data.value)} placeholder="输入实际挂载的目录名称" /><span>共 {mappingChoices.length} 个匹配项，显示前 20 项。</span></Field>}
         {mappingChoices.slice(0, 20).map(choice => <div className="media-v4-field-block" key={choice.id}>
           <div className="media-v4-field-copy"><strong>路径 {choice.index < 26 ? String.fromCharCode(65 + choice.index) : choice.index + 1}{choice.mapping_scope ? ` · ${choice.mapping_scope}` : ''}</strong><span>{kind === 'openlist' ? `已验证 ${choice.selected_count} 个媒体样本。` : `包含 ${choice.selected_count} 个媒体文件。`}{choice.skipped_count ? `排除 ${choice.skipped_count} 个范围外的文件。` : ''}</span></div>
-          {choice.path_samples.map(sample => <div className="media-v4-selected-file" key={sample} title={sample}><span>{sample}</span></div>)}
-          {!choice.path_samples.length && <div className="media-v4-selected-file"><span>{choice.root}</span></div>}
           <Button appearance="secondary" disabled={busy !== ''} onClick={() => void scanSource('primary', choice.id)}>使用路径 {choice.index < 26 ? String.fromCharCode(65 + choice.index) : choice.index + 1}</Button>
         </div>)}
         <Button appearance="secondary" disabled={busy !== ''} onClick={() => void scanSource()}>重新检查播放位置</Button>
@@ -1875,14 +1947,16 @@ export default function MediaManagementPage() {
       {workflowStage === 'review' && scan && !treePathPreview?.requires_confirmation && <section className="media-stage-shell media-v4-stage-panel media-v4-review-card">
         <div className="media-stage-header">
           <div className="media-stage-heading"><span className="media-stage-icon" aria-hidden="true"><DocumentText24Regular /></span><div><span className="media-stage-eyebrow">第 2 步</span><h2>检查识别结果</h2><p>已扫描 {scan.evidence_count} 个媒体条目。默认按作品摘要检查，需要处理的条目会置顶。</p></div></div>
-          {!preview && <Button appearance="secondary" disabled={busy !== '' || (scan.evidence_count === 0 && !allowEmpty)} onClick={() => void buildPreview()}>{busy === 'preview' ? <Spinner size="tiny" /> : '生成识别预览'}</Button>}
+          <div className="media-v4-review-header-actions">
+            <Button appearance="secondary" icon={<DocumentText24Regular />} onClick={() => void exportSourceDiagnostics(scan.root_id, scan.source_metadata.source_display_name)}>导出问题分析</Button>
+            {!preview && <Button appearance="secondary" disabled={busy !== '' || (scan.evidence_count === 0 && !allowEmpty)} onClick={() => void buildPreview()}>{busy === 'preview' ? <Spinner size="tiny" /> : '生成识别预览'}</Button>}
+          </div>
         </div>
         {scan.scan_mode === 'incremental' && <MessageBar intent="info"><MessageBarBody>本次使用 OpenList 增量核对：请求 {scan.scan_stats?.requested_directories || 0} 个目录，其中滚动抽查 {scan.scan_stats?.rolling_verified || 0} 个、变化优先核对 {scan.scan_stats?.changed_directories || 0} 个。{(scan.scan_stats?.unknown_directories || 0) > 0 ? `还有 ${scan.scan_stats?.unknown_directories} 个目录尚未远端核实，会在后续增量中逐个补齐。` : '全部目录已完成远端核实。'}</MessageBarBody></MessageBar>}
         {scan.scan_mode === 'tree_baseline' && <MessageBar intent="info"><MessageBarBody>TXT 基线已建立。确认本次导入后，再扫描同一 OpenList 目录时会自动进入风险受控增量核对。</MessageBarBody></MessageBar>}
-        {Boolean(treePathPreview?.path_samples?.length) && <div className="media-v4-field-block" aria-label="播放路径预览">
-          <div className="media-v4-field-copy"><strong>播放路径示例</strong><span>{treePathPreview?.state === 'supported' ? treePathPreview.reason : '确认导入前请核对目录层级。'}{treePathPreview?.skipped_count ? `已排除 ${treePathPreview.skipped_count} 个范围外的视频。` : ''}</span></div>
-          {treePathPreview?.path_samples?.map(sample => <div className="media-v4-selected-file" key={sample} title={sample}><span>{sample}</span></div>)}
-        </div>}
+        {kind === 'tree' && (directoryCheck?.state === 'missing' || directoryCheck?.state === 'unavailable') && <MessageBar intent="warning">
+          <MessageBarBody>播放目录暂时无法访问，请确认网盘已挂载，且选择的是导出原位置的 TXT。</MessageBarBody>
+        </MessageBar>}
         {!preview && <div className="media-v4-empty">{scan.evidence_count === 0 ? <Checkbox checked={allowEmpty} onChange={(_, data) => setAllowEmpty(Boolean(data.checked))} label="我确认该来源当前确实为空，并允许移除它先前导入的媒体" /> : '正在生成识别结果…'}</div>}
         {preview && <>
           {previewBlockingIssueCount > 0 && <MessageBar intent="warning"><MessageBarBody>发现 {previewBlockingIssueCount} 个需要人工处理的问题；未解决前不能确认。</MessageBarBody></MessageBar>}
@@ -1910,6 +1984,7 @@ export default function MediaManagementPage() {
         <div className="media-stage-header media-v4-execute-stage-header">
           <div className="media-stage-heading"><span className="media-stage-icon" aria-hidden="true"><Database24Regular /></span><div><span className="media-stage-eyebrow">第 3 步</span><h2>建立媒体库</h2><p>可以离开此页面；返回后会继续显示当前导入进度。</p></div></div>
           <div className="media-v4-execute-stage-header-side">
+            {(executionSourceCard || scan?.root_id) && <Button appearance="secondary" icon={<DocumentText24Regular />} onClick={() => void exportSourceDiagnostics(executionSourceCard?.root_id || scan!.root_id, executionSourceCard?.display_name || scan?.source_metadata.source_display_name)}>导出问题分析</Button>}
             {executeProgress && <div className="media-v4-execution-header-summary" aria-label="建立媒体库总体进度">
               <div className="media-v4-execution-header-primary">
                 <strong>{executionCounts?.completed ?? 0}</strong>
@@ -1942,6 +2017,7 @@ export default function MediaManagementPage() {
         </div>
         {executeProgress ? (
           <V4ExecutionProgressView
+            key={executeProgress.revision_id}
             progress={executeProgress}
             busyRetryId={retryingJobId}
             onRetry={(jobId: string) => { const job = jobs.find((item) => item.job_id === jobId); if (job) void retryJob(job) }}
@@ -1950,6 +2026,8 @@ export default function MediaManagementPage() {
             onRetryMetadata={(workId: string) => { void retryMetadataRecovery(workId) }}
             onRetryArtifacts={(workId: string) => { void retryArtifacts(workId) }}
             fetchWorkDetail={mediaV4Api.workExecutionDetail}
+            artworkReadyCount={executionSourceCard?.artwork_ready_count}
+            artworkTotalCount={executionSourceCard?.artwork_total_count}
           />
         ) : (
           <div className="media-v4-empty">正在读取执行进度…</div>

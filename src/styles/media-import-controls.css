@@ -27,3 +27,121 @@
 
 /* 单色官方标识保留原图，用浅色小底片保证深浅主题都有对比。 */
 .media-v4-page .media-provider-brand.provider-quark { padding: 3px; border-radius: 4px; background: #f5f5f5; }
+.media-v4-review-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.media-v4-source-library-grid {
+  align-items: start;
+  grid-auto-rows: auto;
+}
+
+.media-v4-library-source-card {
+  display: flex;
+  min-width: 0;
+  min-height: 224px;
+  flex-direction: column;
+  align-self: start;
+  width: 100%;
+}
+
+.media-v4-library-source-card:not(.expanded) {
+  height: 256px;
+}
+
+.media-v4-library-source-card:not(.expanded) .media-v4-source-card-heading h3 {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.media-v4-source-card-identity,
+.media-v4-source-card-scale {
+  min-width: 0;
+}
+
+.media-v4-source-card-heading {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.media-v4-source-card-expand {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+
+.media-v4-library-source-card-top {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.media-v4-source-card-provider-label,
+.media-v4-source-card-method-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-v4-source-provider-icon,
+.media-v4-source-card-problem-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.media-v4-source-card-problem-icon {
+  color: var(--colorPaletteRedForeground1, #a4262c);
+}
+
+.media-v4-source-card-compact-summary {
+  display: grid;
+  gap: 4px;
+  min-height: 42px;
+  margin-block: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.media-v4-source-card-compact-summary .attention {
+  color: var(--colorPaletteRedForeground1, #a4262c);
+}
+
+.media-v4-source-card-compact-summary > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-v4-source-card-compact-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.media-v4-library-source-card.expanded .media-v4-source-card-locator {
+  overflow-wrap: anywhere;
+}
+
+.media-v4-library-source-card:not(.expanded) .media-v4-source-card-locator,
+.media-v4-library-source-card:not(.expanded) .media-v4-source-card-error,
+.media-v4-library-source-card:not(.expanded) .media-v4-source-card-status,
+.media-v4-library-source-card:not(.expanded) .media-v4-source-card-actions {
+  display: none;
+}
+
+@media (max-width: 540px) {
+  .media-v4-review-header-actions {
+    width: 100%;
+  }
+
+  .media-v4-review-header-actions > .fui-Button {
+    flex: 1 1 auto;
+  }
+}

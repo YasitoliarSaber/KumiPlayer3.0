@@ -6,6 +6,7 @@ import type { PublicConfig } from '../../api/config';
 import FolderPathInput from './FolderPathInput';
 import { SettingsField } from '../ui/SettingsPrimitives';
 import ActionToast from '../ui/ActionToast';
+import { AUTOMATIC_PROBE_INTERVAL_MS, automaticProbeAttempts, automaticProbeFailures, useOpenListProbeSession } from '../../stores/openlistProbeSession';
 
 /**
  * OpenList 连接设置面板（OL-4：Settings IA）。
@@ -164,6 +165,11 @@ export default function OpenListSettingsPanel({
   const [allowOpenlistHttp, setAllowOpenlistHttp] = useState(false);
   const [actionLock, setActionLock] = useState<string | null>(null);
   const [telemetry, setTelemetry] = useState<OpenListTelemetrySummary | null>(null);
+  const automaticPaused = useOpenListProbeSession(state => state.paused);
+  const [automaticFailureNotice, setAutomaticFailureNotice] = useState(false);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const probeKey = `${config.openlist_connection_id || ''}:${config.openlist_server_url || ''}:${config.openlist_remote_root || '/'}`;
   // 切换连接会重建面板，旧连接迟到的响应不得更新父级提示。
   const mounted = useRef(false);
   const operationGeneration = useRef(0);
@@ -243,6 +249,7 @@ export default function OpenListSettingsPanel({
     const generation = ++operationGeneration.current;
     const current = () => mounted.current && operationGeneration.current === generation;
     setActionLock(skipVerification ? 'save-skip' : 'save');
+    setAutomaticFailureNotice(false);
     // 清除旧提示，避免旧错误在重新保存时滞留
     onNotice?.('', 'info');
     setSkipVerificationOffered(false);
@@ -276,14 +283,32 @@ export default function OpenListSettingsPanel({
   const handleSave = () => runSave(false);
   const handleSaveSkipVerification = () => runSave(true);
 
-  const handleTest = async () => {
+  const handleTest = async (automatic = false) => {
     if (actionLock) return;
+    if (automatic && (!activeRef.current || useOpenListProbeSession.getState().paused)) return;
+    automaticProbeAttempts.set(probeKey, Date.now());
     const generation = ++operationGeneration.current;
     const current = () => mounted.current && operationGeneration.current === generation;
     setActionLock('test');
     setProbeState('checking');
     // 清除旧提示，避免旧错误在重新测试时滞留
-    onNotice?.('', 'info');
+    if (!automatic) {
+      setAutomaticFailureNotice(false);
+      onNotice?.('', 'info');
+    }
+    const report = (message: string, ok: boolean) => {
+      if (automatic) {
+        if (!activeRef.current || useOpenListProbeSession.getState().paused) return;
+        if (ok) {
+          automaticProbeFailures.delete(probeKey);
+          return;
+        }
+        if (automaticProbeFailures.get(probeKey) === message) return;
+        automaticProbeFailures.set(probeKey, message);
+        setAutomaticFailureNotice(true);
+      }
+      onNotice?.(message, ok ? 'success' : 'error');
+    };
     try {
       const result = await onTestConnection(buildTestPayload());
       if (!current()) return;
@@ -292,12 +317,12 @@ export default function OpenListSettingsPanel({
       setProbeState(nextState);
       // 反馈在当前操作的生命周期内统一发送，父回调只返回结果。
       if (result.message) {
-        onNotice?.(result.message, result.ok ? 'success' : 'error');
+        report(result.message, result.ok);
       }
     } catch {
       if (!current()) return;
       setProbeState('network_unavailable');
-      onNotice?.('无法连接 OpenList 服务，请检查服务地址是否可达', 'error');
+      report('无法连接 OpenList 服务，请检查服务地址是否可达', false);
     } finally {
       if (current()) setActionLock(null);
     }
@@ -312,14 +337,23 @@ export default function OpenListSettingsPanel({
     : remoteAffectingDirty
       ? '验证并保存'
       : '保存设置';
-  const primaryAction = !hasDirty ? handleTest : handleSave;
-  const autoChecked = useRef(false);
+  const primaryAction = !hasDirty ? () => handleTest() : handleSave;
+  const automaticTestRef = useRef(handleTest);
+  automaticTestRef.current = handleTest;
   useEffect(() => {
-    if (!active) { autoChecked.current = false; return; }
-    if (!saved || hasDirty || busy || autoChecked.current) return;
-    autoChecked.current = true;
-    void handleTest();
-  }, [active, saved, hasDirty, busy]);
+    if (!active || !saved || hasDirty || busy || automaticPaused) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const check = () => {
+      const elapsed = Date.now() - (automaticProbeAttempts.get(probeKey) ?? -Infinity);
+      if (elapsed >= AUTOMATIC_PROBE_INTERVAL_MS) {
+        automaticProbeAttempts.set(probeKey, Date.now());
+        void automaticTestRef.current(true);
+      }
+      timer = setTimeout(check, elapsed >= AUTOMATIC_PROBE_INTERVAL_MS ? AUTOMATIC_PROBE_INTERVAL_MS : Math.max(1, AUTOMATIC_PROBE_INTERVAL_MS - elapsed));
+    };
+    check();
+    return () => clearTimeout(timer);
+  }, [active, saved, hasDirty, busy, automaticPaused, probeKey]);
 
   return (
     <div className="sources-openlist-card sources-connection">
@@ -383,13 +417,13 @@ export default function OpenListSettingsPanel({
             )}
           </div>
 
-          <SettingsField label="远端根目录" className="settings-config-row">
+          <SettingsField label="OpenList 远端根目录" className="settings-config-row">
             <Input type="text" value={draft.remote_root} disabled={busy} onChange={(_, data) => handleDraftChange('remote_root', data.value)} placeholder="/" />
           </SettingsField>
           <SettingsField label="本地挂载位置" className="settings-config-row">
             <FolderPathInput label="本地挂载位置" value={draft.mount_root} disabled={busy} onChange={value => handleDraftChange('mount_root', value)} placeholder="例如 K:\\" />
           </SettingsField>
-          <p className="sources-route-hint">与当前连接的远端根目录对应。</p>
+          <p className="sources-route-hint">这里配置 WebDAV 的远端目录与电脑挂载目录的对应关系。例如远端 /动画 对应本地 K:\动画；从子目录挂载时，填写该子目录对应的位置。原位置 TXT 导入会直接使用所选 TXT 的位置定位。</p>
 
           <details className="sources-advanced">
             <summary>高级设置</summary>
@@ -412,7 +446,12 @@ export default function OpenListSettingsPanel({
 
         </fieldset>
       )}
-      <ActionToast message={notice} intent={noticeKind} onDismiss={() => onNotice?.('', 'info')} />
+      <ActionToast message={automaticFailureNotice && !active ? '' : notice} intent={noticeKind} onDismiss={() => onNotice?.('', 'info')}
+        action={automaticFailureNotice && noticeKind === 'error' ? <Button appearance="transparent" size="small" onClick={() => {
+          useOpenListProbeSession.getState().pause();
+          setAutomaticFailureNotice(false);
+          clearNotice();
+        }}>本次不再提示</Button> : undefined} />
     </div>
   );
 }

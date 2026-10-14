@@ -259,22 +259,15 @@ pub(crate) fn run() {
                 return;
             }
             let app = window.app_handle();
-            match event {
-                WindowEvent::CloseRequested { api, .. } => {
-                    api.prevent_close();
-                    if preferences(app).close_to_tray && app.tray_by_id("main").is_some() {
-                        let _ = hide_to_tray(app.clone());
-                    } else {
-                        begin_shutdown(app, 0);
-                    }
-                }
-                WindowEvent::Resized(_)
-                    if preferences(app).minimize_to_tray
-                        && window.is_minimized().unwrap_or(false) =>
-                {
+            // 系统任务栏点击或 Win+D 的最小化保留任务栏入口。
+            // 收到托盘只由明确的窗口按钮命令或关闭策略触发。
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                if preferences(app).close_to_tray && app.tray_by_id("main").is_some() {
                     let _ = hide_to_tray(app.clone());
+                } else {
+                    begin_shutdown(app, 0);
                 }
-                _ => {}
             }
         })
         .build(tauri::generate_context!())

@@ -1,0 +1,207 @@
+@layer components {
+  .detail-customization-groups {
+    display: grid;
+    gap: 8px;
+    max-width: min(100%, 780px);
+    color: inherit;
+    font-size: 13px;
+  }
+
+  .detail-customization-context {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px 18px;
+  }
+
+  .detail-customization-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .detail-customization-label {
+    color: rgba(255, 255, 255, .68);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    white-space: nowrap;
+  }
+
+  .detail-customization-values {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .detail-customization-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 24px;
+    padding: 2px 9px;
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 999px;
+    background: rgba(18, 25, 34, .42);
+    color: rgba(255, 255, 255, .92);
+    line-height: 1.4;
+    backdrop-filter: blur(12px) saturate(1.1);
+  }
+
+  .detail-customization-chip.source {
+    border-color: rgba(161, 106, 70, .58);
+    background: rgba(110, 66, 39, .46);
+  }
+
+  .detail-customization-chip.type {
+    background: rgba(255, 255, 255, .14);
+  }
+
+  .detail-customization-chip.user {
+    border-color: color-mix(in srgb, var(--work-tag-color) 65%, transparent);
+    background: color-mix(in srgb, var(--work-tag-color) 23%, rgba(18, 25, 34, .68));
+  }
+
+  .detail-customization-chip.user button.edit {
+    min-width: 0;
+    min-height: 20px;
+    padding: 0 2px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .detail-customization-chip.user button.remove {
+    display: inline-grid;
+    width: 20px;
+    height: 20px;
+    place-items: center;
+    margin: -2px -6px -2px 0;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, .78);
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .detail-customization-chip.user button:hover,
+  .detail-customization-chip.user button:focus-visible {
+    background: rgba(255, 255, 255, .2);
+    color: #fff;
+    outline: 2px solid rgba(255, 255, 255, .75);
+    outline-offset: 1px;
+  }
+
+  .detail-extra-video-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    max-width: 660px;
+    padding: 7px 10px;
+    border: 1px solid rgba(255, 255, 255, .2);
+    border-radius: 8px;
+    background: rgba(18, 25, 34, .46);
+    color: rgba(255, 255, 255, .92);
+    font-size: 12px;
+    line-height: 1.45;
+    backdrop-filter: blur(12px);
+  }
+
+  .detail-extra-video-hint > svg {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    color: #b6d7ff;
+  }
+
+  .detail-extra-video-hint span,
+  .detail-extra-video-hint small {
+    display: block;
+  }
+
+  .detail-extra-video-hint small {
+    margin-top: 2px;
+    color: rgba(255, 255, 255, .68);
+    font-size: 11px;
+  }
+
+  .work-tag-dialog {
+    max-width: min(480px, calc(100vw - 32px));
+  }
+
+  .work-tag-dialog-content {
+    display: grid;
+    gap: 16px;
+    padding-top: 8px;
+  }
+
+  .work-tag-quick-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 180px;
+    overflow: auto;
+  }
+
+  .work-tag-preset {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .work-tag-color-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+  }
+
+  .work-tag-empty {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .work-tag-editor-field {
+    display: grid;
+    gap: 6px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .work-tag-editor-field.color {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .work-tag-editor-field input[type='color'] {
+    width: 44px;
+    height: 34px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    cursor: pointer;
+  }
+
+  .work-tag-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .work-tag-error {
+    color: #d13438;
+    font-size: 12px;
+  }
+
+  @media (max-width: 700px) {
+    .detail-customization-context { display: grid; gap: 6px; }
+    .detail-customization-groups { gap: 6px; }
+  }
+}

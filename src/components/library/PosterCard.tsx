@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useUiStore } from '../../stores/ui';
 import { useLibraryStore } from '../../stores/library';
 import { cleanDisplayTitle } from '../../utils/title';
@@ -15,6 +15,7 @@ interface PosterCardProps {
   showType?: 'default' | 'recent';
   recentLabel?: string;
   thumbnailWidth?: number;
+  titleFontSize?: number;
   localArtworkOnly?: boolean;
   deferImage?: boolean;
   preloadImage?: boolean;
@@ -26,6 +27,7 @@ function PosterCard({
   showType = 'default',
   recentLabel = '',
   thumbnailWidth = 0,
+  titleFontSize = 16,
   deferImage = false,
   preloadImage = false,
   managedImage = false,
@@ -37,6 +39,7 @@ function PosterCard({
   const prewarmTimerRef = useRef<number | null>(null);
   const rawTitle = work.title || work.original_title || work.local_title || '';
   const displayTitle = cleanDisplayTitle(rawTitle) || '未命名作品';
+  const titleStyle: CSSProperties = { fontSize: `${titleFontSize}px` };
   // P-001 阶段6：季度数由后端权威投影提供，不再用空数组 || 1 伪造一季。
   const mainSeasonCount = Number(work.season_count || 0);
   const seasonLabel = mainSeasonCount > 0
@@ -102,7 +105,7 @@ function PosterCard({
       >
         {/* 标题常驻底层，加载失败时也可辨认作品。分类图片不回退到大原图。 */}
         <div className="poster-placeholder-title">
-          <span title={displayTitle}>
+          <span title={displayTitle} style={titleStyle}>
             {displayTitle}
           </span>
           {!managedImage && !deferImage && imageUrl && imageState !== 'ready' && (
@@ -133,7 +136,7 @@ function PosterCard({
       </div>
 
       <div className="poster-card-meta">
-        <div className="poster-card-title" style={{ color: 'var(--text)' }} title={rawTitle || displayTitle}>
+        <div className="poster-card-title" style={{ ...titleStyle, color: 'var(--text)' }} title={rawTitle || displayTitle}>
           {displayTitle}
         </div>
         <div className="poster-card-subtitle" style={{ color: 'var(--text-muted)' }}>

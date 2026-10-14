@@ -281,59 +281,70 @@ def test_empty_library_rescan_persists_dirty_request_without_revision(tmp_path, 
     monkeypatch.setattr(V4LibraryProjection, "rebuild", rebuild)
 
 
-def test_library_cards_use_one_deduplicated_related_image_lookup(tmp_path, monkeypatch):
-    client, database = _client(tmp_path, monkeypatch)
-    from app.api import library_v4
-    from app.media_v4.assets import catalog
-    from app.media_v4.projection.library import LibrarySnapshot, V4LibraryProjection
+def test_related_works_requires_confirmed_tmdb_movie_identity_and_prepared_poster(tmp_path):
+    from dataclasses import replace
 
-    metadata = {"related_works": [
-        {"work_id": "related-a", "title": "A", "poster_path": "/a.jpg"},
-        {"work_id": "related-b", "title": "B", "poster_path": "/b.jpg"},
-        {"work_id": "related-c", "title": "C", "poster_path": "/a.jpg"},
-    ]}
-    snapshot = LibrarySnapshot("generation-test", "digest-test", ({
-        "work_id": "work-test", "title": "Show", "year": 2024, "media_type": "tv",
-        "episode_count": 1, "asset_count": 1, "metadata": metadata,
-    },), 3)
-    monkeypatch.setattr(library_v4, "_library_snapshot", lambda **_kwargs: snapshot)
-    monkeypatch.setattr(V4LibraryProjection, "summary", lambda self: {
-        "generation_id": "generation-test", "digest": "digest-test", "work_count": 1, "updating": False,
-    })
-    monkeypatch.setattr(catalog, "get_work_artwork_many", lambda _conn, _ids: {})
+    from backend.tests.artwork_fixtures import ready_artwork
+    from backend.tests.test_v4_library_projection import _entry
 
-    calls = []
+    from app.media_v4.persistence.database import V4Database
+    from app.media_v4.projection.collections import related_works
+    from app.media_v4.revisions.service import V4RevisionService
 
-    def batch_lookup(_conn, sources, width=384):
-        calls.append((sources, width))
-        return {source: f"local:{source}" for source in sources}
+    database = V4Database(tmp_path / "related-works.db")
+    database.initialize()
+    pairs = []
+    for index, title in enumerate(("电影甲", "电影乙", "电影丙")):
+        evidence, facts = _entry(f"movie-{index}")
+        facts = replace(facts, work_title=title, title_candidates=(title,), media_type="movie",
+                        group_type="movie", card_type="standalone", show_type="anime_movie",
+                        season_candidate=None, episode_candidate=None, series_group="")
+        pairs.append((evidence, facts))
+    revisions = V4RevisionService(database)
+    revisions.create_draft("related-movies", pairs)
+    revisions.confirm("related-movies")
+    with database.connect() as conn:
+        work_ids = {row["preferred_title"]: row["work_id"]
+                    for row in conn.execute("SELECT work_id,preferred_title FROM works")}
+        for provider_id, title in (("501", "电影甲"), ("502", "电影乙"), ("503", "电影丙")):
+            conn.execute("INSERT INTO provider_bindings(work_id,provider,provider_id,media_type) VALUES (?, 'tmdb', ?, 'movie')",
+                         (work_ids[title], provider_id))
+        for work_id in (work_ids["电影甲"], work_ids["电影乙"]):
+            ready_artwork(conn, work_id)
 
-    monkeypatch.setattr(catalog, "get_metadata_images_many", batch_lookup)
-    response = client.get("/api/library")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["updating"] is False
-    assert body["generation_id"]
-    assert len(calls) == 1
-    assert set(calls[0][0]) == {"/a.jpg", "/b.jpg"}
-    assert [item["poster_path"] for item in body["works"][0]["related_works"]] == ["local:/a.jpg", "local:/b.jpg", "local:/a.jpg"]
-    assert "studios" not in body["works"][0] and "tags" not in body["works"][0]
+        result = related_works(conn, work_ids["电影甲"], {"related_works": [
+            {"provider": "tmdb", "provider_id": "502", "media_type": "movie",
+             "relation_type": "tmdb_collection", "poster_url": "https://image.tmdb.org/b.jpg",
+             "title": "在线中文标题"},
+            {"provider": "tmdb", "provider_id": "999", "media_type": "movie",
+             "relation_type": "tmdb_collection", "poster_url": "https://image.tmdb.org/missing.jpg",
+             "title": "未入库在线条目"},
+            {"provider": "tmdb", "provider_id": "503", "media_type": "movie",
+             "relation_type": "tmdb_collection", "poster_url": "https://image.tmdb.org/unprepared.jpg",
+             "title": "海报尚未准备"},
+            {"provider": "tmdb", "provider_id": "888", "media_type": "movie",
+             "relation_type": "same_genre", "poster_url": "https://image.tmdb.org/genre.jpg",
+             "title": "同类型"},
+        ]})
+
+    assert len(result) == 1
+    assert result[0]["work_id"] == work_ids["电影乙"]
+    assert result[0]["title"] == "在线中文标题"
+    assert result[0]["relation_type"] == "tmdb_collection"
+    assert result[0]["poster_path"].startswith("/api/assets/artwork/")
+    assert result[0]["poster_path"].endswith("/384")
 
 
-def test_detail_batches_cast_and_related_image_lookups(tmp_path, monkeypatch):
+def test_detail_preserves_already_published_relation_poster_urls(tmp_path, monkeypatch):
     _, database = _client(tmp_path, monkeypatch)
     from app.api import library_v4
     from app.media_v4.assets import catalog
 
-    calls = []
-
-    def batch_lookup(_conn, sources, width=384):
-        calls.append((sources, width))
-        return {source: f"local:{source}" for source in sources}
-
     monkeypatch.setattr(catalog, "get_work_artwork", lambda _conn, _work_id: {})
     monkeypatch.setattr(catalog, "get_episode_artwork_many", lambda _conn, _episode_ids: {})
-    monkeypatch.setattr(catalog, "get_metadata_images_many", batch_lookup)
+    monkeypatch.setattr(catalog, "get_metadata_images_many", lambda _conn, sources: {
+        source: f"local:{source}" for source in sources
+    })
     payload = {
         "work_id": "work-test",
         "cast": [
@@ -342,9 +353,9 @@ def test_detail_batches_cast_and_related_image_lookups(tmp_path, monkeypatch):
             {"profile_path": "/person-a.jpg"},
         ],
         "related_works": [
-            {"poster_path": "/related-a.jpg"},
-            {"poster_url": "/related-b.jpg"},
-            {"poster_path": "/related-a.jpg"},
+            {"poster_path": "/api/assets/artwork/related-a/digest-webp-v1/384"},
+            {"poster_path": "/api/assets/artwork/related-b/digest-webp-v1/384"},
+            {"poster_path": "/api/assets/artwork/related-a/digest-webp-v1/384"},
         ],
         "episodes": [],
         "seasons": [],
@@ -352,10 +363,12 @@ def test_detail_batches_cast_and_related_image_lookups(tmp_path, monkeypatch):
     with database.connect() as conn:
         library_v4._published_artwork_payload(conn, payload)
 
-    assert len(calls) == 1
-    assert set(calls[0][0]) == {"/person-a.jpg", "/person-b.jpg", "/related-a.jpg", "/related-b.jpg"}
     assert [person["profile_path"] for person in payload["cast"]] == ["local:/person-a.jpg", "local:/person-b.jpg", "local:/person-a.jpg"]
-    assert [related["poster_path"] for related in payload["related_works"]] == ["local:/related-a.jpg", "local:/related-b.jpg", "local:/related-a.jpg"]
+    assert [related["poster_path"] for related in payload["related_works"]] == [
+        "/api/assets/artwork/related-a/digest-webp-v1/384",
+        "/api/assets/artwork/related-b/digest-webp-v1/384",
+        "/api/assets/artwork/related-a/digest-webp-v1/384",
+    ]
 
 
 def test_detail_only_exposes_latest_confirmed_revision_for_same_root(tmp_path, monkeypatch):

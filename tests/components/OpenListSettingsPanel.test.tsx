@@ -139,7 +139,7 @@ describe('OpenListSettingsPanel', () => {
     fireEvent.click(screen.getByText('管理连接'));
     expect(screen.getByText('OpenList 地址', { exact: false })).toBeTruthy();
     expect(screen.getByText('WebDAV 挂载地址：')).toBeTruthy();
-    expect(screen.getByRole('textbox', { name: '远端根目录' })).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'OpenList 远端根目录' })).toBeVisible();
   });
 });
 

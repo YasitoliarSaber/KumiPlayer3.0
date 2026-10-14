@@ -29,8 +29,12 @@ from app.core.config import (
 from app.core.data_lock import DATA_WRITE_LOCK
 from app.core.local_roots import (
     apply_primary_change,
-    normalize_records as normalize_local_root_records,
     public_records,
+)
+from app.core.local_roots import (
+    normalize_records as normalize_local_root_records,
+)
+from app.core.local_roots import (
     validate_records as validate_local_root_records,
 )
 from app.core.media_path_probe import (
@@ -99,6 +103,9 @@ class ConfigPatch(BaseModel):
     poster_size: int | None = None
     ongoing_update_on_startup: bool | None = None
     ongoing_update_interval_minutes: Annotated[int, Field(ge=15, le=10080)] | Literal[0] | None = None
+    ongoing_update_schedule_mode: Literal["off", "interval", "daily", "weekly"] | None = None
+    ongoing_update_time: Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")] | None = None
+    ongoing_update_weekday: Annotated[int, Field(ge=0, le=6)] | None = None
     heartbeat_enabled: bool | None = None
     heartbeat_timeout: int | None = None
     proxy_url: str | None = None

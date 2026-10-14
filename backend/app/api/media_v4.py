@@ -1587,6 +1587,28 @@ def list_source_libraries():
     return {"cards": list_source_cards(get_database())}
 
 
+@router.get("/sources/libraries/{root_id}/diagnostics")
+def source_diagnostics(root_id: str):
+    """Exportable read-only summary of the latest source scan, revision and jobs."""
+    from app.media_v4.diagnostics.source_diagnostics import export_source_diagnostics
+
+    try:
+        return export_source_diagnostics(get_database(), root_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="来源不存在") from exc
+
+
+@router.get("/sources/scans/{scan_id}/directory-check")
+def source_scan_directory_check(scan_id: str):
+    """Check a few distinct evidence parent directories using bounded metadata reads."""
+    from app.media_v4.diagnostics.source_diagnostics import check_scan_directories
+
+    try:
+        return check_scan_directories(get_database(), scan_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="来源扫描不存在") from exc
+
+
 @router.delete("/sources/libraries/{root_id}")
 def hide_source_library_card(root_id: str):
     """隐藏一个已停止来源的卡片，不清理它已建立的媒体库。"""

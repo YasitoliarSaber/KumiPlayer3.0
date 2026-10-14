@@ -18,7 +18,7 @@ beforeEach(() => {
 
 test('loads the native preferences and offers independent close and minimize switches', async () => {
   render(<WindowSettingsPanel />);
-  const minimize = await screen.findByRole('switch', { name: '最小化到托盘' });
+  const minimize = await screen.findByRole('switch', { name: '点击窗口最小化按钮时收到托盘' });
   const close = screen.getByRole('switch', { name: '关闭窗口时收到托盘' });
   expect(minimize).not.toBeChecked();
   expect(close).not.toBeChecked();
@@ -46,7 +46,7 @@ test('switches remain disabled until the native save completes', async () => {
   const close = await screen.findByRole('switch', { name: '关闭窗口时收到托盘' });
   fireEvent.click(close);
   expect(close).toBeDisabled();
-  expect(screen.getByRole('switch', { name: '最小化到托盘' })).toBeDisabled();
+  expect(screen.getByRole('switch', { name: '点击窗口最小化按钮时收到托盘' })).toBeDisabled();
   await act(async () => finish({ ...defaults, close_to_tray: true }));
   expect(close).toBeEnabled();
   expect(close).toBeChecked();
@@ -57,13 +57,13 @@ test('read errors are visible and can be retried without resetting saved prefere
   render(<WindowSettingsPanel />);
   expect(await screen.findByRole('alert')).toHaveTextContent('无法读取窗口设置');
   fireEvent.click(screen.getByRole('button', { name: '重新读取' }));
-  expect(await screen.findByRole('switch', { name: '最小化到托盘' })).not.toBeChecked();
+  expect(await screen.findByRole('switch', { name: '点击窗口最小化按钮时收到托盘' })).not.toBeChecked();
 });
 
 test('the immediate tray button uses the native command and reports hide failures', async () => {
   desktop.hide.mockRejectedValueOnce(new Error('tray unavailable'));
   render(<WindowSettingsPanel />);
-  await screen.findByRole('switch', { name: '最小化到托盘' });
+  await screen.findByRole('switch', { name: '点击窗口最小化按钮时收到托盘' });
   fireEvent.click(screen.getByRole('button', { name: '立即收到托盘' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('无法收到托盘');
   expect(desktop.hide).toHaveBeenCalledOnce();

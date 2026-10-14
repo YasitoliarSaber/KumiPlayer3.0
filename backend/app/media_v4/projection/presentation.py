@@ -1,12 +1,14 @@
 """当前媒体库展示合同；过滤派生视图，不改写历史 confirmed 或资产。"""
 
-PRESENTATION_POLICY_VERSION = "required-local-artwork-5"
+PRESENTATION_POLICY_VERSION = "required-local-artwork-online-relations-6"
 
 
 def preserve_identity_title(work_id: str, media_type: str, metadata: dict,
                             identity_ids: set[str], shared_tv_ids: set[str]) -> bool:
-    """合集/关联关系本身不禁止中文展示；共享 TV 身份仍保留各作品区别。"""
-    if work_id in shared_tv_ids:
+    """同一 TV ID 的英文通用标题保留本地区分；可靠中文标题允许统一展示。"""
+    localized_title = str(metadata.get("title") or "").strip()
+    has_chinese_online_title = any("\u3400" <= char <= "\u9fff" for char in localized_title)
+    if work_id in shared_tv_ids and not has_chinese_online_title:
         return True
     has_specific_online_identity = (
         metadata.get("provider") not in {None, "", "local"}

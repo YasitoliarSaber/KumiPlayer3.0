@@ -192,6 +192,10 @@ export interface V4SourceLibraryCard {
   metadata_ready_current_count?: number | null
   /** 其中沿用上一次成功资料快照（retained）的就绪数量。 */
   metadata_ready_retained_count?: number | null
+  /** SQLite 当前图片需求中已就绪的唯一图片资源数。 */
+  artwork_ready_count?: number
+  /** SQLite 当前图片需求中的唯一图片资源总数。 */
+  artwork_total_count?: number
   progress: {
     state: string
     stage: string
@@ -222,6 +226,46 @@ export interface V4SourceLibraryCard {
     failed: number
     cancelled: number
   }
+}
+
+export interface V4SourceDirectoryCheck {
+  scan_id: string
+  state: 'reachable' | 'missing' | 'unavailable' | 'no_samples' | string
+  sampled_directories: number
+  reachable_directories: number
+  missing_directories: number
+  message: string
+  scope: string
+}
+
+export interface V4DiagnosticWorkHierarchy {
+  work_id: string
+  title: string
+  media_type: string
+  seasons: Array<{ number: number | null; kind: string; title: string; episodes: Array<{ number: number | null; absolute_number: number | null; special_number: number | null; title: string }> }>
+}
+
+export interface V4SourceDiagnosticsReport {
+  format: string
+  generated_at: string
+  source: { root_id: string; display_name: string; provider: string; source_mode: string; locations: Record<string, string> }
+  scan: null | { scan_id: string; status: string; stage: string; reason: string; started_at: string; finished_at: string }
+  revision: null | { revision_id: string; status: string; created_at: string; confirmed_at: string }
+  identification_uncertainties: Array<{
+    layer: string
+    code: string
+    reason: string
+    resolved: boolean
+    evidence_id: string
+    path: string
+    hierarchy?: { work?: string; season?: number | null; episode?: number | null; season_title?: string; episode_title?: string; special?: number | null }
+  }>
+  issues: Array<{ layer: string; code: string; reason: string; resolved: boolean; evidence_id: string; path: string }>
+  unfinished_or_failed_jobs: Array<{ layer: string; job_type: string; status: string; attempts: number; reason: string; work_id: string; updated_at: string }>
+  metadata_problems: Array<{ layer: string; work_id: string; provider: string; source: string; job_status: string; metadata_state: string; refresh_status: string; artifact_status: string; reason_code: string; reasons: string[]; updated_at: string; hierarchy: V4DiagnosticWorkHierarchy | null }>
+  unfinished_artwork: Array<{ layer: string; work_id: string; hierarchy: V4DiagnosticWorkHierarchy; subject: { type: string; role: string; season?: number | null; season_title?: string; season_kind?: string; episode?: number | null; absolute_episode?: number | null; special_number?: number | null; episode_title?: string }; resource_id: string; state: string; attempts: number; reason: string }>
+  work_hierarchies: V4DiagnosticWorkHierarchy[]
+  privacy: string
 }
 
 export interface V4MaintenancePreview {
@@ -571,6 +615,12 @@ export const mediaV4Api = {
     ),
 
   sourceLibraries: () => api.get<{ cards: V4SourceLibraryCard[] }>('/api/v4/sources/libraries'),
+
+  sourceDiagnostics: (rootId: string) =>
+    api.get<V4SourceDiagnosticsReport>(`/api/v4/sources/libraries/${encodeURIComponent(rootId)}/diagnostics`),
+
+  sourceScanDirectoryCheck: (scanId: string) =>
+    api.get<V4SourceDirectoryCheck>(`/api/v4/sources/scans/${encodeURIComponent(scanId)}/directory-check`),
 
   hideSourceLibraryCard: (rootId: string) =>
     api.delete<{ root_id: string; hidden: boolean }>(`/api/v4/sources/libraries/${encodeURIComponent(rootId)}`),

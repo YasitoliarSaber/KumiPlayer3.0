@@ -583,7 +583,7 @@ test('全部有图的特别篇也显示原名列表', async () => {
   expect(container.querySelector('.detail-special-list')).not.toBeNull();
 });
 
-test('关联与推荐优先本地海报，只有横图或图片失败时保留文字占位', async () => {
+test('关联只显示有海报的明确关系，图片加载失败保留该作品文字', async () => {
   const related = { ...work, work_id: 'related', title: '关联作品甲', local_poster_path: artworkPath('f', '1', 384), fanart_path: 'https://image.tmdb.org/t/p/original/related-fanart.jpg' };
   const similar = { ...work, work_id: 'similar', title: '推荐作品乙', local_poster_path: artworkPath('9', '1', 384) };
   const noPoster = { ...work, work_id: 'no-poster', title: '只有背景图', local_poster_path: '', poster_path: '', fanart_path: 'https://image.tmdb.org/t/p/original/only-fanart.jpg' };
@@ -594,9 +594,17 @@ test('关联与推荐优先本地海报，只有横图或图片失败时保留�
   const relatedCard = container.querySelector('.detail-related-card')!;
   expect(relatedCard.querySelector('img')?.getAttribute('src')).toContain(related.local_poster_path);
   expect(container.querySelector('.detail-similar-card img')?.getAttribute('src')).toContain(similar.local_poster_path);
-  expect(container.querySelectorAll('.detail-related-card')[1].querySelector('img')).toBeNull();
-  expect(container.querySelectorAll('.detail-related-card')[1].querySelector('.detail-related-fallback')).toHaveTextContent('暂无海报');
+  expect(container.querySelectorAll('.detail-related-card')).toHaveLength(1);
   fireEvent.error(relatedCard.querySelector('img')!);
   expect(relatedCard.querySelector('.detail-related-fallback')).toHaveTextContent('暂无海报');
   expect(relatedCard.querySelector('.detail-related-copy')).toHaveTextContent('关联作品甲');
+});
+
+test('没有在线关系时不按相同标题或series_group猜测关联', async () => {
+  const detail = { ...work, series_group: '京都动画', related_works: [] };
+  const neighbor = { ...work, work_id: 'same-folder', title: `${work.title} 剧场版`, series_group: '京都动画' };
+  useLibraryStore.setState({ works: [detail, neighbor] as never, getWorkDetail: vi.fn().mockResolvedValue(detail) });
+  const { container } = render(<WorkDetailPage />);
+  await screen.findByRole('button', { name: '更多操作' });
+  expect(container.querySelector('.detail-related-card')).toBeNull();
 });

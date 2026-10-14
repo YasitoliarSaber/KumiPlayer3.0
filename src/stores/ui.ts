@@ -38,6 +38,12 @@ export interface PosterWallLayout {
   seriesCardImageMode: SeriesCardImageMode;
 }
 
+export interface DetailTagPreset {
+  id: string;
+  label: string;
+  color: string;
+}
+
 interface NavigationLocation {
   page: AppPage;
   activeCategory: LibraryView | null;
@@ -54,6 +60,27 @@ function normalizeOngoingCategoryName(value: unknown): string {
   const name = typeof value === 'string'
     ? value.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f]/g, '').trim() : '';
   return Array.from(name).slice(0, 24).join('') || '新番';
+}
+
+function normalizeDetailTagPresets(value: unknown): DetailTagPreset[] {
+  if (!Array.isArray(value)) return [];
+  const presets: DetailTagPreset[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const source = item as Partial<DetailTagPreset>;
+    const id = typeof source.id === 'string' ? source.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48) : '';
+    const label = typeof source.label === 'string'
+      ? source.label.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 24)
+      : '';
+    const color = typeof source.color === 'string' && /^#[0-9a-f]{6}$/i.test(source.color) ? source.color : '';
+    const key = label.toLocaleLowerCase();
+    if (!id || !label || !color || seen.has(key)) continue;
+    seen.add(key);
+    presets.push({ id, label, color });
+    if (presets.length >= 32) break;
+  }
+  return presets;
 }
 
 interface UiState {
@@ -77,6 +104,9 @@ interface UiState {
   motionMode: MotionMode;
   appearanceMode: AppearanceMode;
   ongoingCategoryName: string;
+  extraVideoRemindersEnabled: boolean;
+  includeAuxiliaryVideoReminders: boolean;
+  detailTagPresets: DetailTagPreset[];
   seriesCardImageMode: SeriesCardImageMode;
   selectedSeasonNumber: number | null;
   selectedSeasonByWork: Record<string, WorkSeasonSelection>;
@@ -104,6 +134,10 @@ interface UiState {
   setPosterWallLayout: (layout: PosterWallLayout) => void;
   setAppearanceMode: (mode: AppearanceMode) => void;
   setOngoingCategoryName: (name: string) => string;
+  setExtraVideoRemindersEnabled: (enabled: boolean) => void;
+  setIncludeAuxiliaryVideoReminders: (enabled: boolean) => void;
+  saveDetailTagPreset: (preset: DetailTagPreset) => void;
+  removeDetailTagPreset: (presetId: string) => void;
   setActiveCategory: (category: LibraryView | null) => void;
   toggleSidebar: () => void;
   toggleSidebarVisibility: () => void;
@@ -169,6 +203,9 @@ export const useUiStore = create<UiState>()(
       styleMode: 'gallery',
       motionMode: 'standard',
       appearanceMode: 'fluent',
+      extraVideoRemindersEnabled: true,
+      includeAuxiliaryVideoReminders: false,
+      detailTagPresets: [],
       ongoingCategoryName: '新番',
       seriesCardImageMode: 'poster',
       selectedSeasonNumber: null,
@@ -258,6 +295,17 @@ export const useUiStore = create<UiState>()(
         set({ ongoingCategoryName });
         return ongoingCategoryName;
       },
+      setExtraVideoRemindersEnabled: (enabled) => set({ extraVideoRemindersEnabled: enabled }),
+      setIncludeAuxiliaryVideoReminders: (enabled) => set({ includeAuxiliaryVideoReminders: enabled }),
+      saveDetailTagPreset: (preset) => set((state) => ({
+        detailTagPresets: normalizeDetailTagPresets([
+          ...state.detailTagPresets.filter((item) => item.id !== preset.id && item.label.toLocaleLowerCase() !== preset.label.trim().toLocaleLowerCase()),
+          preset,
+        ]),
+      })),
+      removeDetailTagPreset: (presetId) => set((state) => ({
+        detailTagPresets: state.detailTagPresets.filter((item) => item.id !== presetId),
+      })),
       setActiveCategory: (category) => set({ activeCategory: category }),
       toggleSidebar: () => set((state) => {
         const visibleMode = state.sidebarMode === 'hidden'
@@ -307,13 +355,25 @@ export const useUiStore = create<UiState>()(
         motionMode: state.motionMode,
         appearanceMode: state.appearanceMode,
         ongoingCategoryName: state.ongoingCategoryName,
+        extraVideoRemindersEnabled: state.extraVideoRemindersEnabled,
+        includeAuxiliaryVideoReminders: state.includeAuxiliaryVideoReminders,
+        detailTagPresets: state.detailTagPresets,
         sort: state.sort,
         seriesCardImageMode: state.seriesCardImageMode,
         selectedSeasonByWork: state.selectedSeasonByWork,
       }),
       merge: (persistedState, currentState) => {
         const saved = persistedState as Partial<UiState> | undefined;
-        return { ...currentState, ...saved, ongoingCategoryName: normalizeOngoingCategoryName(saved?.ongoingCategoryName) };
+        return {
+          ...currentState,
+          ...saved,
+          ongoingCategoryName: normalizeOngoingCategoryName(saved?.ongoingCategoryName),
+          extraVideoRemindersEnabled: typeof saved?.extraVideoRemindersEnabled === 'boolean'
+            ? saved.extraVideoRemindersEnabled : currentState.extraVideoRemindersEnabled,
+          includeAuxiliaryVideoReminders: typeof saved?.includeAuxiliaryVideoReminders === 'boolean'
+            ? saved.includeAuxiliaryVideoReminders : currentState.includeAuxiliaryVideoReminders,
+          detailTagPresets: normalizeDetailTagPresets(saved?.detailTagPresets),
+        };
       },
     }
   )

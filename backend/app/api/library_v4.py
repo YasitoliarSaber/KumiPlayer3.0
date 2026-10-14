@@ -48,20 +48,15 @@ def _published_artwork_payload(conn, payload: dict) -> None:
     from app.media_v4.assets.catalog import get_metadata_images_many
 
     people = payload.get('cast') or []
-    related_works_payload = payload.get('related_works') or []
     image_sources = list(dict.fromkeys(
-        [str(person.get('profile_path') or person.get('profile_url') or '') for person in people]
-        + [str(related.get('poster_path') or related.get('poster_url') or '') for related in related_works_payload]
+        str(person.get('profile_path') or person.get('profile_url') or '') for person in people
     ))
     images = get_metadata_images_many(conn, [source for source in image_sources if source])
     for person in people:
         person['profile_path'] = images.get(person.get('profile_path') or person.get('profile_url') or '', '')
-    for related in related_works_payload:
-        related['poster_path'] = images.get(related.get('poster_path') or related.get('poster_url') or '', '')
-        related['local_poster_path'] = related['poster_path']
 
 
-def _card_payload(card: dict, override: dict | None = None) -> dict:
+def _card_payload(card: dict, override: dict | None = None, related_payload: list[dict] | None = None) -> dict:
     metadata = card.get("metadata") or {}
     override = override or {}
     media_type = card['media_type'] if card['media_type'] in {'tv', 'movie', 'unknown'} else 'unknown'
@@ -116,7 +111,7 @@ def _card_payload(card: dict, override: dict | None = None) -> dict:
         "local_clearlogo_path": local_clearlogo,
         "clearlogo_path": metadata.get("clearlogo_url") or metadata.get("clearlogo_path") or local_clearlogo,
         "dir_path": "",
-        "related_works": related_works(metadata),
+        "related_works": related_payload or [],
         "collections": metadata.get("collections") or [],
         "cast": metadata.get("cast") or [],
         "tags": metadata.get("tags") or [],
@@ -187,22 +182,20 @@ def get_library(source: str | None = None, work_ids: str | None = None):
     card_work_ids = [card["work_id"] for card in snapshot.cards]
     watch_map = _watch_status_map(card_work_ids)
     override_map = _work_overrides_map(card_work_ids)
-    from app.media_v4.assets.catalog import get_metadata_images_many, get_work_artwork_many
+    from app.media_v4.assets.catalog import get_work_artwork_many
     with get_database().connect() as conn:
         artwork_map = get_work_artwork_many(conn, card_work_ids)
-        related_sources = list(dict.fromkeys(
-            str(item.get('poster_path') or item.get('poster_url') or '')
-            for card in snapshot.cards for item in related_works(card.get('metadata') or {})
-            if item.get('poster_path') or item.get('poster_url')
-        ))
-        related_images = get_metadata_images_many(conn, related_sources)
+        related_map = {
+            str(card['work_id']): related_works(conn, str(card['work_id']), card.get('metadata') or {})
+            for card in snapshot.cards
+        }
     works = []
     for card in snapshot.cards:
         override = override_map.get(card["work_id"], {})
         if override.get("hidden"):
             # 单作品删除：从活动媒体库排除（不可变快照保留审计事实）。
             continue
-        payload = _card_payload(card, override)
+        payload = _card_payload(card, override, related_map.get(str(card['work_id']), []))
         payload['artwork'] = artwork_map.get(card['work_id'], {})
         for role in ('poster', 'fanart', 'clearlogo'):
             variants = payload['artwork'].get(role, {}).get('variants', {})
@@ -212,9 +205,6 @@ def get_library(source: str | None = None, work_ids: str | None = None):
         for key in ('cast', 'studios', 'tags', 'certification', 'certification_country'):
             payload.pop(key, None)
         payload['content_scope'] = card.get('metadata', {}).get('content_scope', '')
-        for related in payload.get('related_works') or []:
-            related['poster_path'] = related_images.get(related.get('poster_path') or related.get('poster_url') or '') or ''
-            related['local_poster_path'] = related['poster_path']
         payload["watch_status"] = watch_map.get(card["work_id"], {
             "work_id": card["work_id"], "status": "", "note": "", "favorite": False, "updated_at": "",
         })

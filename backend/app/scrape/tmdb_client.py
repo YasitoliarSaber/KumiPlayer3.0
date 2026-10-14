@@ -456,6 +456,14 @@ class TMDBClient:
         }
         return self._request("GET", f"/movie/{tmdb_id}", params=params)
 
+    def get_collection_detail(self, collection_id: int) -> dict:
+        """获取 TMDB 电影合集成员；该关系来自电影详情的 belongs_to_collection。"""
+        return self._request(
+            "GET",
+            f"/collection/{collection_id}",
+            params={"language": self._language},
+        )
+
     def get_tv_season_detail(self, tmdb_id: int, season_number: int) -> dict:
         """获取 TV 季详情（含图片、外部 ID、翻译）"""
         params = {

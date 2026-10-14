@@ -13,6 +13,8 @@ const api = vi.hoisted(() => ({
   status: vi.fn(),
   overrideEvidence: vi.fn(),
   sourceLibraries: vi.fn(),
+  sourceDiagnostics: vi.fn(),
+  sourceScanDirectoryCheck: vi.fn(),
   openlistStatus: vi.fn(),
   drafts: vi.fn(),
   revisionEvidence: vi.fn(),
@@ -91,6 +93,38 @@ test('图片失败独立显示，不阻塞已发布作品，也不需要镜像�
   expect(retryImages).toHaveBeenCalledWith('published')
 })
 
+test('后台轮询使作品进入完成态时保留已打开的诊断详情与当前作品位置', async () => {
+  const unit = workUnit('w-stable', '保持详情', 'needs_attention', {
+    metadata_state: 'waiting_review', metadata_reason: '在线作品需要核对',
+  })
+  const fetchWorkDetail = vi.fn().mockResolvedValue({
+    revision_id: 'rev-exec', work_id: 'w-stable',
+    work: { title: '保持详情', media_type: 'tv', provider: '', provider_id: '', metadata_state: 'waiting_review', metadata_reason: '' },
+    mirror: { status: 'succeeded', error: '', artifact_count: 0, artifacts: [] },
+    seasons: [], episodes: [], episode_total: 0, has_detail: true,
+    name_recovery: { status: 'succeeded', steps: [{ provider: 'AniList', status: 'completed', cache_status: 'hit', aliases: ['选中作品'], reason_code: '' }] },
+  })
+  const props = { busyRetryId: '', onRetry: vi.fn(), resolvingWorkId: '', onResolveMetadata: vi.fn(), fetchWorkDetail }
+  const peer = workUnit('peer', '另一个正在等候的作品', 'waiting_metadata')
+  const { rerender } = render(<V4ExecutionProgress progress={makeProgress([unit, peer]) as never} {...props} />)
+
+  fireEvent.click(screen.getByRole('button', { name: /保持详情/ }))
+  fireEvent.click(await screen.findByRole('button', { name: '查看诊断详情' }))
+  expect(await screen.findByText('选中作品')).toBeVisible()
+
+  rerender(<V4ExecutionProgress progress={makeProgress([{
+    ...unit, overall_status: 'completed', metadata_state: 'ready',
+    metadata: { job_id: 'meta-w-stable', status: 'succeeded', attempts: 1, last_error: '' },
+  }, peer], { overall_status: 'running' }) as never} {...props} />)
+
+  expect(screen.getByRole('button', { name: /保持详情/ })).toHaveAttribute('aria-expanded', 'true')
+  expect(await screen.findByRole('button', { name: '收起诊断详情' })).toHaveAttribute('aria-expanded', 'true')
+  expect(screen.getByText('选中作品')).toBeVisible()
+  const activeList = document.querySelector('.media-v4-work-progress-list')
+  expect(activeList && within(activeList).getByRole('button', { name: /保持详情/ })).toBeVisible()
+  expect(activeList?.firstElementChild).toHaveTextContent('保持详情')
+})
+
 test('资料完成但图片待准备时仍在活动列表，总体进度不会提前显示完成', () => {
   const progress = makeProgress([workUnit('preparing', '正在准备图片的作品', 'completed', {
     metadata_state: 'ready', artwork: { status: 'pending', total: 2, counts: { pending: 2 } },
@@ -148,6 +182,12 @@ beforeEach(() => {
     jobs: [],
     progress: makeProgress([]),
   })
+  api.sourceScanDirectoryCheck.mockResolvedValue({
+    scan_id: 'scan-1', state: 'no_samples', sampled_directories: 0,
+    reachable_directories: 0, missing_directories: 0,
+    message: '没有可抽查的视频目录位置。', scope: '未读取视频文件。',
+  })
+  api.sourceDiagnostics.mockResolvedValue({ format: 'kumiplayer-source-diagnostics-v1' })
   api.sourceLibraries.mockResolvedValue({ cards: [] })
   api.drafts.mockResolvedValue({ drafts: [] })
   api.revisionEvidence.mockResolvedValue({ revision_id: 'rev', status: 'draft', entries: [] })
@@ -832,8 +872,9 @@ test('识别摘要显示 unknown 类型与 null 季号/集号，不制造第 0 �
 
   // 总数摘要里就要说明类型未定与集号未定，而不是把它们藏起来。
   expect(screen.getByText(/类型未定 2 部/)).toBeVisible()
+  expect(screen.getByText(/季号未定 2 组/)).toBeVisible()
   expect(screen.getByText(/集号未定 3 项/)).toBeVisible()
-  expect(screen.getByText(/可先建立媒体库，稍后核对/)).toBeVisible()
+  expect(screen.getAllByText(/可先建立媒体库，稍后核对/).length).toBeGreaterThan(0)
 
   // 展开 unknown 作品卡：类型/季号/集号三处都要显式未定。
   fireEvent.click(screen.getByText('未定位作品'))

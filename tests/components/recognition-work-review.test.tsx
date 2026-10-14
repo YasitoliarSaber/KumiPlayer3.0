@@ -37,3 +37,18 @@ test('同一文件的多个问题合并为一个文件入口，并展示全部�
   expect(within(dialog).getByText('类型需要确认')).toBeVisible()
   expect(within(dialog).queryByText('异名无编号文件与正片混放')).not.toBeInTheDocument()
 })
+
+test('没有阻断 issue 的类型未定作品也进入醒目的稍后核对清单', () => {
+  const preview: V4Preview = {
+    revision_id: 'rev', status: 'draft',
+    works: [{ work_key: 'unknown-work', preferred_title: '未定位作品', media_type: 'unknown', year: null, source_evidence_ids: ['ev1'] }],
+    episodes: [{ work_key: 'unknown-work', episode_key: 'unknown-episode', local_season_number: null, local_episode_number: null, absolute_episode_number: null, season_kind: 'unassigned', episode_kind: 'unknown', special_number: null, edition_key: 'default', asset_evidence_ids: ['ev1'], identity_key: 'unknown-episode' }],
+    work_assets: [], issues: [], blocking_issue_count: 0,
+  }
+  render(<V4RecognitionSummary preview={preview} issues={[]} evidenceEntries={[]} overrideDrafts={{}} busy={false} onOverrideChange={vi.fn()} onApplyOverride={vi.fn()} />)
+
+  expect(screen.getByRole('alert')).toHaveTextContent('类型未定 1 部')
+  expect(screen.getByRole('heading', { name: '需要处理或稍后核对' })).toBeVisible()
+  expect(screen.getByText('未定位作品')).toBeVisible()
+  expect(screen.getByText(/类型未定 · 季号未定 1 组 · 集号未定 1 项/)).toBeVisible()
+})

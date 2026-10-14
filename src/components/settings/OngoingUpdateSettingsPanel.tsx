@@ -4,7 +4,7 @@ import type { PublicConfig } from '../../api/config';
 import { SettingsField } from '../ui/SettingsPrimitives';
 import ActionToast from '../ui/ActionToast';
 
-type UpdateSettings = Pick<PublicConfig, 'ongoing_update_on_startup' | 'ongoing_update_interval_minutes'>;
+type UpdateSettings = Pick<PublicConfig, 'ongoing_update_on_startup' | 'ongoing_update_interval_minutes' | 'ongoing_update_schedule_mode' | 'ongoing_update_time' | 'ongoing_update_weekday'>;
 
 const intervalOptions = [
   { value: 0, label: '关闭' }, { value: 15, label: '每 15 分钟' },
@@ -28,6 +28,14 @@ export default function OngoingUpdateSettingsPanel({ config, onSave, externalBus
   const [notice, setNotice] = useState('');
   const [failed, setFailed] = useState(false);
   const interval = config.ongoing_update_interval_minutes ?? 0;
+  const scheduleMode = config.ongoing_update_schedule_mode ?? 'interval';
+  const selectedInterval = scheduleMode === 'daily' || scheduleMode === 'weekly' ? scheduleMode : scheduleMode === 'off' ? '0' : String(interval);
+  const [timeDraft, setTimeDraft] = useState(config.ongoing_update_time ?? '09:00');
+  const [weekdayDraft, setWeekdayDraft] = useState(config.ongoing_update_weekday ?? 0);
+  useEffect(() => {
+    setTimeDraft(config.ongoing_update_time ?? '09:00');
+    setWeekdayDraft(config.ongoing_update_weekday ?? 0);
+  }, [config.ongoing_update_time, config.ongoing_update_weekday]);
   const options = intervalOptions.some(option => option.value === interval)
     ? intervalOptions : [...intervalOptions, { value: interval, label: `每 ${interval} 分钟` }].sort((a, b) => a.value - b.value);
   const disabled = saving || externalBusy;
@@ -78,11 +86,30 @@ export default function OngoingUpdateSettingsPanel({ config, onSave, externalBus
       <Switch className="settings-toggle-row" label="启动时更新新番" checked={config.ongoing_update_on_startup ?? false} disabled={disabled}
         onChange={(_, data) => void save({ ongoing_update_on_startup: data.checked })} />
     <SettingsField label="新番更新间隔" className="settings-config-row sources-ongoing-short-field" description="仅更新新番来源；TXT 需手动导入新清单。">
-      <Dropdown value={options.find(option => option.value === interval)?.label || ''} selectedOptions={[String(interval)]} disabled={disabled}
-        onOptionSelect={(_, data) => { if (data.optionValue !== undefined) void save({ ongoing_update_interval_minutes: Number(data.optionValue) }); }}>
-        {options.map(option => <Option value={String(option.value)} key={option.value}>{option.label}</Option>)}
+      <Dropdown value={selectedInterval === 'daily' ? '每天' : selectedInterval === 'weekly' ? '每周' : scheduleMode === 'interval' && (interval === 1440 || interval === 10080) ? `每 ${interval} 分钟` : options.find(option => String(option.value) === selectedInterval)?.label || ''} selectedOptions={[selectedInterval]} disabled={disabled}
+        onOptionSelect={(_, data) => {
+          const value = data.optionValue;
+          if (value === undefined) return;
+          if (value === 'daily' || value === 'weekly') void save({ ongoing_update_schedule_mode: value, ongoing_update_time: timeDraft, ongoing_update_weekday: weekdayDraft });
+          else void save({ ongoing_update_interval_minutes: Number(value), ...(scheduleMode !== 'interval' ? { ongoing_update_schedule_mode: 'interval' as const } : {}) });
+        }}>
+        {options.filter(option => option.value !== 1440 && option.value !== 10080).map(option => <Option value={String(option.value)} key={option.value}>{option.label}</Option>)}
+        {scheduleMode === 'interval' && (interval === 1440 || interval === 10080) && <Option value={String(interval)}>{`每 ${interval} 分钟`}</Option>}
+        <Option value="daily">每天</Option><Option value="weekly">每周</Option>
       </Dropdown>
     </SettingsField>
+    {(scheduleMode === 'daily' || scheduleMode === 'weekly') && <>
+      {scheduleMode === 'weekly' && <SettingsField label="更新星期" className="settings-config-row sources-ongoing-short-field">
+        <Dropdown value={['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'][weekdayDraft]} selectedOptions={[String(weekdayDraft)]} disabled={disabled}
+          onOptionSelect={(_, data) => { if (data.optionValue !== undefined) setWeekdayDraft(Number(data.optionValue)); }}>
+          {['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'].map((label, index) => <Option key={index} value={String(index)}>{label}</Option>)}
+        </Dropdown>
+      </SettingsField>}
+      <SettingsField label="更新时间" className="settings-config-row sources-ongoing-short-field" description="按本机时间，应用运行时执行；纯 TXT 仍需重新导出清单。"
+        action={<Button appearance="secondary" disabled={disabled || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(timeDraft)} onClick={() => void save({ ongoing_update_time: timeDraft, ongoing_update_weekday: weekdayDraft })}>保存时间</Button>}>
+        <Input type="time" value={timeDraft} disabled={disabled} onChange={(_, data) => setTimeDraft(data.value)} />
+      </SettingsField>
+    </>}
     <ActionToast message={notice} intent={failed ? 'error' : 'success'} onDismiss={() => setNotice('')} />
   </div>;
 }

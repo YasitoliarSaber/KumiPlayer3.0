@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculatePosterGridMetrics, normalizePosterColumns } from '../src/components/library/posterGridMetrics.ts';
+import { calculatePosterGridMetrics, normalizePosterColumns, posterCardTitleFontSize } from '../src/components/library/posterGridMetrics.ts';
+
+test('海报标题字号按实测卡片宽度增长并限制在窄宽卡片范围内', () => {
+  assert.equal(posterCardTitleFontSize(140), 13);
+  assert.equal(posterCardTitleFontSize(180), 13.8);
+  assert.equal(posterCardTitleFontSize(300), 17);
+  assert.equal(posterCardTitleFontSize(420), 17);
+  assert.equal(posterCardTitleFontSize(Number.NaN), 16);
+});
 
 test('封面列数支持 5 到 9，旧大封面偏好归入 5 列', () => {
   assert.equal(normalizePosterColumns(3), 5);

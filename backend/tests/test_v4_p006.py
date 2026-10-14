@@ -116,6 +116,7 @@ def test_playback_history_is_event_based_and_respects_limit(tmp_path, monkeypatc
     from fastapi.testclient import TestClient
 
     from app.api import media_v4, playback_v4
+    from app.media_v4.assets import catalog
     from app.media_v4.playback.store import V4PlaybackStore
 
     database = _fresh_database(tmp_path)
@@ -126,6 +127,10 @@ def test_playback_history_is_event_based_and_respects_limit(tmp_path, monkeypatc
     store.record_activation("w1", "ep-w1-1-1", "asset-w1-1-1")
     for index in range(5):
         store.save_progress("w1", "ep-w1-1-1", "asset-w1-1-1", position=10 + index, duration=100, completed=False)
+    monkeypatch.setattr(catalog, "get_episode_artwork_many", lambda _conn, ids: {
+        episode_id: {"episode_thumb": {"variants": {"768": "/api/assets/artwork/episode-thumb/digest-webp-v1/768"}}}
+        for episode_id in ids
+    })
 
     application = FastAPI()
     application.include_router(playback_v4.router)
@@ -135,6 +140,7 @@ def test_playback_history_is_event_based_and_respects_limit(tmp_path, monkeypatc
     items = limited.json()["items"]
     assert len(items) == 1  # 同一集的多个进度心跳不得重复写入历史
     assert items[0]["title_snapshot"] == "历史作品"  # 事件含标题快照
+    assert items[0]["thumb_path"] == "/api/assets/artwork/episode-thumb/digest-webp-v1/768"
     # 进度仍是单条 upsert
     progress = client.get("/api/playback/progress").json()["items"]
     assert len(progress) == 1

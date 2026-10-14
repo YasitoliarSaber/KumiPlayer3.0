@@ -11,6 +11,8 @@ const api = vi.hoisted(() => ({
   status: vi.fn(),
   overrideEvidence: vi.fn(),
   sourceLibraries: vi.fn(),
+  sourceScanDirectoryCheck: vi.fn(),
+  sourceDiagnostics: vi.fn(),
   openlistStatus: vi.fn(),
   drafts: vi.fn(),
   revisionEvidence: vi.fn(),
@@ -59,6 +61,12 @@ beforeEach(() => {
     issues: [],
   })
   api.sourceLibraries.mockResolvedValue({ cards: [] })
+  api.sourceScanDirectoryCheck.mockResolvedValue({
+    scan_id: 'scan-1', state: 'no_samples', sampled_directories: 0,
+    reachable_directories: 0, missing_directories: 0,
+    message: '没有可抽查的视频目录位置。', scope: '未读取视频文件。',
+  })
+  api.sourceDiagnostics.mockResolvedValue({ format: 'kumiplayer-source-diagnostics-v1' })
   api.drafts.mockResolvedValue({ drafts: [] })
   api.revisionEvidence.mockResolvedValue({ revision_id: 'rev', status: 'draft', entries: [] })
   api.startDurableScan.mockResolvedValue({ scan_id: 'scan-durable', root_id: 'root', scan_mode: 'full', status: 'running' })
@@ -132,8 +140,8 @@ test('只有路径不确定时在原预览确认候选，不生成猜测媒体�
   fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'D:/tree.txt' } })
   fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
   expect(await screen.findByText('播放路径尚未验证')).toBeVisible()
-  expect(screen.getByText('J:/115open/动画/Show/e.mkv')).toBeVisible()
-  expect(screen.getByText('J:/115open/Show/e.mkv')).toBeVisible()
+  expect(screen.queryByText('J:/115open/动画/Show/e.mkv')).not.toBeInTheDocument()
+  expect(screen.queryByText('J:/115open/Show/e.mkv')).not.toBeInTheDocument()
   expect(api.preview).not.toHaveBeenCalled()
   expect(api.durableScan).not.toHaveBeenCalled()
   expect(screen.queryByRole('button', { name: '确认并建立媒体库' })).toBeNull()
@@ -162,20 +170,27 @@ test('多目录歧义可筛选到后面的挂载分支并确认', async () => {
   await screen.findByRole('heading', { name: '检查识别结果' })
 })
 
-test('识别结果显示后端生成的路径示例和范围排除数量', async () => {
+test('路径选择隐藏技术样本、保留范围数量并提交原映射选择', async () => {
   api.startDurableScan.mockResolvedValue({
-    scan_id: 'scan-durable', root_id: 'root', scan_mode: 'tree_snapshot', status: 'queued',
-    effective_playback_root: 'Z:/',
-    path_validation: { path_samples: ['Z:/Show/e.mkv'], selected_count: 1, skipped_count: 2 },
+    scan_id: '', root_id: '', scan_mode: 'tree_snapshot', status: 'mapping_required',
+    path_validation: {
+      requires_confirmation: true, state: 'unverifiable', reason: '需要确认挂载边界。', selected_count: 1,
+      choices: [{
+        id: 'tree-choice-a', root: 'Z:/', path_samples: ['Z:/Show/e.mkv'],
+        selected_count: 1, skipped_count: 2,
+      }],
+    },
   })
   render(<MediaManagementPage />)
   await enterImport()
   fireEvent.click(screen.getByRole('button', { name: '目录树 TXT' }))
   fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'D:/tree.txt' } })
   fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
-  await screen.findByRole('heading', { name: '检查识别结果' })
-  expect(screen.getByText('Z:/Show/e.mkv')).toBeVisible()
-  expect(screen.getByText(/排除 2 个范围外的视频/)).toBeVisible()
+  await screen.findByRole('heading', { name: '检查导入预览' })
+  expect(screen.queryByText('Z:/Show/e.mkv')).not.toBeInTheDocument()
+  expect(screen.getByText(/排除 2 个范围外的文件/)).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '使用路径 A' }))
+  await waitFor(() => expect(api.startDurableScan).toHaveBeenLastCalledWith(expect.objectContaining({ tree_mapping_choice: 'tree-choice-a' })))
 })
 
 test('首次导入选择另一个连接后使用其目录、路由、基线和持久任务身份', async () => {
@@ -551,8 +566,8 @@ test('OpenList 两条可达路径有歧义时显式选择，发送 OpenList 选�
   await waitFor(() => expect(screen.getByRole('button', { name: '完整扫描并建立基线' })).toBeEnabled())
   fireEvent.click(screen.getByRole('button', { name: '完整扫描并建立基线' }))
   expect(await screen.findByText('播放路径尚未验证')).toBeVisible()
-  expect(screen.getByText('K:/115/Anime/Show/1.mkv')).toBeVisible()
-  expect(screen.getByText('K:/Anime/Show/1.mkv')).toBeVisible()
+  expect(screen.queryByText('K:/115/Anime/Show/1.mkv')).not.toBeInTheDocument()
+  expect(screen.queryByText('K:/Anime/Show/1.mkv')).not.toBeInTheDocument()
   expect(api.preview).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: '使用路径 B' }))
   await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledTimes(2))
@@ -694,6 +709,7 @@ test('来源卡可以回到同一 OpenList 来源执行更新', async () => {
   })
   render(<MediaManagementPage />)
 
+  fireEvent.click(await screen.findByRole('button', { name: '展开115 动画来源详情' }))
   fireEvent.click(await screen.findByRole('button', { name: '检查更新' }))
 
   const sourcePicker = screen.getByRole('group', { name: '媒体来源类型' })
@@ -869,6 +885,7 @@ test('来源卡只以 active_task 判断当前任务，忽略过期任务摘要'
 
   expect(await screen.findByText('已完成的目录树')).toBeVisible()
   expect(screen.getByText('上次导入已处理完毕')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '展开已完成的目录树来源详情' }))
   expect(screen.getByRole('button', { name: '检查更新' })).toBeEnabled()
   // 不得出现"正在处理"这类由过期摘要推导出的忙碌文案
   expect(screen.queryByText(/正在处理|正在获取媒体信息/)).toBeNull()

@@ -59,11 +59,11 @@ export default function WindowSettingsPanel({ active = true }: { active?: boolea
   return <SettingsSection title="窗口与托盘">
     {loading && <SettingsFeedback busy>正在读取窗口设置…</SettingsFeedback>}
     {preferences && <>
-      <Switch label="最小化到托盘" labelPosition="before" className="settings-toggle-row" checked={preferences.minimize_to_tray} disabled={loading || busy}
+      <Switch label="点击窗口最小化按钮时收到托盘" labelPosition="before" className="settings-toggle-row" checked={preferences.minimize_to_tray} disabled={loading || busy}
         onChange={(_, data) => void save({ minimize_to_tray: data.checked })} />
       <Switch label="关闭窗口时收到托盘" labelPosition="before" className="settings-toggle-row" checked={preferences.close_to_tray} disabled={loading || busy}
         onChange={(_, data) => void save({ close_to_tray: data.checked })} />
-      <p className="field-help">收到托盘后，播放和后台任务会继续运行。</p>
+      <p className="field-help">点击任务栏图标仍正常最小化。收到托盘后，播放和后台任务会继续运行。</p>
       <Button appearance="secondary" disabled={loading || busy} onClick={() => void hide()}
         icon={busy ? <Spinner size="tiny" /> : undefined}>立即收到托盘</Button>
     </>}

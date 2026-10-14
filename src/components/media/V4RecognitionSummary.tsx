@@ -98,13 +98,16 @@ function WorkCard({
   const typeLabel = work.media_type === 'movie' ? '电影' : work.media_type === 'unknown' ? '类型未定' : '剧集'
   // 未知媒体类型不是 TV 剧集：计数单位写成「个条目」，不冒充集数。
   const countUnit = work.media_type === 'unknown' ? '个条目' : '集'
+  const unresolvedSeasons = work.groups.filter((group) => group.seasonUnknown).length
+  const unresolvedEpisodes = work.groups.reduce((total, group) => total + group.unresolvedEpisodeCount, 0)
+  const needsFactReview = work.media_type === 'unknown' || unresolvedSeasons > 0 || unresolvedEpisodes > 0
   return (
     <article className={`media-v4-work-card ${work.hasAnomaly ? 'attention' : ''}`}>
       <button type="button" className="media-v4-work-card-head" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
         <span className="media-v4-work-card-title">{work.title}</span>
         <span className="media-v4-work-card-meta">
           {work.year || '年份未知'} · {typeLabel} · 共 {work.assetCount} 个视频
-          {work.hasAnomaly && <Warning24Regular aria-label="存在需处理问题" />}
+          {(work.hasAnomaly || needsFactReview) && <Warning24Regular aria-label={work.hasAnomaly ? '存在需处理问题' : '识别事实待核对'} />}
         </span>
         {expanded ? <ChevronDown24Regular aria-hidden="true" /> : <ChevronRight24Regular aria-hidden="true" />}
       </button>
@@ -116,6 +119,14 @@ function WorkCard({
           </Button>
         </div>
       )}
+      {needsFactReview && <div className="media-v4-work-fact-review" role="note">
+        <Warning24Regular aria-hidden="true" />
+        <span>{[
+          work.media_type === 'unknown' ? '类型未定' : '',
+          unresolvedSeasons ? `季号未定 ${unresolvedSeasons} 组` : '',
+          unresolvedEpisodes ? `集号未定 ${unresolvedEpisodes} 项` : '',
+        ].filter(Boolean).join(' · ')}，可先建立媒体库，稍后核对。</span>
+      </div>}
       {expanded && (
         <div className="media-v4-work-card-body">
           <div className="media-v4-work-group-list">
@@ -244,6 +255,18 @@ function WorkCard({
 
 export function V4RecognitionSummary({ preview, evidenceEntries, overrideDrafts, busy, onOverrideChange, onApplyOverride, onOpenMaintenance, onReimport }: V4RecognitionSummaryProps) {
   const summary = buildWorkSummaries(preview)
+  const totalUnresolvedSeasons = summary.works.reduce(
+    (total, work) => total + work.groups.filter((group) => group.seasonUnknown).length,
+    0,
+  )
+  const reviewWorkKeys = new Set(summary.anomalyWorks.map((work) => work.work_key))
+  for (const work of summary.works) {
+    if (work.media_type === 'unknown' || work.groups.some((group) => group.seasonUnknown || group.unresolvedEpisodeCount > 0)) {
+      reviewWorkKeys.add(work.work_key)
+    }
+  }
+  const reviewWorks = summary.works.filter((work) => reviewWorkKeys.has(work.work_key))
+  const ordinaryWorks = summary.works.filter((work) => !reviewWorkKeys.has(work.work_key))
   const cardProps = {
     preview,
     evidenceEntries,
@@ -262,26 +285,26 @@ export function V4RecognitionSummary({ preview, evidenceEntries, overrideDrafts,
         <div><strong>{summary.totalVideos}</strong><span>条剧集记录</span></div>
         <div className={summary.totalIssues > 0 ? 'attention' : ''}><strong>{summary.totalIssues}</strong><span>项需处理问题</span></div>
       </div>
-      {(summary.unknownTypeWorks > 0 || summary.totalUnresolvedEpisodes > 0) && (
-        <p className="media-v4-summary-unknown" role="status">
-          {summary.unknownTypeWorks > 0 && `类型未定 ${summary.unknownTypeWorks} 部`}
-          {summary.unknownTypeWorks > 0 && summary.totalUnresolvedEpisodes > 0 && ' · '}
-          {summary.totalUnresolvedEpisodes > 0 && `集号未定 ${summary.totalUnresolvedEpisodes} 项`}
-          {'。可先建立媒体库，稍后核对。'}
-        </p>
+      {(summary.unknownTypeWorks > 0 || totalUnresolvedSeasons > 0 || summary.totalUnresolvedEpisodes > 0) && (
+        <div className="media-v4-summary-unknown" role="alert">
+          {[summary.unknownTypeWorks > 0 ? `类型未定 ${summary.unknownTypeWorks} 部` : '',
+            totalUnresolvedSeasons > 0 ? `季号未定 ${totalUnresolvedSeasons} 组` : '',
+            summary.totalUnresolvedEpisodes > 0 ? `集号未定 ${summary.totalUnresolvedEpisodes} 项` : '']
+            .filter(Boolean).join(' · ')}。相关作品已列出并标注；这些信息可稍后核对。
+        </div>
       )}
-      {summary.anomalyWorks.length > 0 && (
+      {reviewWorks.length > 0 && (
         <div className="media-v4-issues-block">
-          <h3>需要处理</h3>
+          <h3>需要处理或稍后核对</h3>
           <div className="media-v4-work-grid">
-            {summary.anomalyWorks.map((work) => (
+            {reviewWorks.map((work) => (
               <WorkCard key={work.work_key} work={work} defaultExpanded={false} {...cardProps} />
             ))}
           </div>
         </div>
       )}
       <div className="media-v4-work-grid">
-        {summary.normalWorks.map((work) => (
+        {ordinaryWorks.map((work) => (
           <WorkCard key={work.work_key} work={work} defaultExpanded={false} {...cardProps} />
         ))}
       </div>

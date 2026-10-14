@@ -13,6 +13,8 @@ const api = vi.hoisted(() => ({
   status: vi.fn(),
   overrideEvidence: vi.fn(),
   sourceLibraries: vi.fn(),
+  sourceScanDirectoryCheck: vi.fn(),
+  sourceDiagnostics: vi.fn(),
   openlistStatus: vi.fn(),
   drafts: vi.fn(),
   revisionEvidence: vi.fn(),
@@ -65,10 +67,16 @@ function cardFixture(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function expandSourceDetails(name = '115 动画') {
+  const button = screen.queryByRole('button', { name: `展开${name}来源详情` })
+  if (button) fireEvent.click(button)
+}
+
 test('来源卡将关联提示与真实待处理分开，操作按用途分组', async () => {
   api.sourceLibraries.mockResolvedValue({ cards: [cardFixture({ relation_pending_count: 2 })] })
   render(<MediaManagementPage />)
   await screen.findByText('115 动画')
+  expandSourceDetails()
   expect(screen.queryByText(/个待处理事项/)).not.toBeInTheDocument()
   expect(screen.getByText('2 项关联信息待补全，不影响入库和播放')).toBeVisible()
   expect(screen.getByRole('group', { name: '导入与更新' })).toContainElement(screen.getByRole('button', { name: '检查更新' }))
@@ -84,6 +92,8 @@ test('来源卡显示选择的 TXT 路径和实际完成时间，操作按钮保
     metadata_ready_work_count: 3,
   })] })
   render(<MediaManagementPage />)
+  await screen.findByText('115 动画')
+  expandSourceDetails()
   expect(await screen.findByText(path)).toHaveAttribute('title', path)
   expect(screen.getByText(/上次导入完成于.*2026.*09.*30.*12:34/)).toBeVisible()
   expect(screen.queryByText(/特别篇\/辅助视频/)).not.toBeInTheDocument()
@@ -108,6 +118,7 @@ test('按来源删除媒体库：先展示预览，再确认，且预览态不�
   render(<MediaManagementPage />)
   await screen.findByText('115 动画')
 
+  expandSourceDetails()
   fireEvent.click(screen.getByRole('button', { name: '删除来源卡：115 动画' }))
   fireEvent.click(await screen.findByRole('button', { name: '同时删除媒体库…' }))
 
@@ -140,6 +151,7 @@ test('按来源删除被阻断时给出原因，且不提供确认删除', async
   render(<MediaManagementPage />)
   await screen.findByText('115 动画')
 
+  expandSourceDetails()
   fireEvent.click(screen.getByRole('button', { name: '删除来源卡：115 动画' }))
   fireEvent.click(await screen.findByRole('button', { name: '同时删除媒体库…' }))
 
@@ -182,6 +194,7 @@ test('来源已退役但文件回收失败时仅显示维护入口，重试预�
 
   expect(await screen.findByText('媒体库已移除，生成文件待清理')).toBeVisible()
   expect(screen.getByRole('button', { name: '重试清理' })).toBeVisible()
+  expandSourceDetails()
   expect(screen.queryByRole('button', { name: '检查更新' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '删除来源卡：115 动画' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '重试清理' }))
@@ -200,8 +213,10 @@ test('来源已退役且文件仍在回收时保留状态卡，不提供无效�
 
   expect(await screen.findByText('正在清理生成文件')).toBeVisible()
   expect(screen.getByRole('button', { name: '清理中' })).toBeDisabled()
+  expandSourceDetails()
   expect(screen.queryByRole('button', { name: '检查更新' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '终止任务' })).not.toBeInTheDocument()
+  expandSourceDetails()
   expect(screen.queryByRole('button', { name: '删除来源卡：115 动画' })).not.toBeInTheDocument()
 })
 
@@ -214,6 +229,12 @@ beforeEach(() => {
   api.preview.mockResolvedValue({ revision_id: 'rev', status: 'draft', works: [], episodes: [], work_assets: [], issues: [] })
   api.status.mockResolvedValue({ revision_id: 'rev', status: 'confirmed', jobs: [] })
   api.sourceLibraries.mockResolvedValue({ cards: [] })
+  api.sourceScanDirectoryCheck.mockResolvedValue({
+    scan_id: 'scan-1', state: 'no_samples', sampled_directories: 0,
+    reachable_directories: 0, missing_directories: 0,
+    message: '没有可抽查的视频目录位置。', scope: '未读取视频文件。',
+  })
+  api.sourceDiagnostics.mockResolvedValue({ format: 'kumiplayer-source-diagnostics-v1' })
   api.drafts.mockResolvedValue({ drafts: [] })
   api.hideSourceLibraryCard.mockResolvedValue({ root_id: 'root-115', hidden: true })
   api.renameSourceLibraryCard.mockResolvedValue({ root_id: 'root-115', display_name: '我的动画库' })
@@ -250,6 +271,8 @@ test('返回同一导入目录时重新读取基线，不沿用删除前的提�
     source_mode: 'openlist_full', last_scan_mode: 'incremental',
   })
   render(<MediaManagementPage />)
+  await screen.findByText('115 动画')
+  expandSourceDetails()
   fireEvent.click(await screen.findByRole('button', { name: '检查更新' }))
   expect(await screen.findByText('已有已确认基线，默认增量更新')).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: '返回媒体管理' }))
@@ -342,6 +365,7 @@ test('已完成来源卡可以移除卡片入口，不触碰媒体库数据', as
   render(<MediaManagementPage />)
 
   await screen.findByText('115 动画')
+  expandSourceDetails()
   fireEvent.click(screen.getByRole('button', { name: '删除来源卡：115 动画' }))
 
   expect(await screen.findByRole('dialog', { name: '移除来源卡？' })).toBeVisible()
@@ -360,6 +384,7 @@ test('来源卡列表过期时，删除接口的 404 按幂等成功处理', asy
   render(<MediaManagementPage />)
 
   await screen.findByText('115 动画')
+  expandSourceDetails()
   fireEvent.click(screen.getByRole('button', { name: '删除来源卡：115 动画' }))
   fireEvent.click(await screen.findByRole('button', { name: '移除', exact: true }))
 
@@ -372,6 +397,7 @@ test('来源卡可以在不影响来源路径的情况下重命名', async () =>
   render(<MediaManagementPage />)
 
   await screen.findByText('115 动画')
+  expandSourceDetails()
   fireEvent.click(screen.getByRole('button', { name: '重命名来源卡：115 动画' }))
 
   expect(await screen.findByRole('dialog', { name: '重命名来源卡' })).toBeVisible()
@@ -391,6 +417,7 @@ test('来源卡列表过期时，重命名接口的 404 会移除失效卡片', 
   render(<MediaManagementPage />)
 
   await screen.findByText('115 动画')
+  expandSourceDetails()
   fireEvent.click(screen.getByRole('button', { name: '重命名来源卡：115 动画' }))
   fireEvent.click(await screen.findByRole('button', { name: '保存名称' }))
 
@@ -403,6 +430,7 @@ test('删除来源卡确认框在 Portal 中保留 Fluent 主题容器', async (
   render(<MediaManagementPage />)
 
   await screen.findByText('115 动画')
+  expandSourceDetails()
   fireEvent.click(screen.getByRole('button', { name: '删除来源卡：115 动画' }))
 
   const dialog = await screen.findByRole('dialog', { name: '移除来源卡？' })
@@ -491,6 +519,7 @@ test('失联扫描任务显示中断文案且不渲染转圈，仍可重新扫�
   render(<MediaManagementPage />)
 
   await screen.findByText('115 动画')
+  expandSourceDetails()
   expect(screen.getByText('上次扫描意外中断，请重新扫描')).toBeVisible()
   expect(screen.getByText('需要处理')).toBeVisible()
   expect(screen.queryByRole('button', { name: '终止任务' })).not.toBeInTheDocument()
@@ -558,6 +587,7 @@ test('排队中的扫描任务提供可用的终止按钮', async () => {
   render(<MediaManagementPage />)
 
   await screen.findByText('115 动画')
+  expandSourceDetails()
   const terminate = screen.getByRole('button', { name: '终止任务' })
   expect(terminate).toBeEnabled()
 })
@@ -574,6 +604,7 @@ test('来源卡按阶段显示计量口径，不再用作品数减问题数冒�
   })] })
   render(<MediaManagementPage />)
   await screen.findByText('115 动画')
+  expandSourceDetails()
 
   expect(screen.getByText('3 部已入库作品')).toBeVisible()
   expect(screen.getByText('40 个已入库文件')).toBeVisible()

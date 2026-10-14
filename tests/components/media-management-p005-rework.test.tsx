@@ -14,6 +14,8 @@ const api = vi.hoisted(() => ({
   status: vi.fn(),
   overrideEvidence: vi.fn(),
   sourceLibraries: vi.fn(),
+  sourceScanDirectoryCheck: vi.fn(),
+  sourceDiagnostics: vi.fn(),
   openlistStatus: vi.fn(),
   drafts: vi.fn(),
   revisionEvidence: vi.fn(),
@@ -68,6 +70,12 @@ beforeEach(() => {
   api.scan.mockResolvedValue({ root_id: 'root-local', scan_id: 'scan-1', entries: [] })
   api.preview.mockResolvedValue({ revision_id: 'rev', status: 'draft', works: [], episodes: [], work_assets: [], issues: [] })
   api.sourceLibraries.mockResolvedValue({ cards: [] })
+  api.sourceScanDirectoryCheck.mockResolvedValue({
+    scan_id: 'scan-1', state: 'no_samples', sampled_directories: 0,
+    reachable_directories: 0, missing_directories: 0,
+    message: '没有可抽查的视频目录位置。', scope: '未读取视频文件。',
+  })
+  api.sourceDiagnostics.mockResolvedValue({ format: 'kumiplayer-source-diagnostics-v1' })
   api.drafts.mockResolvedValue({ drafts: [] })
   api.openlistStatus.mockResolvedValue({ root_id: 'r', remote_root: '/', source_mode: '', last_scan_mode: '', has_confirmed_baseline: false })
   api.cancelImport.mockResolvedValue({ revision_id: 'rev-active', running: 0, cancelled: 1 })
@@ -237,6 +245,7 @@ test('来源卡终止任务失败时不向页面透传技术错误', async () =>
   api.cancelImport.mockRejectedValueOnce(new Error('sqlite3.OperationalError: database is locked'))
   render(<MediaManagementPage />)
 
+  fireEvent.click(await screen.findByRole('button', { name: '展开115 动画来源详情' }))
   fireEvent.click(await screen.findByRole('button', { name: '终止任务' }))
   expect(await screen.findByText('终止任务失败，请稍后重试')).toBeVisible()
   expect(screen.queryByText(/OperationalError|database is locked/)).not.toBeInTheDocument()
@@ -305,7 +314,7 @@ test('确认来源清理后刷新来源卡，并按实际失败状态提示', as
 })
 
 
-test('来源卡只保留来源摘要和 Fluent 操作按钮', async () => {
+test('来源卡默认紧凑收起，展开后显示来源路径和更新操作', async () => {
   api.sourceLibraries.mockResolvedValue({ cards: [cardFixture()] })
   const { container } = render(<MediaManagementPage />)
   await screen.findByText('115 动画')
@@ -318,9 +327,41 @@ test('来源卡只保留来源摘要和 Fluent 操作按钮', async () => {
   expect(identity!.textContent).toContain('OpenList 扫描')
   expect(scale!.textContent).toContain('3 部作品')
   expect(scale!.textContent).not.toContain('摇曳露营')
+  const collapsedCard = container.querySelector('.media-v4-library-source-card')
+  expect(collapsedCard).not.toBeNull()
+  expect(collapsedCard).not.toHaveClass('expanded')
+  const sourceCardStyles = readFileSync(join(__dirname, '../../src/styles/media-import-controls.css'), 'utf-8')
+  expect(sourceCardStyles).toMatch(/\.media-v4-library-source-card:not\(\.expanded\) \.media-v4-source-card-locator,[\s\S]*?\.media-v4-source-card-actions \{\s*display: none;/)
+  expect(screen.queryByRole('button', { name: '检查更新' })).not.toBeInTheDocument()
   expect(screen.queryByRole('list', { name: '作品预览' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: '查看进度' })).toBeVisible()
+  expect(screen.getByRole('button', { name: '导出115 动画问题分析，包含必要目录路径' })).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '展开115 动画来源详情' }))
+  expect(screen.getByRole('button', { name: '收起115 动画来源详情' })).toHaveAttribute('aria-expanded', 'true')
+  expect(screen.getByText('/115/Anime')).toBeVisible()
   expect(screen.getByRole('button', { name: '检查更新' })).toBeVisible()
+})
+
+test('来源卡管理操作仅在展开来源详情后出现', async () => {
+  api.sourceLibraries.mockResolvedValue({ cards: [cardFixture({
+    overall_status: 'completed',
+    revision_state: 'completed',
+    can_resume: false,
+    progress: {
+      state: 'completed', stage: 'idle', current_work_id: '', current_work_title: '',
+      completed_work_count: 3, total_work_count: 3, percent: 100, message: '上次导入已处理完毕',
+    },
+    job_summary: { total: 0, queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0 },
+  })] })
+  render(<MediaManagementPage />)
+
+  const expand = await screen.findByRole('button', { name: '展开115 动画来源详情' })
+  expect(screen.queryByRole('group', { name: '来源卡管理' })).not.toBeInTheDocument()
+  fireEvent.click(expand)
+
+  expect(screen.getByRole('group', { name: '来源卡管理' })).toBeVisible()
+  expect(screen.getByRole('button', { name: '重命名来源卡：115 动画' })).toBeVisible()
+  expect(screen.getByRole('button', { name: '删除来源卡：115 动画' })).toBeVisible()
 })
 
 test('部分失败后显示重试按钮并调用 resume API', async () => {

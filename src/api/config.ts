@@ -43,6 +43,9 @@ export interface PublicConfig {
   directory_tree_dir: string
   ongoing_update_on_startup?: boolean
   ongoing_update_interval_minutes?: number
+  ongoing_update_schedule_mode?: 'off' | 'interval' | 'daily' | 'weekly'
+  ongoing_update_time?: string
+  ongoing_update_weekday?: number
   openlist_server_url: string
   openlist_remote_root: string
   openlist_mount_root: string

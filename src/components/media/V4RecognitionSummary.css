@@ -13,6 +13,36 @@
   height: auto;
 }
 
+.media-v4-recognition-summary .media-v4-work-fact-review {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 8px 12px 0;
+  color: var(--colorPaletteRedForeground1, #a4262c);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.media-v4-recognition-summary .media-v4-work-fact-review svg {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.media-v4-recognition-summary .media-v4-summary-unknown {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  margin: 0 0 12px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--colorPaletteRedBorderActive, #d13438) 42%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--colorPaletteRedBackground1, #fde7e9) 42%, transparent);
+  color: var(--colorPaletteRedForeground1, #a4262c);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .media-v4-recognition-summary .media-v4-work-card-title {
   font-size: 15px;
   color: var(--text);

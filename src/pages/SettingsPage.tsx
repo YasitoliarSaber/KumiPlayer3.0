@@ -85,6 +85,10 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
   const setAppearanceMode = useUiStore((state) => state.setAppearanceMode);
   const ongoingCategoryName = useUiStore((state) => state.ongoingCategoryName) || '新番';
   const setOngoingCategoryName = useUiStore((state) => state.setOngoingCategoryName);
+  const extraVideoRemindersEnabled = useUiStore(state => state.extraVideoRemindersEnabled);
+  const includeAuxiliaryVideoReminders = useUiStore(state => state.includeAuxiliaryVideoReminders);
+  const setExtraVideoRemindersEnabled = useUiStore(state => state.setExtraVideoRemindersEnabled);
+  const setIncludeAuxiliaryVideoReminders = useUiStore(state => state.setIncludeAuxiliaryVideoReminders);
   const requestedSection = useUiStore(state => state.settingsSection);
   const persistSettingsSection = useUiStore(state => state.setSettingsSection);
   const requestedConnection = useUiStore(state => state.settingsConnectionId);
@@ -608,23 +612,25 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
         }} />
       </SettingsSection>}
       {config && (
-        <SettingsSection title="目录树播放位置">
+        <SettingsSection title="目录树导入与播放">
           <div className="sources-root-panel">
             <div className="settings-field-list">
-              <ConfigRow folder label="115 网盘挂载位置" value={config.pan115_root} onSave={(value) => saveConfig({ pan115_root: value })} />
-              <ConfigRow folder label="百度网盘挂载位置" value={config.baidu_root} onSave={(value) => saveConfig({ baidu_root: value })} />
               <ConfigRow folder label="夸克网盘挂载位置" value={config.quark_root || ''} onSave={(value) => saveConfig({ quark_root: value })} />
             </div>
-            <p className="sources-root-note">网盘必须先挂载到本地；只填写使用的来源。</p>
+            <p className="sources-root-note">百度、115：先把网盘挂载到电脑，再在媒体管理中选择导出原位置的 TXT。应用按所选 TXT 所在文件夹与树内目录定位播放路径，挂载整个网盘或子目录都可使用，无需在这里重复填写播放根目录。</p>
+            <p className="sources-root-note">导入的 TXT 副本由应用自动归档到自己的数据目录，安装版使用当前用户的数据目录。请选择网盘原位置的文件，归档副本不作为播放定位依据。夸克暂保留手动挂载位置。</p>
+            <p className="sources-root-note">通过 OpenList 导入时，在「WebDAV 目录」配置远端目录与本地挂载位置的对应关系。</p>
           </div>
         </SettingsSection>
       )}
       {config && <SettingsSection title="本地目录">
         <LocalRootsPanel config={config} onSave={saveConfig} externalBusy={Boolean(configLoading || activeAction)} />
       </SettingsSection>}
-      {config && <SettingsSection title="TXT 文件选择" collapsible>
-        <ConfigRow folder label="TXT 默认选择目录" value={config.directory_tree_dir} onSave={(value) => saveConfig({ directory_tree_dir: value })} />
-      </SettingsSection>}
+      <SettingsSection title="额外视频提醒">
+        <Switch label="在详情页提示未进入正片列表的额外视频" checked={extraVideoRemindersEnabled} onChange={(_, data) => setExtraVideoRemindersEnabled(data.checked)} />
+        <Switch label="同时提示片头、片尾、预告等辅助视频" checked={includeAuxiliaryVideoReminders} disabled={!extraVideoRemindersEnabled} onChange={(_, data) => setIncludeAuxiliaryVideoReminders(data.checked)} />
+        <p className="sources-root-note">根据已导入的识别结果区分特别篇与辅助视频；多个画质版本不算额外集数。这里仅控制提醒显示。</p>
+      </SettingsSection>
       <SettingsSection title="来源维护" collapsible>
         {config && <>
           <div className="settings-actions">
@@ -770,7 +776,7 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
   return (
     <div className="settings-shell settings-shell-settings settings-focused">
       <main className="settings-content">
-        {(configLoading || activeAction) && (
+        {!config && (configLoading || activeAction) && (
           <div className="settings-loading" role="status">
             <Spinner size="tiny" />
             {activeAction ? `${activeAction}中…` : '保存或加载中…'}

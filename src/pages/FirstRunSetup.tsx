@@ -321,14 +321,7 @@ export default function FirstRunSetup({ initialConfig, onComplete, mode = 'first
                 </RadioGroup>
                 <SetupPathField disabled={checkingSources} label={selectedSource.label} value={form[activeSource] || ''} placeholder={selectedSource.placeholder} onChange={(value) => update(activeSource, value)} onPick={() => chooseDirectory(activeSource, `选择${selectedSource.label}`)} />
                 <p>点击“继续”会检查并保存已填写的目录；无法访问时留在当前步骤。网盘媒体通过本地挂载播放；目录树和 OpenList 只提供目录信息。作品资料与图片缓存由应用独立保存。</p>
-                <Accordion className="first-run-options" collapsible defaultOpenItems={form.directory_tree_dir ? ['tree'] : []}>
-                  <AccordionItem value="tree">
-                    <AccordionHeader>导入目录树（可选）{form.directory_tree_dir?.trim() ? ' · 已配置' : ''}</AccordionHeader>
-                    <AccordionPanel>
-                      <SetupPathField disabled={checkingSources} label="目录树文件目录（可选）" value={form.directory_tree_dir || ''} placeholder="保存网盘目录树 TXT 的文件夹" onChange={(value) => update('directory_tree_dir', value)} onPick={() => chooseDirectory('directory_tree_dir', '选择目录树文件目录')} />
-                    </AccordionPanel>
-                  </AccordionItem>
-                </Accordion>
+                <p>目录树导入可在完成后从媒体管理中进行。百度、115 请直接选择挂载网盘中导出原位置的 TXT；应用自动保存导入副本，无需配置 TXT 存储目录。</p>
                 <div className="first-run-path-example">
                   <strong>OpenList 可在完成后添加</strong>
                   <span>完成后打开「设置 → OpenList」连接网盘。首次设置仍需一个本地或已挂载的媒体目录。</span>

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import SettingsPage from '../../src/pages/SettingsPage';
 import { openlistApi } from '../../src/api/openlist';
 import { pickFolder } from '../../src/platform/folderPicker';
@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
   openMpvConfigDir: vi.fn(),
   setOngoingCategoryName: vi.fn((name: string) => name.trim() || '新番'),
   setPosterWallLayout: vi.fn(),
+  setExtraVideoRemindersEnabled: vi.fn(),
+  setIncludeAuxiliaryVideoReminders: vi.fn(),
 }));
 
 vi.mock('../../src/api/config', () => ({ configApi: api }));
@@ -62,6 +64,10 @@ vi.mock('../../src/stores/ui', () => ({
       setOngoingCategoryName: api.setOngoingCategoryName,
       setAppearanceMode: vi.fn(),
       setPosterWallLayout: api.setPosterWallLayout,
+      extraVideoRemindersEnabled: true,
+      includeAuxiliaryVideoReminders: false,
+      setExtraVideoRemindersEnabled: api.setExtraVideoRemindersEnabled,
+      setIncludeAuxiliaryVideoReminders: api.setIncludeAuxiliaryVideoReminders,
       goPlayerTuning: vi.fn(),
     };
     return selector ? selector(state) : state;
@@ -127,6 +133,36 @@ describe('SettingsPage 信息架构', () => {
     expect(api.setOngoingCategoryName).toHaveBeenCalledExactlyOnceWith('连载剧集');
     expect(api.patchConfig).not.toHaveBeenCalled();
     expect(screen.getByRole('status')).toHaveTextContent('分类名称已保存');
+  });
+
+  test('额外视频提醒开关保存在本机偏好，辅助视频默认过滤', async () => {
+    render(<SettingsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
+    const enabled = screen.getByRole('switch', { name: '在详情页提示未进入正片列表的额外视频' });
+    const auxiliary = screen.getByRole('switch', { name: '同时提示片头、片尾、预告等辅助视频' });
+    expect(enabled).toBeChecked();
+    expect(auxiliary).not.toBeChecked();
+    fireEvent.click(auxiliary);
+    expect(api.setIncludeAuxiliaryVideoReminders).toHaveBeenCalledWith(true);
+    fireEvent.click(enabled);
+    expect(api.setExtraVideoRemindersEnabled).toHaveBeenCalledWith(false);
+    expect(api.patchConfig).not.toHaveBeenCalled();
+  });
+
+  test('保存设置期间保留现有面板，不插入全页加载提示', async () => {
+    let finish!: (config: unknown) => void;
+    api.patchConfig.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    render(<SettingsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
+    const row = screen.getByRole('button', { name: '选择夸克网盘挂载位置' }).closest('.settings-config-row')!;
+    fireEvent.click(screen.getByRole('button', { name: '手动输入夸克网盘挂载位置' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '夸克网盘挂载位置' }), { target: { value: 'J:/Quark' } });
+    fireEvent.click(within(row).getByRole('button', { name: '保存' }));
+    expect(screen.getByRole('textbox', { name: '夸克网盘挂载位置' })).toBeVisible();
+    expect(document.querySelector('.settings-loading')).toBeNull();
+    await act(async () => finish({ ...config, quark_root: 'J:/Quark' }));
+    expect(screen.getByRole('textbox', { name: '夸克网盘挂载位置' })).toBeEnabled();
+    expect(screen.getByRole('textbox', { name: '夸克网盘挂载位置' }).closest('.settings-config-row')).toBe(row);
   });
 
   test('新番自动更新仅在媒体来源设置，默认关闭且两项独立保存', async () => {
@@ -245,7 +281,7 @@ describe('SettingsPage 信息架构', () => {
     expect(within(navigation).getByRole('button', { name: /外观/ })).toBeVisible();
     expect(within(navigation).getByRole('button', { name: '应用', exact: true })).toBeVisible();
     expect(within(navigation).queryByRole('button', { name: /应用与支持/ })).not.toBeInTheDocument();
-    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('115 网盘挂载位置');
+    expect(document.getElementById('settings-panel-sources')).toHaveTextContent('选择导出原位置的 TXT');
     expect(document.getElementById('settings-panel-sources')).toHaveTextContent('来源维护');
     expect(document.getElementById('settings-panel-sources')).not.toHaveTextContent('镜像目录');
     expect(document.getElementById('settings-panel-sources')).not.toHaveTextContent('打开设置引导');
@@ -388,14 +424,17 @@ describe('SettingsPage 信息架构', () => {
     expect(document.getElementById('settings-panel-bangumi')).not.toBeVisible();
   });
 
-  test('来源配置按播放位置、扫描目录、文件选择和维护分组，标题下无描述', async () => {
+  test('来源配置说明TXT原位置定位，保留本地和夸克设置并自动归档', async () => {
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
-    const mounts = screen.getByRole('region', { name: '目录树播放位置' });
-    expect(within(mounts).getByRole('button', { name: '选择百度网盘挂载位置' })).toBeVisible();
+    const mounts = screen.getByRole('region', { name: '目录树导入与播放' });
+    expect(within(mounts).getByRole('button', { name: '选择夸克网盘挂载位置' })).toBeVisible();
+    expect(mounts).toHaveTextContent('挂载整个网盘或子目录都可使用');
+    expect(mounts).toHaveTextContent('归档副本不作为播放定位依据');
     expect(within(mounts).queryByRole('textbox', { name: 'TXT 默认选择目录' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '编辑本地媒体库' })).toBeVisible();
-    expect(screen.getByRole('button', { name: '选择TXT 默认选择目录', hidden: true })).not.toBeVisible();
+    expect(screen.queryByRole('button', { name: '选择TXT 默认选择目录', hidden: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '选择百度网盘挂载位置', hidden: true })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '检查配置目录', hidden: true })).not.toBeVisible();
     expect(screen.queryByRole('heading', { name: '重新配置基础来源' })).not.toBeInTheDocument();
     expect(document.querySelector('#settings-panel-sources .settings-intro p')).toBeNull();
@@ -418,18 +457,17 @@ describe('SettingsPage 信息架构', () => {
     vi.mocked(pickFolder).mockResolvedValueOnce(null);
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
-    fireEvent.click(screen.getByText('TXT 文件选择', { selector: 'summary h3' }));
     fireEvent.click(screen.getByRole('button', { name: '编辑本地媒体库' }));
-    for (const name of ['115 网盘挂载位置', '百度网盘挂载位置', '夸克网盘挂载位置', '目录 1 路径', 'TXT 默认选择目录']) {
+    for (const name of ['夸克网盘挂载位置', '目录 1 路径']) {
       expect(screen.getByRole('button', { name: `选择${name}` })).toBeVisible();
     }
-    fireEvent.click(screen.getByRole('button', { name: '手动输入115 网盘挂载位置' }));
-    const input = screen.getByRole('textbox', { name: '115 网盘挂载位置' });
+    fireEvent.click(screen.getByRole('button', { name: '手动输入夸克网盘挂载位置' }));
+    const input = screen.getByRole('textbox', { name: '夸克网盘挂载位置' });
     fireEvent.change(input, { target: { value: 'J:\\115' } });
-    fireEvent.click(screen.getByRole('button', { name: '选择115 网盘挂载位置' }));
-    await screen.findByRole('button', { name: '选择115 网盘挂载位置', disabled: false });
+    fireEvent.click(screen.getByRole('button', { name: '选择夸克网盘挂载位置' }));
+    await screen.findByRole('button', { name: '选择夸克网盘挂载位置', disabled: false });
     expect(input).toHaveValue('J:\\115');
-    expect(pickFolder).toHaveBeenLastCalledWith('J:\\115', '选择115 网盘挂载位置');
+    expect(pickFolder).toHaveBeenLastCalledWith('J:\\115', '选择夸克网盘挂载位置');
   });
 
 

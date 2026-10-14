@@ -119,6 +119,14 @@ test('大量作品只渲染可视窗口与 overscan 行，不再全量挂载卡�
   expect(spacerHeight()).toBeCloseTo(200 / COLUMNS * rowHeight - GRID_GAP, 3);
 });
 
+test('标题字号跟随网格实测列宽，窄列保持紧凑而宽列同步放大', () => {
+  const { rerender } = render(<main className="app-main"><VirtualizedPosterGrid works={works(8)} columns={4} /></main>);
+  expect(document.querySelector<HTMLElement>('.poster-card-title')?.style.fontSize).toBe('15.2px');
+
+  rerender(<main className="app-main"><VirtualizedPosterGrid works={works(8)} columns={2} /></main>);
+  expect(document.querySelector<HTMLElement>('.poster-card-title')?.style.fontSize).toBe('17px');
+});
+
 test('滚动后只保留窗口所在行，作品顺序与索引严格对应', () => {
   render(<main className="app-main"><VirtualizedPosterGrid works={works(200)} columns={COLUMNS} /></main>);
   const rowHeight = expectedRowHeight(COLUMNS);

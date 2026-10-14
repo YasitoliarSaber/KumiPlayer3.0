@@ -76,6 +76,49 @@ def _ready_metadata(provider_id="42", target=None):
         ]
     return result
 
+
+def test_movie_metadata_snapshots_only_explicit_tmdb_collection_members():
+    from app.media_v4.jobs.metadata import _tmdb_collection_related_works
+
+    class Client:
+        def __init__(self):
+            self.collection_ids = []
+
+        def get_collection_detail(self, collection_id):
+            self.collection_ids.append(collection_id)
+            return {"parts": [
+                {"id": 1, "media_type": "movie", "title": "当前电影", "poster_path": "/self.jpg"},
+                {"id": 2, "media_type": "movie", "title": "合集成员", "original_title": "Member", "poster_path": "/member.jpg", "release_date": "2024-05-01"},
+                {"id": 3, "media_type": "movie", "title": "缺图电影"},
+                {"id": 4, "media_type": "tv", "name": "TV 条目", "poster_path": "/tv.jpg"},
+            ]}
+
+        @staticmethod
+        def build_image_url(path, size):
+            return f"https://image.tmdb.org/t/p/{size}{path}"
+
+    client = Client()
+    result = _tmdb_collection_related_works(client, {
+        "id": 1, "belongs_to_collection": {"id": 77},
+    })
+    assert client.collection_ids == [77]
+    assert result == [{
+        "provider": "tmdb", "provider_id": "2", "media_type": "movie",
+        "title": "合集成员", "original_title": "Member", "year": 2024,
+        "relation_type": "tmdb_collection",
+        "poster_url": "https://image.tmdb.org/t/p/w500/member.jpg",
+    }]
+
+
+def test_movie_metadata_does_not_fetch_relation_without_confirmed_collection_identity():
+    from app.media_v4.jobs.metadata import _tmdb_collection_related_works
+
+    class Client:
+        def get_collection_detail(self, _collection_id):
+            raise AssertionError("movie without belongs_to_collection must not perform a relation lookup")
+
+    assert _tmdb_collection_related_works(Client(), {"id": 1}) == []
+
 def test_scrape_targets_are_grouped_by_work_and_do_not_reparse(tmp_path, monkeypatch):
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
@@ -832,6 +875,7 @@ def test_scrape_stores_episode_still_as_pending_artwork_requirement(tmp_path):
 
 def test_invalid_scrape_mapping_is_rejected_before_metadata_files_are_published(tmp_path):
     import pytest
+
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService

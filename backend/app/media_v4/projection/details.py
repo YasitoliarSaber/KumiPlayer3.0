@@ -296,7 +296,7 @@ def build_work_detail(conn, work_id: str, metadata: dict):
         "local_clearlogo_path": local_clearlogo,
         "clearlogo_path": metadata.get("clearlogo_url") or metadata.get("clearlogo_path") or local_clearlogo,
         "dir_path": "",
-        "related_works": related_works(metadata),
+        "related_works": related_works(conn, work_id, metadata),
         "collections": metadata.get("collections") or [],
         "cast": metadata.get("cast") or [],
         "tags": metadata.get("tags") or [],

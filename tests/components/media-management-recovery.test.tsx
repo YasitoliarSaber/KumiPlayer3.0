@@ -13,6 +13,8 @@ const api = vi.hoisted(() => ({
   status: vi.fn(),
   overrideEvidence: vi.fn(),
   sourceLibraries: vi.fn(),
+  sourceScanDirectoryCheck: vi.fn(),
+  sourceDiagnostics: vi.fn(),
   openlistStatus: vi.fn(),
   drafts: vi.fn(),
   revisionEvidence: vi.fn(),
@@ -65,6 +67,12 @@ beforeEach(() => {
   api.preview.mockResolvedValue({ revision_id: 'rev', status: 'draft', works: [], episodes: [], work_assets: [], issues: [] })
   api.status.mockResolvedValue({ revision_id: 'rev', status: 'confirmed', jobs: [] })
   api.sourceLibraries.mockResolvedValue({ cards: [] })
+  api.sourceScanDirectoryCheck.mockResolvedValue({
+    scan_id: 'scan-1', state: 'no_samples', sampled_directories: 0,
+    reachable_directories: 0, missing_directories: 0,
+    message: '没有可抽查的视频目录位置。', scope: '未读取视频文件。',
+  })
+  api.sourceDiagnostics.mockResolvedValue({ format: 'kumiplayer-source-diagnostics-v1' })
   api.drafts.mockResolvedValue({ drafts: [] })
   api.revisionEvidence.mockResolvedValue({ revision_id: 'rev-draft', status: 'draft', entries: [{ evidence_id: 'ev-1', scan_id: 'scan-draft', root_id: 'root-draft', source_key: 'Show/Show.S01E01.mkv', relative_path: 'Show/Show.S01E01.mkv', entry_kind: 'video', provider: 'pan115', source_locator: 'Show/Show.S01E01.mkv', playback_locator: 'K:\\115网盘\\Show\\Show.S01E01.mkv', ingest_method: 'openlist_api' }] })
   api.startDurableScan.mockResolvedValue({ scan_id: 'scan-d', root_id: 'root-d', scan_mode: 'full', status: 'running' })
@@ -100,6 +108,11 @@ test('提供商选择使用各自的本地品牌图标，不再渲染文字占�
   expect(screen.getByRole('button', { name: '115 网盘' })).toBeVisible()
 })
 
+function expandSourceDetails(name = '115 动画') {
+  const button = screen.queryByRole('button', { name: `展开${name}来源详情` })
+  if (button) fireEvent.click(button)
+}
+
 test('来源卡使用图标与状态徽标，不再出现文字方块', async () => {
   api.sourceLibraries.mockResolvedValue({
     cards: [{
@@ -115,6 +128,7 @@ test('来源卡使用图标与状态徽标，不再出现文字方块', async ()
   render(<MediaManagementPage />)
 
   expect(await screen.findByText('115 动画')).toBeVisible()
+  expandSourceDetails()
   expect(screen.getByText('需要处理')).toBeVisible()
   expect(screen.getByText('磁盘写入失败')).toBeVisible()
   expect(screen.getByText('有 2 个待处理事项')).toBeVisible()
@@ -320,6 +334,7 @@ test.each(['queued', 'running', 'failed', 'cancelled'])('重扫卡保留旧清�
   api.sourceLibraryDeletionPreview.mockResolvedValue({ blockers: ['该来源仍有进行中的扫描，请先取消或等待结束'] })
   render(<MediaManagementPage />)
   expect(await screen.findByText('正在扫描的夸克来源')).toBeVisible()
+  expandSourceDetails('正在扫描的夸克来源')
   expect(screen.getByRole('button', { name: '查看进度' })).toBeEnabled()
   if (status === 'failed' || status === 'cancelled') {
     fireEvent.click(screen.getByRole('button', { name: '重试清理' }))

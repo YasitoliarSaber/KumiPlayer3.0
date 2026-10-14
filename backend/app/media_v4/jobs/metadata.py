@@ -110,6 +110,53 @@ def _names(items: list[dict[str, Any]] | None) -> list[str]:
     return [str(item.get("name") or "").strip() for item in (items or []) if item.get("name")]
 
 
+def _tmdb_collection_related_works(client: TMDBClient, movie_detail: dict) -> list[dict]:
+    """只从已匹配电影的 TMDB collection 读取可信关联，不以本地目录推断。"""
+    collection = movie_detail.get("belongs_to_collection")
+    if not isinstance(collection, dict):
+        return []
+    raw_id = collection.get("id")
+    try:
+        collection_id = int(raw_id)
+    except (TypeError, ValueError):
+        return []
+    if collection_id <= 0:
+        return []
+    fetch = getattr(client, "get_collection_detail", None)
+    if not callable(fetch):
+        return []
+    try:
+        detail = fetch(collection_id)
+    except TMDBClientError:
+        # 关系是可选展示资料；单次 collection 请求失败不应降级已成功的电影资料。
+        return []
+    if not isinstance(detail, dict):
+        return []
+    results = []
+    for part in detail.get("parts") or []:
+        if not isinstance(part, dict) or str(part.get("media_type") or "movie") != "movie":
+            continue
+        provider_id = str(part.get("id") or "").strip()
+        poster_path = str(part.get("poster_path") or "").strip()
+        title = str(part.get("title") or part.get("original_title") or "").strip()
+        if not provider_id.isdigit() or not poster_path or not title:
+            continue
+        if provider_id == str(movie_detail.get("id") or "").strip():
+            continue
+        results.append({
+            "provider": "tmdb",
+            "provider_id": provider_id,
+            "media_type": "movie",
+            "title": title,
+            "original_title": str(part.get("original_title") or "").strip(),
+            "year": int(str(part.get("release_date") or "")[:4])
+                if str(part.get("release_date") or "")[:4].isdigit() else None,
+            "relation_type": "tmdb_collection",
+            "poster_url": client.build_image_url(poster_path, "w500"),
+        })
+    return results
+
+
 def _local_state(
     state: str,
     reason: str,
@@ -1277,6 +1324,8 @@ def _fetch_provider_metadata(target: dict) -> dict:
                     'title_aliases': _extract_aliases(detail, 'tv'),
                 },
             }
+            if media_type == "movie":
+                result["related_works"] = _tmdb_collection_related_works(client, detail)
             if media_type == "tv":
                 season_results = []
                 mapping_diagnostics: dict[str, Any] = _empty_mapping_diagnostics()
