@@ -23,7 +23,7 @@ def test_selected_tree_mount_overrides_saved_root(tmp_path, monkeypatch, durable
     selected = tmp_path / "selected"
     tree.write_text(f"|——{selected}\nShow/Show.S01E01.mkv\n", encoding="utf-8")
     request = media_v4.SourceScanRequest(
-        source="tree", provider="baidu", tree_file=str(tree), source_root=str(selected),
+        source="tree", provider="baidu", tree_file=str(tree), source_root=str(selected), tree_mapping_mode="direct",
     )
 
     result = media_v4._start_durable_tree_scan(request) if durable else media_v4.scan_source(request)

@@ -1,4 +1,4 @@
-"""目录树播放根由用户选择的位置与目录边界确定，不依赖 TXT 保存位置。"""
+"""原位置 TXT 自动定位与显式挂载边界解析；冻结结果供 V4 来源链消费。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 
-from app.media_v4.sources.scanner import export_root_scope, tree_media_relative_paths, tree_root_id
+from app.media_v4.sources.scanner import (
+    _tree_node, detect_tree_provider, export_root_header_kind, export_root_scope,
+    tree_media_relative_paths, tree_root_id,
+)
 from app.media_v4.sources.tree_mapping import mapped_entries, mapping_scope
 
 
@@ -53,6 +56,77 @@ def tree_scan_root_id(
 
 def _digest(value) -> str:
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def txt_location_root(tree_file: str | Path) -> str:
+    """原位置导出的 TXT 父目录就是本次导出范围；只检查语法，不触盘。"""
+    from app.media_v4.path_validation import validate_playback_locator_syntax
+
+    value = str(tree_file)
+    ok, reason = validate_playback_locator_syntax(value)
+    if not ok:
+        raise ValueError(reason)
+    return str(Path(value).parent)
+
+
+def txt_location_fingerprint(root: str, tree_format: str) -> str:
+    """定位关系只绑定实际父目录与正文格式，与 OpenList 和默认挂载无关。"""
+    return _digest({"origin": "txt_location", "format": tree_format,
+                    "root": str(PureWindowsPath(root)).casefold()})
+
+
+def resolve_txt_location(tree_file: str | Path, text: str, *, provider: str) -> TreeRootResolution:
+    """纯 TXT 自动导入：正文绝对导出根优先，否则绑定原 TXT 父目录。
+
+    百度省略所选根（正文相对内容直接追加到 TXT 父目录），115 保留所选根
+    （裁掉“根目录”外壳与所选文件夹一层）。若正文首节点本身就是本地绝对
+    导出根，那是导出时的原点，比 TXT 当前所在位置更明确，此时按该根映射。
+    挂载从网盘总根、任意祖先或所选文件夹开始均使用相同关系；盘符根和
+    UNC 别名不要求与网盘目录同名。原始 relative_path/source_key 不改写。
+    """
+    root = txt_location_root(tree_file)
+    tree_format = detect_tree_provider(text)
+    paths = tree_media_relative_paths(text, provider=provider)
+    mode, scope = "direct", ""
+    anchor_origin = "txt_parent"
+
+    def invalid(reason: str) -> TreeRootResolution:
+        return TreeRootResolution("", False, reason, 0, 0, (root,), state="invalid")
+
+    nodes = [node for line in text.splitlines() if (node := _tree_node(line)) is not None]
+    headers = [name for depth, name, _ in nodes if depth == 0]
+    selected = [name for depth, name, _ in nodes if depth == 1]
+    header_kind = export_root_header_kind(headers[0]) if len(headers) == 1 else "none"
+    if tree_format == "ambiguous":
+        return invalid("目录树混合了百度与115格式，请重新导出所选文件夹的 TXT")
+    if header_kind == "absolute_root" and PureWindowsPath(headers[0]).is_absolute():
+        # 正文自带本地绝对导出根：使用正文声明的原点，TXT 被复制到其他位置时
+        # 也不会得到错误路径。相对内容已剥离该首节点，因此按 direct 追加。
+        root = str(PureWindowsPath(headers[0]))
+        anchor_origin = "tree_absolute_root"
+    elif tree_format == "pan115":
+        # 先验证结构中的导出边界，不能根据媒体共同前缀或本地文件夹名裁剪。
+        if len(headers) != 1 or header_kind != "export_header" or len(selected) != 1:
+            return invalid("115目录树需要包含“根目录 → 所选文件夹”结构，请重新导出所选文件夹")
+        mode, scope = "mounted_subdir", selected[0]
+    try:
+        entries = mapped_entries([(path, "video") for path in paths], mode=mode, scope=scope)
+    except ValueError as exc:
+        return invalid(f"目录树路径校验拒绝：{exc}")
+    if len(entries) != len(paths):
+        return invalid("目录树中存在所选导出文件夹之外的视频，请重新导出所选文件夹")
+    mapped = {original: relative for original, relative, _ in entries}
+    samples = tuple(str(Path(root).joinpath(*mapped[path].split("/")))
+                    for path in _distributed_samples(paths))
+    rule = {"version": 1, "origin": "txt_location", "tree_format": tree_format,
+            "anchor_origin": anchor_origin,
+            "source_root": root, "mapping_mode": mode, "mapping_scope": scope,
+            "config_fingerprint": txt_location_fingerprint(root, tree_format)}
+    return TreeRootResolution(
+        root, True, "已按原位置 TXT 与导出格式确定本地播放路径", 0, 0, (root,),
+        export_scope="", mapping_mode=mode, mapping_scope=scope,
+        selected_count=len(entries), path_samples=samples, state="confirmed", mapping_rule=rule,
+    )
 
 
 def _remote_parts(value: str) -> tuple[str, ...]:

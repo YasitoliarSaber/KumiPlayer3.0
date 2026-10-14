@@ -447,7 +447,7 @@ def _configured_tree_roots(config, provider: str) -> list[str]:
 
 
 def _tree_roots_for_request(request: SourceScanRequest, config, provider: str) -> list[str]:
-    """纯 TXT 使用本次选定挂载；混合来源始终由保存的路由决定。"""
+    """纯 TXT 自动定位使用原文件父目录；显式对应关系与混合来源保留原合同。"""
 
     if request.source == "tree" and request.source_root:
         from app.media_v4.path_validation import validate_playback_locator_syntax
@@ -455,6 +455,14 @@ def _tree_roots_for_request(request: SourceScanRequest, config, provider: str) -
         ok, reason = validate_playback_locator_syntax(request.source_root)
         if not ok:
             raise HTTPException(status_code=400, detail=reason)
+    if request.source == "tree" and provider != "quark" and request.tree_mapping_mode == "auto":
+        from app.media_v4.sources.tree_root import txt_location_root
+
+        try:
+            return [txt_location_root(request.tree_file)]
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+    if request.source == "tree" and request.source_root:
         return [request.source_root]
     return _configured_tree_roots(config, provider)
 
@@ -479,7 +487,11 @@ def _tree_mapping_fingerprint(config, roots: list[str], provider: str) -> str:
 
 
 def _resolve_tree_mapping(request: SourceScanRequest, config, roots: list[str], text: str, provider: str) -> TreeRootResolution:
-    """同步和持久入口共享解析；规则仅从已确认 revision 的扫描记录复用。"""
+    """同步与持久入口共享定位；纯 TXT 按原位置，其他映射只复用已确认规则。"""
+    if request.source == "tree" and provider != "quark" and request.tree_mapping_mode == "auto":
+        from app.media_v4.sources.tree_root import resolve_txt_location
+
+        return resolve_txt_location(request.tree_file, text, provider=provider)
     fingerprint = _tree_mapping_fingerprint(config, roots, provider)
     saved_rules = []
     with get_database().connect() as conn:
@@ -1355,11 +1367,31 @@ def _require_tree_validation(database, scan_id: str, root_id: str, *, require: b
         if not isinstance(rule, dict) or (rule and rule.get("version") != 1):
             raise HTTPException(status_code=409, detail="来源映射记录无效，请重新扫描")
         if rule.get("version") == 1:
-            config = (_select_openlist_config(str(scan_request.get("connection_id") or "legacy"))
-                      if request_row["source_mode"] == "tree_openlist" else load_config())
-            roots = scan_request.get("configured_roots") or [rule.get("source_root", "")]
-            if rule.get("config_fingerprint") != _tree_mapping_fingerprint(config, roots, str(root_row["provider"])):
-                raise HTTPException(status_code=409, detail="来源设置已变化，请重新扫描并核对播放路径")
+            if rule.get("origin") == "txt_location" and request_row["source_mode"] == "tree_snapshot":
+                from app.media_v4.sources.tree_root import txt_location_fingerprint, txt_location_root
+
+                if rule.get("anchor_origin") == "tree_absolute_root":
+                    # 正文自带本地绝对导出根：映射不依赖 TXT 当前所在位置，
+                    # 只需确认记录本身仍是合法的绝对根且指纹一致。
+                    recorded_root = str(rule.get("source_root") or "")
+                    if (not PureWindowsPath(recorded_root).is_absolute()
+                            or rule.get("config_fingerprint") != txt_location_fingerprint(
+                                recorded_root, str(rule.get("tree_format") or ""))):
+                        raise HTTPException(status_code=409, detail="目录树导出根记录无效，请重新扫描")
+                else:
+                    try:
+                        anchor = txt_location_root(str(scan_request.get("tree_file_path") or ""))
+                    except ValueError:
+                        raise HTTPException(status_code=409, detail="TXT 原位置记录无效，请重新扫描") from None
+                    if (PureWindowsPath(anchor) != PureWindowsPath(str(rule.get("source_root") or ""))
+                            or rule.get("config_fingerprint") != txt_location_fingerprint(anchor, str(rule.get("tree_format") or ""))):
+                        raise HTTPException(status_code=409, detail="TXT 定位关系已变化，请重新扫描")
+            else:
+                config = (_select_openlist_config(str(scan_request.get("connection_id") or "legacy"))
+                          if request_row["source_mode"] == "tree_openlist" else load_config())
+                roots = scan_request.get("configured_roots") or [rule.get("source_root", "")]
+                if rule.get("config_fingerprint") != _tree_mapping_fingerprint(config, roots, str(root_row["provider"])):
+                    raise HTTPException(status_code=409, detail="来源设置已变化，请重新扫描并核对播放路径")
     validation = load_tree_scan_validation(database, scan_id)
     if validation is None:
         raise HTTPException(
@@ -1794,7 +1826,7 @@ def _start_durable_tree_scan(request: SourceScanRequest) -> dict:
         if not configured_roots:
             raise HTTPException(status_code=409, detail="当前内容来源尚未配置本地挂载路径，请先在设置页完成来源映射")
 
-    # 原位置仅用于读取与显示；播放根和身份都不依赖 TXT 所在文件夹或文件名。
+    # 纯 TXT 自动定位使用原文件父目录；复制位置不参与映射，后台消费冻结结果。
     try:
         with copy_tree_input_to_local(request.tree_file) as local_copy:
             tree_text = read_directory_tree_text(local_copy)

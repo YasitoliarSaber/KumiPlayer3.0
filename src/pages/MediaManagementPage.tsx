@@ -587,7 +587,7 @@ export default function MediaManagementPage() {
     return ''
   }
   function treePlaybackRoot() {
-    return treeMountRoots[provider] ?? providerRoot(provider)
+    return provider === 'quark' ? treeMountRoots[provider] ?? providerRoot(provider) : parentPath(path.trim())
   }
   const providerOption = PROVIDER_OPTIONS.find((option) => option.value === provider) || PROVIDER_OPTIONS[0]
   const sourceCardMetadata = (
@@ -757,7 +757,7 @@ export default function MediaManagementPage() {
           root_path: requestSource === 'local' ? path : kind === 'hybrid' ? remoteRoot : requestSource === 'openlist' ? remoteRoot : selectedSourceRoot || 'tree',
           tree_file: requestSource === 'tree' || kind === 'hybrid' ? path : '',
           provider: selectedProvider,
-          source_root: selectedSourceRoot,
+          source_root: requestSource === 'tree' && selectedProvider !== 'quark' ? '' : selectedSourceRoot,
           ...(mappingChoice ? requestSource === 'openlist' ? { openlist_mapping_choice: mappingChoice } : { tree_mapping_choice: mappingChoice } : {}),
           scan_mode: scanMode === 'incremental' ? 'incremental' : 'full',
           revision_id: nextRevisionId,
@@ -1734,7 +1734,7 @@ export default function MediaManagementPage() {
               <div className="media-v4-field-block">
                 <div className="media-v4-field-copy"><strong>目录树 TXT 文件</strong></div>
                 <div className="media-v4-path-row media-v4-path-row-wide">
-                  <Input aria-label="目录树 TXT 文件" name="tree_file" autoComplete="off" spellCheck={false} title={path || undefined} value={path} onChange={(_, data) => setPath(data.value)} placeholder="例如 K:\\媒体清单\\动画目录树.txt" />
+                  <Input aria-label="目录树 TXT 文件" name="tree_file" autoComplete="off" spellCheck={false} title={path || undefined} value={path} onChange={(_, data) => setPath(data.value)} placeholder="选择挂载盘中原位置生成的 TXT 文件" />
                   <Button className="media-v4-file-picker-button" appearance="secondary" icon={<DocumentText24Regular />} onClick={() => void choosePath()}>选择文件</Button>
                 </div>
                 {path.trim() && <div className="media-v4-selected-file" title={path}>
@@ -1744,7 +1744,10 @@ export default function MediaManagementPage() {
               </div>
               <div className="media-v4-field-block">
                 <div className="media-v4-field-copy"><strong>本地播放位置</strong></div>
-                {treeRootEditors[provider] || !providerRoot(provider) ? <>
+                {provider !== 'quark' ? <div className="media-v4-mapping-note">
+                  <Database24Regular aria-hidden="true" />
+                  <div><output aria-label="本地播放位置" title={treePlaybackRoot()}>{treePlaybackRoot() || '选择 TXT 后自动确定'}</output><span>从挂载盘中选择原位置生成的 TXT，按所在文件夹与导出格式生成播放路径。</span></div>
+                </div> : treeRootEditors[provider] || !providerRoot(provider) ? <>
                   <FolderPathInput key={provider} label="本次导入的挂载目录" value={treePlaybackRoot()} disabled={busy !== ''} onChange={value => setTreeMountRoots(current => ({ ...current, [provider]: value }))} />
                   <div className="media-v4-command-buttons">
                     {providerRoot(provider) && <Button appearance="subtle" disabled={busy !== ''} onClick={() => {

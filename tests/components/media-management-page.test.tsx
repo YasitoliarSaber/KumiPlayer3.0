@@ -102,17 +102,18 @@ async function enterImport() {
   fireEvent.click(await screen.findByRole('button', { name: '导入媒体' }))
 }
 
-test('目录树默认复用媒体来源位置，正常导入没有额外映射模式', async () => {
+test('百度与115目录树从所选TXT父目录定位，不复用默认挂载根', async () => {
   render(<MediaManagementPage />)
   await enterImport()
   fireEvent.click(screen.getByRole('button', { name: '目录树 TXT' }))
   fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'K:/115网盘/动画/tree.txt' } })
-  expect(await screen.findByLabelText('本地播放位置')).toHaveTextContent('K:\\115网盘')
+  expect(await screen.findByLabelText('本地播放位置')).toHaveTextContent('K:/115网盘/动画')
+  expect(screen.queryByRole('button', { name: '更改播放位置' })).toBeNull()
   expect(screen.queryByRole('combobox', { name: '目录对应方式' })).toBeNull()
   expect(screen.getByRole('button', { name: '扫描并识别' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
   await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledWith(expect.objectContaining({
-    source: 'tree', source_root: 'K:\\115网盘',
+    source: 'tree', source_root: '', tree_file: 'K:/115网盘/动画/tree.txt',
   })))
   await screen.findByRole('heading', { name: '检查识别结果' })
 })
@@ -285,7 +286,7 @@ test('新番TXT更新清空旧归档，选择新版后复用目标来源、播�
   fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
   await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledWith(expect.objectContaining({
     source: 'tree', content_scope: 'ongoing', target_root_id: 'ongoing-tree',
-    tree_file: 'D:/Trees/new-export.txt', source_root: 'J:/新番', source_display_name: '连载专用目录',
+    tree_file: 'D:/Trees/new-export.txt', source_root: '', source_display_name: '连载专用目录',
   })))
 })
 
@@ -305,7 +306,7 @@ test('新版TXT更新复用原始播放位置和导出目录，避免重复追�
   fireEvent.change(input, { target: { value: 'D:/Trees/new.txt' } })
   fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
   await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledWith(expect.objectContaining({
-    source_root: 'J:/新番', target_root_id: 'ongoing-tree',
+    source_root: '', tree_file: 'D:/Trees/new.txt', target_root_id: 'ongoing-tree',
   })))
   await screen.findByRole('heading', { name: '检查识别结果' })
 })
@@ -326,7 +327,7 @@ test('新番待确认跳转复用既有草稿，避免创建第二次扫描', as
   expect(api.startDurableScan).not.toHaveBeenCalled()
 })
 
-test('目录树使用真实网盘提供商、官网入口和设置中的播放映射', async () => {
+test('目录树使用真实网盘提供商与官网入口，百度115按文件位置定位', async () => {
   render(<MediaManagementPage />)
   await enterImport()
   fireEvent.click(screen.getByRole('button', { name: '目录树 TXT' }))
@@ -339,7 +340,7 @@ test('目录树使用真实网盘提供商、官网入口和设置中的播放�
   expect(screen.getByRole('link', { name: /前往 115 官网/ })).toHaveAttribute('href', 'https://115.com/')
   expect(screen.getByRole('link', { name: /前往 115 官网/ })).toHaveClass('media-v4-provider-link')
   expect(screen.queryByText(/支持 115、百度、夸克和 OpenList 导出的清单/)).not.toBeInTheDocument()
-  expect(screen.getByText('K:\\115网盘', { selector: 'output' })).toBeVisible()
+  expect(screen.getByText('选择 TXT 后自动确定', { selector: 'output' })).toBeVisible()
   expect(screen.queryByRole('textbox', { name: '本次导入的挂载目录' })).not.toBeInTheDocument()
 
   fireEvent.click(screen.getByRole('button', { name: '夸克网盘' }))
@@ -376,7 +377,7 @@ test('夸克目录树采用独立默认挂载目录，也可为本次导入选�
   await screen.findByDisplayValue('J:/Quark')
   fireEvent.click(screen.getByRole('button', { name: '115 网盘' }))
   expect(screen.queryByRole('textbox', { name: '本次导入的挂载目录' })).not.toBeInTheDocument()
-  expect(screen.getByText('K:/115', { selector: 'output' })).toBeVisible()
+  expect(screen.getByText('选择 TXT 后自动确定', { selector: 'output' })).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: '夸克网盘' }))
   expect(screen.getByRole('textbox', { name: '本次导入的挂载目录' })).toHaveValue('J:/Quark')
   fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'D:/Trees/quark.txt' } })
@@ -397,18 +398,20 @@ test('TXT 未配置网盘播放位置时不会静默采用 OpenList 的同提供
   await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledWith(expect.objectContaining({ source_root: 'J:/Quark' })))
 })
 
-test('目录树取消本次位置覆盖后使用设置中的位置扫描', async () => {
+test('夸克目录树取消本次位置覆盖后使用设置中的位置扫描', async () => {
+  config.getConfig.mockResolvedValue({ quark_root: 'K:/Quark', openlist_routes: [] })
   render(<MediaManagementPage />)
   await enterImport()
   fireEvent.click(screen.getByRole('button', { name: '目录树 TXT' }))
+  fireEvent.click(await screen.findByRole('button', { name: '夸克网盘' }))
   fireEvent.click(await screen.findByRole('button', { name: '更改播放位置' }))
   fireEvent.change(screen.getByRole('textbox', { name: '本次导入的挂载目录' }), { target: { value: 'J:/Temporary' } })
   fireEvent.click(screen.getByRole('button', { name: '使用设置中的位置' }))
   expect(screen.queryByRole('textbox', { name: '本次导入的挂载目录' })).not.toBeInTheDocument()
-  expect(screen.getByText('K:\\115网盘', { selector: 'output' })).toBeVisible()
+  expect(screen.getByText('K:/Quark', { selector: 'output' })).toBeVisible()
   fireEvent.change(screen.getByRole('textbox', { name: '目录树 TXT 文件' }), { target: { value: 'D:/Trees/tree.txt' } })
   fireEvent.click(screen.getByRole('button', { name: '扫描并识别' }))
-  await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledWith(expect.objectContaining({ source_root: 'K:\\115网盘' })))
+  await waitFor(() => expect(api.startDurableScan).toHaveBeenCalledWith(expect.objectContaining({ provider: 'quark', source_root: 'K:/Quark' })))
 })
 
 test('文件夹选择失败可重试，切换来源后丢弃迟到选择', async () => {

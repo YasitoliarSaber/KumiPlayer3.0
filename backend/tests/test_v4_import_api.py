@@ -252,7 +252,7 @@ def test_tree_scan_accepts_utf16_tree_through_both_entries(tmp_path, monkeypatch
     media_file = mount / "01动画" / "Show" / "Show.S01E01.mkv"
     media_file.parent.mkdir(parents=True)
     media_file.write_bytes(b"video")
-    tree = tmp_path / "01动画_文件目录.txt"
+    tree = mount / "01动画" / "01动画_文件目录.txt"
     tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-16")
     monkeypatch.setattr(media_v4, "load_config", lambda: SimpleNamespace(
         pan115_root="",
@@ -283,6 +283,7 @@ def test_tree_scan_accepts_utf16_tree_through_both_entries(tmp_path, monkeypatch
         root_path="/01动画",
         tree_file=str(tree),
         provider="baidu",
+        tree_mapping_mode="direct",
     ))
 
     assert tree_result["entries"][0]["playback_locator"] == str(media_file)
@@ -299,7 +300,7 @@ def test_tree_scan_confirm_succeeds_with_source_disk_offline(tmp_path, monkeypat
 
     mount = tmp_path / "百度网盘"
     (mount / "01动画").mkdir(parents=True)  # 子库目录存在但视频不存在（源盘离线）
-    tree = tmp_path / "01动画_文件目录.txt"
+    tree = mount / "01动画" / "01动画_文件目录.txt"
     tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
     monkeypatch.setattr(media_v4, "load_config", lambda: SimpleNamespace(
         pan115_root="",
@@ -338,7 +339,7 @@ def test_preview_uses_the_backend_effective_root_over_a_stale_frontend_copy(tmp_
     media_file = effective_root / "Show" / "Show.S01E01.mkv"
     media_file.parent.mkdir(parents=True)
     media_file.write_bytes(b"video")
-    tree = tmp_path / "01动画_文件目录.txt"
+    tree = effective_root / "01动画_文件目录.txt"
     tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
     monkeypatch.setattr(media_v4, "load_config", lambda: SimpleNamespace(
         pan115_root="",
@@ -656,6 +657,7 @@ def test_hybrid_tree_scan_reuses_the_openlist_root_identity(tmp_path, monkeypatc
         tree_file=str(tree),
         provider="baidu",
         source_root="Z:\\stale-frontend-path",
+        tree_mapping_mode="direct",
     ))
 
     assert result["root_id"] == openlist_root_id(
@@ -713,6 +715,7 @@ def test_tree_scan_preserves_quark_as_the_content_provider(tmp_path, monkeypatch
         source="tree",
         tree_file=str(tree),
         provider="quark",
+        tree_mapping_mode="direct",
     ))
 
     assert result["entries"][0]["provider"] == "quark"
@@ -745,16 +748,14 @@ def test_tree_scan_resolves_the_precise_sub_library_root_from_the_tree_location(
         provider="baidu",
     ))
 
-    # 总根 / Show 不存在；TXT 父目录（媒体子库）是唯一全部命中候选。
+    # TXT 父目录直接确定媒体子库，不要求样本命中或源盘在线。
     assert result["effective_playback_root"] == str(library)
     assert result["entries"][0]["playback_locator"] == str(media_file)
     assert result["path_validation"]["ok"] is True
     assert result["path_validation"]["hits"] == result["path_validation"]["total"]
 
 
-def test_remote_tree_scan_requires_a_playback_mapping(tmp_path, monkeypatch):
-    from fastapi import HTTPException
-
+def test_remote_tree_scan_uses_original_txt_parent_without_a_saved_mapping(tmp_path, monkeypatch):
     from app.api import media_v4
 
     tree = tmp_path / "tree.txt"
@@ -767,15 +768,11 @@ def test_remote_tree_scan_requires_a_playback_mapping(tmp_path, monkeypatch):
         openlist_routes=[],
     ))
 
-    with pytest.raises(HTTPException) as exc_info:
-        media_v4.scan_source(media_v4.SourceScanRequest(
-            source="tree",
-            tree_file=str(tree),
-            provider="baidu",
-        ))
-
-    assert exc_info.value.status_code == 409
-    assert "挂载路径" in exc_info.value.detail
+    result = media_v4.scan_source(media_v4.SourceScanRequest(
+        source="tree", tree_file=str(tree), provider="baidu",
+    ))
+    assert result["effective_playback_root"] == str(tree.parent)
+    assert result["entries"][0]["playback_locator"] == str(tree.parent / "Show" / "Show.S01E01.mkv")
 
 
 def test_local_scan_receives_all_configured_cloud_mount_roots(monkeypatch):
@@ -1215,7 +1212,7 @@ def _tree_scan_fixture(tmp_path, monkeypatch):
     media_file = library / "Show" / "Show.S01E01.mkv"
     media_file.parent.mkdir(parents=True)
     media_file.write_bytes(b"video")
-    tree = tmp_path / "01动画_文件目录.txt"
+    tree = library / "01动画_文件目录.txt"
     tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
     monkeypatch.setattr(media_v4, "load_config", lambda: SimpleNamespace(
         pan115_root="",
@@ -1245,7 +1242,7 @@ def test_tree_scan_opens_the_txt_exactly_once_end_to_end(tmp_path, monkeypatch):
     media_file = library / "Show" / "Show.S01E01.mkv"
     media_file.parent.mkdir(parents=True)
     media_file.write_bytes(b"video")
-    tree = tmp_path / "01动画_文件目录.txt"
+    tree = library / "01动画_文件目录.txt"
     tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
 
     from app.api import media_v4
@@ -1789,7 +1786,8 @@ def test_sync_and_durable_tree_entries_share_one_root_identity(tmp_path, monkeyp
 
     database = media_v4.get_database()
     mount = tmp_path / "百度网盘"
-    tree = tmp_path / "01动画_文件目录.txt"
+    (mount / "01动画").mkdir(parents=True)
+    tree = mount / "01动画" / "01动画_文件目录.txt"
     tree.write_text("Show/Show.S01E01.mkv\n", encoding="utf-8")
     monkeypatch.setattr(media_v4, "load_config", lambda: SimpleNamespace(
         pan115_root="",

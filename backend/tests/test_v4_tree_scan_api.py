@@ -73,25 +73,22 @@ def test_mapping_fingerprint_tracks_server_and_account_namespace(tree_api):
     assert second != media_v4._tree_mapping_fingerprint(config, roots, "baidu")
 
 
-def test_sync_mapping_saves_complete_root_configuration_for_confirm(tree_api, monkeypatch):
+def test_sync_txt_mapping_saves_original_parent_for_confirm(tree_api):
     tree, database, _runner, client = tree_api
-    roots = [media_v4.load_config().baidu_root, "R:/another-mount"]
-    monkeypatch.setattr(media_v4, "_tree_roots_for_request", lambda *_: roots)
     request = {**_request(tree, "tree"), "tree_mapping_mode": "auto", "tree_verify_paths": False}
-    pending = client.post("/api/v4/sources/scan", json=request).json()
-    selected = client.post("/api/v4/sources/scan", json={**request, "tree_mapping_choice": pending["path_validation"]["choices"][0]["id"]})
+    selected = client.post("/api/v4/sources/scan", json=request)
     assert selected.status_code == 200, selected.text
     body = selected.json()
     with database.connect() as conn:
         row = conn.execute("SELECT request_json FROM source_scan_requests WHERE scan_id=?", (body["scan_id"],)).fetchone()
-    assert json.loads(row["request_json"])["configured_roots"] == roots
+    assert json.loads(row["request_json"])["configured_roots"] == [str(tree.parent)]
     media_v4._require_tree_validation(database, body["scan_id"], body["root_id"], require=True)
 
 
 @pytest.mark.parametrize("endpoint", ["/api/v4/sources/scans", "/api/v4/sources/scan"])
-def test_automatic_mapping_requires_confirmation_before_creating_media(tree_api, endpoint):
+def test_hybrid_automatic_mapping_still_requires_confirmation_before_creating_media(tree_api, endpoint):
     tree, database, runner, client = tree_api
-    request = {**_request(tree, "tree"), "tree_mapping_mode": "auto", "tree_verify_paths": False}
+    request = {**_request(tree, "hybrid"), "tree_mapping_mode": "auto", "tree_verify_paths": False}
     pending = client.post(endpoint, json=request)
     assert pending.status_code == 200, pending.text
     assert pending.json()["status"] == "mapping_required"
@@ -111,21 +108,24 @@ def test_automatic_mapping_requires_confirmation_before_creating_media(tree_api,
     assert len(evidence) == 2
 
 
-def test_stale_candidate_after_txt_change_cannot_silently_start_scan(tree_api):
-    tree, database, _runner, client = tree_api
-    request = {**_request(tree, "tree"), "tree_mapping_mode": "auto", "tree_verify_paths": False}
-    choice = client.post("/api/v4/sources/scans", json=request).json()["path_validation"]["choices"][0]["id"]
-    tree.write_text("Other/new.mkv\n", encoding="utf-16")
-    changed = client.post("/api/v4/sources/scans", json={**request, "tree_mapping_choice": choice})
-    assert changed.json()["status"] == "mapping_required"
-    _assert_no_scan(database)
-
-
-def test_confirmed_mapping_reused_for_new_txt_and_config_change_invalidates_it(tree_api):
+def test_new_txt_scan_reads_current_content_at_the_same_original_parent(tree_api):
     tree, database, runner, client = tree_api
     request = {**_request(tree, "tree"), "tree_mapping_mode": "auto", "tree_verify_paths": False}
-    pending = client.post("/api/v4/sources/scans", json=request).json()
-    selected = client.post("/api/v4/sources/scans", json={**request, "tree_mapping_choice": pending["path_validation"]["choices"][0]["id"]}).json()
+    first = client.post("/api/v4/sources/scans", json=request).json()
+    runner.run_scan(runner.claim_next_scan())
+    tree.write_text("Other/new.mkv\n", encoding="utf-16")
+    changed = client.post("/api/v4/sources/scans", json=request).json()
+    assert changed["status"] == "queued" and changed["root_id"] == first["root_id"]
+    runner.run_scan(runner.claim_next_scan())
+    with database.connect() as conn:
+        rows = conn.execute("SELECT relative_path FROM source_evidence WHERE scan_id=?", (changed["scan_id"],)).fetchall()
+    assert any(row["relative_path"] == "Other/new.mkv" for row in rows)
+
+
+def test_txt_update_keeps_location_identity_when_default_mount_changes(tree_api):
+    tree, database, runner, client = tree_api
+    request = {**_request(tree, "tree"), "tree_mapping_mode": "auto", "tree_verify_paths": False}
+    selected = client.post("/api/v4/sources/scans", json=request).json()
     runner.run_scan(runner.claim_next_scan())
     # 本用例只验证映射复用条件，不执行识别/在线资料作业。
     with database.connect() as conn:
@@ -134,24 +134,22 @@ def test_confirmed_mapping_reused_for_new_txt_and_config_change_invalidates_it(t
     replay = client.post("/api/v4/sources/scans", json={**request, "target_root_id": selected["root_id"]})
     assert replay.status_code == 200, replay.text
     assert replay.json()["status"] == "queued"
-    assert "保存" in replay.json()["path_validation"]["reason"]
+    assert replay.json()["root_id"] == selected["root_id"]
     config = media_v4.load_config()
     config.baidu_root = "R:/different-mount"
-    invalidated = client.post("/api/v4/sources/scans", json={**request, "source_root": r"Q:\offline-library", "target_root_id": selected["root_id"]})
-    assert invalidated.json()["status"] == "mapping_required"
+    unchanged = client.post("/api/v4/sources/scans", json={**request, "source_root": r"Q:\offline-library", "target_root_id": selected["root_id"]})
+    assert unchanged.json()["status"] == "queued"
+    assert unchanged.json()["effective_playback_root"] == str(tree.parent)
 
 
-def test_mapping_configuration_change_before_confirm_is_rejected(tree_api):
+def test_default_mapping_change_before_txt_confirm_does_not_change_original_location(tree_api):
     tree, database, runner, client = tree_api
     request = {**_request(tree, "tree"), "tree_mapping_mode": "auto", "tree_verify_paths": False}
-    pending = client.post("/api/v4/sources/scans", json=request).json()
-    selected = client.post("/api/v4/sources/scans", json={**request, "tree_mapping_choice": pending["path_validation"]["choices"][0]["id"]}).json()
+    selected = client.post("/api/v4/sources/scans", json=request).json()
     runner.run_scan(runner.claim_next_scan())
     media_v4._require_tree_validation(database, selected["scan_id"], selected["root_id"], require=True)
     media_v4.load_config().baidu_root = "R:/changed"
-    with pytest.raises(media_v4.HTTPException) as error:
-        media_v4._require_tree_validation(database, selected["scan_id"], selected["root_id"], require=True)
-    assert error.value.status_code == 409
+    media_v4._require_tree_validation(database, selected["scan_id"], selected["root_id"], require=True)
 
 
 def _assert_no_scan(database):
