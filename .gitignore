@@ -169,3 +169,14 @@ docs/samples/*
 /mpv/sources/evidence/**/README.md
 /mpv/sources/evidence/components/uosc/material-icons-round/font/
 /mpv/sources/evidence/components/uosc_danmaku/local-modifications.patch
+
+# ===== 用户指定：KumiPlayer 3.0 前端重构知识库（2026-10-14）=====
+# 目的：把「重构前置分析」（docs/current）与「设计输入层」（docs/design-input）纳入版本控制，
+# 便于换电脑、切换模型或交给外部设计方时直接读取，不必再靠本地目录传递。
+# 注意：否定规则必须留在本文件末尾，否则会被上面的 `docs/`、`*.md` 规则重新忽略。
+!docs/current/
+!docs/current/**
+!docs/design-input/
+!docs/design-input/**
+# 文档状态判定与版本控制边界报告（被上述两层的文档引用，一并放行以免出现悬空引用）。
+!docs/DOCUMENT_CLEANUP_REPORT.md
