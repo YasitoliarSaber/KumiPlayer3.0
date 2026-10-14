@@ -53,7 +53,12 @@ scripts/
 ├─ stage_tauri_runtime.ps1                暂存 WebView2Loader
 ├─ verify_tauri_build.ps1                 验证开发 EXE
 ├─ verify_installer_bundle.ps1            验证安装包内容
+├─ verify_mpv_distribution.ps1            公开发布材料门控，供预检、MPV 暂存和安装包验证调用
 ├─ cleanup_build_cache.ps1                清理可重建缓存
+├─ cleanup_workspace.ps1                  本地工作区清理入口，使用前先核对预览与保留范围
+├─ audit_scrape_accuracy.py               人工运行的识别审计工具，真实在线核验须按当前任务授权
+├─ archive_delegations.py                 人工运行的历史协作资料归档工具
+├─ _render_icon_source.py                 图标源生成辅助工具
 ├─ check_versions.py                      校验关键依赖版本一致性（npm run check:versions）
 ├─ tools/                                 只读审计和导出工具
 └─ repair/                                已确认样本的定向修复工具
@@ -123,4 +128,4 @@ npm run build
 - `repair/` 只能用于已确认的具体样本。
 - 不删除 `data/`、用户镜像、真实媒体和 `release/`。
 - 不把源码模式数据复制到安装包。
-- 不把 `mpv.exe`、`mpv.com` 或第三方 MPV 组合包复制到安装包；普通用户在首次启动时选择外部播放器。
+- 内置 MPV 仅由标准白名单暂存入口处理；公开安装包仍须通过许可证与对应源码门控。外部 MPV 整合包由用户自行选择，不复制进安装包。

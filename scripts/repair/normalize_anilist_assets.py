@@ -1,10 +1,11 @@
 r"""Normalize AniList artwork filenames to the TMDB/Kodi convention.
 
 Usage:
-    python scripts/normalize_anilist_assets.py D:\01_Software\KumiPlayer2.0\data\mirror
+    python scripts/repair/normalize_anilist_assets.py <explicit-legacy-mirror-directory>
 
 The script is intentionally conservative: existing poster/fanart files are
 treated as canonical and are never overwritten.
+This is a legacy mirror repair tool, not a V4 import or artwork preparation step.
 """
 
 from __future__ import annotations

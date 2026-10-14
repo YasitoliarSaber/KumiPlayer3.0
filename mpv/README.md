@@ -9,6 +9,8 @@ KumiPlayer 的 MPV 相关文件**全部集中在本目录**：干净官方二进
 | 路径 | 职责 | 随应用分发 | Git 跟踪 |
 |---|---|---|---|
 | `runtime/` | 干净官方 MPV v0.41.0 二进制与依赖 DLL（27 个运行文件），内置播放器本体 | ✅ | ❌ 实际文件忽略，仅跟踪 README |
+| `config/README.md` | 配置层阅读入口与维护边界 | — | ✅ |
+| `config/patches/` | 默认套件修改补丁（含 `uosc_danmaku-autoload.patch`），用于源码与改动证据核对 | 由对应源码材料按审核清单交付 | ✅ |
 | `config/portable_config/` | **可替换层**：KumiPlayer 默认套件（mpv.conf、input.conf、uosc / thumbfast / mpv-stats-zh / uosc_danmaku、script-opts、fonts） | ✅ | ✅ |
 | `config/kumiplayer/` | **自有层**：KumiPlayer 自有强制配置、Lua 脚本与自有资源（`shaders/anime4k-v4.0.1/`），不可替换 | ✅ | ✅ |
 | `runtime-manifest.json` | 二进制来源、版本、文件清单、逐文件 SHA-256、配置版本、`distribution_status` | ✅ | ✅ |
@@ -59,6 +61,7 @@ mpv.exe
   --include=<kumiplayer/mpv.conf>         # 自有层强制配置（在整合包 mpv.conf 之后解析）
   --script=<kumiplayer/scripts/*.lua>     # 自有层脚本（与整合包 scripts/ 自动加载并行）
   --script-opt=thumbfast-thumbnail=<状态目录>
+  --script-opt=thumbfast-mpv_path=<已校验的 mpv.exe 绝对路径>
   --script-opt=kumiplayer_anime4k-default_mode=<off|a|b|c|a+a|b+b|c+a>
   --script-opt=kumiplayer_anime4k-default_quality=<fast|light|balanced|high>
   --script-opt=kumiplayer_anime4k-shaders_dir=<自有层 shaders 绝对路径>
