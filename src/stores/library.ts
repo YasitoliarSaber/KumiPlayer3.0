@@ -3,7 +3,7 @@ import { libraryApi } from '../api/library'
 import { playbackApi } from '../api/playback'
 import { useUiStore, type SourceId } from './ui'
 import { matchesSourceFilter } from '../utils/sourceFilter'
-import type { WorkIndex, PlaybackHistoryItem } from '../api/types'
+import type { WorkDetail, WorkIndex, PlaybackHistoryItem } from '../api/types'
 import { mainEpisodeCount } from '../utils/workStats'
 import { isWorkInLibraryView } from '../utils/libraryCategories'
 import { recordScrollDiagnostic } from '../utils/scrollDiagnostics'
@@ -30,7 +30,7 @@ interface LibraryState {
   loaded: boolean
   changeSequence: number | null
 
-  selectedWorkDetail: WorkIndex | null
+  selectedWorkDetail: WorkDetail | null
   detailLoading: boolean
   detailError: string | null
 
@@ -45,14 +45,14 @@ interface LibraryState {
   closeWorkDetail: () => void
   refreshHistory: () => Promise<void>
   updateWorkWatchStatus: (workId: string, watchStatus: WorkIndex['watch_status']) => void
-  peekWorkDetail: (workId: string) => WorkIndex | null
-  getWorkDetail: (workId: string) => Promise<any>
+  peekWorkDetail: (workId: string) => WorkDetail | null
+  getWorkDetail: (workId: string) => Promise<WorkDetail>
   invalidateWork: (workId: string) => void
-  refreshWork: (workId: string) => Promise<WorkIndex>
+  refreshWork: (workId: string) => Promise<WorkDetail>
 }
 
-const detailCache = new Map<string, WorkIndex>()
-const detailRequests = new Map<string, Promise<WorkIndex>>()
+const detailCache = new Map<string, WorkDetail>()
+const detailRequests = new Map<string, Promise<WorkDetail>>()
 const detailVersions = new Map<string, number>()
 let changeRequest: Promise<boolean> | null = null
 let pendingDetailRefreshId: string | null = null
@@ -383,7 +383,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     }))
   },
 
-  peekWorkDetail: (workId) => detailCache.get(workId) || get().works.find((work) => work.work_id === workId) || null,
+  peekWorkDetail: (workId) => {
+    const cached = detailCache.get(workId)
+    if (cached) return cached
+    const card = get().works.find((work) => work.work_id === workId)
+    return card ? { ...card, studios: card.studios || [], tags: card.tags || [] } : null
+  },
 
   getWorkDetail: async (workId: string) => {
     const cached = detailCache.get(workId)

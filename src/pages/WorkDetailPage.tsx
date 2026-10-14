@@ -7,6 +7,7 @@ import { useLibraryStore } from '../stores/library';
 import { useBangumiStore } from '../stores/bangumi';
 import { useUiStore, type CategoryKey } from '../stores/ui';
 import { systemApi } from '../api/system';
+import type { WorkDetail } from '../api/types';
 import { bangumiApi as v4BangumiApi, buildBangumiImageUrl, type BangumiEpisode, type BangumiMatch } from '../api/bangumi';
 import { playbackApi } from '../api/playback';
 import { cleanDisplayTitle } from '../utils/title';
@@ -128,7 +129,7 @@ export default function WorkDetailPage() {
   const initialWork = selectedWorkId
     ? peekWorkDetail(selectedWorkId)
     : null;
-  const [work, setWork] = useState<any>(() => initialWork);
+  const [work, setWork] = useState<WorkDetail | null>(() => initialWork);
   const [loading, setLoading] = useState(!initialWork);
   const [showLoadProgress, setShowLoadProgress] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -192,6 +193,7 @@ export default function WorkDetailPage() {
   const [failedCastKeys, setFailedCastKeys] = useState<Set<string>>(new Set());
   const [episodeStripScrollable, setEpisodeStripScrollable] = useState(false);
   const auxiliaryRequestRef = useRef(0);
+  const auxiliaryInFlightRef = useRef(new Map<string, number>());
   const pendingPlaybackIntentRef = useRef<PendingPlaybackIntent>(null);
   const playbackStatusRequestRef = useRef(0);
   const episodeStripRef = useRef<HTMLDivElement>(null);
@@ -471,9 +473,13 @@ export default function WorkDetailPage() {
   const loadAuxiliary = async (
     options: { preferCache?: boolean; skipProgressSync?: boolean } = {},
   ) => {
-    const requestId = ++auxiliaryRequestRef.current;
+    if (!work) return;
     const selectedSeason = findSelectedSeason(work, selectedSeasonKey, selectedSeasonNumber);
     const cacheKey = auxiliaryCacheKey(work.work_id, selectedSeasonNumber, selectedSeason?.group_type);
+    const requestKey = `${cacheKey}:${useBangumiStore.getState().sessionStatus}`;
+    // 局部发布可能再次触发资料 effect；同一季度正在加载时复用该请求，避免重复双向同步。
+    if (auxiliaryInFlightRef.current.get(requestKey) === auxiliaryRequestRef.current) return;
+    const requestId = ++auxiliaryRequestRef.current;
     if (options.preferCache !== false) {
       const cached = getCacheEntry(cacheKey);
       if (cached) {
@@ -484,89 +490,94 @@ export default function WorkDetailPage() {
       }
     }
 
-    const snapshot: AuxiliarySnapshot = {
-      scrapeTarget: null,
-      bangumiMatch: null,
-      bangumiMatchSeasonNumber: null,
-      bangumiEpisodes: [],
-      bangumiCollection: null,
-      playedEpisodeIds: [],
-      progressItems: [],
-      completedEpisodeIds: [],
-      manualUnwatchedEpisodeIds: [],
-      continueEpisodeId: '',
-    };
+    auxiliaryInFlightRef.current.set(requestKey, requestId);
+    try {
+      const snapshot: AuxiliarySnapshot = {
+        scrapeTarget: null,
+        bangumiMatch: null,
+        bangumiMatchSeasonNumber: null,
+        bangumiEpisodes: [],
+        bangumiCollection: null,
+        playedEpisodeIds: [],
+        progressItems: [],
+        completedEpisodeIds: [],
+        manualUnwatchedEpisodeIds: [],
+        continueEpisodeId: '',
+      };
 
-    const scrapeTargetSource = normalizedWorkSources(work).length > 1 ? undefined : work.source;
+      const scrapeTargetSource = normalizedWorkSources(work).length > 1 ? undefined : work.source;
 
-    // 第 1 阶段：并发获取刮削、匹配
-    const [scrapeResult, matchResult] = await Promise.allSettled([
-      scrapeApi.getTargetByWork(
-        work.work_id,
-        scrapeTargetSource,
-        selectedSeasonNumber ?? null,
-        selectedSeason?.group_type,
-      ),
-      bangumiApi.getMatch(work.work_id, selectedSeasonNumber ?? undefined),
-    ]);
+      // 第 1 阶段：并发获取刮削、匹配
+      const [scrapeResult, matchResult] = await Promise.allSettled([
+        scrapeApi.getTargetByWork(
+          work.work_id,
+          scrapeTargetSource,
+          selectedSeasonNumber ?? null,
+          selectedSeason?.group_type,
+        ),
+        bangumiApi.getMatch(work.work_id, selectedSeasonNumber ?? undefined),
+      ]);
 
-    if (scrapeResult.status === 'fulfilled') {
-      snapshot.scrapeTarget = scrapeResult.value;
-    }
-
-    if (matchResult.status === 'fulfilled') {
-      snapshot.bangumiMatch = matchResult.value;
-      snapshot.bangumiMatchSeasonNumber = matchResult.value.season_number ?? null;
-    }
-
-    // 第 2 阶段：有匹配时执行双向同步（在读取本地进度之前）
-    const isConnected = useBangumiStore.getState().sessionStatus === 'connected';
-    if (snapshot.bangumiMatch && isConnected && !options.skipProgressSync) {
-      try {
-        await bangumiApi.syncProgress(work.work_id, selectedSeasonNumber ?? undefined);
-      } catch {
-        // 同步失败不阻断页面渲染，本地进度保持原样
+      if (scrapeResult.status === 'fulfilled') {
+        snapshot.scrapeTarget = scrapeResult.value;
       }
-    }
 
-    // 第 3 阶段：并发获取剧集映射、收藏状态和本地进度
-    const [episodesResult, collectionResult, playbackResult] = await Promise.allSettled([
-      bangumiApi.getEpisodes(work.work_id, selectedSeasonNumber ?? undefined),
-      bangumiApi.getCollection(work.work_id, selectedSeasonNumber ?? undefined),
-      refreshPlaybackSnapshot(),
-    ]);
-
-    if (episodesResult.status === 'fulfilled') {
-      const mapping = episodesResult.value;
-      snapshot.bangumiEpisodes = mapping.episodes || [];
-      if (mapping.match) {
-        snapshot.bangumiMatch = mapping.match;
-        snapshot.bangumiMatchSeasonNumber = mapping.match.season_number ?? mapping.season_number ?? null;
+      if (matchResult.status === 'fulfilled') {
+        snapshot.bangumiMatch = matchResult.value;
+        snapshot.bangumiMatchSeasonNumber = matchResult.value.season_number ?? null;
       }
-    } else {
-      snapshot.bangumiEpisodes = [];
-    }
 
-    if (collectionResult.status === 'fulfilled') {
-      snapshot.bangumiCollection = collectionResult.value.bangumi || null;
-      const collMatchSeason = collectionResult.value.match_season_number;
-      if (collMatchSeason !== undefined && collMatchSeason !== selectedSeasonNumber) {
-        snapshot.bangumiMatchSeasonNumber = collMatchSeason ?? null;
+      // 第 2 阶段：有匹配时执行双向同步（在读取本地进度之前）
+      const isConnected = useBangumiStore.getState().sessionStatus === 'connected';
+      if (snapshot.bangumiMatch && isConnected && !options.skipProgressSync) {
+        try {
+          await bangumiApi.syncProgress(work.work_id, selectedSeasonNumber ?? undefined);
+        } catch {
+          // 同步失败不阻断页面渲染，本地进度保持原样
+        }
       }
-    } else {
-      snapshot.bangumiCollection = null;
+
+      // 第 3 阶段：并发获取剧集映射、收藏状态和本地进度
+      const [episodesResult, collectionResult, playbackResult] = await Promise.allSettled([
+        bangumiApi.getEpisodes(work.work_id, selectedSeasonNumber ?? undefined),
+        bangumiApi.getCollection(work.work_id, selectedSeasonNumber ?? undefined),
+        refreshPlaybackSnapshot(),
+      ]);
+
+      if (episodesResult.status === 'fulfilled') {
+        const mapping = episodesResult.value;
+        snapshot.bangumiEpisodes = mapping.episodes || [];
+        if (mapping.match) {
+          snapshot.bangumiMatch = mapping.match;
+          snapshot.bangumiMatchSeasonNumber = mapping.match.season_number ?? mapping.season_number ?? null;
+        }
+      } else {
+        snapshot.bangumiEpisodes = [];
+      }
+
+      if (collectionResult.status === 'fulfilled') {
+        snapshot.bangumiCollection = collectionResult.value.bangumi || null;
+        const collMatchSeason = collectionResult.value.match_season_number;
+        if (collMatchSeason !== undefined && collMatchSeason !== selectedSeasonNumber) {
+          snapshot.bangumiMatchSeasonNumber = collMatchSeason ?? null;
+        }
+      } else {
+        snapshot.bangumiCollection = null;
+      }
+
+      const playbackSnapshot = playbackResult.status === 'fulfilled' ? playbackResult.value : null;
+      snapshot.playedEpisodeIds = playbackSnapshot?.playedEpisodeIds || [];
+      snapshot.progressItems = playbackSnapshot?.progressItems || [];
+      snapshot.completedEpisodeIds = playbackSnapshot?.completedEpisodeIds || [];
+      snapshot.manualUnwatchedEpisodeIds = playbackSnapshot?.manualUnwatchedEpisodeIds || [];
+      snapshot.continueEpisodeId = playbackSnapshot?.continueEpisodeId || '';
+
+      if (requestId !== auxiliaryRequestRef.current) return;
+      setCacheEntry(cacheKey, snapshot);
+      applyAuxiliarySnapshot(snapshot);
+    } finally {
+      if (auxiliaryInFlightRef.current.get(requestKey) === requestId) auxiliaryInFlightRef.current.delete(requestKey);
     }
-
-    const playbackSnapshot = playbackResult.status === 'fulfilled' ? playbackResult.value : null;
-    snapshot.playedEpisodeIds = playbackSnapshot?.playedEpisodeIds || [];
-    snapshot.progressItems = playbackSnapshot?.progressItems || [];
-    snapshot.completedEpisodeIds = playbackSnapshot?.completedEpisodeIds || [];
-    snapshot.manualUnwatchedEpisodeIds = playbackSnapshot?.manualUnwatchedEpisodeIds || [];
-    snapshot.continueEpisodeId = playbackSnapshot?.continueEpisodeId || '';
-
-    if (requestId !== auxiliaryRequestRef.current) return;
-    setCacheEntry(cacheKey, snapshot);
-    applyAuxiliarySnapshot(snapshot);
   };
 
   useEffect(() => {
@@ -749,11 +760,11 @@ export default function WorkDetailPage() {
     return episodes
       .filter((episode: any) => {
         const item = progressByEpisodeId.get(episode.episode_id);
-        return item?.completed && !item.bangumi_synced && !item.manually_unwatched;
+        return item?.completed && !syncedEpisodeIds.has(episode.episode_id) && !item.manually_unwatched;
       })
       .map((episode: any) => episode.episode_id)
       .sort();
-  }, [episodes, progressByEpisodeId]);
+  }, [episodes, progressByEpisodeId, syncedEpisodeIds]);
   const pendingBangumiSyncKey = pendingBangumiSyncEpisodeIds.join('|');
 
   const continueTarget = useMemo(() => {
@@ -898,14 +909,13 @@ export default function WorkDetailPage() {
   };
   const titleTags = mergeTitleTags(work);
   const workSources = normalizedWorkSources(work);
-  const sourceFolderEpisodes = workSources
-    .map((source) => ({
-      source,
-      episodeId: work.source_episode_ids?.[source]
-        || work.episodes.find((episode: any) => episode.source === source && episode.strm_path)?.episode_id
-        || '',
-    }))
-    .filter(({ episodeId }) => Boolean(episodeId));
+  const sourceFolderEpisodes = workSources.flatMap((source) => {
+    for (const episode of work.episodes) {
+      const asset = episode.assets?.find((item) => item.source === source);
+      if (asset) return [{ source, episodeId: episode.kind === 'movie' ? '' : episode.episode_id, assetId: asset.asset_id }];
+    }
+    return [];
+  });
   const hasMultipleSources = workSources.length > 1;
   const resolvedBangumiStatusLabel = bangumiMatch
     ? (bangumiMatchSeasonNumber != null && bangumiMatchSeasonNumber !== selectedSeasonNumber)
@@ -1002,7 +1012,7 @@ export default function WorkDetailPage() {
   };
 
   const scanCurrentWork = async () => {
-    if (work.import_scope !== 'seasonal') return;
+    if (work.content_scope !== 'ongoing') return;
     setManagementBusy(true); setMoreMenuOpen(false);
     try {
       const task = await trackingApi.scan(work.work_id, true);
@@ -1237,9 +1247,9 @@ export default function WorkDetailPage() {
     }
   };
 
-  const handleOpenFolder = async (episodeId = '', source = '') => {
+  const handleOpenFolder = async (episodeId = '', source = '', assetId = '') => {
     try {
-      const result = await systemApi.openFolder(work.work_id, episodeId);
+      const result = await systemApi.openFolder(work.work_id, episodeId, true, assetId);
       if (!result.exists) alert(`${source ? `${workSourceLabel(source)}：` : ''}文件夹不存在或挂载未连接`);
     } catch (err) {
       alert(`${source ? `${workSourceLabel(source)}：` : ''}${(err as Error).message}`);
@@ -1469,7 +1479,7 @@ export default function WorkDetailPage() {
               {work.certification}
             </span>
           )}
-          {work.import_scope === 'seasonal' && <span>追更中</span>}
+          {work.content_scope === 'ongoing' && <span>追更中</span>}
         </div>
         {hasDetailTags && (
           <div className="detail-hero-tags">
@@ -1549,11 +1559,11 @@ export default function WorkDetailPage() {
             <button className="detail-more-trigger" onClick={() => setMoreMenuOpen((open) => !open)} aria-label="更多操作" aria-expanded={moreMenuOpen}><Ellipsis size={24} /></button>
             {moreMenuOpen && <div className="detail-more-menu" role="menu">
               {workDetailV4Capabilities.titleMutation && <button role="menuitem" onClick={openTitleEditor}><Pencil size={16} />修改作品标题</button>}
-              {workDetailV4Capabilities.seasonalManagement && work.import_scope === 'seasonal' && <button role="menuitem" onClick={scanCurrentWork} disabled={managementBusy}><ScanLine size={16} />扫描当前作品</button>}
+              {workDetailV4Capabilities.seasonalManagement && work.content_scope === 'ongoing' && <button role="menuitem" onClick={scanCurrentWork} disabled={managementBusy}><ScanLine size={16} />扫描当前作品</button>}
               {workDetailV4Capabilities.appendEpisodes && <button role="menuitem" onClick={() => { setAppendOpen(true); setMoreMenuOpen(false); }}><Upload size={16} />追加剧集</button>}
               {workDetailV4Capabilities.artworkMutation && <button role="menuitem" onClick={() => { setArtworkKind('fanart'); setMoreMenuOpen(false); }}><Image size={16} />更换背景图</button>}
-              {workDetailV4Capabilities.sourceSpecificFolders && (hasMultipleSources && sourceFolderEpisodes.length > 0 ? sourceFolderEpisodes.map(({ source, episodeId }) => (
-                <button key={`video-${source}`} role="menuitem" onClick={() => { setMoreMenuOpen(false); void handleOpenFolder(episodeId, source); }}><FolderOpen size={16} />打开{workSourceLabel(source)}文件夹</button>
+              {workDetailV4Capabilities.sourceSpecificFolders && (hasMultipleSources && sourceFolderEpisodes.length > 0 ? sourceFolderEpisodes.map(({ source, episodeId, assetId }) => (
+                <button key={`video-${source}`} role="menuitem" onClick={() => { setMoreMenuOpen(false); void handleOpenFolder(episodeId, source, assetId); }}><FolderOpen size={16} />打开{workSourceLabel(source)}文件夹</button>
               )) : (
                 <button role="menuitem" onClick={() => { setMoreMenuOpen(false); void handleOpenFolder(); }}><FolderOpen size={16} />打开视频文件夹</button>
               ))}
@@ -1924,7 +1934,7 @@ export default function WorkDetailPage() {
                   key={episode.episode_id}
                   className={`${continueTarget?.episode_id === episode.episode_id ? 'current' : ''} ${watchedEpisodeIds.has(episode.episode_id) ? 'watched' : ''}`}
                   onClick={() => revealEpisodeInStrip(index)}
-                  aria-label={`${episodeAriaNumberLabel(episode)}：${cleanDisplayTitle(episode.title || '', episodeFallbackTitle(episode), { preserveTitle: isSpecialEpisode(episode) })}`}
+                  aria-label={`${episodeAriaNumberLabel(episode)}：${episodeQuickLabel(episode)}`}
                 >
                   {episodeQuickLabel(episode)}
                 </button>

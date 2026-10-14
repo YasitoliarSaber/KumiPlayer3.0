@@ -1,11 +1,11 @@
-"""后端数据流 V2 一次性重置命令（默认预览）。
+"""V4 受管媒体状态重置命令（默认预览，保留历史脚本名）。
 
 用法：
     python scripts/repair/reset_backend_v2.py            # 只预览
     python scripts/repair/reset_backend_v2.py --apply    # 预览后确认执行
 
 安全：
-- 只删除 KumiPlayer 受管数据（data 下快照/计划/镜像/刮削/播放/数据库等）与受管镜像目录；
+- 只删除 V4 重置清单中的受管媒体状态；配置、凭据、播放器状态和日志保留；
 - 任何目标是来源根、磁盘根或用户主目录时立即中止；
 - 真实媒体、本地来源目录、网盘文件与 OpenList 远端内容绝不被删除。
 """
@@ -15,9 +15,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
 
-from app.maintenance.reset_backend_state import (  # noqa: E402
+from app.maintenance.reset_backend_state_v4 import (  # noqa: E402
     ResetProtectionError,
     apply_reset,
     preview_reset,
@@ -27,9 +27,8 @@ from app.maintenance.reset_backend_state import (  # noqa: E402
 def main() -> int:
     apply = "--apply" in sys.argv
     preview = preview_reset()
-    print("=== KumiPlayer 管理数据重置（后端数据流 V2）===")
+    print("=== KumiPlayer V4 受管媒体状态重置 ===")
     print(f"数据根：{preview['data_dir']}")
-    print(f"镜像根：{preview['mirror_root']}")
     print("将删除（KumiPlayer 受管数据，可重建）：")
     for target in preview["targets"]:
         print(f"  - {target}")
@@ -58,7 +57,7 @@ def main() -> int:
     print("\n已删除：")
     for path in result["removed"]:
         print(f"  - {path}")
-    print("重置完成。下一次启动将创建空的后端 V2 数据库。")
+    print("重置完成。下一次启动将创建空的 V4 媒体数据库。")
     return 0
 
 

@@ -2,8 +2,6 @@ import type { PlaybackHistoryItem, PlaybackSession } from '../api/types';
 
 export type PlaybackProgressItem = PlaybackHistoryItem & {
   ratio?: number;
-  bangumi_synced?: boolean;
-  bangumi_error?: string;
   manually_unwatched?: boolean;
 };
 
@@ -67,8 +65,6 @@ export function mergeActiveSessionProgress(
       ratio,
       completed: false,
       updated_at: session.started_at || '',
-      bangumi_synced: false,
-      bangumi_error: '',
       manually_unwatched: false,
     }];
   }

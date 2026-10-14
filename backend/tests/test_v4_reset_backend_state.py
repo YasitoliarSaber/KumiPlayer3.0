@@ -3,6 +3,23 @@
 from __future__ import annotations
 
 
+def test_historical_reset_entrypoint_previews_v4_without_applying(tmp_path, monkeypatch, capsys):
+    import importlib.util
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[2] / 'scripts' / 'repair' / 'reset_backend_v2.py'
+    spec = importlib.util.spec_from_file_location('reset_entrypoint_fixture', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module.sys, 'argv', [str(script)])
+    monkeypatch.setattr(module, 'preview_reset', lambda: {
+        'data_dir': str(tmp_path), 'targets': [], 'source_roots_protected': []})
+    monkeypatch.setattr(module, 'apply_reset', lambda: (_ for _ in ()).throw(AssertionError('preview must not apply')))
+    assert module.main() == 0
+    output = capsys.readouterr().out
+    assert 'V4' in output and '未删除任何数据' in output
+
+
 def test_preview_is_non_destructive_and_apply_keeps_credentials_and_runtime_state(tmp_path, monkeypatch):
     from app.maintenance import reset_backend_state_v4 as reset
 
@@ -45,6 +62,7 @@ def test_preview_is_non_destructive_and_apply_keeps_credentials_and_runtime_stat
 
 def test_source_root_and_symlink_targets_are_rejected(tmp_path, monkeypatch):
     import pytest
+
     from app.maintenance import reset_backend_state_v4 as reset
 
     data_dir = tmp_path / "data"
@@ -72,6 +90,7 @@ def test_source_root_and_symlink_targets_are_rejected(tmp_path, monkeypatch):
 
 def test_parent_of_source_root_is_never_a_reset_target(tmp_path, monkeypatch):
     import pytest
+
     from app.maintenance import reset_backend_state_v4 as reset
 
     data_dir = tmp_path / "data"

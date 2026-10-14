@@ -32,6 +32,7 @@ class OpenFolderRequest(BaseModel):
 
     work_id: str
     episode_id: str = ""
+    asset_id: str = ""
     folder_type: Literal["video"] = "video"
     open: bool = True
 
@@ -44,7 +45,7 @@ def open_folder(req: OpenFolderRequest):
     only V4 Work/Episode/Asset rows are consulted.
     """
 
-    asset = _find_asset(req.work_id, req.episode_id)
+    asset = _find_asset(req.work_id, req.episode_id, req.asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="作品或剧集没有当前已确认的媒体文件")
     locator = str(asset["playback_locator"] or "")
@@ -67,7 +68,7 @@ def open_folder(req: OpenFolderRequest):
     }
 
 
-def _find_asset(work_id: str, episode_id: str) -> dict | None:
+def _find_asset(work_id: str, episode_id: str, asset_id: str = "") -> dict | None:
     with get_database().connect() as conn:
         row = conn.execute(
             """
@@ -82,13 +83,14 @@ def _find_asset(work_id: str, episode_id: str) -> dict | None:
             LEFT JOIN episode_assets ea ON ea.asset_id = rb.asset_id AND ea.episode_id = rb.episode_id
             LEFT JOIN work_assets wa ON wa.asset_id = rb.asset_id AND wa.work_id = rb.work_id
             WHERE rb.work_id = ? AND (? = '' OR rb.episode_id = ?)
+              AND (? = '' OR rb.asset_id = ?)
               AND ((rb.episode_id IS NULL AND wa.asset_id IS NOT NULL)
                    OR (e.episode_id IS NOT NULL AND ea.asset_id IS NOT NULL))
             ORDER BY COALESCE(ea.preference_rank, wa.preference_rank, 0),
                      ir.confirmed_at DESC, rb.binding_id
             LIMIT 1
             """,
-            (work_id, episode_id, episode_id),
+            (work_id, episode_id, episode_id, asset_id, asset_id),
         ).fetchone()
     return dict(row) if row is not None else None
 

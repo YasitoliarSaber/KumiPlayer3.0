@@ -10,9 +10,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from fastapi.testclient import TestClient
+
 from app.core.config import invalidate_config_cache
 from app.main import app
-from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -302,16 +303,19 @@ def test_builtin_mpv_launch_fails_closed_when_script_is_missing(tmp_path, monkey
 def test_kumiplayer_mpv_integration_reports_builtin_runtime_status(
     builtin_runtime,
 ):
+    from app.core.runtime import get_kumiplayer_layer_dir
     from app.playback import mpv
 
     runtime_dir, config_dir = builtin_runtime
 
     status = mpv.get_kumiplayer_mpv_integration()
 
-    assert status["integration_dir"] == str(config_dir)
+    layer = get_kumiplayer_layer_dir()
+    assert status["integration_dir"] == str(layer)
     assert status["integration_available"] is True
     assert status["plugin_available"] is True
-    assert status["plugin_path"] == str(config_dir / "scripts" / "screenshot_to_video_dir.lua")
+    assert status["plugin_path"] == str(layer / "scripts" / "screenshot_to_video_dir.lua")
+    assert Path(status['plugin_path']).is_file()
     assert status["mpv_available"] is True
     assert status["manifest_valid"] is True
 

@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
+
 from app.api import system
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.revisions.service import V4RevisionService
-from pydantic import ValidationError
 
 
 def _confirmed_asset(database: V4Database, tmp_path, *, movie: bool = False) -> tuple[str, str, Path]:
@@ -86,3 +87,19 @@ def test_open_video_folder_keeps_using_asset_playback_directory(tmp_path, monkey
 
     assert result["exists"] is True
     assert result["folder_path"] == str(playback_file.parent)
+
+
+def test_folder_uses_requested_confirmed_asset_and_rejects_foreign_identity(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    database = V4Database(tmp_path / "library.db")
+    database.initialize()
+    work_id, episode_id, playback_file = _confirmed_asset(database, tmp_path)
+    monkeypatch.setattr(system, "get_database", lambda: database)
+    with database.connect() as conn:
+        asset_id = conn.execute("SELECT asset_id FROM revision_bindings LIMIT 1").fetchone()[0]
+    result = system.open_folder(system.OpenFolderRequest(work_id=work_id, episode_id=episode_id, asset_id=asset_id, open=False))
+    assert result["source_path"] == str(playback_file)
+    with pytest.raises(HTTPException) as error:
+        system.open_folder(system.OpenFolderRequest(work_id=work_id, asset_id="foreign", open=False))
+    assert error.value.status_code == 404

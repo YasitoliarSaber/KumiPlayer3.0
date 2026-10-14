@@ -4,6 +4,9 @@ import { playbackApi } from '../../src/api/playback';
 import { useLibraryStore } from '../../src/stores/library';
 import { useUiStore } from '../../src/stores/ui';
 import WorkDetailPage from '../../src/pages/WorkDetailPage';
+import { systemApi } from '../../src/api/system';
+import { bangumiApi } from '../../src/api/bangumi';
+import { useBangumiStore } from '../../src/stores/bangumi';
 
 const artworkPath = (resourceHex: string, digestHex: string, width: number) =>
   `/api/assets/artwork/${resourceHex.repeat(64)}/${digestHex.repeat(64)}-webp-v1/${width}`;
@@ -55,6 +58,18 @@ const work = {
   ],
 };
 
+test('V4 新番徽标与扫描入口可达，来源文件夹携带对应 Asset', async () => {
+  const ongoing = { ...work, content_scope: 'ongoing' };
+  useLibraryStore.setState({ works: [ongoing as never], getWorkDetail: vi.fn().mockResolvedValue(ongoing) });
+  const openFolder = vi.spyOn(systemApi, 'openFolder').mockResolvedValue({ ok: true, opened: true, exists: true, folder_path: '', source_path: '' });
+  render(<WorkDetailPage />);
+  expect((await screen.findAllByText('追更中'))[0]).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
+  expect(screen.getByRole('menuitem', { name: '扫描当前作品' })).toBeVisible();
+  fireEvent.click(screen.getByRole('menuitem', { name: '打开115 网盘文件夹' }));
+  await waitFor(() => expect(openFolder).toHaveBeenCalledWith(work.work_id, 'episode-1', true, 'asset-alt'));
+});
+
 // JSDOM 不传输图片；为卸载后仍占预算的节点模拟浏览器完成事件。
 const startedImages = new Set<HTMLImageElement>();
 const nativeSource = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src')!.set!;
@@ -92,16 +107,56 @@ beforeEach(() => {
 
 test('单作品图片发布更新当前详情，不重新请求详情或重置当前季度', async () => {
   const { container } = render(<WorkDetailPage />);
-  await screen.findByText('启程');
+  await screen.findAllByText('启程').then(items => items[0]);
   const getDetail = useLibraryStore.getState().getWorkDetail;
   expect(getDetail).toHaveBeenCalledOnce();
   const updated = { ...work, episodes: [{ ...work.episodes[0], thumb_path: artworkPath('d', '2', 384) }],
     cast: [{ name: '新演员', role: '角色', profile_path: artworkPath('e', '2', 384) }] };
   act(() => useLibraryStore.setState({ selectedWorkDetail: updated as never }));
   expect(container.querySelector('.episode-thumb img')).not.toBeNull();
-  expect(screen.getByText('新演员')).toBeVisible();
+  expect(screen.getAllByText('新演员')[0]).toBeVisible();
   expect(useUiStore.getState().selectedSeasonNumber).toBe(1);
   expect(getDetail).toHaveBeenCalledOnce();
+});
+
+test.each([
+  { label: '已同步的剧集', synced: true, manuallyUnwatched: false },
+  { label: '手工标记未看的剧集', synced: false, manuallyUnwatched: true },
+])('$label 不触发重复的延迟 Bangumi 同步', async ({ label, synced, manuallyUnwatched }) => {
+  // 独立作品身份避开资料缓存；真实等待跨过页面的 800ms 延迟同步窗口。
+  const fixture = { ...work, work_id: `bangumi-${label}` };
+  useUiStore.setState({ selectedWorkId: fixture.work_id });
+  useLibraryStore.setState({ works: [fixture as never], getWorkDetail: vi.fn().mockResolvedValue(fixture) });
+  const previousSession = useBangumiStore.getState().sessionStatus;
+  useBangumiStore.setState({ sessionStatus: 'connected' });
+  const match = { work_id: fixture.work_id, season_number: 1, subject_id: 100,
+    subject_name: 'Test', subject_name_cn: '测试', episode_map: { 'episode-1': 101 } };
+  vi.spyOn(bangumiApi, 'getMatch').mockResolvedValue(match);
+  const mappings = vi.spyOn(bangumiApi, 'getEpisodes').mockResolvedValue({
+    work_id: fixture.work_id, season_number: 1, match, match_season_number: 1,
+    episodes: [{ episode_id: 'episode-1', season_number: 1, episode_number: 1,
+      title: '启程', bangumi_episode_id: 101, synced, synced_at: '' }],
+  });
+  vi.spyOn(bangumiApi, 'getCollection').mockResolvedValue({
+    work_id: fixture.work_id, season_number: 1, match_season_number: 1, bangumi: null,
+  } as never);
+  const sync = vi.spyOn(bangumiApi, 'syncProgress').mockResolvedValue({
+    ok: true, status: 'synced', work_id: fixture.work_id, season_number: 1, subject_id: 100,
+    remote_done_before: 0, local_done_before: 1, pulled: 0, pushed: 0, pending: 0,
+  });
+  vi.mocked(playbackApi.getProgress).mockResolvedValue({ items: [{
+    work_id: fixture.work_id, episode_id: 'episode-1', asset_id: 'asset-primary',
+    position: 1200, duration: 1200, completed: true, manually_unwatched: manuallyUnwatched,
+  } as never] });
+  const view = render(<WorkDetailPage />);
+  try {
+    await waitFor(() => expect(mappings).toHaveBeenCalledOnce());
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    expect(sync).toHaveBeenCalledExactlyOnceWith(fixture.work_id, 1);
+  } finally {
+    view.unmount();
+    useBangumiStore.setState({ sessionStatus: previousSession });
+  }
 });
 
 test.each(['local-path', 'resource-variants'])('背景加载失败后，%s 发布新图片可以恢复满页背景', async (source) => {
@@ -111,7 +166,7 @@ test.each(['local-path', 'resource-variants'])('背景加载失败后，%s 发�
   useLibraryStore.setState({ works: [stale as never], getWorkDetail: vi.fn().mockResolvedValue(stale) });
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
   const { container } = render(<WorkDetailPage />);
-  await screen.findByText('启程');
+  await screen.findAllByText('启程').then(items => items[0]);
   fireEvent.error(container.querySelector('.detail-hero-art')!);
   fireEvent.error(container.querySelector('.detail-hero-art')!);
   expect(container.querySelector('.detail-hero-art')).toBeNull();
@@ -134,7 +189,7 @@ test('按旧版沉浸式结构展示 V4 季度和剧集信息', async () => {
   expect(container.querySelector('.detail-hero-logo')).not.toBeNull();
   expect(container.querySelector('.detail-episode-grid.thumbnail-strip')).not.toBeNull();
   expect(screen.getByRole('combobox', { name: '选择季度' })).toBeVisible();
-  expect(screen.getByText('启程')).toBeVisible();
+  expect(screen.getAllByText('启程')[0]).toBeVisible();
 });
 
 test('夸克来源缺少 provider_id 时仍显示可读名称', async () => {
@@ -144,7 +199,7 @@ test('夸克来源缺少 provider_id 时仍显示可读名称', async () => {
   };
   useLibraryStore.setState({ works: [quarkWork as never], getWorkDetail: vi.fn().mockResolvedValue(quarkWork) });
   render(<WorkDetailPage />);
-  await screen.findByText('启程');
+  await screen.findAllByText('启程').then(items => items[0]);
   expect(screen.queryByText('quark')).not.toBeInTheDocument();
   expect(screen.getAllByText('夸克网盘').length).toBeGreaterThan(0);
 });
@@ -163,7 +218,7 @@ test('季度缺少剧照时仍使用统一的横向剧集组件', async () => {
 
   const { container } = render(<WorkDetailPage />);
 
-  expect(await screen.findByText('启程')).toBeVisible();
+  expect(await screen.findAllByText('启程').then(items => items[0])).toBeVisible();
   expect(container.querySelector('.detail-episode-grid.thumbnail-strip')).not.toBeNull();
   expect(screen.getByRole('button', { name: '上一组剧集' })).toBeVisible();
   expect(screen.queryByRole('button', { name: '列表视图' })).not.toBeInTheDocument();
@@ -194,7 +249,7 @@ test('首次进入优先显示正片季度并把特别篇排在最后', async ()
   render(<WorkDetailPage />);
 
   await waitFor(() => expect(screen.getByRole('combobox', { name: '选择季度' })).toHaveTextContent('第1季'));
-  expect(screen.getByText('第一季启程')).toBeVisible();
+  expect(screen.getAllByText('第一季启程')[0]).toBeVisible();
   expect(screen.queryByText('露营小剧场')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('combobox', { name: '选择季度' }));
   const options = screen.getAllByRole('option').map((option) => option.textContent);
@@ -223,10 +278,10 @@ test('用户切换季度后重新进入同一作品仍恢复该季度', async ()
   });
 
   const firstVisit = render(<WorkDetailPage />);
-  expect(await screen.findByText('第一季启程')).toBeVisible();
+  expect(await screen.findAllByText('第一季启程').then(items => items[0])).toBeVisible();
   fireEvent.click(screen.getByRole('combobox', { name: '选择季度' }));
   fireEvent.click(screen.getByRole('option', { name: '第 2 季' }));
-  expect(await screen.findByText('第二季启程')).toBeVisible();
+  expect(await screen.findAllByText('第二季启程').then(items => items[0])).toBeVisible();
   expect(useUiStore.getState().selectedSeasonByWork[work.work_id]).toEqual({
     seasonNumber: 2,
     seasonKey: 'season:2',
@@ -235,7 +290,7 @@ test('用户切换季度后重新进入同一作品仍恢复该季度', async ()
   firstVisit.unmount();
   render(<WorkDetailPage />);
 
-  expect(await screen.findByText('第二季启程')).toBeVisible();
+  expect(await screen.findAllByText('第二季启程').then(items => items[0])).toBeVisible();
   expect(screen.queryByText('第一季启程')).not.toBeInTheDocument();
 });
 
@@ -251,7 +306,7 @@ test('缺图剧集卡显示占位，不把背景大图复制为每集缩略图',
 
   const { container } = render(<WorkDetailPage />);
 
-  expect(await screen.findByText('启程')).toBeVisible();
+  expect(await screen.findAllByText('启程').then(items => items[0])).toBeVisible();
   const episodeThumb = container.querySelector('.episode-thumb');
   expect(episodeThumb).not.toBeNull();
   // 缺图时不得回退到整页背景图（fanart），否则几十张卡片会并发请求同一张原图。
@@ -298,8 +353,8 @@ test('特别篇不展示内部 SP 编号，并显示彼此可区分的本地标�
   render(<WorkDetailPage />);
 
   // SP 编号仅用于后端排序/定位，用户界面只显示可区分的语义标题。
-  expect(await screen.findByText('露营小剧场')).toBeVisible();
-  expect(screen.getByText('温泉小剧场')).toBeVisible();
+  expect(await screen.findAllByText('露营小剧场').then(items => items[0])).toBeVisible();
+  expect(screen.getAllByText('温泉小剧场')[0]).toBeVisible();
   expect(screen.queryByText('SP01')).not.toBeInTheDocument();
   expect(screen.queryByText('SP02')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '播放特别篇 1：露营小剧场' })).toBeVisible();
@@ -332,7 +387,7 @@ test('历史数据标题残留的 SP 前缀不会暴露在特别篇界面', asyn
 
   render(<WorkDetailPage />);
 
-  expect(await screen.findByText('Making Documentary')).toBeVisible();
+  expect(await screen.findAllByText('Making Documentary').then(items => items[0])).toBeVisible();
   expect(screen.queryByText('SP08')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '播放特别篇 8：Making Documentary' })).toBeVisible();
 });
@@ -489,8 +544,8 @@ test('缺图特别篇整组使用紧凑列表，混合图片仍保持集顺序�
   useLibraryStore.setState({ works: [specialWork as never], getWorkDetail: vi.fn().mockResolvedValue(specialWork) });
   const { container } = render(<WorkDetailPage />);
   await waitFor(() => expect(container.querySelector('[aria-busy="false"]')).not.toBeNull());
-  await screen.findByText('小剧场 1');
-  expect(screen.getByText('小剧场 10')).toBeVisible();
+  await screen.findAllByText('小剧场 1').then(items => items[0]);
+  expect(screen.getAllByText('小剧场 10')[0]).toBeVisible();
   const list = container.querySelector('.detail-special-list')!;
   expect(list).not.toBeNull();
   expect(Array.from(list.children, (row) => (row as HTMLElement).dataset.episodeId)).toEqual(
@@ -504,7 +559,7 @@ test('缺图特别篇整组使用紧凑列表，混合图片仍保持集顺序�
   Object.defineProperty(list.children[9], 'scrollIntoView', { configurable: true, value: reveal });
   fireEvent.click(screen.getByRole('button', { name: '快速选集' }));
   const chooser = screen.getByRole('dialog', { name: '快速选集' });
-  fireEvent.click(within(chooser).getByRole('button', { name: '小剧场 10' }));
+  fireEvent.click(within(chooser).getByRole('button', { name: /特别篇 10：.*小剧场 10$/ }));
   expect(reveal).toHaveBeenCalledWith({ block: 'center', inline: 'nearest', behavior: 'smooth' });
   expect(screen.queryByRole('dialog', { name: '快速选集' })).not.toBeInTheDocument();
   expect(list.children[9].querySelector('button')).toHaveFocus();
@@ -523,7 +578,7 @@ test('全部有图的特别篇也显示原名列表', async () => {
   useUiStore.setState({ selectedSeasonNumber: 0, selectedSeasonByWork: {} });
   useLibraryStore.setState({ works: [specialWork as never], getWorkDetail: vi.fn().mockResolvedValue(specialWork) });
   const { container } = render(<WorkDetailPage />);
-  await screen.findByText('[Group] Show - 14.5 [1080p].mkv');
+  await screen.findAllByText('[Group] Show - 14.5 [1080p].mkv').then(items => items[0]);
   expect(container.querySelector('.detail-episode-grid.thumbnail-strip')).toBeNull();
   expect(container.querySelector('.detail-special-list')).not.toBeNull();
 });
@@ -535,7 +590,7 @@ test('关联与推荐优先本地海报，只有横图或图片失败时保留�
   const detailWork = { ...work, related_works: [{ work_id: related.work_id, title: related.title, poster_path: 'https://image.tmdb.org/t/p/w500/remote.jpg', fanart_path: related.fanart_path }, { work_id: noPoster.work_id, title: noPoster.title, fanart_path: noPoster.fanart_path }] };
   useLibraryStore.setState({ works: [detailWork, related, similar, noPoster] as never, getWorkDetail: vi.fn().mockResolvedValue(detailWork) });
   const { container } = render(<WorkDetailPage />);
-  await screen.findByText('关联作品甲');
+  await screen.findAllByText('关联作品甲').then(items => items[0]);
   const relatedCard = container.querySelector('.detail-related-card')!;
   expect(relatedCard.querySelector('img')?.getAttribute('src')).toContain(related.local_poster_path);
   expect(container.querySelector('.detail-similar-card img')?.getAttribute('src')).toContain(similar.local_poster_path);

@@ -195,7 +195,7 @@ export function LibraryMaintenancePanel({ busy, onPreview, onConfirm, onResume }
           <div className="media-v4-maintenance-groups">
             <div className="media-v4-maintenance-delete-group">
               <strong>将退出媒体库</strong>
-              <span>{preview.orphan_work_count} 部作品的媒体库记录、受控镜像、NFO 和图片</span>
+              <span>{preview.orphan_work_count} 部作品的媒体库记录与预览列出的受管资料</span>
               <small>同时移除播放历史 {preview.history_count ?? 0} 条、播放进度 {preview.progress_count ?? 0} 条、追更状态 {preview.tracking_count ?? 0} 条。</small>
             </div>
             <div className="media-v4-maintenance-keep-group">

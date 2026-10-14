@@ -23,6 +23,22 @@ def _client(tmp_path, monkeypatch):
     return TestClient(application), database
 
 
+def test_watch_list_exposes_only_local_shaped_status(tmp_path, monkeypatch):
+    client, database = _client(tmp_path, monkeypatch)
+    assert client.post("/api/v4/imports/preview", json=_entry()).status_code == 200
+    assert client.post("/api/v4/imports/rev-library/confirm").status_code == 200
+    with database.connect() as conn:
+        work_id = conn.execute("SELECT work_id FROM works LIMIT 1").fetchone()[0]
+    from app.media_v4.tracking.store import V4TrackingStore
+    store = V4TrackingStore(database)
+    store.save_state(work_id, "local", provider_id="", last_watched_episode=None, metadata={"favorite": True, "status": "watching", "note": "local"})
+    store.save_state(work_id, "bangumi", provider_id="test", last_watched_episode=None, metadata={"favorite": False, "status": "watched"})
+    items = client.get("/api/library/watch-status").json()["items"]
+    assert items == [client.get(f"/api/library/watch-status/{work_id}").json()]
+    assert items[0]["favorite"] is True
+    assert "metadata_json" not in items[0]
+
+
 def _entry(revision_id: str = "rev-library") -> dict:
     fixture_root = Path.cwd() / "backend" / "tests" / "media-fixtures"
     return {

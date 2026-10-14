@@ -16,12 +16,13 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const systemApi = {
-  async openFolder(workId: string, episodeId?: string, open = true): Promise<OpenFolderResult> {
+  async openFolder(workId: string, episodeId?: string, open = true, assetId = ''): Promise<OpenFolderResult> {
     return fetchJson(`${API_BASE}/open-folder`, {
       method: 'POST',
       body: JSON.stringify({
         work_id: workId,
         episode_id: episodeId || '',
+        ...(assetId ? { asset_id: assetId } : {}),
         open,
       }),
     });

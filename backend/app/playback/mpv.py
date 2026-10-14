@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.core.runtime import get_mpv_config_dir, get_mpv_executable
+from app.core.runtime import get_mpv_executable
 from app.media_v4.path_validation import validate_playback_locator, validate_playback_locator_syntax
 from app.playback.mpv_runtime import (
     build_mpv_playback_args,
@@ -250,13 +250,14 @@ def _build_fallback_mpv_args(
 
 
 def _build_kumiplayer_script_args() -> list[str]:
-    """KumiPlayer 自有脚本由 --config-dir 的 scripts/ 目录自动加载，无需 --scripts-append。
+    """兼容校验入口；实际注入由 mpv_runtime 的 --script 参数完成。
 
     这里仍校验脚本存在，缺失时明确报错，避免启动后才发现功能失效。
     """
-    from app.core.runtime import get_mpv_config_dir
 
-    scripts_dir = get_mpv_config_dir() / "scripts"
+    from app.core.runtime import get_kumiplayer_layer_dir
+
+    scripts_dir = get_kumiplayer_layer_dir() / "scripts"
     missing_scripts = [name for name in _KUMIPLAYER_MPV_SCRIPTS if not (scripts_dir / name).is_file()]
     if missing_scripts:
         raise FileNotFoundError(
@@ -267,6 +268,7 @@ def _build_kumiplayer_script_args() -> list[str]:
 
 def get_kumiplayer_mpv_integration() -> dict:
     """返回非敏感的 KumiPlayer 内置 MPV 功能状态（版本、清单、运行文件、配置与脚本）。"""
+    from app.core.runtime import get_kumiplayer_layer_dir
     from app.playback.mpv_runtime import (
         check_mpv_runtime,
     )
@@ -274,10 +276,10 @@ def get_kumiplayer_mpv_integration() -> dict:
     status = check_mpv_runtime(verify_files=False)
     manifest = load_runtime_manifest()
     return {
-        "integration_dir": str(get_mpv_config_dir()),
+        "integration_dir": str(get_kumiplayer_layer_dir()),
         "integration_available": status["configuration_available"],
         "plugin_available": status["scripts_available"],
-        "plugin_path": str(get_mpv_config_dir() / "scripts" / _KUMIPLAYER_MPV_SCRIPTS[0]),
+        "plugin_path": str(get_kumiplayer_layer_dir() / "scripts" / _KUMIPLAYER_MPV_SCRIPTS[0]),
         "mpv_available": status["available"],
         "version": status["version"],
         "manifest_valid": status["manifest_valid"],

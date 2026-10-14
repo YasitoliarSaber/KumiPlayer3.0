@@ -11,7 +11,6 @@ export const workDetailV4Capabilities = {
   titleMutation: true,
   workDeletion: true,
   sourceSpecificFolders: true,
-  mirrorFolder: true,
 } as const;
 
 const candidateIdByTmdb = new Map<string, string>();
@@ -162,7 +161,7 @@ export const workDetailV4Compatibility = {
       return {
         preview_id: preview.preview_id,
         files: preview.artifact_paths.map((path) => ({ path, kind: 'artifact', exists: true, allowed: true, reason: '' })),
-        warnings: ['源视频与挂载盘媒体始终保留；确认后作品从媒体库退出并清理受控镜像/NFO/图片。'],
+        warnings: ['源视频与挂载盘媒体始终保留；确认后作品从媒体库退出，并清理预览列出的受管资料。'],
         blocked: false,
         history_count: preview.playback_count,
         progress_count: preview.playback_count,

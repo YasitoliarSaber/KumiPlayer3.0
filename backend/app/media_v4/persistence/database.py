@@ -56,8 +56,7 @@ class V4Database:
 
     CURRENT_SCHEMA_VERSION = V4_SCHEMA_VERSION
     # PRAGMA user_version 的值位置不接受绑定参数（SQLite 语法限制），只能在
-    # _set_user_version 内写字面量；文件末尾的模块级校验保证它与
-    # CURRENT_SCHEMA_VERSION 不漂移。
+    # _set_user_version 内仅插入 schema 常量的整数值，并读回校验。
     REQUIRED_TABLES = frozenset(
         {
             "v4_meta",
@@ -162,14 +161,14 @@ class V4Database:
         """写入当前 schema 版本号。
 
         PRAGMA user_version 的值位置不接受绑定参数（SQLite 语法限制），只能
-        使用字面量；写回后立即读回校验，版本升级时若字面量未同步会立即失败。
+        使用 schema 常量生成整数语句；写回后立即读回校验。
         """
 
-        conn.execute("PRAGMA user_version = 27")
+        conn.execute(f"PRAGMA user_version = {int(V4_SCHEMA_VERSION)}")
         written = int(conn.execute("PRAGMA user_version").fetchone()[0])
         if written != V4_SCHEMA_VERSION:
             raise RuntimeError(
-                f"PRAGMA user_version 写入值 {written} 与 CURRENT_SCHEMA_VERSION 不一致，请同步更新字面量"
+                f"PRAGMA user_version 写入值 {written} 与 CURRENT_SCHEMA_VERSION 不一致"
             )
 
     @contextmanager

@@ -321,8 +321,8 @@ def diagnostics():
 @router.get("/watch-status")
 def list_watch_status():
     with get_database().connect() as conn:
-        rows = conn.execute("SELECT * FROM tracking_states ORDER BY work_id, provider").fetchall()
-    return {"items": [dict(row) for row in rows]}
+        rows = conn.execute("SELECT * FROM tracking_states WHERE provider = 'local' ORDER BY work_id").fetchall()
+    return {"items": [_watch_payload(dict(row)) for row in rows]}
 
 
 @router.get("/watch-status/{work_id}")
