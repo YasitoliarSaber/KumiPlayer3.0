@@ -21,7 +21,7 @@ test('登记两个目录后按列表保存，不覆盖为一个兼容值', async
 test('移除登记需要再次确认，确认前可以取消', () => {
   render(<LocalRootsPanel config={config} onSave={vi.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: '移除动画库' }));
-  expect(screen.getByRole('textbox', { name: '目录 1 路径' })).toHaveValue('D:/Media');
+  expect(screen.getByText('D:/Media')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '取消' }));
   fireEvent.click(screen.getByRole('button', { name: '移除动画库' }));
   fireEvent.click(screen.getByRole('button', { name: '确认移除' }));
@@ -42,6 +42,7 @@ test.each(['relative/Media', 'd:\\MEDIA\\.'])('拒绝非法或重复路径 %s，
 test('其他配置刷新与保存失败不会清掉目录草稿', async () => {
   const save = vi.fn().mockRejectedValue(new Error('offline'));
   const view = render(<LocalRootsPanel config={config} onSave={save} />);
+  fireEvent.click(screen.getByRole('button', { name: '编辑动画库' }));
   fireEvent.change(screen.getByRole('textbox', { name: '目录 1 名称' }), { target: { value: '待保存' } });
   view.rerender(<LocalRootsPanel config={{ ...config, poster_size: 8 }} onSave={save} />);
   fireEvent.click(screen.getByRole('button', { name: '保存本地目录' }));
@@ -51,5 +52,22 @@ test('其他配置刷新与保存失败不会清掉目录草稿', async () => {
 
 test('旧单目录仍显示为第一条登记', () => {
   render(<LocalRootsPanel config={{ local_root: 'D:/Old' } as PublicConfig} onSave={vi.fn()} />);
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '编辑本地媒体库' }));
   expect(screen.getByRole('textbox', { name: '目录 1 路径' })).toHaveValue('D:/Old');
+});
+
+test('收起目录编辑不会丢失待保存名称，重新展开可继续编辑', async () => {
+  const save = vi.fn().mockResolvedValue(true);
+  render(<LocalRootsPanel config={config} onSave={save} />);
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '编辑动画库' }));
+  fireEvent.change(screen.getByRole('textbox', { name: '目录 1 名称' }), { target: { value: '新的名称' } });
+  fireEvent.click(screen.getByRole('button', { name: '编辑新的名称' }));
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  expect(screen.getByText('新的名称')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: '编辑新的名称' }));
+  expect(screen.getByRole('textbox', { name: '目录 1 名称' })).toHaveValue('新的名称');
+  fireEvent.click(screen.getByRole('button', { name: '保存本地目录' }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith({ local_roots: [{ root_id: '', name: '新的名称', path: 'D:/Media' }] }));
 });

@@ -392,10 +392,10 @@ describe('SettingsPage 信息架构', () => {
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
     const mounts = screen.getByRole('region', { name: '目录树播放位置' });
-    expect(within(mounts).getByRole('textbox', { name: '百度网盘挂载位置' })).toBeVisible();
+    expect(within(mounts).getByRole('button', { name: '选择百度网盘挂载位置' })).toBeVisible();
     expect(within(mounts).queryByRole('textbox', { name: 'TXT 默认选择目录' })).not.toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: '目录 1 路径' })).toBeVisible();
-    expect(screen.getByLabelText('TXT 默认选择目录')).not.toBeVisible();
+    expect(screen.getByRole('button', { name: '编辑本地媒体库' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '选择TXT 默认选择目录', hidden: true })).not.toBeVisible();
     expect(screen.getByRole('button', { name: '检查配置目录', hidden: true })).not.toBeVisible();
     expect(screen.queryByRole('heading', { name: '重新配置基础来源' })).not.toBeInTheDocument();
     expect(document.querySelector('#settings-panel-sources .settings-intro p')).toBeNull();
@@ -405,12 +405,12 @@ describe('SettingsPage 信息架构', () => {
     vi.mocked(pickFolder).mockResolvedValueOnce('J:\\夸克');
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
-    const input = screen.getByRole('textbox', { name: '夸克网盘挂载位置' });
+    const row = screen.getByRole('button', { name: '选择夸克网盘挂载位置' }).closest('.settings-config-row')!;
     api.patchConfig.mockClear();
     fireEvent.click(screen.getByRole('button', { name: '选择夸克网盘挂载位置' }));
-    await screen.findByDisplayValue('J:\\夸克');
+    await screen.findByText('J:\\夸克');
     expect(api.patchConfig).not.toHaveBeenCalled();
-    fireEvent.click(within(input.closest('.settings-config-row')!).getByRole('button', { name: '保存' }));
+    fireEvent.click(within(row).getByRole('button', { name: '保存' }));
     expect(api.patchConfig).toHaveBeenCalledWith({ quark_root: 'J:\\夸克' });
   });
 
@@ -419,9 +419,11 @@ describe('SettingsPage 信息架构', () => {
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '媒体来源' }));
     fireEvent.click(screen.getByText('TXT 文件选择', { selector: 'summary h3' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑本地媒体库' }));
     for (const name of ['115 网盘挂载位置', '百度网盘挂载位置', '夸克网盘挂载位置', '目录 1 路径', 'TXT 默认选择目录']) {
       expect(screen.getByRole('button', { name: `选择${name}` })).toBeVisible();
     }
+    fireEvent.click(screen.getByRole('button', { name: '手动输入115 网盘挂载位置' }));
     const input = screen.getByRole('textbox', { name: '115 网盘挂载位置' });
     fireEvent.change(input, { target: { value: 'J:\\115' } });
     fireEvent.click(screen.getByRole('button', { name: '选择115 网盘挂载位置' }));

@@ -796,6 +796,9 @@ export default function SettingsPage({ onOpenSetup }: { onOpenSetup?: (config: P
           <div className="settings-outline-heading">
             <strong>设置</strong>
           </div>
+          <Dropdown className="settings-outline-compact" aria-label="设置分类" value={sectionTabs.find(tab => tab.key === activeSection)?.label} selectedOptions={[activeSection]} onOptionSelect={(_, data) => { if (data.optionValue) selectSection(data.optionValue as SettingsTab); }}>
+            {sectionTabs.map(tab => <Option key={tab.key} value={tab.key}>{tab.label}</Option>)}
+          </Dropdown>
           <div className="settings-outline-nav">
             {sectionTabs.map((tab) => {
               const Icon = tab.icon;
@@ -854,8 +857,8 @@ function ConfigRow({ label, value, onSave, secret = false, placeholder = '', fol
     }
   };
   return (
-    <SettingsField label={label} className="settings-config-row settings-config-row--with-action" action={<GhostButton onClick={() => void save()} disabled={saving || (secret && !draft.trim())}>{saving ? '正在保存…' : '保存'}</GhostButton>}>
-      {folder ? <FolderPathInput disabled={saving} label={label} value={draft} onChange={setDraft} placeholder={placeholder} /> : <Input disabled={saving} type={secret ? 'password' : 'text'} value={draft} onChange={(_, data) => setDraft(data.value)} placeholder={resolvedPlaceholder} autoComplete={secret ? 'off' : undefined} />}
+    <SettingsField label={label} className={`settings-config-row settings-config-row--with-action${folder ? ' settings-config-row--folder-summary' : ''}`} action={(!folder || draft !== (value || '')) ? <GhostButton onClick={() => void save()} disabled={saving || (secret && !draft.trim())}>{saving ? '正在保存…' : '保存'}</GhostButton> : undefined}>
+      {folder ? <FolderPathInput compact disabled={saving} label={label} value={draft} onChange={setDraft} placeholder={placeholder} /> : <Input disabled={saving} type={secret ? 'password' : 'text'} value={draft} onChange={(_, data) => setDraft(data.value)} placeholder={resolvedPlaceholder} autoComplete={secret ? 'off' : undefined} />}
     </SettingsField>
   );
 }

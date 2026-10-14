@@ -1,5 +1,15 @@
 .settings-folder-field { min-width: 0; }
 .settings-folder-input { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.settings-folder-input > .fui-Input { flex: 1; min-width: 0; width: 100%; }
+.settings-folder-input > :is(.fui-Input, .fui-Textarea) { flex: 1; min-width: 0; width: 100%; }
 .settings-folder-input > button { flex-shrink: 0; white-space: nowrap; }
+.settings-folder-input:has(.fui-Textarea) { align-items: flex-start; }
+.settings-folder-input textarea { overflow-wrap: anywhere; }
+.settings-folder-summary { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.settings-folder-path { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 13px; line-height: 1.6; }
+.settings-folder-path.is-empty { color: var(--text-muted); }
+.settings-folder-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.settings-folder-edit-done { margin-top: 4px; }
+@media (max-width: 480px) {
+  .settings-folder-summary { align-items: flex-start; flex-direction: column; gap: 8px; }
+}
 .settings-folder-error { margin: 6px 0 0; color: var(--danger, #c42b1c); font-size: 12px; }

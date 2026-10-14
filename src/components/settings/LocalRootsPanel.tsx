@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Input } from '@fluentui/react-components';
-import { Plus, Trash2 } from 'lucide-react';
+import { Folder, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { PublicConfig } from '../../api/config';
 import { localPathKey, localRootRecords } from '../../api/localRoots';
 import { SettingsField } from '../ui/SettingsPrimitives';
@@ -19,6 +19,7 @@ export default function LocalRootsPanel({ config, onSave, externalBusy = false }
   const [draft, setDraft] = useState(() => fromConfig(config));
   const [saved, setSaved] = useState(() => snapshot(fromConfig(config)));
   const [confirmKey, setConfirmKey] = useState('');
+  const [editingKey, setEditingKey] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const lock = useRef(false);
@@ -62,19 +63,32 @@ export default function LocalRootsPanel({ config, onSave, externalBusy = false }
   const busy = saving || externalBusy;
   return <div className="sources-root-panel sources-local-roots">
     {draft.map((row, index) => <div className="sources-local-root" key={row.key}>
-      <div className="sources-local-root-heading"><strong>{index === 0 ? '默认目录' : `目录 ${index + 1}`}</strong>
-        {confirmKey === row.key ? <div className="sources-openlist-actions">
+      <div className="sources-local-root-heading">
+        <Folder className="sources-local-root-icon" size={20} aria-hidden="true" />
+        <div className="sources-local-root-copy">
+          <div className="sources-local-root-title"><strong>{row.name || '新目录'}</strong>{index === 0 && <span className="sources-local-root-default">默认</span>}</div>
+          <p className="sources-local-root-path">{row.path || '尚未选择文件夹'}</p>
+        </div>
+        <div className="sources-local-root-actions">
+          <Button appearance="subtle" size="small" disabled={busy} icon={<Pencil size={16} />} aria-label={`编辑${row.name || `目录 ${index + 1}`}`} aria-expanded={editingKey === row.key} onClick={() => setEditingKey(editingKey === row.key ? '' : row.key)}>{editingKey === row.key ? '收起' : '编辑'}</Button>
+          <Button appearance="subtle" size="small" disabled={busy} icon={<Trash2 size={16} />} aria-label={`移除${row.name || `目录 ${index + 1}`}`} title="移除登记" onClick={() => setConfirmKey(row.key)} />
+        </div>
+      </div>
+      {confirmKey === row.key && <div className="sources-local-root-confirm sources-openlist-actions">
           <span>移除这条登记？</span><Button size="small" appearance="secondary" disabled={busy} onClick={() => { setDraft(rows => rows.filter(item => item.key !== row.key)); setConfirmKey(''); }}>确认移除</Button>
           <Button size="small" appearance="subtle" disabled={busy} onClick={() => setConfirmKey('')}>取消</Button>
-        </div> : <Button appearance="subtle" size="small" disabled={busy} icon={<Trash2 size={16} />} aria-label={`移除${row.name || `目录 ${index + 1}`}`} onClick={() => setConfirmKey(row.key)}>移除</Button>}
-      </div>
-      <SettingsField label={`目录 ${index + 1} 名称`} className="settings-config-row"><Input value={row.name} disabled={busy} placeholder="例如 动画库" onChange={(_, data) => update(row.key, { name: Array.from(data.value).slice(0, 24).join('') })} /></SettingsField>
-      <SettingsField label={`目录 ${index + 1} 路径`} className="settings-config-row"><FolderPathInput label={`目录 ${index + 1} 路径`} value={row.path} disabled={busy} onChange={path => update(row.key, { path })} /></SettingsField>
+      </div>}
+      {editingKey === row.key && <div className="sources-local-root-editor">
+        <SettingsField label="名称" className="sources-local-root-name"><Input aria-label={`目录 ${index + 1} 名称`} value={row.name} disabled={busy} placeholder="例如 动画库" onChange={(_, data) => update(row.key, { name: Array.from(data.value).slice(0, 24).join('') })} /></SettingsField>
+        <SettingsField label="路径"><FolderPathInput multiline label={`目录 ${index + 1} 路径`} value={row.path} disabled={busy} onChange={path => update(row.key, { path })} /></SettingsField>
+      </div>}
     </div>)}
-    <div className="sources-openlist-actions">
-      <Button appearance="secondary" icon={<Plus size={16} />} disabled={busy || draft.length >= 24} onClick={() => { setDraft(rows => [...rows, { key: `draft-${++counter.current}`, name: '', path: '' }]); setError(''); }}>添加本地目录</Button>
-      <Button appearance="primary" disabled={busy || !dirty} onClick={() => void save()}>{saving ? '正在保存…' : '保存本地目录'}</Button>
+    <div className="sources-local-root-footer">
+      <Button appearance="subtle" icon={<Plus size={16} />} disabled={busy || draft.length >= 24} onClick={() => { const key = `draft-${++counter.current}`; setDraft(rows => [...rows, { key, name: '', path: '' }]); setEditingKey(key); setError(''); }}>添加本地目录</Button>
+      <div className="sources-openlist-actions">
       {dirty && <span className="sources-dirty-hint">有未保存的更改</span>}
+      <Button appearance="primary" disabled={busy || !dirty} onClick={() => void save()}>{saving ? '正在保存…' : '保存本地目录'}</Button>
+      </div>
     </div>
     <ActionToast message={error} intent="error" onDismiss={() => setError('')} />
   </div>;

@@ -248,10 +248,28 @@
 }
 
 .sources-local-roots { min-width: 0; }
-.sources-local-root { display: grid; gap: 12px; min-width: 0; padding-block: 12px; border-bottom: 1px solid var(--border); }
-.sources-local-root-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sources-local-root { display: grid; gap: 12px; min-width: 0; padding-block: 14px; border-bottom: 1px solid var(--border); }
+.sources-local-root:first-child { padding-top: 4px; }
+.sources-local-root-heading { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: start; gap: 12px; }
 .sources-local-root-heading strong { font-size: 14px; }
+.sources-local-root-icon { margin-top: 3px; color: var(--text-muted); }
+.sources-local-root-copy { min-width: 0; display: grid; gap: 4px; }
+.sources-local-root-title { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.sources-local-root-title strong { overflow-wrap: anywhere; }
+.sources-local-root-default { font-size: 12px; color: var(--text-muted); }
+.sources-local-root-path { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+.sources-local-root-actions { display: flex; align-items: center; gap: 4px; }
+.sources-local-root-editor { display: grid; gap: 12px; padding-left: 32px; min-width: 0; }
+.sources-local-root-name { width: min(100%, 260px); }
+.sources-local-root-confirm { padding-left: 32px; }
 .sources-local-root .settings-folder-field { min-width: 0; width: 100%; }
+.sources-local-root-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 4px; }
+@media (max-width: 480px) {
+  .sources-local-root-heading { grid-template-columns: 20px minmax(0, 1fr); }
+  .sources-local-root-actions { grid-column: 2; }
+  .sources-local-root-editor, .sources-local-root-confirm { padding-left: 0; }
+  .sources-local-root-footer > .sources-openlist-actions { margin-left: auto; }
+}
 
 /* ---------- 本地与兼容来源 ---------- */
 .sources-root-panel {

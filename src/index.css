@@ -5151,7 +5151,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settings-section:hover { border-color: var(--border-strong) !important; box-shadow: 0 4px 16px color-mix(in srgb, var(--text) 7%, transparent) !important; }
 .settings-hero { border-radius: 10px !important; }
 .settings-section-head h3 { font-size: 16px !important; }
-.settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]), .settings-shell select:not(.fui-Select__select), .settings-shell textarea {
+.settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]), .settings-shell select:not(.fui-Select__select), .settings-shell textarea:not(.fui-Textarea__textarea) {
   border-color: var(--border) !important;
   background: color-mix(in srgb, var(--surface-solid) 76%, transparent) !important;
   color: var(--text) !important;
@@ -6095,7 +6095,7 @@ body,
 }
 :root[data-theme='cinema'] .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
 :root[data-theme='cinema'] .settings-shell select:not(.fui-Select__select),
-:root[data-theme='cinema'] .settings-shell textarea,
+:root[data-theme='cinema'] .settings-shell textarea:not(.fui-Textarea__textarea),
 :root[data-theme='cinema'] .detail-page input:not([type='range']),
 :root[data-theme='cinema'] .detail-page select,
 :root[data-theme='cinema'] .detail-page textarea {
@@ -6104,7 +6104,7 @@ body,
   color: #eef2f7 !important;
 }
 :root[data-theme='cinema'] .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"])::placeholder,
-:root[data-theme='cinema'] .settings-shell textarea::placeholder,
+:root[data-theme='cinema'] .settings-shell textarea:not(.fui-Textarea__textarea)::placeholder,
 :root[data-theme='cinema'] .detail-page input:not([type='range'])::placeholder,
 :root[data-theme='cinema'] .detail-page textarea::placeholder {
   color: #7b8795 !important;
@@ -6576,7 +6576,7 @@ body {
 
 .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
 .settings-shell select:not(.fui-Select__select),
-.settings-shell textarea,
+.settings-shell textarea:not(.fui-Textarea__textarea),
 .detail-page input:not([type='range']),
 .detail-page select,
 .detail-page textarea {
@@ -6587,7 +6587,7 @@ body {
 }
 
 .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"])::placeholder,
-.settings-shell textarea::placeholder,
+.settings-shell textarea:not(.fui-Textarea__textarea)::placeholder,
 .detail-page input:not([type='range'])::placeholder,
 .detail-page textarea::placeholder {
   color: color-mix(in srgb, var(--text-muted) 72%, transparent) !important;
@@ -7427,7 +7427,7 @@ select option {
 
 .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
 .settings-shell select:not(.fui-Select__select),
-.settings-shell textarea,
+.settings-shell textarea:not(.fui-Textarea__textarea),
 .settings-input {
   min-width: 0 !important;
   border: 1px solid var(--border) !important;
@@ -7439,7 +7439,7 @@ select option {
 
 .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]):focus,
 .settings-shell select:not(.fui-Select__select):focus,
-.settings-shell textarea:focus,
+.settings-shell textarea:not(.fui-Textarea__textarea):focus,
 .settings-input:focus {
   outline: 2px solid color-mix(in srgb, var(--accent-strong) 36%, transparent) !important;
   outline-offset: 1px !important;
@@ -7521,7 +7521,7 @@ select option {
 :root[data-theme='cinema'] .workbench-input-panel,
 :root[data-theme='cinema'] .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
 :root[data-theme='cinema'] .settings-shell select:not(.fui-Select__select),
-:root[data-theme='cinema'] .settings-shell textarea,
+:root[data-theme='cinema'] .settings-shell textarea:not(.fui-Textarea__textarea),
 :root[data-theme='cinema'] .settings-input {
   background: rgba(27, 30, 36, .94) !important;
   border-color: rgba(236, 240, 246, .14) !important;
@@ -8036,7 +8036,7 @@ body::before {
 
 .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
 .settings-shell select:not(.fui-Select__select),
-.settings-shell textarea,
+.settings-shell textarea:not(.fui-Textarea__textarea),
 .settings-input,
 .detail-page input:not([type='range']),
 .detail-page select,
@@ -8050,7 +8050,7 @@ body::before {
 
 .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]):focus,
 .settings-shell select:not(.fui-Select__select):focus,
-.settings-shell textarea:focus,
+.settings-shell textarea:not(.fui-Textarea__textarea):focus,
 .settings-input:focus,
 .detail-page input:not([type='range']):focus,
 .detail-page select:focus,
@@ -8126,7 +8126,7 @@ body::before {
 
 :root[data-theme='cinema'] .settings-shell input:not(.fui-Input__input):not([type="radio"]):not([type="checkbox"]),
 :root[data-theme='cinema'] .settings-shell select:not(.fui-Select__select),
-:root[data-theme='cinema'] .settings-shell textarea,
+:root[data-theme='cinema'] .settings-shell textarea:not(.fui-Textarea__textarea),
 :root[data-theme='cinema'] .settings-input,
 :root[data-theme='cinema'] .detail-page input:not([type='range']),
 :root[data-theme='cinema'] .detail-page select,

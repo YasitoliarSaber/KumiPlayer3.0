@@ -37,6 +37,7 @@
   .settings-focused .settings-outline-heading { padding: 0 12px 16px; }
   .settings-focused .settings-outline-heading strong { font-size: 30px; line-height: 1.2; font-weight: 600; }
   .settings-focused .settings-outline-nav { display: grid; gap: 4px; }
+  .settings-focused .settings-outline-compact { display: none !important; }
   .settings-focused .settings-outline-link { position: relative; min-height: 40px; width: 100%; justify-content: flex-start !important; gap: 12px; text-align: left; }
   .settings-focused .settings-outline-link.is-active::before { content: ''; position: absolute; inset: 10px auto 10px 0; width: 3px; border-radius: 2px; background: var(--accent-strong); }
   .settings-focused .settings-outline-icon { display: flex; flex: 0 0 20px; align-items: center; justify-content: center; }
@@ -51,6 +52,12 @@
   .settings-focused .settings-config-row > .fui-Field__label { grid-column: 1; grid-row: 1; margin: 0; padding-block: 6px; }
   .settings-focused .settings-config-row > .kp-settings-field-controls { grid-column: 2; grid-row: 1; }
   .settings-focused .settings-config-row .kp-settings-field-controls--action { grid-template-columns: minmax(0, 1fr) auto; }
+  .settings-focused .settings-config-row--folder-summary { padding-block: 4px; }
+  .settings-focused .settings-config-row--folder-summary .settings-folder-actions { align-items: center; }
+  .settings-focused .sources-ongoing-short-field > .kp-settings-field-controls { max-width: 360px; }
+  .settings-focused .sources-ongoing-short-field > .fui-Field__hint { grid-column: 2; }
+  .settings-focused .kp-settings-field.sources-ongoing-short-field { padding-block: 0; min-height: 0; row-gap: 4px !important; border: 0; }
+  .settings-focused .sources-ongoing-settings .settings-toggle-row { padding-block: 0; min-height: 36px; }
   .settings-focused .settings-config-row .kp-settings-field-action { align-items: center; }
   .settings-focused .settings-toggle-row { width: 100%; justify-content: space-between; }
   .settings-focused .settings-toggle-row .fui-Switch__label { flex: 1; }
@@ -110,13 +117,15 @@
     .settings-focused .kp-settings-field.settings-config-row { grid-template-columns: minmax(0, 1fr) !important; }
     .settings-focused .settings-config-row > .fui-Field__label { padding-block: 0; }
     .settings-focused .settings-config-row > .kp-settings-field-controls { grid-column: 1; grid-row: 2; }
+    .settings-focused .sources-ongoing-short-field > .fui-Field__hint { grid-column: 1; }
   }
   @media (max-width: 760px) {
     .settings-focused { grid-template-columns: minmax(0, 1fr) !important; padding: 16px 16px 40px !important; gap: 16px !important; }
     .settings-focused .settings-content { grid-column: 1; grid-row: 2; }
     .settings-focused .settings-outline-popover-wrap { top: 0 !important; max-height: none; background: var(--app-bg); padding: 6px 0 !important; }
     .settings-focused .settings-outline-heading { display: none; }
-    .settings-focused .settings-outline-nav { display: flex; overflow-x: auto; scrollbar-width: thin; gap: 4px; }
+    .settings-focused .settings-outline-nav { display: none; }
+    .settings-focused .settings-outline-compact { display: flex !important; width: 100%; min-width: 0 !important; }
     .settings-focused .settings-outline-link { width: auto; flex-shrink: 0; white-space: nowrap; }
     .settings-focused .settings-outline-link.is-active::before { inset: auto 12px 0; width: auto; height: 2px; }
     .settings-focused .settings-config-row .kp-settings-field-controls--action { grid-template-columns: minmax(0, 1fr); }
@@ -124,5 +133,12 @@
     .settings-focused .sources-route-card-main { grid-template-columns: minmax(0, 1fr) auto; }
     .settings-focused .sources-route-card-main .fui-Dropdown { grid-column: 1; grid-row: 2; }
     .settings-focused .sources-route-card-main > .fui-Button { grid-column: 2; grid-row: 1 / 3; }
+    .settings-focused .sources-ongoing-short-field .kp-settings-field-controls--action { grid-template-columns: minmax(0, 1fr) auto; }
+  }
+  @media (min-width: 600px) and (max-width: 980px) {
+    .settings-focused .kp-settings-field:is(.sources-ongoing-short-field, .settings-config-row--folder-summary) { grid-template-columns: 144px minmax(0, 1fr) !important; }
+    .settings-focused :is(.sources-ongoing-short-field, .settings-config-row--folder-summary) > .fui-Field__label { grid-column: 1; grid-row: 1; padding-block: 6px; }
+    .settings-focused :is(.sources-ongoing-short-field, .settings-config-row--folder-summary) > .kp-settings-field-controls { grid-column: 2; grid-row: 1; }
+    .settings-focused .sources-ongoing-short-field > .fui-Field__hint { grid-column: 2; }
   }
 }
