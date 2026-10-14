@@ -130,7 +130,7 @@ tmp/
 # Piolium 代码审阅产物（本地审计报告与 findings，绝不提交）
 piolium/
 
-# 用户拖入/导出的网盘目录树 TXT（含真实媒体路径，绝不提交）
+# 用户拖入/导出的网盘目录树 TXT（含真实媒体路径，默认不提交；指定样本见下方例外）
 *_目录树*.txt
 *_文件目录*.txt
 
@@ -143,6 +143,12 @@ piolium/
 docs/**
 !docs/review/
 !docs/review/**
+
+# 用户指定的百度 / 115 原始目录树样本，仅放行这两个文件。
+!docs/samples/
+docs/samples/*
+!docs/samples/01动画_文件目录.txt
+!docs/samples/根目录20260703203700_目录树.txt
 
 # ===== 内置 MPV 目录按原样随源码可见（2026-10-04）=====
 # mpv/ 下的配置、文档、清单与许可证全部上传 GitHub，便于外部审阅；
