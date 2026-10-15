@@ -136,4 +136,74 @@ describe('演示业务服务', () => {
     // 其它分类保持默认，不会互相覆盖。
     expect(reread.player.mode).toBe('internal');
   });
+
+  it('候选检索为空时返回空数组，确认失败候选不改写覆盖', async () => {
+    const instance = service();
+    const work = catalog.works[0]!;
+    // 空关键词代表"没有可用候选"，用于演示需要人工介入的路径。
+    expect(await instance.metadataCandidates(work.id, '   ')).toEqual([]);
+
+    const candidates = await instance.metadataCandidates(work.id, work.title);
+    expect(candidates.length).toBeGreaterThan(0);
+    const failing = candidates.find((candidate) => candidate.failing);
+    expect(failing).toBeDefined();
+
+    await expect(instance.confirmCandidate(work.id, failing!.id)).rejects.toBeInstanceOf(DemoServiceError);
+    // 失败必须保留原值：覆盖层不能出现候选记录。
+    expect(getDemoState().overrides[work.id]?.metadataCandidateId).toBeUndefined();
+  });
+
+  it('确认可用候选写入手动来源标记', async () => {
+    const instance = service();
+    const work = catalog.works[0]!;
+    const candidates = await instance.metadataCandidates(work.id, work.title);
+    const ok = candidates.find((candidate) => !candidate.failing)!;
+    const override = await instance.confirmCandidate(work.id, ok.id);
+    expect(override.metadataProvenance).toBe('manual');
+    expect(override.metadataCandidateId).toBe(ok.id);
+  });
+
+  it('手动标题与图片写入覆盖层，列表读取立即反映，恢复自动后清除', async () => {
+    const instance = service();
+    const work = catalog.works[1]!;
+    await instance.setManualTitle(work.id, '人工标题（演示）');
+    await instance.setManualArtwork(work.id, 'poster', {
+      url: '/__mock/w01/poster.jpg',
+      width: 256,
+      height: 384,
+    });
+
+    const snapshot = await instance.listLibrary();
+    const updated = snapshot.works.find((item) => item.id === work.id)!;
+    expect(updated.title).toBe('人工标题（演示）');
+    expect(updated.artwork.poster?.url).toBe('/__mock/w01/poster.jpg');
+
+    await instance.resetManualTitle(work.id);
+    await instance.resetManualArtwork(work.id);
+    const restored = (await instance.listLibrary()).works.find((item) => item.id === work.id)!;
+    expect(restored.title).toBe(work.title);
+    expect(restored.artwork.poster?.url).toBe(work.artwork.poster?.url);
+  });
+
+  it('Bangumi 绑定后同步生成任务并累计已同步集数，失败条目保留失败状态', async () => {
+    const instance = service();
+    const work = catalog.works[2]!;
+
+    const subjects = await instance.bangumiSearch(work.title);
+    expect(subjects.length).toBeGreaterThan(0);
+    const good = subjects.find((subject) => !subject.id.startsWith('bgm-3'))!;
+    const bound = await instance.bangumiBind(work.id, good.id);
+    expect(bound.bangumi?.status).toBe('matched');
+
+    const task = await instance.bangumiSync(work.id);
+    expect(task.type).toBe('bangumi_sync');
+    expect(await instance.listTasks()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: task.id })]),
+    );
+
+    // 解除绑定后同步必须失败，且不留下绑定。
+    await instance.bangumiUnbind(work.id);
+    await expect(instance.bangumiSync(work.id)).rejects.toBeInstanceOf(DemoServiceError);
+    expect(getDemoState().overrides[work.id]?.bangumi).toBeUndefined();
+  });
 });

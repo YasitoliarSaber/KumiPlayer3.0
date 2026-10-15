@@ -247,6 +247,45 @@ export interface PlaybackSession {
   readonly paused: boolean;
 }
 
+/** 演示用刮削候选：带明确的本地作品与线上身份，不参与任何真实匹配。 */
+export interface MetadataCandidate {
+  readonly id: string;
+  readonly title: string;
+  readonly year: number;
+  readonly mediaType: MediaType;
+  readonly provider: string;
+  readonly providerId: string;
+  /** 0..1 的演示置信度，只用于展示排序。 */
+  readonly confidence: number;
+  /** 演示失败候选：确认会失败并保留原值。 */
+  readonly failing?: boolean;
+}
+
+export interface BangumiSubject {
+  readonly id: string;
+  readonly title: string;
+  readonly year: number;
+  readonly episodes: number;
+}
+
+export interface BangumiBinding {
+  readonly subjectId: string;
+  readonly title: string;
+  readonly status: 'matched' | 'failed';
+  readonly lastSyncAt: string;
+  readonly syncedEpisodes: number;
+  readonly error?: string;
+}
+
+/** 用户手动覆盖：标题、图片，以及线上候选与 Bangumi 绑定。 */
+export interface WorkOverride {
+  readonly manualTitle?: string;
+  readonly manualArtwork?: ArtworkRef & { readonly role: 'poster' | 'fanart' };
+  readonly metadataCandidateId?: string;
+  readonly metadataProvenance?: 'auto' | 'manual';
+  readonly bangumi?: BangumiBinding;
+}
+
 /** 演示/真实实现共用的业务服务面。 */
 export interface MediaService {
   listLibrary(signal?: AbortSignal): Promise<LibrarySnapshot>;
@@ -266,5 +305,17 @@ export interface MediaService {
   play(workId: string, episodeId: string, assetId: string): Promise<PlaybackSession>;
   stopPlayback(): Promise<PlaybackSession | null>;
   getPlayback(): Promise<PlaybackSession | null>;
+  /** N12：演示候选检索与人工确认（不访问在线服务）。 */
+  metadataCandidates(workId: string, query: string): Promise<readonly MetadataCandidate[]>;
+  confirmCandidate(workId: string, candidateId: string): Promise<WorkOverride>;
+  setManualTitle(workId: string, title: string): Promise<WorkOverride>;
+  resetManualTitle(workId: string): Promise<WorkOverride>;
+  setManualArtwork(workId: string, role: 'poster' | 'fanart', artwork: ArtworkRef): Promise<WorkOverride>;
+  resetManualArtwork(workId: string): Promise<WorkOverride>;
+  /** N13：Bangumi 只做同步，不参与本地身份。 */
+  bangumiSearch(query: string): Promise<readonly BangumiSubject[]>;
+  bangumiBind(workId: string, subjectId: string): Promise<WorkOverride>;
+  bangumiUnbind(workId: string): Promise<WorkOverride>;
+  bangumiSync(workId: string): Promise<TaskEntry>;
   resetDemoData(): Promise<void>;
 }

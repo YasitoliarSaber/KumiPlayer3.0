@@ -22,7 +22,6 @@ import { demoQueryKeys, useMediaService, useWorkDetail } from '../../shared/api/
 import { Artwork } from '../../shared/ui/Artwork';
 import { ProgressBar, StatusChip } from '../../shared/ui/Surface';
 import { ErrorSurface, LoadingSurface } from '../../shared/ui/Surface';
-import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import {
   Dialog,
@@ -42,6 +41,7 @@ import {
 } from '@/shared/ui/dropdown-menu';
 import { Input } from '@/shared/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/shared/ui/tabs';
+import { BangumiPanel, ManualScrapePanel } from './WorkMetadataPanels';
 import styles from './WorkDetailPage.module.css';
 
 export function WorkDetailPage() {
@@ -370,23 +370,8 @@ export function WorkDetailPage() {
             {work.collections.length > 0 ? <DetailRow label="合集" value={work.collections.join('、')} /> : null}
           </SidePanel>
 
-          <SidePanel title="手动刮削（演示）">
-            <p className={styles.panelHint}>演示模式不访问在线资料，也不会写入任何真实绑定。</p>
-            <div className={styles.manualRow}>
-              <Input aria-label="搜索标题" defaultValue={work.title} className="h-8" disabled />
-              <Badge variant="soft">演示</Badge>
-            </div>
-            <Button size="xs" variant="default" disabled>
-              搜索候选项
-            </Button>
-          </SidePanel>
-
-          <SidePanel title="Bangumi 同步（演示）">
-            <p className={styles.panelHint}>未配置账号；演示模式不会读取或保存任何凭据。</p>
-            <Button size="xs" variant="default" disabled>
-              绑定 Bangumi 条目
-            </Button>
-          </SidePanel>
+          <ManualScrapePanel work={work} />
+          <BangumiPanel work={work} />
         </aside>
       </div>
 

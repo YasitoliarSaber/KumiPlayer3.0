@@ -17,6 +17,7 @@ import type {
   SourceCard,
   TaskEntry,
   WatchStatus,
+  WorkOverride,
 } from '../shared/api/service';
 
 const STORAGE_KEY = 'kumiplayer-demo-v1';
@@ -30,6 +31,8 @@ export interface PersistedDemoState {
   readonly settings: SettingsSnapshot;
   readonly scenario: DemoScenario;
   readonly sourceOverrides: Readonly<Record<string, Partial<SourceCard>>>;
+  /** 用户手动覆盖：标题、图片、线上候选与 Bangumi 绑定（演示内存 + 本机存储）。 */
+  readonly overrides: Readonly<Record<string, WorkOverride>>;
 }
 
 export interface DemoState extends PersistedDemoState {
@@ -110,6 +113,7 @@ const EMPTY_STATE: DemoState = {
   settings: DEFAULT_SETTINGS,
   scenario: 'default',
   sourceOverrides: {},
+  overrides: {},
   tasks: [],
   playback: null,
 };
@@ -160,6 +164,7 @@ function persist(): void {
     settings: state.settings,
     scenario: state.scenario,
     sourceOverrides: state.sourceOverrides,
+    overrides: state.overrides,
   };
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(payload));

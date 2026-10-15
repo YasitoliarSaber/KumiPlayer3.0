@@ -25,6 +25,7 @@ import type {
   SourceId,
   TaskEntry,
   WorkDetail,
+  WorkOverride,
   WorkSummary,
 } from '../shared/api/service';
 
@@ -172,8 +173,15 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
     const favorite = state.favorite[work.id];
     const status = state.watch[work.id];
     const progress = state.progress[work.id];
+    const override = state.overrides[work.id] ?? {};
+    const manualArtwork = override.manualArtwork;
+    const artwork = manualArtwork
+      ? { ...work.artwork, [manualArtwork.role]: manualArtwork }
+      : work.artwork;
     return {
       ...work,
+      title: override.manualTitle?.trim() || work.title,
+      artwork,
       watch: {
         ...work.watch,
         ...(favorite === undefined ? {} : { favorite }),
@@ -181,6 +189,21 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
       },
       progress: progress ?? work.progress,
     };
+  };
+
+  const overrideOf = (workId: string): WorkOverride => getDemoState().overrides[workId] ?? {};
+
+  const setOverride = (workId: string, patch: Partial<WorkOverride>): WorkOverride => {
+    const merged: Record<string, unknown> = { ...overrideOf(workId), ...patch };
+    // undefined 表示"恢复自动"，需要真正删除该字段而不是写入 undefined。
+    for (const key of Object.keys(merged)) {
+      if (merged[key] === undefined) {
+        delete merged[key];
+      }
+    }
+    const next = merged as WorkOverride;
+    updateDemoState((current) => ({ overrides: { ...current.overrides, [workId]: next } }));
+    return next;
   };
 
   const workById = (workId: string): WorkSummary => {
@@ -502,6 +525,133 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
     async getPlayback() {
       await wait(undefined, 10);
       return getDemoState().playback;
+    },
+
+    async metadataCandidates(workId, query) {
+      await wait(undefined, 60);
+      const work = workById(workId);
+      const needle = query.trim();
+      // 空查询视为"没有可用候选"，用于演示需要人工介入的失败路径。
+      if (needle.length === 0) {
+        return [];
+      }
+      const pool = catalog.works.filter((candidate) => candidate.id !== work.id);
+      return [0, 1, 2].map((offset) => {
+        const source = pool[(work.title.length + offset * 7) % pool.length] ?? work;
+        return {
+          id: `cand-${work.id}-${offset + 1}`,
+          title: offset === 0 ? needle : `${needle}（候选 ${offset + 1}）`,
+          year: source.year,
+          mediaType: source.mediaType,
+          provider: 'TMDB（演示）',
+          providerId: `demo-${source.id}`,
+          confidence: Number((0.92 - offset * 0.21).toFixed(2)),
+          // 置信度过低的候选用于演示"确认失败保留原值"。
+          failing: offset === 2,
+        };
+      });
+    },
+
+    async confirmCandidate(workId, candidateId) {
+      await wait(undefined, 80);
+      const candidates = await service.metadataCandidates(workId, workById(workId).title);
+      const candidate = candidates.find((item) => item.id === candidateId);
+      if (!candidate) {
+        throw new DemoServiceError('候选已失效，请重新检索');
+      }
+      if (candidate.failing) {
+        throw new DemoServiceError('该候选在演示中被判定为不可确认，已保留原资料');
+      }
+      return setOverride(workId, {
+        metadataCandidateId: candidate.id,
+        metadataProvenance: 'manual',
+      });
+    },
+
+    async setManualTitle(workId, title) {
+      await wait(undefined, 30);
+      const trimmed = title.trim();
+      return setOverride(workId, { manualTitle: trimmed.length > 0 ? trimmed : undefined });
+    },
+
+    async resetManualTitle(workId) {
+      await wait(undefined, 20);
+      return setOverride(workId, { manualTitle: undefined });
+    },
+
+    async setManualArtwork(workId, role, artwork) {
+      await wait(undefined, 30);
+      return setOverride(workId, { manualArtwork: { ...artwork, role } });
+    },
+
+    async resetManualArtwork(workId) {
+      await wait(undefined, 20);
+      return setOverride(workId, { manualArtwork: undefined });
+    },
+
+    async bangumiSearch(query) {
+      await wait(undefined, 60);
+      const needle = query.trim();
+      if (needle.length === 0) {
+        return [];
+      }
+      return [0, 1, 2].map((offset) => ({
+        id: `bgm-${offset + 1}-${needle.length}`,
+        title: offset === 0 ? needle : `${needle} 第 ${offset + 1} 季`,
+        year: 2015 + offset,
+        episodes: 12 + offset * 6,
+      }));
+    },
+
+    async bangumiBind(workId, subjectId) {
+      await wait(undefined, 60);
+      const subjects = await service.bangumiSearch(workById(workId).title);
+      const subject = subjects.find((item) => item.id === subjectId);
+      if (!subject) {
+        throw new DemoServiceError('Bangumi 条目已失效，请重新搜索');
+      }
+      // 演示失败路径：条目 id 以 3 结尾时返回同步失败，保留"未匹配"以外的失败状态。
+      const failing = subject.id.startsWith('bgm-3');
+      return setOverride(workId, {
+        bangumi: {
+          subjectId: subject.id,
+          title: subject.title,
+          status: failing ? 'failed' : 'matched',
+          lastSyncAt: new Date().toISOString(),
+          syncedEpisodes: 0,
+          ...(failing ? { error: '演示：账号未授权同步该条目' } : {}),
+        },
+      });
+    },
+
+    async bangumiUnbind(workId) {
+      await wait(undefined, 20);
+      return setOverride(workId, { bangumi: undefined });
+    },
+
+    async bangumiSync(workId) {
+      await wait(undefined, 60);
+      const binding = overrideOf(workId).bangumi;
+      const work = workById(workId);
+      if (!binding) {
+        throw new DemoServiceError('尚未绑定 Bangumi 条目');
+      }
+      if (binding.status === 'failed') {
+        throw new DemoServiceError(binding.error ?? 'Bangumi 同步失败');
+      }
+      const task = createTask({
+        type: 'bangumi_sync',
+        title: '同步 Bangumi 观看进度',
+        sourceId: 'bangumi',
+        sourceName: 'Bangumi（演示）',
+        scope: 'tracking',
+        durationMs: 1800,
+        resultMessage: `已同步 ${work.episodeCount} 集观看进度（演示，未访问网络）`,
+      });
+      setOverride(workId, {
+        bangumi: { ...binding, lastSyncAt: new Date().toISOString(), syncedEpisodes: work.episodeCount },
+      });
+      return task;
     },
 
     async resetDemoData() {
