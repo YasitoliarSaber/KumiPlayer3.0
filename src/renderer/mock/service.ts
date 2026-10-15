@@ -143,14 +143,46 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
   };
   const currentCatalog = (): MockCatalog => catalogFor(getDemoState().librarySize);
   const latency = options.latencyMs ?? 180;
+  /**
+   * 本服务实例创建的全部定时器。切换场景或重置演示数据时统一清理，
+   * 避免反复操作后留下仍在跑的定时器。
+   */
+  const pendingTimers = new Set<ReturnType<typeof setTimeout>>();
+  const track = (timer: ReturnType<typeof setTimeout>) => {
+    pendingTimers.add(timer);
+    return timer;
+  };
+  const clearTimers = () => {
+    for (const timer of pendingTimers) {
+      clearTimeout(timer);
+    }
+    pendingTimers.clear();
+  };
 
   const wait = async (signal?: AbortSignal, extra = 0) => {
     // 慢操作场景：把写入路径拉长，便于人工尝试重复点击。
     const slowBonus = getDemoState().scenario === 'slow-actions' ? 900 : 0;
     const total = latency + extra + slowBonus;
     if (total > 0) {
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, total);
+      // 取消时立即结束等待，不再让一个已经作废的请求继续占着时限。
+      await new Promise<void>((resolve, reject) => {
+        const timer = track(
+          setTimeout(() => {
+            pendingTimers.delete(timer);
+            resolve();
+          }, total),
+        );
+        if (signal) {
+          signal.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer);
+              pendingTimers.delete(timer);
+              reject(new DemoServiceError('读取已取消'));
+            },
+            { once: true },
+          );
+        }
       });
     }
     if (signal?.aborted) {
@@ -182,7 +214,13 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
   };
 
   const schedule = (fn: () => void, delayMs: number) => {
-    setTimeout(fn, delayMs);
+    const timer = track(
+      setTimeout(() => {
+        pendingTimers.delete(timer);
+        fn();
+      }, delayMs),
+    );
+    return timer;
   };
 
   const applyOverrides = (work: WorkSummary): WorkSummary => {
@@ -735,6 +773,8 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
     },
 
     async resetDemoData() {
+      // 重置前先停掉在跑的模拟任务定时器，避免重置后又被旧回调写回。
+      clearTimers();
       resetDemoState();
     },
   };

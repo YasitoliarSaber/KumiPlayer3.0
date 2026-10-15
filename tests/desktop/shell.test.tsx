@@ -104,10 +104,16 @@ afterEach(() => {
   resetDemoState();
 });
 
-function renderPage(element: React.ReactNode, path = '/', initialEntry = path) {
+function renderPage(
+  element: React.ReactNode,
+  path = '/',
+  initialEntry = path,
+  queryClient = createAppQueryClient(),
+  mediaService: typeof service = service,
+) {
   return render(
-    <QueryClientProvider client={createAppQueryClient()}>
-      <ServiceProvider service={service}>
+    <QueryClientProvider client={queryClient}>
+      <ServiceProvider service={mediaService}>
         <MemoryRouter initialEntries={[initialEntry]}>
           <AppShell>
             <Routes>
@@ -146,6 +152,61 @@ describe('公共框架', () => {
 
     // 面板关闭即视为已执行激活动作；导航目标由详情路由承载。
     await waitFor(() => expect(screen.queryByRole('textbox', { name: '快捷搜索' })).toBeNull());
+  });
+
+  it('挂载/卸载公共框架不会泄漏 window 键盘监听', () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    for (let round = 0; round < 3; round += 1) {
+      const view = renderPage(<HomePage />);
+      view.unmount();
+    }
+    const added = add.mock.calls.filter(([type]) => type === 'keydown').length;
+    const removed = remove.mock.calls.filter(([type]) => type === 'keydown').length;
+    expect(added).toBeGreaterThan(0);
+    // 每次挂载都必须有对应退订，卸载后不残留键盘监听。
+    expect(removed).toBeGreaterThanOrEqual(added);
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
+  it('读取失败时保留最后一次有效快照并允许重试', async () => {
+    const instance = createMockMediaService({ latencyMs: 0, catalog });
+    let calls = 0;
+    const flaky = {
+      ...instance,
+      listLibrary: async (signal?: AbortSignal) => {
+        calls += 1;
+        if (calls > 1) {
+          throw new Error('演示：第二次读取失败');
+        }
+        return instance.listLibrary(signal);
+      },
+    };
+    const queryClient = createAppQueryClient();
+    const view = renderPage(
+      <PosterWallPage mode={{ kind: 'view' }} />,
+      '/library/:view',
+      '/library/anime_series',
+      queryClient,
+      flaky,
+    );
+
+    // jsdom 不做布局，虚拟化不产生行；用分类标题里的数量作为"快照已加载"的证据。
+    const wall = () =>
+      view.container.querySelector('[data-route="library"]') as HTMLElement;
+    await waitFor(() => expect(within(wall()).getByText(/共 \d+ 部/)).toBeTruthy());
+    const before = within(wall()).getByText(/共 \d+ 部/).textContent ?? '';
+    expect(Number(before.match(/\d+/)?.[0] ?? 0)).toBeGreaterThan(0);
+
+    // 触发一次失败的重新读取：列表必须保留，只多出"显示上次成功数据"的提示。
+    await queryClient.refetchQueries().catch(() => undefined);
+    await waitFor(() => expect(screen.getByText(/显示上一次成功的数据/)).toBeTruthy());
+    // 快照未被清空：数量仍与成功那次一致，页面也没有退化成致命错误页。
+    expect(within(wall()).getByText(/共 \d+ 部/).textContent).toBe(before);
+    expect(screen.queryByRole('alert')).toBeNull();
+    // 服务实现由测试提供，第二次调用确实失败。
+    expect(calls).toBeGreaterThanOrEqual(2);
   });
 });
 

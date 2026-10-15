@@ -120,6 +120,7 @@ function SourceOverview({
   const service = useMediaService();
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState('');
+  const [pendingScanId, setPendingScanId] = useState('');
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: demoQueryKeys.sources });
@@ -170,12 +171,21 @@ function SourceOverview({
               activeTaskTitle={
                 tasks.data?.find((task) => task.id === card.activeTaskId)?.title ?? ''
               }
-              onScan={() =>
-                void service.startScan(card.id).then((task) => {
-                  setNotice(`已发起扫描（演示）：${card.name} · 任务 ${task.id.slice(-6)}`);
-                  refresh();
-                })
-              }
+              pendingScan={pendingScanId === card.id}
+              onScan={() => {
+                // 双击保护：同一来源在扫描发起期间只接受一次点击。
+                if (pendingScanId) {
+                  return;
+                }
+                setPendingScanId(card.id);
+                void service
+                  .startScan(card.id)
+                  .then((task) => {
+                    setNotice(`已发起扫描（演示）：${card.name} · 任务 ${task.id.slice(-6)}`);
+                    refresh();
+                  })
+                  .finally(() => setPendingScanId(''));
+              }}
               onOpenTasks={onOpenTasks}
               onReview={() => setNotice(`演示：打开来源「${card.name}」的识别结果（前往导入审核步骤）`)}
             />
@@ -189,12 +199,14 @@ function SourceOverview({
 function SourceCardView({
   card,
   activeTaskTitle,
+  pendingScan,
   onScan,
   onReview,
   onOpenTasks,
 }: {
   readonly card: SourceCard;
   readonly activeTaskTitle: string;
+  readonly pendingScan: boolean;
   readonly onScan: () => void;
   readonly onReview: () => void;
   readonly onOpenTasks: () => void;
@@ -238,7 +250,7 @@ function SourceCardView({
             查看进度
           </Button>
         ) : (
-          <Button size="xs" variant="outline" onClick={onScan}>
+          <Button size="xs" variant="outline" loading={pendingScan} onClick={onScan}>
             开始扫描
           </Button>
         )}
@@ -267,6 +279,8 @@ function ImportFlow({
   const [scanTaskId, setScanTaskId] = useState('');
   const [decisions, setDecisions] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState('');
+  const [starting, setStarting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const scanTask = tasks.data?.find((task) => task.id === scanTaskId);
   const blockingIssues = (issues.data ?? []).filter((issue) => issue.severity === 'blocking');
@@ -338,18 +352,23 @@ function ImportFlow({
             </fieldset>
             <div className={styles.panelActions}>
               <Button
+                loading={starting}
                 onClick={() => {
                   if (!selected) {
                     return;
                   }
-                  void service.startScan(selected.id).then((task) => {
-                    setScanTaskId(task.id);
-                    setStep(1);
-                    setNotice(`已发起扫描（演示）：${selected.name}`);
-                    void queryClient.invalidateQueries({ queryKey: demoQueryKeys.tasks });
-                  });
+                  setStarting(true);
+                  void service
+                    .startScan(selected.id)
+                    .then((task) => {
+                      setScanTaskId(task.id);
+                      setStep(1);
+                      setNotice(`已发起扫描（演示）：${selected.name}`);
+                      void queryClient.invalidateQueries({ queryKey: demoQueryKeys.tasks });
+                    })
+                    .finally(() => setStarting(false));
                 }}
-                disabled={!selected}
+                disabled={!selected || starting}
               >
                 开始扫描
               </Button>
@@ -419,16 +438,21 @@ function ImportFlow({
                 title={allDecided ? '确认修订（演示）' : '请先处理所有阻断性识别问题'}
               >
                 <Button
-                  disabled={!allDecided || !selected}
+                  loading={confirming}
+                  disabled={!allDecided || !selected || confirming}
                   onClick={() => {
                     if (!selected) {
                       return;
                     }
-                    void service.confirmRevision(selected.id, decisions).then((task) => {
-                      setStep(3);
-                      setNotice(`已确认修订（演示）：任务 ${task.id.slice(-6)}`);
-                      void queryClient.invalidateQueries({ queryKey: demoQueryKeys.tasks });
-                    });
+                    setConfirming(true);
+                    void service
+                      .confirmRevision(selected.id, decisions)
+                      .then((task) => {
+                        setStep(3);
+                        setNotice(`已确认修订（演示）：任务 ${task.id.slice(-6)}`);
+                        void queryClient.invalidateQueries({ queryKey: demoQueryKeys.tasks });
+                      })
+                      .finally(() => setConfirming(false));
                   }}
                 >
                   确认并执行

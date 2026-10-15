@@ -252,4 +252,29 @@ describe('演示业务服务', () => {
     expect(finished?.error).toContain('演示场景');
     expect(finished?.cancellable).toBe(false);
   });
+
+  it('取消读取立即结束等待，不等满延迟', async () => {
+    vi.useFakeTimers();
+    const instance = createMockMediaService({ latencyMs: 5000, catalog });
+    const controller = new AbortController();
+    const pending = instance.listLibrary(controller.signal);
+    const assertion = expect(pending).rejects.toBeInstanceOf(DemoServiceError);
+    controller.abort();
+    // 不需要推进 5 秒定时器：取消应当立刻落地。
+    await assertion;
+  });
+
+  it('重置演示数据会停止在跑的模拟任务定时器', async () => {
+    vi.useFakeTimers();
+    const instance = service();
+    const pending = instance.startScan('src-local-anime');
+    await vi.advanceTimersByTimeAsync(120);
+    await pending;
+    expect(getDemoState().tasks.length).toBeGreaterThan(0);
+
+    await instance.resetDemoData();
+    // 重置后旧回调不得再写回任务（否则"重置"就会被打断）。
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(getDemoState().tasks).toHaveLength(0);
+  });
 });

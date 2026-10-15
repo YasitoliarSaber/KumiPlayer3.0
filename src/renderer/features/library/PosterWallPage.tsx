@@ -117,7 +117,8 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
   if (library.isPending) {
     return <LoadingSurface label="正在载入媒体库" detail="正在读取演示数据" />;
   }
-  if (library.isError) {
+  // 失败但已有快照时保留最后有效视图（列表不清空、不伪装成空库）。
+  if (library.isError && !library.data) {
     return (
       <ErrorSurface
         detail={library.error?.message ?? '演示数据读取失败'}
@@ -128,6 +129,17 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
 
   return (
     <section className={styles.page} data-route={routeMarker(mode)}>
+      {library.isRefetchError ? (
+        <p
+          className="m-0 rounded-md border border-border bg-card px-3 py-2 text-[12.5px] text-muted-foreground"
+          role="status"
+        >
+          刷新失败，当前显示上一次成功的数据：{library.error?.message ?? '未知错误'}
+          <button type="button" className="ml-2 underline" onClick={() => void library.refetch()}>
+            重试
+          </button>
+        </p>
+      ) : null}
       <div className={styles.head}>
         <div className={styles.titleBlock}>
           <h1 className={styles.title}>{title}</h1>

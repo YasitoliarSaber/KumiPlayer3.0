@@ -57,12 +57,17 @@ export function WorkDetailPage() {
   const [pendingTitle, setPendingTitle] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [togglingFavorite, setTogglingFavorite] = useState(false);
 
   const work = detail.data;
   const season = work?.seasons[Math.min(seasonIndex, Math.max(0, work.seasons.length - 1))];
 
   useEffect(() => {
     setSeasonIndex(0);
+    // 切换作品时清掉上一部作品的临时状态，避免旧提示/旧忙碌态串到新作品。
+    setNotice('');
+    setBusy(false);
+    setTogglingFavorite(false);
   }, [workId]);
 
   const refreshLibrary = useCallback(
@@ -173,9 +178,19 @@ export function WorkDetailPage() {
               <span title={work.watch.favorite ? '取消收藏' : '加入收藏'} className="inline-flex">
                 <Button
                   variant={work.watch.favorite ? 'subtle' : 'outline'}
-                  onClick={() =>
-                    void service.setFavorite(work.id, !work.watch.favorite).then(refreshLibrary)
-                  }
+                  loading={togglingFavorite}
+                  aria-busy={togglingFavorite}
+                  onClick={() => {
+                    // 双击保护：写入期间不再接受第二次点击，避免重复提交。
+                    if (togglingFavorite) {
+                      return;
+                    }
+                    setTogglingFavorite(true);
+                    void service
+                      .setFavorite(work.id, !work.watch.favorite)
+                      .then(refreshLibrary)
+                      .finally(() => setTogglingFavorite(false));
+                  }}
                 >
                   <Heart className="size-4" />
                   {work.watch.favorite ? '已收藏' : '收藏'}
