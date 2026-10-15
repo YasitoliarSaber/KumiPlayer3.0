@@ -57,8 +57,45 @@ describe('新旧前端模块边界', () => {
   });
 
   it('Renderer 不直接依赖旧 Fluent UI 与旧全局样式', () => {
-    const forbidden = [/@fluentui\//, /\.\.\/index\.css$/, /src\/index\.css$/];
+    // Mantine 已从新前端移除：把它一并锁进禁令，防止后续回退。
+    const forbidden = [/@fluentui\//, /@mantine\//, /\.\.\/index\.css$/, /src\/index\.css$/];
     expect(violations('src/renderer', forbidden)).toEqual([]);
+  });
+
+  it('新 Renderer 只用一套 UI 原语（shadcn/ui + radix-ui）', () => {
+    const files = listSourceFiles('src/renderer');
+    const uiImports = new Set<string>();
+    for (const file of files) {
+      for (const specifier of importsOf(file)) {
+        if (
+          specifier.startsWith('@/shared/ui/') ||
+          specifier === 'radix-ui' ||
+          specifier.startsWith('@tanstack/react-') ||
+          specifier.startsWith('react') ||
+          specifier.startsWith('react-dom') ||
+          specifier.startsWith('react-router') ||
+          specifier === 'zustand' ||
+          specifier === 'lucide-react' ||
+          specifier.startsWith('@shared/') ||
+          specifier.startsWith('@/')
+        ) {
+          if (specifier === 'radix-ui') {
+            uiImports.add('radix-ui');
+          }
+          continue;
+        }
+        // 其余第三方依赖必须显式出现在允许名单里，避免悄悄混入第二套组件库。
+        const packageName = specifier.startsWith('@')
+          ? specifier.split('/').slice(0, 2).join('/')
+          : specifier.split('/')[0]!;
+        if (packageName.startsWith('.') === false && !packageName.startsWith('node:')) {
+          uiImports.add(packageName);
+        }
+      }
+    }
+    const allowed = new Set(['clsx', 'tailwind-merge', 'class-variance-authority', 'radix-ui']);
+    const unexpected = [...uiImports].filter((name) => !allowed.has(name));
+    expect(unexpected).toEqual([]);
   });
 
   it('跨进程纯契约不依赖 React、Electron 或 Node', () => {

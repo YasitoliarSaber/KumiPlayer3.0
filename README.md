@@ -10,9 +10,10 @@ KumiPlayer 是一款面向 Windows 的本地 / 网盘媒体库与 MPV 播放应�
 - 后续方向为 Electron + React + TypeScript；优先采用成熟组件库，保持模块化、风格统一和组件可替换，避免巨型页面与全局 CSS。
 - **视觉依据**：当前正在运行的界面已被用户选定为视觉复刻参考。正式页面以用户确认的单页截图与 HTML 为视觉依据，用新架构实现；实现层仍不导入旧 Fluent 组件、旧主题变量与旧全局 CSS。
 - 本轮（2026-10-15）已完成最小基础切片：`src/main`、`src/preload`、`src/renderer`、`src/shared/contracts` 四个边界，`electron.vite.config.ts`（输出到 `.build/desktop`），以及 `src/desktop-helper` 的 Windows Job Object 进程宿主。业务页面尚未接入，导航与配色仍待设计确认。
-- **演示模式（2026-10-15）**：`npm run dev:desktop:mock` 打开与当前界面同构的完整前端壳子，数据全部来自本机确定性演示目录与 `.context/artwork-export` 的选定素材。该模式不启动 Python 后端、不注册业务网关、不访问 37821 或任何外部图片服务；真实后端启动路径（含 P01 进程保护验证）保持不变。
-- 桌面候选与组件库仍属"已验证候选、未正式锁定"：Electron 启动/就绪/退出回收、具名桥接、Mantine 控件与带 nonce 的严格 CSP 已取得隔离验证证据；Windows 打包、性能预算、正式切换与安装矩阵仍待后续关卡。
-- 当前 Tauri/Fluent 前端及其测试仍保护现有可运行应用；独立新前端不受其布局与主题断言约束。现有设置分类描述仅是当前实现事实，不锁定新前端信息架构。
+- **网页优先（2026-10-15 起）**：新前端先在普通浏览器开发与验收。`npm run dev`（等价 `dev:web:mock`）在 127.0.0.1:5273 打开完整演示应用；`build:web:mock` 输出 `.build/web`，`preview:web:mock` 在 5274 预览构建产物。演示数据来自本机确定性目录与 `.context/artwork-export` 选定素材，**不启动 Python 后端、不注册业务网关、不访问真实媒体库或外网**。
+- **组件库**：新前端使用 shadcn/ui + Tailwind CSS（`@mantine/*` 已从依赖中移除）；影视专用组件（海报卡、背景橱窗、剧集缩略图、季集与版本）由项目自有实现。
+- **旧前端已归档**：本地 Git 标签 `legacy-tauri-frontend`（指向 `e98ad0b`）是旧 Tauri/Fluent 活动入口的最后状态，可 `git switch --detach legacy-tauri-frontend` 或从该标签取出文件；旧前端源码仍在 `src/` 中，但默认入口已让位给网页版，仅保留 `npm run dev:legacy`（Vite 1420）用于对照。迁移期两者共用同一份后端与数据边界。
+- Electron 承载仍属"已验证候选、未正式锁定"：启动/鉴权就绪/退出回收、具名桥接、严格 CSP 已有隔离验证证据；Windows 打包、性能预算、正式切换与安装矩阵仍待后续关卡（本轮不做 EXE/安装包）。
 - Python、SQLite V4、识别、刮削、来源与 MPV 能力及数据保护规则继续有效；源码与真实业务契约优先。事实入口为 README、docs/PROJECT.md 和 docs/current/README.md。
 
 ## 核心能力
@@ -200,14 +201,17 @@ npm test               # 契约测试（node --test）+ 组件测试（vitest）
 npm run build          # tsc -b && vite build
 npm run check:versions # 各层版本一致性
 
-# 新桌面候选（3.0 基础切片，独立于上面的旧前端构建）
+# 新前端（网页优先；与上面的旧前端构建互不影响）
+npm run dev                 # 等价 dev:web:mock → http://127.0.0.1:5273/ （演示数据，不连后端）
+npm run build:web:mock      # 网页构建产物 → .build/web
+npm run preview:web:mock    # 预览构建产物 → http://127.0.0.1:5274/
+npm run mock:assets         # 从本地素材导出目录准备演示素材 → .build/mock-assets/__mock
 npm run typecheck:desktop   # main / preload / renderer 三份隔离类型检查
-npm run test:desktop        # 新契约、网关、缓存与 Renderer 装配测试
-npm run build:desktop       # electron-vite 构建 + 进程宿主，输出 .build/desktop
+npm run test:desktop        # 新契约、搜索、服务、渲染与模块边界测试
+npm run dev:desktop:mock    # Electron 演示壳子（同一份 Renderer，不启动 Python）
+npm run build:desktop       # electron-vite 构建 + 进程宿主 → .build/desktop
 npm run verify:p01          # Windows 进程树回收隔离验证（不使用项目 data/）
-npm run mock:assets         # 从本地素材导出目录准备演示素材到 .build/desktop/mock-assets
-npm run dev:desktop:mock    # 演示模式（不启动 Python / 不连真实后端）
-npm run verify:desktop:mock # 演示模式逐页截图与网络/网关探针验证
+npm run dev:legacy          # 已归档的旧 Tauri/Fluent 前端（仅对照用，1420）
 
 uv sync --project backend --locked --extra dev
 uv run --project backend python -m pytest backend/tests
