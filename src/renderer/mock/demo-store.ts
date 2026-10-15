@@ -45,7 +45,8 @@ export const DEFAULT_SETTINGS: SettingsSnapshot = {
     minimizeToTray: false,
     closeToTray: false,
     connectionMonitor: true,
-    setupState: '已完成（演示）',
+    setupCompleted: false,
+    setupDeferred: false,
   },
   appearance: {
     theme: 'fluent',

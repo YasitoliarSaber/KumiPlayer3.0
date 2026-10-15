@@ -188,7 +188,9 @@ export interface SettingsSnapshot {
     readonly minimizeToTray: boolean;
     readonly closeToTray: boolean;
     readonly connectionMonitor: boolean;
-    readonly setupState: string;
+    /** 首次引导：完成与"稍后设置"分开记录，未完成不等于已完成。 */
+    readonly setupCompleted: boolean;
+    readonly setupDeferred: boolean;
   };
   readonly appearance: {
     readonly theme: 'fluent' | 'cinema' | 'mica';

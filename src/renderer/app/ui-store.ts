@@ -14,14 +14,19 @@ export type SourceFilter = 'all' | SourceId;
 interface UiState {
   readonly source: SourceFilter;
   readonly sidebarMode: SidebarMode;
+  /** 首次引导：可从设置重新打开，取消不清空演示设置。 */
+  readonly setupOpen: boolean;
   setSource: (source: SourceFilter) => void;
   toggleSidebar: () => void;
   toggleSidebarVisibility: () => void;
+  openSetup: () => void;
+  closeSetup: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
   source: 'all',
   sidebarMode: 'expanded',
+  setupOpen: false,
   setSource: (source) => {
     pushDemoPreference({ source });
     set({ source });
@@ -32,6 +37,8 @@ export const useUiStore = create<UiState>((set) => ({
     })),
   toggleSidebarVisibility: () =>
     set((state) => ({ sidebarMode: state.sidebarMode === 'hidden' ? 'expanded' : 'hidden' })),
+  openSetup: () => set({ setupOpen: true }),
+  closeSetup: () => set({ setupOpen: false }),
 }));
 
 export const SOURCE_LABELS: ReadonlyArray<{ value: SourceFilter; label: string }> = [

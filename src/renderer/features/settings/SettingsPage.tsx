@@ -25,6 +25,7 @@ import { useCallback, useState } from 'react';
 import type { SettingsSection } from '../../shared/api/service';
 import { demoQueryKeys, useMediaService, useSettings } from '../../shared/api/service-context';
 import { ErrorSurface, LoadingSurface, StatusChip } from '../../shared/ui/Surface';
+import { useUiStore } from '@/app/ui-store';
 import styles from './SettingsPage.module.css';
 
 const SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string; icon: LucideIcon }> = [
@@ -43,6 +44,7 @@ export function SettingsPage() {
   const queryClient = useQueryClient();
   const [active, setActive] = useState<SettingsSection>('application');
   const [notice, setNotice] = useState('');
+  const openSetup = useUiStore((state) => state.openSetup);
 
   const save = useCallback(
     (section: SettingsSection, patch: Record<string, unknown>, message: string) => {
@@ -126,11 +128,25 @@ export function SettingsPage() {
                 value={data.application.connectionMonitor}
                 onChange={(value) => save('application', { connectionMonitor: value }, '已更新连接监测（演示）')}
               />
-              <Row label="设置引导" hint="首次使用引导的完成状态。">
+              <Row label="设置引导" hint="完成与「稍后设置」分开记录，未完成不会被标记为已完成。">
                 <div className={styles.rowControl}>
-                  <StatusChip tone="success">{data.application.setupState}</StatusChip>
-                  <Button size="xs" variant="outline" onClick={() => setNotice('演示：已模拟重新运行设置引导')}>
-                    重新运行引导
+                  <StatusChip
+                    tone={
+                      data.application.setupCompleted
+                        ? 'success'
+                        : data.application.setupDeferred
+                          ? 'warning'
+                          : 'neutral'
+                    }
+                  >
+                    {data.application.setupCompleted
+                      ? '已完成（演示）'
+                      : data.application.setupDeferred
+                        ? '稍后设置'
+                        : '未完成'}
+                  </StatusChip>
+                  <Button size="xs" variant="outline" onClick={openSetup}>
+                    {data.application.setupCompleted ? '重新运行引导' : '继续设置引导'}
                   </Button>
                 </div>
               </Row>

@@ -20,7 +20,7 @@ import { SettingsPage } from '../../src/renderer/features/settings/SettingsPage'
 import { AppShell } from '../../src/renderer/shell/AppShell';
 import { ServiceProvider } from '../../src/renderer/shared/api/service-context';
 import { buildMockCatalog } from '../../src/renderer/mock/catalog';
-import { getDemoState, resetDemoState } from '../../src/renderer/mock/demo-store';
+import { DEFAULT_SETTINGS, getDemoState, resetDemoState, updateDemoState } from '../../src/renderer/mock/demo-store';
 import { createMockMediaService } from '../../src/renderer/mock/service';
 
 const catalog = buildMockCatalog();
@@ -91,6 +91,13 @@ beforeAll(() => {
 
 beforeEach(() => {
   resetDemoState();
+  // 多数用例关注业务界面而非引导：把演示引导标记为已完成，避免弹层遮挡可访问性树。
+  updateDemoState(() => ({
+    settings: {
+      ...DEFAULT_SETTINGS,
+      application: { ...DEFAULT_SETTINGS.application, setupCompleted: true, setupDeferred: false },
+    },
+  }));
 });
 
 afterEach(() => {
@@ -223,7 +230,7 @@ describe('媒体管理与任务', () => {
     renderPage(<MediaManagementPage />, '/manage');
     await waitFor(() => expect(screen.getByText('本地动画库')).toBeTruthy());
     expect(screen.getAllByRole('button', { name: '开始扫描' }).length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: /导入媒体/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '新建导入' })).toBeTruthy();
   });
 
   it('导入流程在阻断问题处理完之前不允许确认', async () => {
@@ -249,6 +256,37 @@ describe('媒体管理与任务', () => {
 });
 
 describe('设置', () => {
+
+  it('未完成引导时自动打开，选择「稍后设置」只记录推迟并关闭', async () => {
+    updateDemoState(() => ({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        application: { ...DEFAULT_SETTINGS.application, setupCompleted: false, setupDeferred: false },
+      },
+    }));
+    renderPage(<HomePage />);
+
+    expect(await screen.findByText('欢迎使用 KumiPlayer（演示）')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '稍后设置' }));
+
+    await waitFor(() => expect(getDemoState().settings.application.setupDeferred).toBe(true));
+    expect(getDemoState().settings.application.setupCompleted).toBe(false);
+    await waitFor(() => expect(screen.queryByText('欢迎使用 KumiPlayer（演示）')).toBeNull());
+  });
+
+  it('可在设置里重新打开引导，取消不清空已有设置', async () => {
+    renderPage(<SettingsPage />, '/settings');
+    const outline = await screen.findByRole('navigation', { name: '设置分类' });
+    fireEvent.click(within(outline).getByRole('button', { name: '应用' }));
+
+    const before = getDemoState().settings.sources.localRoots.length;
+    fireEvent.click(await screen.findByRole('button', { name: '重新运行引导' }));
+    expect(await screen.findByText('重新运行设置引导')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    await waitFor(() => expect(getDemoState().settings.sources.localRoots.length).toBe(before));
+    expect(getDemoState().settings.application.setupCompleted).toBe(true);
+  });
   it('七个分类可切换，外观主题写入演示设置', async () => {
     renderPage(<SettingsPage />, '/settings');
     const outline = await screen.findByRole('navigation', { name: '设置分类' });

@@ -36,6 +36,7 @@ import { SOURCE_LABELS, useUiStore, type SourceFilter } from '@/app/ui-store';
 import { useNavHistoryState, useRecordLocation } from '@/app/nav-history';
 import { detectHost } from '@/app/platform';
 import { useLibrary } from '@/shared/api/service-context';
+import { useDemoState } from '@/mock/demo-store';
 import type { LibraryView, WorkSummary } from '@/shared/api/service';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
@@ -50,6 +51,7 @@ import { Input } from '@/shared/ui/input';
 import { Separator } from '@/shared/ui/separator';
 import { Dialog, DialogContent, DialogTitle } from '@/shared/ui/dialog';
 import { CommandPalette } from './CommandPalette';
+import { FirstRunSetup } from '@/features/setup/FirstRunSetup';
 import { MainScrollContext } from './main-scroll';
 import styles from './AppShell.module.css';
 
@@ -91,8 +93,22 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const library = useLibrary();
+  const setupOpen = useUiStore((state) => state.setupOpen);
+  const openSetup = useUiStore((state) => state.openSetup);
+  const closeSetup = useUiStore((state) => state.closeSetup);
+  const application = useDemoState().settings.application;
   const sidebarMode = useUiStore((state) => state.sidebarMode);
   const mainRef = useCallback((node: HTMLElement | null) => setMain(node), []);
+
+  // 首次使用引导只在"未完成且未推迟"时自动打开一次；关掉后不会反复弹出。
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (autoOpened.current || setupOpen || application.setupCompleted || application.setupDeferred) {
+      return;
+    }
+    autoOpened.current = true;
+    openSetup();
+  }, [application.setupCompleted, application.setupDeferred, openSetup, setupOpen]);
 
   // Ctrl/Cmd+K 唤起快捷搜索；只拦截组合键，不影响普通输入与输入法组合。
   useEffect(() => {
@@ -126,6 +142,11 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
         onOpenChange={setPaletteOpen}
         works={library.data?.works ?? []}
         onOpenWork={(workId) => navigate(`/work/${workId}`)}
+      />
+      <FirstRunSetup
+        open={setupOpen}
+        onClose={closeSetup}
+        mode={application.setupCompleted ? 'reconfigure' : 'first-run'}
       />
     </div>
   );
