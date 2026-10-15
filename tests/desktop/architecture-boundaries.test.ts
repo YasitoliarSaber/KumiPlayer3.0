@@ -30,6 +30,24 @@ function listSourceFiles(dir: string): string[] {
   return files;
 }
 
+/** 样式文件也要扫描：旧组件库过去正是以 CSS `@import` 形式回流。 */
+function listStyleFiles(dir: string): string[] {
+  const root = path.join(projectRoot, dir);
+  const files: string[] = [];
+  const walk = (current: string) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (/\.css$/.test(entry.name)) {
+        files.push(full);
+      }
+    }
+  };
+  walk(root);
+  return files;
+}
+
 function importsOf(file: string): readonly string[] {
   const source = fs.readFileSync(file, 'utf8');
   const matches = source.matchAll(/(?:from|import)\s+['"]([^'"]+)['"]/g);
@@ -62,6 +80,20 @@ describe('新旧前端模块边界', () => {
     expect(violations('src/renderer', forbidden)).toEqual([]);
   });
 
+  it('样式文件不导入旧组件库或旧全局样式', () => {
+    const styleHits: string[] = [];
+    for (const file of listStyleFiles('src/renderer')) {
+      const css = fs.readFileSync(file, 'utf8');
+      for (const match of css.matchAll(/@import\s+(?:url\()?['"]([^'"]+)['"]/g)) {
+        const target = match[1] ?? '';
+        if (/@mantine|@fluentui/.test(target) || /index\.css$/.test(target)) {
+          styleHits.push(`${path.relative(projectRoot, file)} -> ${target}`);
+        }
+      }
+    }
+    expect(styleHits).toEqual([]);
+  });
+
   it('新 Renderer 只用一套 UI 原语（shadcn/ui + radix-ui）', () => {
     const files = listSourceFiles('src/renderer');
     const uiImports = new Set<string>();
@@ -71,9 +103,12 @@ describe('新旧前端模块边界', () => {
           specifier.startsWith('@/shared/ui/') ||
           specifier === 'radix-ui' ||
           specifier.startsWith('@tanstack/react-') ||
-          specifier.startsWith('react') ||
-          specifier.startsWith('react-dom') ||
-          specifier.startsWith('react-router') ||
+          // 精确到包名：`react-*` 前缀不能放行 react-bootstrap 等第二套组件库。
+          specifier === 'react' ||
+          specifier === 'react-dom' ||
+          specifier === 'react-dom/client' ||
+          specifier === 'react-router' ||
+          specifier === 'react-router-dom' ||
           specifier === 'zustand' ||
           specifier === 'lucide-react' ||
           specifier.startsWith('@shared/') ||
