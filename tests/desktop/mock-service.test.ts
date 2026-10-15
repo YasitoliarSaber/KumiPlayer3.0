@@ -206,4 +206,50 @@ describe('演示业务服务', () => {
     await expect(instance.bangumiSync(work.id)).rejects.toBeInstanceOf(DemoServiceError);
     expect(getDemoState().overrides[work.id]?.bangumi).toBeUndefined();
   });
+
+  it('压力库规模按 240 / 2000 / 5000 生成唯一 ID', async () => {
+    // 该用例必须使用真实目录（不注入小夹具），才验证规模切换本身。
+    const instance = createMockMediaService({ latencyMs: 0 });
+    for (const size of [2000, 5000] as const) {
+      updateDemoState(() => ({ librarySize: size }));
+      const snapshot = await instance.listLibrary();
+      expect(snapshot.works).toHaveLength(size);
+      expect(new Set(snapshot.works.map((work) => work.id)).size).toBe(size);
+    }
+  });
+
+  it('缺图 / 长标题 / 无版本场景给出稳定回退数据', async () => {
+    const instance = service();
+    const work = catalog.works[0]!;
+
+    updateDemoState(() => ({ scenario: 'missing-artwork' }));
+    const missing = await instance.listLibrary();
+    expect(missing.works.every((item) => item.artwork.poster === null)).toBe(true);
+    expect(missing.works.every((item) => item.artwork.episodeThumbs.length === 0)).toBe(true);
+
+    updateDemoState(() => ({ scenario: 'long-titles' }));
+    const longTitles = await instance.listLibrary();
+    expect(longTitles.works[0]!.title.length).toBeGreaterThan(work.title.length);
+
+    updateDemoState(() => ({ scenario: 'no-assets' }));
+    const detail = await instance.getWorkDetail(work.id);
+    expect(detail.assetCount).toBe(0);
+    expect(detail.seasons[0]!.episodes.every((episode) => episode.assets.length === 0)).toBe(true);
+  });
+
+  it('任务失败场景让新任务以失败收尾并保留可重试状态', async () => {
+    vi.useFakeTimers();
+    const instance = service();
+    updateDemoState(() => ({ scenario: 'task-failure' }));
+
+    const pending = instance.startScan('src-local-anime');
+    await vi.advanceTimersByTimeAsync(200);
+    const task = await pending;
+    await vi.advanceTimersByTimeAsync(4000);
+
+    const finished = getDemoState().tasks.find((entry) => entry.id === task.id);
+    expect(finished?.status).toBe('failed');
+    expect(finished?.error).toContain('演示场景');
+    expect(finished?.cancellable).toBe(false);
+  });
 });

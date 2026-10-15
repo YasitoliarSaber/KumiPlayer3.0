@@ -127,13 +127,30 @@ const REVIEW_ISSUES: readonly ReviewIssue[] = [
 ];
 
 export function createMockMediaService(options: MockServiceOptions = {}): MediaService {
-  const catalog = options.catalog ?? buildMockCatalog();
+  // 目录按演示库规模缓存：压力模式复用同一小批图片，只放大元数据条目。
+  const catalogs = new Map<number, MockCatalog>();
+  const catalogFor = (size: number): MockCatalog => {
+    if (options.catalog) {
+      return options.catalog;
+    }
+    const cached = catalogs.get(size);
+    if (cached) {
+      return cached;
+    }
+    const built = buildMockCatalog({ count: size });
+    catalogs.set(size, built);
+    return built;
+  };
+  const currentCatalog = (): MockCatalog => catalogFor(getDemoState().librarySize);
   const latency = options.latencyMs ?? 180;
 
   const wait = async (signal?: AbortSignal, extra = 0) => {
-    if (latency + extra > 0) {
+    // 慢操作场景：把写入路径拉长，便于人工尝试重复点击。
+    const slowBonus = getDemoState().scenario === 'slow-actions' ? 900 : 0;
+    const total = latency + extra + slowBonus;
+    if (total > 0) {
       await new Promise<void>((resolve) => {
-        setTimeout(resolve, latency + extra);
+        setTimeout(resolve, total);
       });
     }
     if (signal?.aborted) {
@@ -193,6 +210,43 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
 
   const overrideOf = (workId: string): WorkOverride => getDemoState().overrides[workId] ?? {};
 
+  /**
+   * 场景化的展示变形：只影响"看到什么"，不改媒体事实与覆盖层。
+   * 缺图 / 长标题用于检查回退与排版，无版本用于检查"不可播放"提示。
+   */
+  const applyScenario = (work: WorkSummary): WorkSummary => {
+    const scenario = getDemoState().scenario;
+    if (scenario === 'missing-artwork') {
+      return {
+        ...work,
+        artwork: { poster: null, fanart: null, clearlogo: null, episodeThumbs: [] },
+      };
+    }
+    if (scenario === 'long-titles') {
+      return {
+        ...work,
+        title: `${work.title}：这是一个用于检查中文长标题排版与省略行为的超长作品名称（演示）`,
+        originalTitle: `${work.originalTitle} — an intentionally very long original title used for layout checks`,
+      };
+    }
+    return work;
+  };
+
+  const applyDetailScenario = (detail: WorkDetail): WorkDetail => {
+    const scenario = getDemoState().scenario;
+    if (scenario !== 'no-assets') {
+      return detail;
+    }
+    return {
+      ...detail,
+      seasons: detail.seasons.map((season) => ({
+        ...season,
+        episodes: season.episodes.map((episode) => ({ ...episode, assets: [] })),
+      })),
+      assetCount: 0,
+    };
+  };
+
   const setOverride = (workId: string, patch: Partial<WorkOverride>): WorkOverride => {
     const merged: Record<string, unknown> = { ...overrideOf(workId), ...patch };
     // undefined 表示"恢复自动"，需要真正删除该字段而不是写入 undefined。
@@ -207,7 +261,7 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
   };
 
   const workById = (workId: string): WorkSummary => {
-    const found = catalog.byId.get(workId);
+    const found = currentCatalog().byId.get(workId);
     if (!found) {
       throw new DemoServiceError('演示数据中没有这个作品');
     }
@@ -216,7 +270,7 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
 
   const sourceCards = (): readonly SourceCard[] => {
     const state = getDemoState();
-    const works = state.scenario === 'empty' ? [] : catalog.works;
+    const works = state.scenario === 'empty' ? [] : currentCatalog().works.map(applyScenario);
     return SOURCE_DEFINITIONS.map((definition, index) => {
       const activeTask = state.tasks.find(
         (task) =>
@@ -283,6 +337,24 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
     }, delayMs);
   };
 
+  const transitionToFailed = (taskId: string, delayMs: number, message: string) => {
+    schedule(() => {
+      const latest = getDemoState().tasks.find((entry) => entry.id === taskId);
+      if (!latest || latest.status === 'cancelled') {
+        return;
+      }
+      upsertTask({
+        ...latest,
+        status: 'failed',
+        progress: 0,
+        error: message,
+        message,
+        finishedAt: new Date().toISOString(),
+        cancellable: false,
+      });
+    }, delayMs);
+  };
+
   const createTask = (input: {
     readonly type: string;
     readonly title: string;
@@ -311,7 +383,12 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
     };
     upsertTask(task);
     transitionToRunning(id);
-    transitionToSucceeded(id, input.durationMs, input.resultMessage);
+    // 任务失败场景用于演示失败与重试路径；默认场景正常收敛为成功。
+    if (getDemoState().scenario === 'task-failure') {
+      transitionToFailed(id, input.durationMs, '演示场景：任务在执行阶段失败，可重试');
+    } else {
+      transitionToSucceeded(id, input.durationMs, input.resultMessage);
+    }
     return task;
   };
 
@@ -320,7 +397,10 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
       await wait(signal);
       const state = getDemoState();
       const snapshot: LibrarySnapshot = {
-        works: state.scenario === 'empty' ? [] : catalog.works.map(applyOverrides),
+        works:
+          state.scenario === 'empty'
+            ? []
+            : currentCatalog().works.map(applyOverrides).map(applyScenario),
         sources: sourceCards(),
         ongoingCategoryName: '新番',
       };
@@ -329,7 +409,7 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
 
     async getWorkDetail(workId, signal) {
       await wait(signal, 40);
-      const detail: WorkDetail = buildMockDetail(workById(workId), catalog);
+      const detail: WorkDetail = applyDetailScenario(buildMockDetail(workById(workId), currentCatalog()));
       return detail;
     },
 
@@ -491,7 +571,7 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
 
     async play(workId, episodeId, assetId) {
       await wait(undefined, 80);
-      const detail = buildMockDetail(workById(workId), catalog);
+      const detail = applyDetailScenario(buildMockDetail(workById(workId), currentCatalog()));
       const episodes = detail.seasons.flatMap((season) => season.episodes);
       const episode =
         episodes.find((entry) => entry.id === episodeId) ?? episodes[0];
@@ -535,7 +615,7 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
       if (needle.length === 0) {
         return [];
       }
-      const pool = catalog.works.filter((candidate) => candidate.id !== work.id);
+      const pool = currentCatalog().works.filter((candidate) => candidate.id !== work.id);
       return [0, 1, 2].map((offset) => {
         const source = pool[(work.title.length + offset * 7) % pool.length] ?? work;
         return {

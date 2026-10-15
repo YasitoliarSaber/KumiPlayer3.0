@@ -22,7 +22,26 @@ import type {
 
 const STORAGE_KEY = 'kumiplayer-demo-v1';
 
-export type DemoScenario = 'default' | 'empty' | 'loading' | 'error';
+/**
+ * 演示场景：用于在一处切换"同一套业务在不同状态下的表现"，
+ * 入口只放在开发路径，不污染产品界面。
+ */
+export type DemoScenario =
+  | 'default'
+  | 'empty'
+  | 'loading'
+  | 'error'
+  | 'missing-artwork'
+  | 'long-titles'
+  | 'no-assets'
+  | 'task-failure'
+  | 'setup-incomplete'
+  | 'slow-actions';
+
+/** 演示库规模：压力模式复用同一小批图片，只放大元数据条目。 */
+export type DemoLibrarySize = 240 | 2000 | 5000;
+
+export const DEMO_LIBRARY_SIZES: readonly DemoLibrarySize[] = [240, 2000, 5000];
 
 export interface PersistedDemoState {
   readonly favorite: Readonly<Record<string, boolean>>;
@@ -30,6 +49,7 @@ export interface PersistedDemoState {
   readonly progress: Readonly<Record<string, ProgressSnapshot>>;
   readonly settings: SettingsSnapshot;
   readonly scenario: DemoScenario;
+  readonly librarySize: DemoLibrarySize;
   readonly sourceOverrides: Readonly<Record<string, Partial<SourceCard>>>;
   /** 用户手动覆盖：标题、图片、线上候选与 Bangumi 绑定（演示内存 + 本机存储）。 */
   readonly overrides: Readonly<Record<string, WorkOverride>>;
@@ -113,6 +133,7 @@ const EMPTY_STATE: DemoState = {
   progress: {},
   settings: DEFAULT_SETTINGS,
   scenario: 'default',
+  librarySize: 240,
   sourceOverrides: {},
   overrides: {},
   tasks: [],
@@ -164,6 +185,7 @@ function persist(): void {
     progress: state.progress,
     settings: state.settings,
     scenario: state.scenario,
+    librarySize: state.librarySize,
     sourceOverrides: state.sourceOverrides,
     overrides: state.overrides,
   };

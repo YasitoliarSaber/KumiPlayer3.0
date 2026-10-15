@@ -7,8 +7,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
-import { updateDemoState, useDemoState, type DemoScenario } from '@/mock/demo-store';
+import {
+  DEMO_LIBRARY_SIZES,
+  updateDemoState,
+  useDemoState,
+  type DemoLibrarySize,
+  type DemoScenario,
+} from '@/mock/demo-store';
 import { useMediaService } from '@/shared/api/service-context';
+import { useUiStore } from '@/app/ui-store';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
@@ -32,6 +39,12 @@ const SCENARIOS: ReadonlyArray<{ value: DemoScenario; label: string; hint: strin
   { value: 'empty', label: '空库', hint: '来源与作品都为空，用于检查空状态' },
   { value: 'loading', label: '长加载', hint: '读取保持等待，用于检查加载状态' },
   { value: 'error', label: '失败', hint: '读取返回错误，用于检查失败与重试' },
+  { value: 'missing-artwork', label: '缺图', hint: '所有作品都没有海报与背景，检查稳定回退' },
+  { value: 'long-titles', label: '长标题', hint: '超长中英文标题，用于检查排版与省略' },
+  { value: 'no-assets', label: '无版本', hint: '剧集没有可播放版本，用于检查详情提示' },
+  { value: 'task-failure', label: '任务失败', hint: '新任务会失败，用于检查失败与重试' },
+  { value: 'setup-incomplete', label: '引导未完成', hint: '把首次引导重置为未完成并打开' },
+  { value: 'slow-actions', label: '慢操作', hint: '写入路径变慢，便于尝试重复点击' },
 ];
 
 export function ControlsFixturePage() {
@@ -40,6 +53,24 @@ export function ControlsFixturePage() {
   const service = useMediaService();
   const queryClient = useQueryClient();
   const demo = useDemoState();
+  const openSetup = useUiStore((state) => state.openSetup);
+
+  /** 场景切换必须丢弃旧查询：换库规模时旧结果不能留在缓存里。 */
+  const switchScenario = (scenario: DemoScenario) => {
+    updateDemoState(() => ({ scenario }));
+    queryClient.clear();
+    if (scenario === 'setup-incomplete') {
+      void service.updateSettings('application', { setupCompleted: false, setupDeferred: false }).then(() => {
+        queryClient.clear();
+        openSetup();
+      });
+    }
+  };
+
+  const switchLibrarySize = (size: DemoLibrarySize) => {
+    updateDemoState(() => ({ librarySize: size }));
+    queryClient.clear();
+  };
 
   return (
     <div className="mx-auto flex max-w-[860px] flex-col gap-4" data-route="dev">
@@ -57,10 +88,7 @@ export function ControlsFixturePage() {
               size="sm"
               variant={demo.scenario === scenario.value ? 'default' : 'outline'}
               title={scenario.hint}
-              onClick={() => {
-                updateDemoState(() => ({ scenario: scenario.value }));
-                void queryClient.invalidateQueries();
-              }}
+              onClick={() => switchScenario(scenario.value)}
             >
               {scenario.label}
             </Button>
@@ -74,6 +102,27 @@ export function ControlsFixturePage() {
           >
             重置演示数据
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>演示库规模</CardTitle>
+          <p className="text-[12.5px] text-muted-foreground">
+            压力模式只放大元数据条目，仍然复用同一小批本地图片；当前 {demo.librarySize} 条。
+          </p>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {DEMO_LIBRARY_SIZES.map((size) => (
+            <Button
+              key={size}
+              size="sm"
+              variant={demo.librarySize === size ? 'default' : 'outline'}
+              onClick={() => switchLibrarySize(size)}
+            >
+              {size} 条
+            </Button>
+          ))}
         </CardContent>
       </Card>
 
