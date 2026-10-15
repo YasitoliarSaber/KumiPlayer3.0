@@ -40,7 +40,8 @@ export function Select({
 }) {
   return (
     <SelectRoot value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger size="sm" aria-label={label} className="w-full">
+      {/* 没有显式 label 时也给一个可读名称，避免下拉变成"无名称控件"。 */}
+      <SelectTrigger size="sm" aria-label={label ?? '下拉选择'} className="w-full">
         <SelectValue placeholder={placeholder ?? '请选择'} />
       </SelectTrigger>
       <SelectContent>

@@ -16,6 +16,7 @@ import {
 } from '@/mock/demo-store';
 import { useMediaService } from '@/shared/api/service-context';
 import { useUiStore } from '@/app/ui-store';
+import { THEME_LABELS } from '@/app/theme';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
@@ -121,6 +122,35 @@ export function ControlsFixturePage() {
               onClick={() => switchLibrarySize(size)}
             >
               {size} 条
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>外观主题</CardTitle>
+          <p className="text-[12.5px] text-muted-foreground">
+            与「设置 → 外观」同一份演示偏好；「跟随系统」按 prefers-color-scheme 解析。
+          </p>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {THEME_LABELS.map((option) => (
+            <Button
+              key={option.value}
+              size="sm"
+              variant={demo.settings.appearance.theme === option.value ? 'default' : 'outline'}
+              onClick={() => {
+                updateDemoState((current) => ({
+                  settings: {
+                    ...current.settings,
+                    appearance: { ...current.settings.appearance, theme: option.value },
+                  },
+                }));
+                queryClient.clear();
+              }}
+            >
+              {option.label}
             </Button>
           ))}
         </CardContent>

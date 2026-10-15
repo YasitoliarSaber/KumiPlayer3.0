@@ -38,6 +38,8 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // 面板由快捷键唤起，没有触发元素；关闭时把焦点还给打开前的元素。
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   const listId = useId();
 
   // 查询标记：切换查询时重置高亮；同步搜索也按同一规则丢弃旧结果。
@@ -67,8 +69,14 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
     if (!open) {
       setQuery('');
       setActiveIndex(0);
+      restoreFocusRef.current?.focus?.();
+      restoreFocusRef.current = null;
       return;
     }
+    restoreFocusRef.current =
+      typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(frame);
   }, [open]);

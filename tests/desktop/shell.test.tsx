@@ -19,6 +19,7 @@ import { TaskCenter } from '../../src/renderer/features/tasks/TaskCenter';
 import { SettingsPage } from '../../src/renderer/features/settings/SettingsPage';
 import { AppShell } from '../../src/renderer/shell/AppShell';
 import { ServiceProvider } from '../../src/renderer/shared/api/service-context';
+import { useUiStore } from '../../src/renderer/app/ui-store';
 import { buildMockCatalog } from '../../src/renderer/mock/catalog';
 import { DEFAULT_SETTINGS, getDemoState, resetDemoState, updateDemoState } from '../../src/renderer/mock/demo-store';
 import { createMockMediaService } from '../../src/renderer/mock/service';
@@ -91,6 +92,9 @@ beforeAll(() => {
 
 beforeEach(() => {
   resetDemoState();
+  // UI store 是模块级状态：用例之间必须复位，否则上一次留下的模态弹层
+  // 会把后面的界面整片 aria-hidden 掉（表现为"找不到可访问元素"）。
+  useUiStore.setState({ setupOpen: false, sidebarMode: 'expanded', source: 'all' });
   // 多数用例关注业务界面而非引导：把演示引导标记为已完成，避免弹层遮挡可访问性树。
   updateDemoState(() => ({
     settings: {
@@ -152,6 +156,24 @@ describe('公共框架', () => {
 
     // 面板关闭即视为已执行激活动作；导航目标由详情路由承载。
     await waitFor(() => expect(screen.queryByRole('textbox', { name: '快捷搜索' })).toBeNull());
+  });
+
+  it('快捷搜索按 Esc 关闭并把焦点还给打开前的元素', async () => {
+    renderPage(<HomePage />);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^打开.+详情$/ }).length).toBeGreaterThan(0));
+
+    // 先聚焦一个可聚焦元素，作为"打开面板前的位置"。
+    const anchor = screen.getByRole('link', { name: '我的收藏' });
+    anchor.focus();
+    expect(document.activeElement).toBe(anchor);
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    const box = await screen.findByRole('textbox', { name: '快捷搜索' });
+    expect(document.activeElement).toBe(box);
+
+    fireEvent.keyDown(box, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: '快捷搜索' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(anchor));
   });
 
   it('挂载/卸载公共框架不会泄漏 window 键盘监听', () => {

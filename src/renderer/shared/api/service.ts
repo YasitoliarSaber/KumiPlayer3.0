@@ -193,7 +193,8 @@ export interface SettingsSnapshot {
     readonly setupDeferred: boolean;
   };
   readonly appearance: {
-    readonly theme: 'fluent' | 'cinema' | 'mica';
+    /** fluent / mica 为浅色系，cinema 为深色系；system 表示跟随系统。 */
+    readonly theme: 'fluent' | 'cinema' | 'mica' | 'system';
     readonly motion: 'standard' | 'expressive' | 'reduced';
     readonly posterSize: number;
     readonly cardImageMode: 'poster' | 'fanart';
