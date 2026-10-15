@@ -26,8 +26,12 @@ export function installMockProfile(app: App, projectRoot: string): string {
   return profileDir;
 }
 
-/** 演示素材根目录（由 scripts/desktop/prepare-mock-assets.cjs 生成）。 */
+/**
+ * 演示素材根目录（由 scripts/desktop/prepare-mock-assets.cjs 生成）。
+ * 目录名与 URL 前缀一致（`__mock/`），浏览器与 Electron 共用同一份素材，
+ * 无需为宿主改动 Renderer 代码。
+ */
 export function mockAssetRoot(projectRoot: string): string | null {
-  const root = path.join(projectRoot, '.build', 'desktop', 'mock-assets');
+  const root = path.join(projectRoot, '.build', 'mock-assets', '__mock');
   return fs.existsSync(root) ? root : null;
 }

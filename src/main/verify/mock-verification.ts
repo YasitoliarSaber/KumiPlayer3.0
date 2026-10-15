@@ -21,6 +21,8 @@ export interface MockVerificationReport {
   readonly screenshots: readonly string[];
   /** 各页面实际挂载的作品卡数量，用于证明虚拟化挂载有界。 */
   readonly mountedCards: Readonly<Record<string, number>>;
+  /** 各路由渲染出的标题，用于确认截图与页面一致。 */
+  readonly routeTitles: Readonly<Record<string, string>>;
   /** 运行期观测到的非受控网络请求（应为空）。 */
   readonly unexpectedRequests: readonly string[];
   /** 桥接模式与业务网关存在性探针结果。 */
@@ -62,6 +64,7 @@ export async function runMockVerification(
   const failures: string[] = [];
   const screenshots: string[] = [];
   const mountedCards: Record<string, number> = {};
+  const routeTitles: Record<string, string> = {};
   const unexpectedRequests: string[] = [];
 
   // 只允许随包资源与（开发模式的）本地 dev server；其余请求一律记录为异常。
@@ -105,14 +108,24 @@ export async function runMockVerification(
       missingMarkers.push(route.name);
     }
     await waitForImages(options.window, 6000);
-    await delay(settleMs);
+    // 等待 DOM 稳定（连续两次读取一致），避免在过渡帧上截图。
+    await waitForStableDom(options.window, settleMs);
     mountedCards[route.name] = Number(
       await options.window.webContents.executeJavaScript(
         `document.querySelectorAll('[data-route] button[aria-label^="打开"]').length`,
         true,
       ),
     );
+    routeTitles[route.name] = String(
+      await options.window.webContents.executeJavaScript(
+        `(document.querySelector('[data-route] h1') || document.querySelector('h1') || {}).textContent || ''`,
+        true,
+      ),
+    ).trim();
     const file = path.join(options.outputDir, `${route.name}.png`);
+    // 离屏窗口的首帧可能仍是上一路由：丢弃一帧后重新抓取。
+    await options.window.webContents.capturePage();
+    await delay(300);
     const image = await options.window.webContents.capturePage();
     fs.writeFileSync(file, image.toPNG());
     screenshots.push(file);
@@ -163,6 +176,7 @@ export async function runMockVerification(
     ok: failures.length === 0,
     screenshots,
     mountedCards,
+    routeTitles,
     unexpectedRequests,
     bridgeMode,
     businessGatewayCall,
@@ -206,6 +220,21 @@ async function waitFor(
 async function waitForImages(window: BrowserWindow, timeoutMs: number): Promise<void> {
   const expression = `Array.from(document.images).every((image) => image.complete)`;
   await waitFor(window, expression, timeoutMs);
+}
+
+/** 连续两次 DOM 文本一致即视为稳定。 */
+async function waitForStableDom(window: BrowserWindow, settleMs: number): Promise<void> {
+  const expression = `document.body.innerText.length + ':' + document.body.innerText.slice(0, 120)`;
+  let previous = '';
+  const deadline = Date.now() + Math.max(2400, settleMs * 3);
+  while (Date.now() < deadline) {
+    const current = String(await window.webContents.executeJavaScript(expression, true));
+    if (current === previous) {
+      return;
+    }
+    previous = current;
+    await delay(300);
+  }
 }
 
 function delay(ms: number): Promise<void> {

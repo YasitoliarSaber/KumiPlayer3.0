@@ -5,7 +5,6 @@
  * 排序条件放在 URL 上，返回时由路由自然恢复；滚动位置按视图与筛选单独记录。
  */
 
-import { Button, Menu } from '@mantine/core';
 import { ChevronDown } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -18,6 +17,14 @@ import { useMainScroll } from '../../shell/AppShell';
 import { useUiStore } from '../../app/ui-store';
 import { pushDemoPreference } from '../../mock/preferences';
 import { matchView } from '../../shell/AppShell';
+import { Button } from '@/shared/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/shared/ui/dropdown-menu';
 import styles from './PosterWallPage.module.css';
 
 const SORT_OPTIONS: ReadonlyArray<{ id: SortId; label: string }> = [
@@ -127,30 +134,26 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
           <span className={styles.count}>共 {sorted.length} 部</span>
         </div>
         <div className={styles.toolbar} role="toolbar" aria-label="媒体库视图工具">
-          <Menu shadow="md" position="bottom-end" withinPortal>
-            <Menu.Target>
-              <Button
-                variant="default"
-                size="xs"
-                rightSection={<ChevronDown size={14} aria-hidden="true" />}
-                aria-label="排序方式"
-              >
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" aria-label="排序方式">
                 {SORT_OPTIONS.find((option) => option.id === sort)?.label ?? '排序'}
+                <ChevronDown className="size-3.5 opacity-60" aria-hidden="true" />
               </Button>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Label>排序方式</Menu.Label>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>排序方式</DropdownMenuLabel>
               {SORT_OPTIONS.map((option) => (
-                <Menu.Item
+                <DropdownMenuCheckboxItem
                   key={option.id}
-                  onClick={() => setSort(option.id)}
-                  rightSection={sort === option.id ? '✓' : undefined}
+                  checked={sort === option.id}
+                  onCheckedChange={() => setSort(option.id)}
                 >
                   {option.label}
-                </Menu.Item>
+                </DropdownMenuCheckboxItem>
               ))}
-            </Menu.Dropdown>
-          </Menu>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -164,7 +167,7 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
               : '可以切换来源筛选，或前往媒体管理导入新的来源。'
           }
           action={
-            <Button variant="default" onClick={() => navigate('/manage')}>
+            <Button variant="outline" onClick={() => navigate('/manage')}>
               前往媒体管理
             </Button>
           }

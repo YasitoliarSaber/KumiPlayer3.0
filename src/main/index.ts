@@ -179,9 +179,14 @@ async function bootstrapMock(projectRoot: string): Promise<void> {
     preloadPath: path.join(__dirname, '..', 'preload', 'index.cjs'),
     devServerUrl: process.env.ELECTRON_RENDERER_URL,
     autoShow: true,
+    // 演示模式与正式模式一致：无边框窗口 + 自绘标题栏，
+    // 否则会同时出现系统标题栏与自绘标题栏。
+    frameless: true,
     offscreenVerify: process.env.KUMIPLAYER_DESKTOP_VERIFY === '1',
   });
   windows.push(window);
+  // 自绘标题栏依赖窗口控制；两个模式都注册，且只对受信窗口生效。
+  registerWindowControls(() => windows.map((item) => item.webContents));
 
   process.stdout.write(
     `[mock] 演示模式已启动：未启动 Python 后端、未注册业务网关；profile=${profileDir}\n`,

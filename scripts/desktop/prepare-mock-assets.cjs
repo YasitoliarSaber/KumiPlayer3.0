@@ -3,8 +3,13 @@
  * 演示模式素材准备。
  *
  * 从本地素材导出目录（`.context/artwork-export/<日期>/`）挑选若干部作品，
- * 把海报、背景、透明标志与剧集缩略图复制到被忽略的 `.build/desktop/mock-assets/`，
- * 并生成 Renderer 可静态引用的清单 `src/renderer/mock/asset-manifest.ts`。
+ * 把海报、背景、透明标志与剧集缩略图复制到被忽略的
+ * `.build/mock-assets/__mock/`，并生成 Renderer 可静态引用的清单
+ * `src/renderer/mock/asset-manifest.ts`。
+ *
+ * 目录结构刻意与 URL 前缀一致（`__mock/`），因此浏览器端可以直接把
+ * `.build/mock-assets` 当作静态资源根提供 `/__mock/...`，
+ * Electron 端也只是把同一个目录挂到受控协议的同一前缀下，无需改动代码。
  *
  * 约束：
  * - 只复制选定素材，不复制整个导出目录；
@@ -65,9 +70,17 @@ function main() {
     fail('素材清单为空或格式不正确');
   }
 
-  const outputRoot = path.join(projectRoot, '.build', 'desktop', 'mock-assets');
-  fs.rmSync(outputRoot, { recursive: true, force: true });
-  fs.mkdirSync(outputRoot, { recursive: true });
+  const outputRoot = path.join(projectRoot, '.build', 'mock-assets');
+  const assetRoot = path.join(outputRoot, '__mock');
+  // 只清理这两个被忽略的构建目录；写前确认它们确实位于 .build 之下。
+  const buildRoot = path.join(projectRoot, '.build');
+  for (const target of [outputRoot, assetRoot]) {
+    if (!path.resolve(target).startsWith(path.resolve(buildRoot) + path.sep)) {
+      fail(`拒绝操作 .build 之外的路径：${target}`);
+    }
+  }
+  fs.rmSync(assetRoot, { recursive: true, force: true });
+  fs.mkdirSync(assetRoot, { recursive: true });
 
   const works = [];
   const missing = [];
@@ -94,7 +107,7 @@ function main() {
         }
         const extension = path.extname(source).toLowerCase();
         const fileName = `${role}${role === 'episode_thumb' ? `_${assets.filter((item) => item.role === role).length + 1}` : ''}${extension}`;
-        const targetDir = path.join(outputRoot, selection.slug);
+        const targetDir = path.join(assetRoot, selection.slug);
         fs.mkdirSync(targetDir, { recursive: true });
         const target = path.join(targetDir, fileName);
         fs.copyFileSync(source, target);
@@ -129,7 +142,7 @@ function main() {
   const fileCount = works.reduce((total, work) => total + work.assets.length, 0);
   console.log(
     `[mock-assets] 已准备 ${works.length} 部作品 / ${fileCount} 个素材文件 → ` +
-      `${path.relative(projectRoot, outputRoot).replace(/\\/g, '/')}`,
+      `${path.relative(projectRoot, assetRoot).replace(/\\/g, '/')}`,
   );
   console.log('[mock-assets] 已更新 src/renderer/mock/asset-manifest.ts');
 }
@@ -179,8 +192,11 @@ export interface MockBaseWork {
   readonly assets: readonly MockAssetFile[];
 }
 
-/** 演示素材在受控应用协议中的挂载前缀。 */
-export const MOCK_ASSET_BASE = 'kumiplayer-app://app/__mock/';
+/**
+ * 演示素材的 URL 前缀（宿主无关的根相对路径）。
+ * 浏览器由静态资源根提供 __mock/，Electron 由受控协议挂到同一前缀。
+ */
+export const MOCK_ASSET_PREFIX = '/__mock/';
 
 export const MOCK_BASE_WORKS: readonly MockBaseWork[] = [
 ${body}

@@ -1,5 +1,6 @@
 import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 
 const sharedDir = path.resolve(import.meta.dirname, 'src/shared');
@@ -50,8 +51,13 @@ export default defineConfig({
   renderer: {
     root: path.resolve(import.meta.dirname, 'src/renderer'),
     base: '/',
-    plugins: [react()],
-    resolve: { alias: { '@shared': sharedDir } },
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        '@shared': sharedDir,
+        '@': path.resolve(import.meta.dirname, 'src/renderer'),
+      },
+    },
     build: {
       outDir: path.join(outDir, 'renderer'),
       emptyOutDir: true,

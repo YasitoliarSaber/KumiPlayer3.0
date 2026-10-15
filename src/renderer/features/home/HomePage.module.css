@@ -24,7 +24,6 @@
   overflow: hidden;
   border-radius: var(--radius-card);
   background: var(--surface-soft);
-  box-shadow: var(--shadow-card);
 }
 
 .featureBackdrop {
@@ -67,16 +66,16 @@
 }
 
 .featureTitle {
-  font-size: 34px;
+  font-size: var(--text-display);
   font-weight: 700;
-  line-height: 1.2;
+  line-height: var(--line-tight);
 }
 
 .featurePlot {
   display: -webkit-box;
   overflow: hidden;
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--text-base);
+  line-height: var(--line-body);
   color: rgba(255, 255, 255, 0.86);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -164,7 +163,6 @@
   overflow: hidden;
   border-radius: var(--radius-card);
   background: var(--surface-soft);
-  box-shadow: var(--shadow-card);
 }
 
 .tile:first-child {
@@ -209,12 +207,12 @@
 }
 
 .tileMeta strong {
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
 .tileMeta small {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: rgba(255, 255, 255, 0.82);
 }
 
@@ -258,6 +256,8 @@
   }
 
   .sideList {
-    grid-auto-rows: 150px;
+    /* 窄窗改为单列媒体带：重置基础层的两行网格，避免第三个磁贴溢出到主视觉。 */
+    grid-template-rows: none;
+    grid-auto-rows: 148px;
   }
 }

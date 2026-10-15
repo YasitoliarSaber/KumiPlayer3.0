@@ -111,8 +111,8 @@
 .heroPlot {
   max-width: 760px;
   margin: 0;
-  font-size: 14px;
-  line-height: 1.75;
+  font-size: var(--text-base);
+  line-height: var(--line-body);
   color: rgba(255, 255, 255, 0.88);
 }
 
@@ -170,10 +170,9 @@
   grid-template-columns: 168px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  padding: 8px;
-  border: var(--hairline);
-  border-radius: var(--radius-card);
-  background: var(--surface);
+  /* 列表行不重复使用卡片外观：层次由缩略图与文本层级表达。 */
+  padding: 10px 0;
+  border-bottom: var(--hairline);
 }
 
 .episodeThumb {
@@ -227,7 +226,7 @@
 }
 
 .episodeTitle {
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -235,7 +234,7 @@
 }
 
 .episodeMeta {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 

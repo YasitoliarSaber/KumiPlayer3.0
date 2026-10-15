@@ -21,7 +21,8 @@
   --accent-soft: rgba(96, 125, 168, 0.14);
   --border: rgba(78, 91, 108, 0.16);
   --border-strong: rgba(66, 79, 96, 0.25);
-  --shadow-card: 0 1px 2px rgba(31, 42, 55, 0.05);
+  /* 与当前应用的默认风格一致：卡片不靠投影区分层次，改用留白与描边。 */
+  --shadow-card: none;
   --shadow-flyout: 0 18px 48px rgba(31, 42, 55, 0.14), 0 2px 8px rgba(31, 42, 55, 0.06);
   --hero-shade: linear-gradient(180deg, rgba(6, 12, 22, 0.1) 0%, rgba(6, 12, 22, 0.72) 62%, rgba(6, 12, 22, 0.9) 100%);
   --hairline: 1px solid var(--border);
@@ -42,7 +43,7 @@
   --accent-soft: rgba(134, 168, 231, 0.18);
   --border: rgba(219, 228, 241, 0.13);
   --border-strong: rgba(219, 228, 241, 0.22);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --shadow-card: none;
   --shadow-flyout: 0 20px 54px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.24);
   --hero-shade: linear-gradient(180deg, rgba(4, 6, 10, 0.24) 0%, rgba(4, 6, 10, 0.8) 62%, rgba(4, 6, 10, 0.94) 100%);
 }
@@ -62,7 +63,7 @@
   --accent-soft: rgba(88, 101, 112, 0.14);
   --border: rgba(43, 48, 53, 0.1);
   --border-strong: rgba(43, 48, 53, 0.18);
-  --shadow-card: 0 1px 2px rgba(31, 39, 46, 0.06);
+  --shadow-card: none;
   --shadow-flyout: 0 18px 44px rgba(31, 39, 46, 0.12), 0 2px 8px rgba(31, 39, 46, 0.06);
   --hero-shade: linear-gradient(180deg, rgba(10, 12, 16, 0.14) 0%, rgba(10, 12, 16, 0.7) 62%, rgba(10, 12, 16, 0.88) 100%);
 }
@@ -76,6 +77,17 @@
   --sidebar-width-collapsed: 56px;
   --page-gutter: 18px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* 字阶：与当前应用一致的基准（17px / 1.6），
+     只保留 5 档，避免每处各写一个字号。 */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 17px;
+  --text-title: 22px;
+  --text-display: 34px;
+  --line-body: 1.7;
+  --line-tight: 1.35;
 
   --font-sans: 'Microsoft YaHei UI', 'Segoe UI Variable Text', 'Segoe UI', -apple-system,
     BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;

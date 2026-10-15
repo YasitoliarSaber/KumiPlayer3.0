@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildMockCatalog, buildMockDetail, MOCK_WORK_TARGET } from '../../src/renderer/mock/catalog';
-import { MOCK_ASSET_BASE } from '../../src/renderer/mock/asset-manifest';
+import { MOCK_ASSET_PREFIX } from '../../src/renderer/mock/asset-manifest';
 
 describe('演示目录', () => {
   const catalog = buildMockCatalog();
@@ -21,7 +21,7 @@ describe('演示目录', () => {
       expect(work.id.startsWith('w')).toBe(true);
       expect(work.id).toMatch(/^w\d{2}-v\d{2}$/);
       if (work.artwork.poster) {
-        expect(work.artwork.poster.url.startsWith(MOCK_ASSET_BASE)).toBe(true);
+        expect(work.artwork.poster.url.startsWith(MOCK_ASSET_PREFIX)).toBe(true);
       }
       expect(JSON.stringify(work)).not.toMatch(/[A-Za-z]:\\\\|[A-Za-z]:\\/);
     }

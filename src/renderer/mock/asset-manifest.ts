@@ -21,8 +21,11 @@ export interface MockBaseWork {
   readonly assets: readonly MockAssetFile[];
 }
 
-/** 演示素材在受控应用协议中的挂载前缀。 */
-export const MOCK_ASSET_BASE = 'kumiplayer-app://app/__mock/';
+/**
+ * 演示素材的 URL 前缀（宿主无关的根相对路径）。
+ * 浏览器由静态资源根提供 __mock/，Electron 由受控协议挂到同一前缀。
+ */
+export const MOCK_ASSET_PREFIX = '/__mock/';
 
 export const MOCK_BASE_WORKS: readonly MockBaseWork[] = [
   {

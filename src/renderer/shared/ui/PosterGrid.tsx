@@ -1,21 +1,19 @@
 /**
- * 虚拟化海报墙。
+ * 虚拟化海报墙（影视专用自有组件）。
  *
- * 沿用当前应用的单主滚动区、按行虚拟化、可见区外有界 overscan；
- * 卡片数量只与可见行数和列数有关，不随作品总数线性增长。
+ * 沿用单主滚动区、按行虚拟化、可见区外有界 overscan：
+ * 挂载卡片数只与可见行数和列数有关，不随作品总数线性增长。
  */
 
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
-import type { WorkSummary } from '../api/service';
-import { PosterCard } from './PosterCard';
-import styles from './PosterGrid.module.css';
+import type { WorkSummary } from '@/shared/api/service';
+import { PosterCard } from '@/shared/ui/PosterCard';
 
 export interface PosterGridProps {
   readonly works: readonly WorkSummary[];
   readonly onOpen: (workId: string) => void;
-  /** 期望列数（对应现有应用的海报墙密度设置）。 */
   readonly desiredColumns?: number;
   readonly scrollRef: RefObject<HTMLElement | null>;
   readonly emptyLabel?: string;
@@ -64,27 +62,26 @@ export function PosterGrid({
     overscan: OVERSCAN,
   });
 
-  // 行高随容器宽度变化时必须重新测量，否则会出现空白或跳动。
   useLayoutEffect(() => {
     virtualizer.measure();
   }, [rowHeight, columns, virtualizer]);
 
   if (works.length === 0) {
-    return <p className={styles.empty}>{emptyLabel}</p>;
+    return <p className="my-12 text-center text-[13px] text-muted-foreground">{emptyLabel}</p>;
   }
 
   const rows = virtualizer.getVirtualItems();
 
   return (
-    <div ref={containerRef} className={styles.wrap} data-virtual-rows={rows.length}>
-      <div className={styles.viewport} style={{ height: virtualizer.getTotalSize() }}>
+    <div ref={containerRef} className="relative w-full" data-virtual-rows={rows.length}>
+      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {rows.map((row) => {
           const start = row.index * columns;
           const rowWorks = works.slice(start, start + columns);
           return (
             <div
               key={row.key}
-              className={styles.row}
+              className="absolute inset-x-0 top-0 grid gap-[18px] pb-[18px]"
               style={{
                 transform: `translateY(${row.start}px)`,
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
@@ -101,7 +98,7 @@ export function PosterGrid({
   );
 }
 
-/** 列数由容器宽度决定，并受现有"海报墙密度"设置限制。 */
+/** 列数由容器宽度决定，并受海报墙密度设置限制。 */
 export function resolveColumns(width: number, desired: number): number {
   const byWidth = width > 0 ? Math.floor((width + GAP) / (MIN_CARD_WIDTH + GAP)) : 2;
   return Math.max(2, Math.min(desired, Math.max(byWidth, 2)));

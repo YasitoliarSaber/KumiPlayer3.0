@@ -12,7 +12,7 @@
 
 .title {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--text-title);
   font-weight: 600;
 }
 
@@ -92,7 +92,6 @@
   padding: 16px 18px;
   border: var(--hairline);
   border-radius: var(--radius-card);
-  background: var(--surface);
 }
 
 .panelTitle {

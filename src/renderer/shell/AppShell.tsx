@@ -1,12 +1,11 @@
 /**
- * 公共框架：标题栏、侧栏与主滚动区。
+ * 公共应用框架：顶栏、侧栏与主滚动区。
  *
- * 复刻当前应用的信息密度与操作位置：侧栏承载媒体库入口与计数，
- * 标题栏承载返回/前进、来源筛选、全局搜索、任务入口与窗口控制，
- * 主内容区是唯一的滚动容器。
+ * 使用 shadcn/ui 源码组件与 Tailwind 组织交互与外观；布局细节留在 CSS Module。
+ * 宿主能力（窗口控件、拖拽区）由 platform 适配层决定：浏览器里不渲染，
+ * 避免出现点了没反应的假窗口按钮。
  */
 
-import { Badge, Menu, TextInput, Tooltip } from '@mantine/core';
 import {
   ArrowLeft,
   ArrowRight,
@@ -18,6 +17,7 @@ import {
   Home,
   ListFilter,
   Loader2,
+  Menu as MenuIcon,
   MonitorPlay,
   PanelLeft,
   PanelLeftClose,
@@ -29,31 +29,32 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-router';
 
-import { useLibrary } from '../shared/api/service-context';
-import { SOURCE_LABELS, useUiStore, type SourceFilter } from '../app/ui-store';
-import { useNavHistoryState, useRecordLocation } from '../app/nav-history';
-import { remainingLabel } from '../shared/ui/PosterCard';
-import type { LibraryView, WorkSummary } from '../shared/api/service';
+import { SOURCE_LABELS, useUiStore, type SourceFilter } from '@/app/ui-store';
+import { useNavHistoryState, useRecordLocation } from '@/app/nav-history';
+import { detectHost } from '@/app/platform';
+import { useLibrary } from '@/shared/api/service-context';
+import type { LibraryView, WorkSummary } from '@/shared/api/service';
+import { Badge } from '@/shared/ui/badge';
+import { Button } from '@/shared/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/shared/ui/dropdown-menu';
+import { Input } from '@/shared/ui/input';
+import { Separator } from '@/shared/ui/separator';
+import { Dialog, DialogContent, DialogTitle } from '@/shared/ui/dialog';
+import { MainScrollContext } from './main-scroll';
 import styles from './AppShell.module.css';
 
-const MainScrollContext = createContext<{ readonly current: HTMLElement | null }>({ current: null });
+export { useMainScroll } from './main-scroll';
 
-export function useMainScroll(): { readonly current: HTMLElement | null } {
-  return useContext(MainScrollContext);
-}
-
-interface SidebarItem {
+interface NavItem {
   readonly key: string;
   readonly label: string;
   readonly to: string;
@@ -61,13 +62,13 @@ interface SidebarItem {
   readonly view?: LibraryView;
 }
 
-const PRIMARY_ITEMS: readonly SidebarItem[] = [
+const PRIMARY: readonly NavItem[] = [
   { key: 'home', label: '首页', to: '/', icon: Home },
   { key: 'favorites', label: '我的收藏', to: '/favorites', icon: Heart },
   { key: 'recent', label: '最近观看', to: '/recent', icon: Clock3 },
 ];
 
-const LIBRARY_ITEMS: readonly SidebarItem[] = [
+const LIBRARY: readonly NavItem[] = [
   { key: 'seasonal', label: '新番', to: '/library/seasonal', icon: CalendarSync, view: 'seasonal' },
   { key: 'anime_series', label: '番剧', to: '/library/anime_series', icon: Tv, view: 'anime_series' },
   { key: 'anime_movie', label: '动画电影', to: '/library/anime_movie', icon: Clapperboard, view: 'anime_movie' },
@@ -75,38 +76,49 @@ const LIBRARY_ITEMS: readonly SidebarItem[] = [
   { key: 'live_movie', label: '电影', to: '/library/live_movie', icon: Film, view: 'live_movie' },
 ];
 
+const BOTTOM: readonly NavItem[] = [
+  { key: 'manage', label: '媒体管理', to: '/manage', icon: SlidersHorizontal },
+  { key: 'settings', label: '设置', to: '/settings', icon: Settings },
+];
+
 export function AppShell({ children }: { readonly children: ReactNode }) {
   const location = useLocation();
   useRecordLocation(location.key, useNavigationType());
   const [main, setMain] = useState<HTMLElement | null>(null);
+  // 窄窗没有常驻侧栏，用抽屉承载同一套导航。
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const sidebarMode = useUiStore((state) => state.sidebarMode);
-  const mainRef = useCallback((node: HTMLElement | null) => {
-    setMain(node);
-  }, []);
+  const mainRef = useCallback((node: HTMLElement | null) => setMain(node), []);
 
   return (
     <div className={styles.shell} data-sidebar={sidebarMode}>
-      <TitleBar />
+      <TitleBar onOpenDrawer={() => setDrawerOpen(true)} />
       <Sidebar />
-      <main className={styles.main} ref={mainRef}>
+      <main className={styles.main} ref={mainRef} data-testid="main-scroll">
         <div className={styles.content}>
           <MainScrollContext.Provider value={{ current: main }}>{children}</MainScrollContext.Provider>
         </div>
       </main>
+      <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <DialogContent className={styles.drawer} showClose={false} aria-describedby={undefined}>
+          <DialogTitle className="sr-only">导航</DialogTitle>
+          <NavList expanded onNavigate={() => setDrawerOpen(false)} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function TitleBar() {
+function TitleBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const host = detectHost();
   const { back, forward } = useNavHistoryState();
-  const { source, setSource, toggleSidebarVisibility, sidebarMode } = useUiStore();
+  const { source, setSource, sidebarMode, toggleSidebarVisibility } = useUiStore();
   const library = useLibrary();
   const [search, setSearch] = useState(() => searchValue(location.search));
   const [composing, setComposing] = useState(false);
   const lastNonSearch = useRef('/');
-  const controls = typeof window === 'undefined' ? undefined : window.kumiplayer?.windowControls;
 
   useEffect(() => {
     if (!location.pathname.startsWith('/search')) {
@@ -122,8 +134,9 @@ function TitleBar() {
         navigate(lastNonSearch.current, { replace: true });
         return;
       }
-      const alreadySearching = location.pathname.startsWith('/search');
-      navigate(`/search?q=${encodeURIComponent(trimmed)}`, { replace: alreadySearching });
+      navigate(`/search?q=${encodeURIComponent(trimmed)}`, {
+        replace: location.pathname.startsWith('/search'),
+      });
     },
     [location.pathname, navigate],
   );
@@ -132,158 +145,172 @@ function TitleBar() {
   const sourceLabel = SOURCE_LABELS.find((item) => item.value === source)?.label ?? '全部来源';
 
   return (
-    <header className={styles.titlebar}>
-      <div className={styles.titlebarLeading}>
-        <Tooltip label={sidebarMode === 'hidden' ? '显示导航栏' : '完全隐藏导航栏'}>
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={toggleSidebarVisibility}
-            aria-label={sidebarMode === 'hidden' ? '显示导航栏' : '完全隐藏导航栏'}
-          >
-            <PanelLeft aria-hidden="true" />
-          </button>
-        </Tooltip>
-        <button
-          type="button"
-          className={styles.iconButton}
-          disabled={!back}
-          onClick={() => navigate(-1)}
+    <header className={styles.titlebar} data-drag={host.canDragWindow ? 'true' : undefined}>
+      <div className={styles.titlebarGroup} data-no-drag="true">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="lg:hidden"
+          aria-label="打开导航"
+          title="打开导航"
+          onClick={onOpenDrawer}
+        >
+          <MenuIcon />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="hidden lg:inline-flex"
+          aria-label={sidebarMode === 'hidden' ? '显示导航栏' : '完全隐藏导航栏'}
+          title={sidebarMode === 'hidden' ? '显示导航栏' : '完全隐藏导航栏'}
+          onClick={toggleSidebarVisibility}
+        >
+          <PanelLeft />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           aria-label="返回上个界面"
           title="返回上个界面"
+          disabled={!back}
+          onClick={() => navigate(-1)}
         >
-          <ArrowLeft aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className={styles.iconButton}
-          disabled={!forward}
-          onClick={() => navigate(1)}
+          <ArrowLeft />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           aria-label="前进到下个界面"
           title="前进到下个界面"
+          disabled={!forward}
+          onClick={() => navigate(1)}
         >
-          <ArrowRight aria-hidden="true" />
-        </button>
+          <ArrowRight />
+        </Button>
+
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true">
             K
           </span>
           <span className={styles.brandName}>KumiPlayer</span>
-          <Badge size="xs" variant="light" className={styles.demoBadge}>
+          <Badge variant="soft" className="hidden sm:inline-flex">
             演示模式
           </Badge>
         </div>
       </div>
 
-      <div className={styles.titlebarTools}>
-        <Menu shadow="md" position="bottom-end" withinPortal>
-          <Menu.Target>
-            <button
-              type="button"
-              className={styles.iconButton}
+      <div className={styles.titlebarTools} data-no-drag="true">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant={source === 'all' ? 'ghost' : 'subtle'}
+              size="icon-sm"
               aria-label={`来源筛选，当前${sourceLabel}`}
               title={`来源：${sourceLabel}`}
-              data-filtered={source !== 'all' ? 'true' : undefined}
             >
-              <ListFilter aria-hidden="true" />
-            </button>
-          </Menu.Target>
-          <Menu.Dropdown>
-            <Menu.Label>来源筛选</Menu.Label>
+              <ListFilter />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuLabel>来源筛选</DropdownMenuLabel>
             {SOURCE_LABELS.map((option) => (
-              <Menu.Item
+              <DropdownMenuCheckboxItem
                 key={option.value}
-                onClick={() => setSource(option.value as SourceFilter)}
-                rightSection={source === option.value ? '✓' : undefined}
+                checked={source === option.value}
+                onCheckedChange={() => setSource(option.value as SourceFilter)}
               >
                 {option.label}
-              </Menu.Item>
+              </DropdownMenuCheckboxItem>
             ))}
-          </Menu.Dropdown>
-        </Menu>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <div className={styles.taskButtonWrap}>
-          <Tooltip label="任务中心">
-            <button
-              type="button"
-              className={styles.iconButton}
-              onClick={() => navigate('/tasks')}
-              aria-label="任务中心"
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="relative"
+          aria-label={`任务中心${activeTasks > 0 ? `，${activeTasks} 个进行中` : ''}`}
+          title="任务中心"
+          onClick={() => navigate('/tasks')}
+        >
+          {activeTasks > 0 ? <Loader2 className="animate-spin" /> : <SlidersHorizontal />}
+          {activeTasks > 0 ? (
+            <span className="absolute top-1 right-1 size-2 rounded-full bg-primary" aria-hidden="true" />
+          ) : null}
+        </Button>
+
+        <div className="relative w-[min(300px,32vw)]">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            className="h-8 pl-8"
+            value={search}
+            placeholder="搜索作品"
+            aria-label="搜索作品"
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setSearch(value);
+              if (!composing) {
+                applySearch(value);
+              }
+            }}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={(event) => {
+              setComposing(false);
+              applySearch(event.currentTarget.value);
+            }}
+          />
+          {search.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="absolute top-0.5 right-0.5 size-7"
+              aria-label="清空搜索"
+              onClick={() => {
+                setSearch('');
+                applySearch('');
+              }}
             >
-              {activeTasks > 0 ? (
-                <Loader2 className={styles.spin} aria-hidden="true" />
-              ) : (
-                <SlidersHorizontal aria-hidden="true" />
-              )}
-            </button>
-          </Tooltip>
-          {activeTasks > 0 ? <span className={styles.taskDot} aria-hidden="true" /> : null}
+              <X />
+            </Button>
+          ) : null}
         </div>
-
-        <TextInput
-          className={styles.search}
-          value={search}
-          onChange={(event) => {
-            const value = event.currentTarget.value;
-            setSearch(value);
-            if (!composing) {
-              applySearch(value);
-            }
-          }}
-          onCompositionStart={() => setComposing(true)}
-          onCompositionEnd={(event) => {
-            setComposing(false);
-            applySearch(event.currentTarget.value);
-          }}
-          leftSection={<Search size={16} aria-hidden="true" />}
-          rightSection={
-            search.length > 0 ? (
-              <button
-                type="button"
-                className={styles.searchClear}
-                aria-label="清空搜索"
-                onClick={() => {
-                  setSearch('');
-                  applySearch('');
-                }}
-              >
-                <X size={15} aria-hidden="true" />
-              </button>
-            ) : null
-          }
-          placeholder="搜索作品"
-          aria-label="搜索作品"
-          radius="md"
-        />
       </div>
 
-      <div className={styles.windowControls}>
-        <button type="button" className={styles.windowButton} aria-label="最小化" onClick={() => void controls?.minimize()}>
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M2 6.5h8" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className={styles.windowButton}
-          aria-label="最大化或还原"
-          onClick={() => void controls?.toggleMaximize()}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <rect x="2.5" y="2.5" width="7" height="7" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className={`${styles.windowButton} ${styles.windowClose}`}
-          aria-label="关闭窗口"
-          onClick={() => void controls?.close()}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="m2.5 2.5 7 7m0-7-7 7" />
-          </svg>
-        </button>
-      </div>
+      {host.hasWindowControls ? (
+        <div className={styles.windowControls} data-no-drag="true">
+          <button
+            type="button"
+            className={styles.windowButton}
+            aria-label="最小化"
+            onClick={() => void window.kumiplayer?.windowControls?.minimize()}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M2 6.5h8" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={styles.windowButton}
+            aria-label="最大化或还原"
+            onClick={() => void window.kumiplayer?.windowControls?.toggleMaximize()}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <rect x="2.5" y="2.5" width="7" height="7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={`${styles.windowButton} ${styles.windowClose}`}
+            aria-label="关闭窗口"
+            onClick={() => void window.kumiplayer?.windowControls?.close()}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <path d="m2.5 2.5 7 7m0-7-7 7" />
+            </svg>
+          </button>
+        </div>
+      ) : null}
     </header>
   );
 }
@@ -295,14 +322,7 @@ function searchValue(search: string): string {
 function Sidebar() {
   const sidebarMode = useUiStore((state) => state.sidebarMode);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
-  const library = useLibrary();
   const expanded = sidebarMode === 'expanded';
-  const works = library.data?.works ?? [];
-  const countFor = (view: LibraryView): number => works.filter((work) => matchView(work, view)).length;
-  const nextUp = works
-    .filter((work) => work.progress && !work.progress.completed)
-    .sort((left, right) => (right.progress?.updatedAt ?? '').localeCompare(left.progress?.updatedAt ?? ''))
-    .slice(0, 1);
 
   return (
     <aside
@@ -310,53 +330,61 @@ function Sidebar() {
       data-expanded={expanded ? 'true' : 'false'}
       aria-hidden={sidebarMode === 'hidden'}
     >
-      <button
-        type="button"
-        className={styles.sidebarHeader}
-        onClick={toggleSidebar}
-        aria-expanded={expanded}
-        aria-label={expanded ? '收起为图标栏' : '展开完整侧栏'}
-      >
-        <span className={styles.sidebarHeaderLabel}>媒体库</span>
-        <span className={styles.sidebarHeaderIcon} aria-hidden="true">
-          {expanded ? <PanelLeftClose /> : <PanelLeftOpen />}
-        </span>
-      </button>
+      <div className={styles.sidebarHeader}>
+        <button
+          type="button"
+          className={styles.sidebarHeaderButton}
+          onClick={toggleSidebar}
+          aria-expanded={expanded}
+          aria-label={expanded ? '收起为图标栏' : '展开完整侧栏'}
+        >
+          <span className={styles.sidebarHeaderLabel}>媒体库</span>
+          <span className={styles.sidebarHeaderIcon} aria-hidden="true">
+            {expanded ? <PanelLeftClose /> : <PanelLeftOpen />}
+          </span>
+        </button>
+      </div>
+      <NavList expanded={expanded} />
+    </aside>
+  );
+}
 
+/** 侧栏与窄窗抽屉共用同一份导航，避免两套入口漂移。 */
+function NavList({
+  expanded,
+  onNavigate,
+}: {
+  readonly expanded: boolean;
+  readonly onNavigate?: () => void;
+}) {
+  const library = useLibrary();
+  const works = library.data?.works ?? [];
+  const countFor = (view: LibraryView) => works.filter((work) => matchView(work, view)).length;
+
+  return (
+    <>
       <nav className={styles.nav} aria-label="媒体库导航">
-        {PRIMARY_ITEMS.map((item) => (
-          <SidebarLink key={item.key} item={item} expanded={expanded} />
+        {PRIMARY.map((item) => (
+          <SidebarLink key={item.key} item={item} expanded={expanded} onNavigate={onNavigate} />
         ))}
-        <span className={styles.divider} aria-hidden="true" />
-        {LIBRARY_ITEMS.map((item) => (
+        <Separator className="my-2" />
+        {LIBRARY.map((item) => (
           <SidebarLink
             key={item.key}
             item={item}
             expanded={expanded}
             count={item.view ? countFor(item.view) : undefined}
+            onNavigate={onNavigate}
           />
         ))}
       </nav>
-
       <div className={styles.sidebarBottom}>
-        <span className={styles.divider} aria-hidden="true" />
-        <SidebarLink
-          item={{ key: 'manage', label: '媒体管理', to: '/manage', icon: SlidersHorizontal }}
-          expanded={expanded}
-        />
-        <SidebarLink
-          item={{ key: 'settings', label: '设置', to: '/settings', icon: Settings }}
-          expanded={expanded}
-        />
-        {expanded && nextUp[0] ? (
-          <div className={styles.continueCard} title={nextUp[0].title}>
-            <span className={styles.continueLabel}>继续观看</span>
-            <span className={styles.continueTitle}>{nextUp[0].title}</span>
-            <span className={styles.continueMeta}>{remainingLabel(nextUp[0])}</span>
-          </div>
-        ) : null}
+        <Separator className="mb-2" />
+        {BOTTOM.map((item) => (
+          <SidebarLink key={item.key} item={item} expanded={expanded} onNavigate={onNavigate} />
+        ))}
       </div>
-    </aside>
+    </>
   );
 }
 
@@ -364,17 +392,20 @@ function SidebarLink({
   item,
   expanded,
   count,
+  onNavigate,
 }: {
-  readonly item: SidebarItem;
+  readonly item: NavItem;
   readonly expanded: boolean;
   readonly count?: number;
+  readonly onNavigate?: () => void;
 }) {
   const Icon = item.icon;
   return (
     <NavLink
       to={item.to}
       end={item.to === '/'}
-      className={({ isActive }) => (isActive ? `${styles.navItem} ${styles.navItemActive}` : styles.navItem)}
+      onClick={onNavigate}
+      className={({ isActive }) => (isActive ? styles.navItemActive : styles.navItem)}
       title={expanded ? undefined : item.label}
     >
       <span className={styles.navIcon} aria-hidden="true">
@@ -403,3 +434,4 @@ export function matchView(work: WorkSummary, view: LibraryView): boolean {
       return false;
   }
 }
+

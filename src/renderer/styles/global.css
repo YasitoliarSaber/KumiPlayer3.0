@@ -18,9 +18,20 @@ body,
 }
 
 body {
-  font-family: var(--kumi-font-sans, system-ui, sans-serif);
+  font-family: var(--font-sans);
+  /* 与当前应用一致的基础排版：17px / 1.6，正文可读性优先。 */
+  font-size: var(--text-lg);
+  line-height: 1.6;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
   color: var(--kumi-text);
   background: var(--kumi-surface);
+}
+
+/* 键盘焦点下限：可见、不被裁切，且不依赖颜色单独表达。 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* 基础元素 reset：与当前应用的 foundation 层一致，只清除浏览器默认外观；

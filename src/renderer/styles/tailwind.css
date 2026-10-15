@@ -1,0 +1,143 @@
+/*
+ * 新 Renderer 的 Tailwind 入口与语义主题。
+ *
+ * 只被 src/renderer 引用，旧前端与旧 index.css 不受影响。
+ * 颜色值直接映射当前应用的三套主题（fluent / cinema / mica），
+ * 不引入新品牌色；shadcn 组件消费这里的语义变量，CSS Modules 消费同一批值。
+ */
+
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* 深色主题由 data-theme 驱动，而不是系统的 .dark 类。 */
+@custom-variant dark (&:where([data-theme='cinema'], [data-theme='cinema'] *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+  --font-sans: var(--font-sans-stack);
+}
+
+:root,
+:root[data-theme='fluent'] {
+  --background: #eef3f9;
+  --foreground: #1f2328;
+  --card: #ffffff;
+  --card-foreground: #1f2328;
+  --popover: #ffffff;
+  --popover-foreground: #1f2328;
+  --primary: #607da8;
+  --primary-foreground: #ffffff;
+  --secondary: #e6ecf4;
+  --secondary-foreground: #24303c;
+  --muted: #e8edf3;
+  --muted-foreground: #68717d;
+  --accent: #e2e9f3;
+  --accent-foreground: #1f2328;
+  --destructive: #c4362b;
+  --destructive-foreground: #ffffff;
+  --border: rgba(78, 91, 108, 0.16);
+  --input: rgba(78, 91, 108, 0.22);
+  --ring: #607da8;
+
+  /* 与 CSS Modules 共用的语义别名。 */
+  --app-bg: var(--background);
+  --surface: var(--card);
+  --surface-soft: #f3f6fa;
+  --surface-hover: #eef2f8;
+  --text: var(--foreground);
+  --text-muted: var(--muted-foreground);
+  --accent-strong: #496b9c;
+  --accent-soft: rgba(96, 125, 168, 0.14);
+  --accent-contrast: #ffffff;
+  --border-strong: rgba(66, 79, 96, 0.25);
+  --hairline: 1px solid var(--border);
+  --radius: 8px;
+  --radius-card: 8px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
+  --shadow-card: none;
+  --shadow-flyout: 0 18px 48px rgba(31, 42, 55, 0.14), 0 2px 8px rgba(31, 42, 55, 0.06);
+  --hero-shade: linear-gradient(180deg, rgba(6, 12, 22, 0.1) 0%, rgba(6, 12, 22, 0.72) 62%, rgba(6, 12, 22, 0.9) 100%);
+  --titlebar-height: 48px;
+  --sidebar-width-expanded: 248px;
+  --sidebar-width-collapsed: 56px;
+  --page-gutter: 18px;
+  --font-sans-stack: 'Microsoft YaHei UI', 'Segoe UI Variable Text', 'Segoe UI', -apple-system,
+    BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 17px;
+  --text-title: 22px;
+  --text-display: 34px;
+  color-scheme: light;
+}
+
+:root[data-theme='mica'] {
+  --background: #ffffff;
+  --card: #ffffff;
+  --surface-soft: #f5f6f8;
+  --surface-hover: #f0f2f5;
+  --primary: #586570;
+  --accent-strong: #3d4852;
+  --accent-soft: rgba(88, 101, 112, 0.14);
+  --muted: #f1f2f4;
+  --border: rgba(43, 48, 53, 0.1);
+  --input: rgba(43, 48, 53, 0.16);
+  --border-strong: rgba(43, 48, 53, 0.18);
+}
+
+:root[data-theme='cinema'] {
+  --background: #0d1016;
+  --foreground: #f2f4f7;
+  --card: #181d26;
+  --card-foreground: #f2f4f7;
+  --popover: #1b212b;
+  --popover-foreground: #f2f4f7;
+  --primary: #86a8e7;
+  --primary-foreground: #0d1016;
+  --secondary: #232b37;
+  --secondary-foreground: #e7ecf3;
+  --muted: #212834;
+  --muted-foreground: #a7b0bd;
+  --accent: #263040;
+  --accent-foreground: #f2f4f7;
+  --destructive: #e0645a;
+  --destructive-foreground: #14181f;
+  --border: rgba(219, 228, 241, 0.13);
+  --input: rgba(219, 228, 241, 0.2);
+  --ring: #86a8e7;
+
+  --surface-soft: #1f2632;
+  --surface-hover: #232b38;
+  --accent-strong: #a9c2f2;
+  --accent-soft: rgba(134, 168, 231, 0.18);
+  --accent-contrast: #0d1016;
+  --border-strong: rgba(219, 228, 241, 0.22);
+  --shadow-card: none;
+  --shadow-flyout: 0 20px 54px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.24);
+  --hero-shade: linear-gradient(180deg, rgba(4, 6, 10, 0.24) 0%, rgba(4, 6, 10, 0.8) 62%, rgba(4, 6, 10, 0.94) 100%);
+  color-scheme: dark;
+}

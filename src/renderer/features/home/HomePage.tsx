@@ -3,7 +3,6 @@
  * 结构、信息密度与分区顺序复刻当前应用首页，不做新的视觉设计。
  */
 
-import { Button } from '@mantine/core';
 import { ArrowRight, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -11,6 +10,7 @@ import { useNavigate } from 'react-router';
 import type { WorkSummary } from '../../shared/api/service';
 import { useLibrary } from '../../shared/api/service-context';
 import { Artwork } from '../../shared/ui/Artwork';
+import { Button } from '@/shared/ui/button';
 import { PosterCard } from '../../shared/ui/PosterCard';
 import { EmptySurface, ErrorSurface, LoadingSurface, SectionHeading } from '../../shared/ui/Surface';
 import { matchView } from '../../shell/AppShell';
@@ -84,7 +84,7 @@ export function HomePage() {
         title="还没有作品"
         detail="演示场景当前为空。可以前往媒体管理添加媒体，或在开发入口切回默认场景。"
         action={
-          <Button variant="default" onClick={() => navigate('/manage')}>
+          <Button variant="outline" onClick={() => navigate('/manage')}>
             添加媒体
           </Button>
         }

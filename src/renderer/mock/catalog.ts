@@ -8,7 +8,7 @@
  * 全部取值由固定种子推导，重复运行结果一致；这里不做任何识别、合卡或编号推导。
  */
 
-import { MOCK_ASSET_BASE, MOCK_BASE_WORKS, type MockBaseWork } from './asset-manifest';
+import { MOCK_ASSET_PREFIX, MOCK_BASE_WORKS, type MockBaseWork } from './asset-manifest';
 import type {
   ArtworkRef,
   ArtworkSet,
@@ -138,7 +138,8 @@ function seededRandom(seed: number): () => number {
 }
 
 function assetUrl(file: string): string {
-  return `${MOCK_ASSET_BASE}${file}`;
+  // 根相对路径：浏览器由静态资源根提供，Electron 由受控协议挂到同一前缀。
+  return `${MOCK_ASSET_PREFIX}${file}`;
 }
 
 function artworkSet(base: MockBaseWork): ArtworkSet {
