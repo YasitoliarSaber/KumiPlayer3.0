@@ -1,5 +1,7 @@
 # 播放流程（重构前置）
 
+> 适用范围：现有系统的事实快照；不作为 3.0 的页面、组件、视觉或架构约束。源码及用户最新指令优先。
+
 > 记录日期：2026-10-14
 > 事实来源：`backend/app/api/playback_v4.py`、`backend/app/media_v4/playback/`、`backend/app/playback/`、`src/api/playback.ts`、`mpv/README.md`、`docs/PROJECT.md`
 > 定位：回答「从用户点击到 MPV 播放、再到进度与历史落库的完整链路」。用于新前端设计播放类交互时确认边界。不评估播放器实现是否需要重构。

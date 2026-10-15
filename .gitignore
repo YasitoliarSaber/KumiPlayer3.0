@@ -81,7 +81,7 @@ data/_test_local/
 # 文档中未被引用的品牌概念图（磁盘保留，不纳入版本控制）
 /docs/assets/kumiplayer-brand-refined-concept.png
 
-# AI 旧内容归档：禁止删除文件，改为移动到此处
+# 历史本地归档（是否保留按用途与当前用户指令判断）
 /旧内容/
 
 # ===== 借鉴分析类文档 2026-08-10 =====
@@ -170,13 +170,8 @@ docs/samples/*
 /mpv/sources/evidence/components/uosc/material-icons-round/font/
 /mpv/sources/evidence/components/uosc_danmaku/local-modifications.patch
 
-# ===== 用户指定：KumiPlayer 3.0 前端重构知识库（2026-10-14）=====
-# 目的：把「重构前置分析」（docs/current）与「设计输入层」（docs/design-input）纳入版本控制，
-# 便于换电脑、切换模型或交给外部设计方时直接读取，不必再靠本地目录传递。
-# 注意：否定规则必须留在本文件末尾，否则会被上面的 `docs/`、`*.md` 规则重新忽略。
+# ===== 现有系统事实与清理记录（2026-10-15）=====
+# 保留源码事实快照；旧设计输入与未实施重构方案已删除。
 !docs/current/
 !docs/current/**
-!docs/design-input/
-!docs/design-input/**
-# 文档状态判定与版本控制边界报告（被上述两层的文档引用，一并放行以免出现悬空引用）。
 !docs/DOCUMENT_CLEANUP_REPORT.md

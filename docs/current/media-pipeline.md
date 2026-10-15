@@ -1,5 +1,7 @@
 # V4 媒体导入与识别管线
 
+> 适用范围：现有系统的事实快照；不作为 3.0 的页面、组件、视觉或架构约束。源码及用户最新指令优先。
+
 > 记录日期：2026-10-14
 > 事实来源：backend/app/api/media_v4.py、backend/app/media_v4/sources/、parsing/、resolution/、revisions/service.py、jobs/、assets/、tracking/、projection/、backend/app/core/local_roots.py、backend/tests/（261 个测试文件）
 > 定位：说明从"用户登记来源"到"媒体库出现可播放卡片"的真实执行链、各步负责文件、失败与阻塞语义、可恢复点。不回答播放器行为（见 playback-flow.md），不逐表解释结构（见 data-model.md）。

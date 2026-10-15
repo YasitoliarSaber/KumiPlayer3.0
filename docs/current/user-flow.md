@@ -1,5 +1,7 @@
 # 用户流程（重构前置输入）
 
+> 适用范围：现有系统的事实快照；不作为 3.0 的页面、组件、视觉或架构约束。源码及用户最新指令优先。
+
 > 记录日期：2026-10-14
 > 事实来源：`src/App.tsx`、`src/pages/`、`src/api/`、`backend/app/api/`、`backend/app/media_v4/`、`docs/PROJECT.md`、`docs/USER_GUIDE.md`
 > 定位：回答「用户会按什么顺序做事、每步等待什么、失败后回到哪里」。用于新前端的流程完整性与状态覆盖面设计，不描述具体界面形态。
@@ -177,4 +179,4 @@
 2. **必须区分「未发布」与「空」**：首次未发布、已发布空库、后台更新中是三种状态。
 3. **必须区分「来源」「内容来源」「导入方式」**：本地 / 115 / 百度 / 夸克是内容来源，本地目录 / 目录树 TXT / OpenList / 混合是导入方式，两者不得混为一谈（`src/pages/MediaManagementPage.tsx:1354-1355` 注释）。
 4. **错误必须可读且可操作**：不把 SQLite / traceback / HTTP 状态码直接呈现给用户。
-5. **不得引导用户做后端不支持的事**：见 `docs/current/page-requirements.md` 第 7 节。
+5. **不得引导用户做后端不支持的事**：以 `docs/current/api-reference.md` 和当前 OpenAPI 的实际能力为准。

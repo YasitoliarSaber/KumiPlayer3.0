@@ -4,6 +4,14 @@ KumiPlayer 是一款面向 Windows 的本地 / 网盘媒体库与 MPV 播放应�
 
 > 项目仍在开发阶段。`release\KumiPlayer.exe` 是依赖当前源码目录的开发版；交给普通用户使用时应构建完整安装包。安装包的公开分发还受内置播放器许可证材料门控，详见下文“已知限制”。
 
+## KumiPlayer 3.0 前端方向（2026-10-15）
+
+- 上一次未完成前端重构及其 Design System、配色、原型、页面布局、P0—P7 路线图、工程蓝图和验收矩阵已废止，不作为施工或验收依据。
+- 后续方向为 Electron + React + TypeScript；新前端不继承 Fluent UI、旧主题与旧视觉规范。优先采用成熟组件库，保持模块化、风格统一和组件可替换，避免巨型页面与全局 CSS。
+- 目前仅完成仓库整理，不迁移 Electron、不选最终组件库、不设计页面、配色或导航。具体 UI/UX 交由后续专门设计 Skill。
+- 当前 Tauri/Fluent 前端及其测试仍保护现有可运行应用；独立新前端不受其布局与主题断言约束。现有设置分类描述仅是当前实现事实，不锁定新前端信息架构。
+- Python、SQLite V4、识别、刮削、来源与 MPV 能力及数据保护规则继续有效；源码与真实业务契约优先。事实入口为 README、docs/PROJECT.md 和 docs/current/README.md。
+
 ## 核心能力
 
 | 场景 | KumiPlayer 可以做什么 |
@@ -215,16 +223,18 @@ cargo clippy --locked --all-targets -- -D warnings
 - [`README.md`](README.md)：入口文档（本文件）
 - [`mpv/README.md`](mpv/README.md)：内置 MPV 的分层、注入契约、源码↔安装包映射与许可证材料现状（MPV 相关唯一事实来源）
 - [`scripts/README.md`](scripts/README.md)：构建、验证、只读审计与修复脚本说明
-- [`src/components/ui/README.md`](src/components/ui/README.md)：UI 组合模板与共享组件入口
+- [`src/components/ui/README.md`](src/components/ui/README.md)：当前前端共享组件说明（不作为 3.0 设计规范）
 - [`项目经验教训/项目建设与性能优化规范.md`](项目经验教训/项目建设与性能优化规范.md)：开发与性能优化的实施规范
 - [`docs/review/`](docs/review/)：对外审阅用的根因与合规分析文档
+- [`docs/current/README.md`](docs/current/README.md)：现有系统事实快照，不约束新前端设计
+- [`docs/DOCUMENT_CLEANUP_REPORT.md`](docs/DOCUMENT_CLEANUP_REPORT.md)：本轮清理清单、保留边界与验证结果
 
 本地开发资料（`.gitignore` 排除，只在本地工作副本中可读，GitHub 读者无法访问）：
 
 - `docs/PROJECT.md`：现行总体架构；`docs/PROJECT_MEMORY.md`：长期项目记忆（含较多历史条目，冲突时以源码为准）
 - `docs/USER_GUIDE.md`：用户功能指南（部分内容尚未同步到 V4）；`docs/PROJECT_STRUCTURE.md`：目录结构
 - `docs/DISTRIBUTION.md`：Windows 分发说明与安装版兼容性矩阵；`docs/THIRD_PARTY_NOTICES.md`：第三方声明
-- `docs/01_项目基准/`：视觉规范、UI 组件策略、配置与数据目录、目录树解析等基线文档
+- `docs/01_项目基准/`：配置与数据目录、目录树解析、命名与运行架构等业务基线
 - `docs/项目现状与改进清单.md`：已过时内容、已确认缺陷、待核实项与优化建议的维护清单
 - `docs/90_历史归档/`：明确标注的历史归档，不参与施工
 

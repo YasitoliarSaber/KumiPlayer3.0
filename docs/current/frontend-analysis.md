@@ -1,5 +1,7 @@
 # 前端现状分析（重构前置）
 
+> 适用范围：现有系统的事实快照；不作为 3.0 的页面、组件、视觉或架构约束。源码及用户最新指令优先。
+
 > 记录日期：2026-10-14
 > 事实来源：`package.json`、`vite.config.ts`、`tsconfig.json`、`src/`、`src-tauri/Cargo.toml`、`tests/`
 > 定位：记录当前前端（React 19 + Fluent UI + Zustand）的技术栈、真实结构、调用方式与可确认的技术债，作为重构起点。不设计新界面、不推荐组件库、不评价视觉方案；页面能力范围见 `docs/current/feature-list.md`，后端事实见 `docs/current/system-overview.md`。
@@ -219,7 +221,7 @@
 | 样式分散在组件/页面目录 | `src/components/detail/work-customization-tags.css`、`src/components/library/PosterCard.css`、`src/components/library/VirtualizedPosterGrid.css`、`src/components/media/V4RecognitionSummary.css`、`src/components/settings/PosterWallSettingsPanel.css`、`src/pages/RecentPage.css` | 6 个共 532 行 |
 | `src/pages/` 下存在页面级 CSS | `src/pages/RecentPage.css`（162 行） | 1 个 |
 | 主题映射只实现两套配色 | `src/design/fluentTheme.ts:45`：`cinema` 走 `cinemaTheme`，`fluent` 与 `mica` 均走 `webLightTheme` | 3 个 UI 主题 → 2 套 Fluent 主题 |
-| 组件组合约定只有说明文档 | `src/components/ui/README.md` 描述模板与参考（WinUIonWeb / Fluent），无对应 lint 或测试约束 | — |
+| 组件组合约定只有说明文档 | `src/components/ui/README.md` 仅说明当前共享组件；不再作为新前端模板，无对应 lint 或测试约束 | — |
 
 ## 10. 未确认项
 

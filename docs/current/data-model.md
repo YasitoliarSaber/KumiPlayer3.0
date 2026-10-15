@@ -1,5 +1,7 @@
 # V4 数据模型（SQLite 权威结构）
 
+> 适用范围：现有系统的事实快照；不作为 3.0 的页面、组件、视觉或架构约束。源码及用户最新指令优先。
+
 > 记录日期：2026-10-14
 > 事实来源：backend/app/media_v4/persistence/schema_v4.py、backend/app/media_v4/persistence/database.py、backend/app/media_v4/projection/、backend/app/api/library_v4.py、backend/app/api/playback_v4.py、backend/tests/test_v4_schema_contract.py、backend/tests/test_v4_immutable_facts.py
 > 定位：说明 KumiPlayer 后端 V4 SQLite 的实际表结构、迁移机制、不可变性边界与前端读模型合同字段。不回答进度条/播放器行为（见 playback-flow.md），不回答导入识别流程（见 media-pipeline.md）。
