@@ -306,6 +306,19 @@ describe('作品详情', () => {
     fireEvent.click(favorite);
     await waitFor(() => expect(getDemoState().favorite[target.id]).toBe(true));
   });
+
+  it('季切换 Tabs 支持键盘方向键（Radix 原语，无需自写实现）', async () => {
+    const target = catalog.works.find((work) => work.seasonCount > 1)!;
+    renderPage(<WorkDetailPage />, '/work/:workId', `/work/${target.id}`);
+
+    const tabs = await screen.findAllByRole('tab');
+    expect(tabs.length).toBeGreaterThan(1);
+    tabs[0]!.focus();
+    expect(document.activeElement).toBe(tabs[0]);
+
+    fireEvent.keyDown(tabs[0]!, { key: 'ArrowRight' });
+    await waitFor(() => expect(tabs[1]!.getAttribute('aria-selected')).toBe('true'));
+  });
 });
 
 describe('媒体管理与任务', () => {

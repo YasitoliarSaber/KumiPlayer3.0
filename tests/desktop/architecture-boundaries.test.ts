@@ -133,6 +133,21 @@ describe('新旧前端模块边界', () => {
     expect(unexpected).toEqual([]);
   });
 
+  it('Renderer 不发起真实网络请求（无 fetch / XHR / WebSocket / EventSource）', () => {
+    const offenders: string[] = [];
+    for (const file of listSourceFiles('src/renderer')) {
+      const source = fs.readFileSync(file, 'utf8');
+      const relative = path.relative(projectRoot, file);
+      if (/\bfetch\s*\(/.test(source)) {
+        offenders.push(`${relative} -> fetch(`);
+      }
+      if (/XMLHttpRequest|new WebSocket|EventSource/.test(source)) {
+        offenders.push(`${relative} -> 原生网络 API`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('跨进程纯契约不依赖 React、Electron 或 Node', () => {
     expect(violations('src/shared', [...NODE_OR_ELECTRON, ...REACT_OR_DOM])).toEqual([]);
   });
