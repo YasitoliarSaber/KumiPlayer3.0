@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "body": {
+    "changes": [],
+    "next_sequence": 0,
+    "has_more": false,
+    "reset_required": false,
+    "generation_id": "9a50e397-77d5-4d39-b489-0fdfdd098ef0",
+    "updating": false,
+    "background_active": false
+  }
+}

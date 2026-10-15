@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "body": {
+    "change_sequence": 0,
+    "works": [],
+    "collections": [],
+    "summary": {
+      "work_count": 0,
+      "episode_count": 0
+    },
+    "generated_at": "9a50e397-77d5-4d39-b489-0fdfdd098ef0",
+    "generation_id": "9a50e397-77d5-4d39-b489-0fdfdd098ef0",
+    "updating": false,
+    "background_active": false,
+    "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "body": {
+    "status": "ok",
+    "app": "KumiPlayer",
+    "runtime_kind": "source",
+    "runtime_id": "fixture-runtime",
+    "instance_id": "fixture-instance"
+  }
+}

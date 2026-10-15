@@ -1,0 +1,18 @@
+[package]
+name = "kumiplayer-backend-host"
+version = "2.0.0"
+description = "持有 Windows Job Object 的后端进程宿主（P01 候选）"
+authors = ["KumiPlayer"]
+edition = "2021"
+
+[[bin]]
+name = "kumiplayer-backend-host"
+path = "src/main.rs"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }

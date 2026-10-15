@@ -18,5 +18,6 @@
     "ignoreDeprecations": "6.0"
   },
   "include": ["src"],
+  "exclude": ["src/main", "src/preload", "src/renderer", "src/shared"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

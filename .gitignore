@@ -13,6 +13,8 @@ node_modules/
 dist/
 
 src-tauri/target/
+# P01 进程宿主的 cargo 产物：只提交源码，不提交构建目录。
+src/desktop-helper/target/
 .build/
 packaging/runtime/
 

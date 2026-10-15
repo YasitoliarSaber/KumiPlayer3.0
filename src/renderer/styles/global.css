@@ -1,0 +1,45 @@
+/*
+ * 全局样式只允许：reset、字体加载策略、语义 Token 声明与应用级可访问性。
+ * 这里不定义配色、圆角和动效数值；语义名映射到组件库自身变量，
+ * 具体视觉由后续设计 Skill 决定。
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--kumi-font-sans, system-ui, sans-serif);
+  color: var(--kumi-text);
+  background: var(--kumi-surface);
+}
+
+:root {
+  /* 语义类别（B 7.2）的最小映射：只别名到组件库变量，不引入自有视觉数值。 */
+  --kumi-surface: var(--mantine-color-body);
+  --kumi-surface-raised: var(--mantine-color-default);
+  --kumi-text: var(--mantine-color-text);
+  --kumi-text-muted: var(--mantine-color-dimmed);
+  --kumi-border: var(--mantine-color-default-border);
+  --kumi-accent: var(--mantine-primary-color-filled);
+  --kumi-focus: var(--mantine-primary-color-filled);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
