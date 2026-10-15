@@ -1,0 +1,25 @@
+.wrap {
+  position: relative;
+  width: 100%;
+}
+
+.viewport {
+  position: relative;
+  width: 100%;
+}
+
+.row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 18px;
+  padding-bottom: 18px;
+}
+
+.empty {
+  margin: 48px 0;
+  text-align: center;
+  color: var(--text-muted);
+}

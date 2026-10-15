@@ -11,10 +11,13 @@ import {
   BRIDGE_CHANNEL,
   CANCEL_CHANNEL,
   DESKTOP_STATUS_CHANNEL,
+  WINDOW_CHANNEL,
   type BridgeRequest,
   type BridgeResponse,
   type DesktopBridge,
+  type DesktopMode,
   type DesktopStatus,
+  type WindowAction,
 } from '@shared/contracts/desktop';
 
 const MAX_DEPTH = 4;
@@ -52,7 +55,14 @@ function sanitize(value: unknown, depth = 0): unknown {
   throw new Error('桥接参数包含不可序列化的值');
 }
 
+/**
+ * 运行模式由桌面壳的环境显式决定：演示模式必须被明确选择，
+ * 不会因为真实后端失败而自动切换成假数据。
+ */
+const MODE: DesktopMode = process.env.KUMIPLAYER_DESKTOP_MOCK === '1' ? 'mock' : 'live';
+
 const bridge: DesktopBridge = {
+  mode: MODE,
   async invoke(request: BridgeRequest): Promise<BridgeResponse> {
     const payload = sanitize(request) as BridgeRequest;
     return (await ipcRenderer.invoke(BRIDGE_CHANNEL, payload)) as BridgeResponse;
@@ -68,6 +78,20 @@ const bridge: DesktopBridge = {
     return () => {
       ipcRenderer.off(DESKTOP_STATUS_CHANNEL, handler);
     };
+  },
+  windowControls: {
+    async minimize(): Promise<void> {
+      await ipcRenderer.invoke(WINDOW_CHANNEL, 'minimize' satisfies WindowAction);
+    },
+    async toggleMaximize(): Promise<boolean> {
+      return Boolean(await ipcRenderer.invoke(WINDOW_CHANNEL, 'toggleMaximize' satisfies WindowAction));
+    },
+    async close(): Promise<void> {
+      await ipcRenderer.invoke(WINDOW_CHANNEL, 'close' satisfies WindowAction);
+    },
+    async isMaximized(): Promise<boolean> {
+      return Boolean(await ipcRenderer.invoke(WINDOW_CHANNEL, 'isMaximized'));
+    },
   },
 };
 

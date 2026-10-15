@@ -1,0 +1,416 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+}
+
+.heroBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.heroShade {
+  position: absolute;
+  inset: 0;
+  background: var(--hero-shade);
+}
+
+.heroBack {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(12, 16, 22, 0.46);
+  color: #fff;
+  font-size: 13px;
+}
+
+.heroBack svg {
+  width: 16px;
+  height: 16px;
+}
+
+.heroBody {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 24px;
+  padding: 60px 28px 28px;
+}
+
+.heroPoster {
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-flyout);
+}
+
+.heroPoster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.heroCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  color: #fff;
+}
+
+.heroLogo {
+  max-width: 340px;
+  max-height: 86px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.heroOriginal {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.heroMeta,
+.heroTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.metaChip {
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 12px;
+}
+
+.heroPlot {
+  max-width: 760px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.resumeState {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.notice {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 12px;
+  color: #fff;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(280px, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.episodes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.episode {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px;
+  border: var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.episodeThumb {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+}
+
+.episodeImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.episodePlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  background: rgba(8, 12, 18, 0.42);
+  color: #fff;
+}
+
+.episodeThumb:hover .episodePlay,
+.episodeThumb:focus-visible .episodePlay {
+  opacity: 1;
+}
+
+.episodeProgress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.episodeCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.episodeCode {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.episodeTitle {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.episodeMeta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.blockTitle {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.castSection {
+  margin-top: 6px;
+}
+
+.castRow,
+.relatedRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.castCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px;
+  border: var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.castAvatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.castName {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.castRole {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.relatedCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.relatedMedia {
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+}
+
+.relatedImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.relatedTitle {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relatedMeta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.panel {
+  padding: 14px 16px;
+  border: var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.panelTitle {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.panelBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panelHint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.detailRow {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 13px;
+}
+
+.detailLabel {
+  color: var(--text-muted);
+}
+
+.detailValue {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stateRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.manualRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modalActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+@media (max-width: 1080px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .heroBody {
+    grid-template-columns: 140px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .episode {
+    grid-template-columns: 120px minmax(0, 1fr);
+  }
+
+  .heroBody {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 56px 18px 20px;
+  }
+
+  .heroPoster {
+    width: 140px;
+  }
+}

@@ -10,6 +10,7 @@ KumiPlayer 是一款面向 Windows 的本地 / 网盘媒体库与 MPV 播放应�
 - 后续方向为 Electron + React + TypeScript；优先采用成熟组件库，保持模块化、风格统一和组件可替换，避免巨型页面与全局 CSS。
 - **视觉依据**：当前正在运行的界面已被用户选定为视觉复刻参考。正式页面以用户确认的单页截图与 HTML 为视觉依据，用新架构实现；实现层仍不导入旧 Fluent 组件、旧主题变量与旧全局 CSS。
 - 本轮（2026-10-15）已完成最小基础切片：`src/main`、`src/preload`、`src/renderer`、`src/shared/contracts` 四个边界，`electron.vite.config.ts`（输出到 `.build/desktop`），以及 `src/desktop-helper` 的 Windows Job Object 进程宿主。业务页面尚未接入，导航与配色仍待设计确认。
+- **演示模式（2026-10-15）**：`npm run dev:desktop:mock` 打开与当前界面同构的完整前端壳子，数据全部来自本机确定性演示目录与 `.context/artwork-export` 的选定素材。该模式不启动 Python 后端、不注册业务网关、不访问 37821 或任何外部图片服务；真实后端启动路径（含 P01 进程保护验证）保持不变。
 - 桌面候选与组件库仍属"已验证候选、未正式锁定"：Electron 启动/就绪/退出回收、具名桥接、Mantine 控件与带 nonce 的严格 CSP 已取得隔离验证证据；Windows 打包、性能预算、正式切换与安装矩阵仍待后续关卡。
 - 当前 Tauri/Fluent 前端及其测试仍保护现有可运行应用；独立新前端不受其布局与主题断言约束。现有设置分类描述仅是当前实现事实，不锁定新前端信息架构。
 - Python、SQLite V4、识别、刮削、来源与 MPV 能力及数据保护规则继续有效；源码与真实业务契约优先。事实入口为 README、docs/PROJECT.md 和 docs/current/README.md。
@@ -204,6 +205,9 @@ npm run typecheck:desktop   # main / preload / renderer 三份隔离类型检查
 npm run test:desktop        # 新契约、网关、缓存与 Renderer 装配测试
 npm run build:desktop       # electron-vite 构建 + 进程宿主，输出 .build/desktop
 npm run verify:p01          # Windows 进程树回收隔离验证（不使用项目 data/）
+npm run mock:assets         # 从本地素材导出目录准备演示素材到 .build/desktop/mock-assets
+npm run dev:desktop:mock    # 演示模式（不启动 Python / 不连真实后端）
+npm run verify:desktop:mock # 演示模式逐页截图与网络/网关探针验证
 
 uv sync --project backend --locked --extra dev
 uv run --project backend python -m pytest backend/tests

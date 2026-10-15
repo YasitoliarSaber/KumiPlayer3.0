@@ -5,27 +5,39 @@
 
 import { MantineProvider } from '@mantine/core';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router';
 
+import { ServiceProvider } from '../shared/api/service-context';
+import { useDemoState } from '../mock/demo-store';
 import { useDesktopStatusSubscription } from '../shared/hooks/use-desktop-bridge';
 import { createAppQueryClient } from './queryClient';
 import { RecoveryBoundary } from './recovery-boundary';
 import { appRouter } from './router';
+import { applyThemeToDocument, colorSchemeFor, createAppTheme, kumiCssVariablesResolver } from './theme';
 
 export function AppRoot({ styleNonce }: { readonly styleNonce?: string }) {
   const [queryClient] = useState(createAppQueryClient);
   useDesktopStatusSubscription();
+  const themeName = useDemoState().settings.appearance.theme;
+
+  useEffect(() => {
+    applyThemeToDocument(themeName);
+  }, [themeName]);
 
   return (
     <MantineProvider
-      defaultColorScheme="auto"
+      theme={createAppTheme(themeName)}
+      forceColorScheme={colorSchemeFor(themeName)}
+      cssVariablesResolver={kumiCssVariablesResolver}
       {...(styleNonce ? { getStyleNonce: () => styleNonce } : {})}
     >
       <QueryClientProvider client={queryClient}>
-        <RecoveryBoundary>
-          <RouterProvider router={appRouter} />
-        </RecoveryBoundary>
+        <ServiceProvider>
+          <RecoveryBoundary>
+            <RouterProvider router={appRouter} />
+          </RecoveryBoundary>
+        </ServiceProvider>
       </QueryClientProvider>
     </MantineProvider>
   );

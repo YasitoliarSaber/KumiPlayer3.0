@@ -14,6 +14,8 @@ export interface MainWindowOptions {
   readonly devServerUrl?: string | undefined;
   /** 验证模式保持窗口不显示，避免干扰用户当前会话。 */
   readonly autoShow?: boolean;
+  /** 演示模式使用无边框窗口，标题栏由界面自行绘制（复刻当前应用）。 */
+  readonly frameless?: boolean;
   /**
    * 验证模式需要在离屏位置短暂显示窗口：Chromium 对完全隐藏的窗口
    * 不保证产出合成帧，capturePage 会失败。离屏显示不抢焦点。
@@ -29,6 +31,7 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     minWidth: 960,
     minHeight: 640,
     show: false,
+    frame: options.frameless ? false : true,
     autoHideMenuBar: true,
     backgroundColor: '#1b1b1f',
     // 隐藏窗口时仍允许渲染与截图，验证模式因此不需要弹出可见窗口。

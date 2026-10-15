@@ -1,0 +1,263 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
+}
+
+.showcase {
+  display: grid;
+  grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
+  gap: 14px;
+  height: clamp(320px, 42vh, 460px);
+}
+
+.feature {
+  position: relative;
+  min-width: 0;
+}
+
+.featureSurface {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+  box-shadow: var(--shadow-card);
+}
+
+.featureBackdrop {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.featureShade {
+  position: absolute;
+  inset: 0;
+  background: var(--hero-shade);
+}
+
+.featureCopy {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 640px;
+  padding: 26px 28px;
+  text-align: left;
+  color: #fff;
+}
+
+.featureChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.featureChip {
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 12px;
+}
+
+.featureTitle {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.featurePlot {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.86);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.featureNav {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: rgba(12, 16, 22, 0.42);
+  color: #fff;
+}
+
+.featureNav svg {
+  width: 20px;
+  height: 20px;
+}
+
+.featureNav:hover {
+  background: rgba(12, 16, 22, 0.66);
+}
+
+.featureNavLeft {
+  left: 12px;
+}
+
+.featureNavRight {
+  right: 12px;
+}
+
+.featureDots {
+  position: absolute;
+  right: 20px;
+  bottom: 18px;
+  display: flex;
+  gap: 6px;
+}
+
+.dot,
+.dotActive {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.dotActive {
+  width: 20px;
+  border-radius: var(--radius-pill);
+  background: #fff;
+}
+
+.autoPlay {
+  position: absolute;
+  right: 20px;
+  bottom: 44px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(12, 16, 22, 0.42);
+  color: #fff;
+}
+
+.autoPlay svg {
+  width: 15px;
+  height: 15px;
+}
+
+.sideList {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-width: 0;
+}
+
+.tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+  box-shadow: var(--shadow-card);
+}
+
+.tile:first-child {
+  grid-row: span 1;
+}
+
+.tileWide {
+  grid-row: span 1;
+}
+
+.sideList:has(.tile:nth-child(3)) {
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.tile:last-child:nth-child(2) {
+  grid-row: span 2;
+}
+
+.tileImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tileShade {
+  position: absolute;
+  inset: 0;
+  background: var(--hero-shade);
+}
+
+.tileMeta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  text-align: left;
+  color: #fff;
+}
+
+.tileMeta strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tileMeta small {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.sectionLink:hover {
+  color: var(--accent-strong);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 18px;
+}
+
+.continueRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+@media (max-width: 1080px) {
+  .showcase {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+
+  .feature {
+    height: 320px;
+  }
+
+  .sideList {
+    grid-auto-rows: 150px;
+  }
+}

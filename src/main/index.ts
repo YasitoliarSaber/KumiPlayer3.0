@@ -16,6 +16,8 @@ import { BackendGateway } from './backend/gateway';
 import { BackendManager } from './backend/manager';
 import { createIdentity, findProjectRoot } from './identity';
 import { broadcastStatus, registerBridgeIpc } from './ipc/handlers';
+import { registerWindowControls } from './ipc/window-controls';
+import { installMockProfile, isMockMode, mockAssetRoot } from './mock-mode';
 import { registerAppProtocol } from './protocols/app-protocol';
 import { registerArtworkProtocol } from './protocols/artwork';
 import { createMainWindow, installPermissionPolicy } from './windows/main-window';
@@ -60,6 +62,11 @@ async function bootstrap(): Promise<void> {
     return;
   }
 
+  if (isMockMode()) {
+    await bootstrapMock(projectRoot);
+    return;
+  }
+
   const identity = createIdentity({
     installRoot: projectRoot,
     kind: 'source',
@@ -94,9 +101,11 @@ async function bootstrap(): Promise<void> {
     preloadPath: path.join(__dirname, '..', 'preload', 'index.cjs'),
     devServerUrl: process.env.ELECTRON_RENDERER_URL,
     autoShow: true,
+    frameless: true,
     offscreenVerify: process.env.KUMIPLAYER_DESKTOP_VERIFY === '1',
   });
   windows.push(window);
+  registerWindowControls(() => windows.map((item) => item.webContents));
   window.on('closed', () => {
     const index = windows.indexOf(window);
     if (index >= 0) {
@@ -150,6 +159,56 @@ async function bootstrap(): Promise<void> {
     void manager.stop().finally(() => {
       app.quit();
     });
+  });
+}
+
+/**
+ * 演示模式启动：不创建 BackendManager、不启动 Python/helper、
+ * 不注册业务网关与图片网关，只加载随包的 Renderer 与本地演示素材。
+ */
+async function bootstrapMock(projectRoot: string): Promise<void> {
+  const profileDir = installMockProfile(app, projectRoot);
+  const assetRoot = mockAssetRoot(projectRoot);
+  const rendererRoot = path.join(__dirname, '..', 'renderer');
+  registerAppProtocol({
+    rendererRoot,
+    extraMounts: assetRoot ? [{ prefix: '/__mock/', root: assetRoot }] : [],
+  });
+
+  const window = createMainWindow({
+    preloadPath: path.join(__dirname, '..', 'preload', 'index.cjs'),
+    devServerUrl: process.env.ELECTRON_RENDERER_URL,
+    autoShow: true,
+    offscreenVerify: process.env.KUMIPLAYER_DESKTOP_VERIFY === '1',
+  });
+  windows.push(window);
+
+  process.stdout.write(
+    `[mock] 演示模式已启动：未启动 Python 后端、未注册业务网关；profile=${profileDir}\n`,
+  );
+  if (!assetRoot) {
+    process.stdout.write(
+      '[mock] 警告：未找到演示素材目录，界面将显示占位图。请先运行 npm run mock:assets\n',
+    );
+  }
+
+  if (process.env.KUMIPLAYER_DESKTOP_VERIFY === '1') {
+    const verifyDir = path.join(projectRoot, '.build', 'desktop', 'verify', 'mock');
+    const { runMockVerification } = await import('./verify/mock-verification');
+    const report = await runMockVerification({ window, outputDir: verifyDir });
+    process.stdout.write(`[mock-verify] ok=${report.ok}\n`);
+    for (const problem of report.failures) {
+      process.stdout.write(`[mock-verify] 失败：${problem}\n`);
+    }
+    process.stdout.write(
+      `[mock-verify] 截图 ${report.screenshots.length} 张 → ${verifyDir}\n`,
+    );
+    app.exit(report.ok ? 0 : 1);
+    return;
+  }
+
+  app.on('window-all-closed', () => {
+    app.quit();
   });
 }
 

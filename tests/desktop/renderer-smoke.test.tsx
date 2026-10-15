@@ -6,6 +6,7 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { DesktopBridge, DesktopStatus } from '@shared/contracts/desktop';
@@ -14,6 +15,7 @@ import { createAppQueryClient } from '../../src/renderer/app/queryClient';
 import { useDesktopStore } from '../../src/renderer/app/desktop-store';
 import { ControlsFixturePage } from '../../src/renderer/features/dev/ControlsFixturePage';
 import { SessionPage } from '../../src/renderer/features/session/SessionPage';
+import { ServiceProvider } from '../../src/renderer/shared/api/service-context';
 
 beforeAll(() => {
   if (typeof window.matchMedia !== 'function') {
@@ -46,7 +48,11 @@ const readyStatus: DesktopStatus = {
 function renderWithProviders(node: React.ReactNode) {
   return render(
     <MantineProvider>
-      <QueryClientProvider client={createAppQueryClient()}>{node}</QueryClientProvider>
+      <QueryClientProvider client={createAppQueryClient()}>
+        <ServiceProvider>
+          <MemoryRouter>{node}</MemoryRouter>
+        </ServiceProvider>
+      </QueryClientProvider>
     </MantineProvider>,
   );
 }

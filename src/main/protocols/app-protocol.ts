@@ -49,22 +49,46 @@ export function buildContentSecurityPolicy(nonce: string): string {
 
 export interface AppProtocolOptions {
   readonly rendererRoot: string;
+  /**
+   * 额外的受限挂载（例如演示素材目录）。
+   * 只按前缀映射到固定根目录，仍然拒绝路径越界，不提供任意文件访问。
+   */
+  readonly extraMounts?: readonly AppProtocolMount[];
   /** 允许注入替身资源，便于验证路径穿越与 MIME 行为。 */
   readonly readFile?: (file: string) => Promise<Buffer>;
+}
+
+export interface AppProtocolMount {
+  /** 形如 `/__mock/` 的路径前缀。 */
+  readonly prefix: string;
+  readonly root: string;
 }
 
 export function registerAppProtocol(options: AppProtocolOptions): void {
   const readFile = options.readFile ?? ((file: string) => fs.promises.readFile(file));
   const root = path.resolve(options.rendererRoot);
+  const mounts = (options.extraMounts ?? []).map((mount) => ({
+    prefix: mount.prefix.endsWith('/') ? mount.prefix : `${mount.prefix}/`,
+    root: path.resolve(mount.root),
+  }));
 
   protocol.handle(APP_PROTOCOL, async (request) => {
     const url = new URL(request.url);
     if (url.hostname !== 'app') {
       return new Response('未知资源来源', { status: 403 });
     }
-    const requested = decodeURIComponent(url.pathname).replace(/^\/+/, '');
-    const resolved = path.resolve(root, requested === '' ? 'index.html' : requested);
-    if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    const pathname = decodeURIComponent(url.pathname);
+    let base = root;
+    let requested = pathname.replace(/^\/+/, '');
+    for (const mount of mounts) {
+      if (pathname.startsWith(mount.prefix)) {
+        base = mount.root;
+        requested = pathname.slice(mount.prefix.length);
+        break;
+      }
+    }
+    const resolved = path.resolve(base, requested === '' ? 'index.html' : requested);
+    if (resolved !== base && !resolved.startsWith(base + path.sep)) {
       return new Response('路径越界', { status: 403 });
     }
     let body: Buffer;

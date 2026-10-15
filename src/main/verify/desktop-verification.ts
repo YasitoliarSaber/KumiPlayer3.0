@@ -63,6 +63,17 @@ export async function runDesktopVerification(
   const deadline = Date.now() + timeoutMs;
   let domText = '';
   let probeVisible = false;
+
+  // 真实链路自检页现在是开发入口 `/dev/session`（根路由是产品首页）。
+  try {
+    await options.window.webContents.executeJavaScript(
+      "location.hash = '#/dev/session'; true",
+      true,
+    );
+  } catch {
+    // 页面仍在加载时忽略：下面的循环会重新读取 DOM。
+  }
+
   while (Date.now() < deadline) {
     try {
       domText = String(
