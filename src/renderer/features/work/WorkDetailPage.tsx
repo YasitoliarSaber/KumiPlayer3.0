@@ -3,7 +3,6 @@
  * 收藏、模拟播放与更多菜单。复刻当前应用详情页的信息层级与操作位置。
  */
 
-import { Badge, Button, Menu, Modal, Tabs, TextInput, Tooltip } from '@mantine/core';
 import {
   ArrowLeft,
   Check,
@@ -23,6 +22,26 @@ import { demoQueryKeys, useMediaService, useWorkDetail } from '../../shared/api/
 import { Artwork } from '../../shared/ui/Artwork';
 import { ProgressBar, StatusChip } from '../../shared/ui/Surface';
 import { ErrorSurface, LoadingSurface } from '../../shared/ui/Surface';
+import { Badge } from '@/shared/ui/badge';
+import { Button } from '@/shared/ui/button';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/shared/ui/dropdown-menu';
+import { Input } from '@/shared/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/shared/ui/tabs';
 import styles from './WorkDetailPage.module.css';
 
 export function WorkDetailPage() {
@@ -134,12 +153,8 @@ export function WorkDetailPage() {
             </div>
             <p className={styles.heroPlot}>{work.plot}</p>
             <div className={styles.heroActions}>
-              <Button
-                leftSection={<CirclePlay size={16} />}
-                loading={busy}
-                onClick={() => resume && void play(resume)}
-                disabled={!resume}
-              >
+              <Button onClick={() => resume && void play(resume)} disabled={!resume || busy}>
+                <CirclePlay className="size-4" />
                 {work.progress && work.progress.position > 0 ? '继续观看' : '播放'}
               </Button>
               {work.progress && work.progress.position > 0 ? (
@@ -155,50 +170,50 @@ export function WorkDetailPage() {
                   </span>
                 </div>
               ) : null}
-              <Tooltip label={work.watch.favorite ? '取消收藏' : '加入收藏'}>
+              <span title={work.watch.favorite ? '取消收藏' : '加入收藏'} className="inline-flex">
                 <Button
-                  variant={work.watch.favorite ? 'light' : 'default'}
-                  leftSection={<Heart size={15} />}
+                  variant={work.watch.favorite ? 'subtle' : 'outline'}
                   onClick={() =>
                     void service.setFavorite(work.id, !work.watch.favorite).then(refreshLibrary)
                   }
                 >
+                  <Heart className="size-4" />
                   {work.watch.favorite ? '已收藏' : '收藏'}
                 </Button>
-              </Tooltip>
-              <Menu shadow="md" withinPortal>
-                <Menu.Target>
-                  <Button variant="default" leftSection={<MoreHorizontal size={16} />}>
+              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">
+                    <MoreHorizontal className="size-4" />
                     更多
                   </Button>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  <Menu.Item
-                    leftSection={<RefreshCw size={14} />}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
                     onClick={() => setNotice('已排队重新刮削资料（演示，不会访问在线服务）')}
                   >
+                    <RefreshCw className="size-3.5" />
                     重新刮削资料
-                  </Menu.Item>
-                  <Menu.Item
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     onClick={() => {
                       setPendingTitle(work.title);
                       setRenameOpen(true);
                     }}
                   >
                     编辑标题
-                  </Menu.Item>
-                  <Menu.Item
-                    leftSection={<FolderOpen size={14} />}
-                    onClick={() => setNotice(`已请求打开位置（演示）：${work.location}`)}
-                  >
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setNotice(`已请求打开位置（演示）：${work.location}`)}>
+                    <FolderOpen className="size-3.5" />
                     打开所在位置
-                  </Menu.Item>
-                  <Menu.Divider />
-                  <Menu.Item color="red" leftSection={<Trash2 size={14} />} onClick={() => setDeleteOpen(true)}>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
+                    <Trash2 className="size-3.5" />
                     从媒体库移除
-                  </Menu.Item>
-                </Menu.Dropdown>
-              </Menu>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
             {notice ? (
               <p className={styles.notice} role="status">
@@ -211,17 +226,20 @@ export function WorkDetailPage() {
 
       <div className={styles.body}>
         <section className={styles.main} aria-label="季集与版本">
-          <Tabs value={season?.id ?? ''} onChange={(value) => {
-            const index = work.seasons.findIndex((entry) => entry.id === value);
-            setSeasonIndex(index >= 0 ? index : 0);
-          }}>
-            <Tabs.List>
+          <Tabs
+            value={season?.id ?? ''}
+            onValueChange={(value) => {
+              const index = work.seasons.findIndex((entry) => entry.id === value);
+              setSeasonIndex(index >= 0 ? index : 0);
+            }}
+          >
+            <TabsList>
               {work.seasons.map((entry) => (
-                <Tabs.Tab key={entry.id} value={entry.id}>
+                <TabsTrigger key={entry.id} value={entry.id}>
                   {entry.label}
-                </Tabs.Tab>
+                </TabsTrigger>
               ))}
-            </Tabs.List>
+            </TabsList>
           </Tabs>
 
           <ul className={styles.episodes}>
@@ -262,21 +280,21 @@ export function WorkDetailPage() {
                     {episode.watched ? ' · 已看完' : ''}
                   </span>
                 </div>
-                <Menu shadow="md" withinPortal position="bottom-end">
-                  <Menu.Target>
-                    <Button variant="default" size="xs">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="xs">
                       选择版本
                     </Button>
-                  </Menu.Target>
-                  <Menu.Dropdown>
-                    <Menu.Label>{episode.code} 可用版本</Menu.Label>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[16rem]">
+                    <DropdownMenuLabel>{episode.code} 可用版本</DropdownMenuLabel>
                     {episode.assets.map((asset) => (
-                      <Menu.Item key={asset.id} onClick={() => void play(episode, asset.id)}>
+                      <DropdownMenuItem key={asset.id} onClick={() => void play(episode, asset.id)}>
                         {asset.label} · {asset.codec} · {asset.sizeLabel} · {asset.source}
-                      </Menu.Item>
+                      </DropdownMenuItem>
                     ))}
-                  </Menu.Dropdown>
-                </Menu>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </li>
             ))}
           </ul>
@@ -335,7 +353,7 @@ export function WorkDetailPage() {
                 <Button
                   key={option.value}
                   size="xs"
-                  variant={work.watch.status === option.value ? 'light' : 'default'}
+                  variant={work.watch.status === option.value ? 'subtle' : 'outline'}
                   onClick={() =>
                     void service.setWatchStatus(work.id, option.value).then(refreshLibrary)
                   }
@@ -355,8 +373,8 @@ export function WorkDetailPage() {
           <SidePanel title="手动刮削（演示）">
             <p className={styles.panelHint}>演示模式不访问在线资料，也不会写入任何真实绑定。</p>
             <div className={styles.manualRow}>
-              <TextInput aria-label="搜索标题" defaultValue={work.title} size="xs" disabled />
-              <Badge variant="light">演示</Badge>
+              <Input aria-label="搜索标题" defaultValue={work.title} className="h-8" disabled />
+              <Badge variant="soft">演示</Badge>
             </div>
             <Button size="xs" variant="default" disabled>
               搜索候选项
@@ -372,48 +390,57 @@ export function WorkDetailPage() {
         </aside>
       </div>
 
-      <Modal opened={renameOpen} onClose={() => setRenameOpen(false)} title="编辑标题（演示）">
-        <TextInput
-          label="展示标题"
-          value={pendingTitle}
-          onChange={(event) => setPendingTitle(event.currentTarget.value)}
-        />
-        <p className={styles.panelHint}>演示模式只修改本机演示偏好，不会改写媒体事实或在线资料。</p>
-        <div className={styles.modalActions}>
-          <Button
-            leftSection={<Check size={15} />}
-            onClick={() => {
-              setRenameOpen(false);
-              setNotice(`已保存演示标题：${pendingTitle}`);
-            }}
-          >
-            保存
-          </Button>
-          <Button variant="default" onClick={() => setRenameOpen(false)}>
-            取消
-          </Button>
-        </div>
-      </Modal>
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>编辑标题（演示）</DialogTitle>
+          </DialogHeader>
+          <label className="flex flex-col gap-1.5 text-[13px]">
+            展示标题
+            <Input value={pendingTitle} onChange={(event) => setPendingTitle(event.currentTarget.value)} />
+          </label>
+          <p className={styles.panelHint}>演示模式只修改本机演示偏好，不会改写媒体事实或在线资料。</p>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setRenameOpen(false);
+                setNotice(`已保存演示标题：${pendingTitle}`);
+              }}
+            >
+              <Check className="size-4" />
+              保存
+            </Button>
+            <DialogClose asChild>
+              <Button variant="outline">取消</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <Modal opened={deleteOpen} onClose={() => setDeleteOpen(false)} title="从媒体库移除（演示）">
-        <p className={styles.panelHint}>
-          真实实现中，这里只退役受控媒体记录，绝不删除来源媒体文件；演示模式不会写入任何数据。
-        </p>
-        <div className={styles.modalActions}>
-          <Button
-            color="red"
-            onClick={() => {
-              setDeleteOpen(false);
-              setNotice('演示：已模拟从媒体库移除（不会删除任何文件）');
-            }}
-          >
-            确认移除
-          </Button>
-          <Button variant="default" onClick={() => setDeleteOpen(false)}>
-            取消
-          </Button>
-        </div>
-      </Modal>
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>从媒体库移除（演示）</DialogTitle>
+          </DialogHeader>
+          <p className={styles.panelHint}>
+            真实实现中，这里只退役受控媒体记录，绝不删除来源媒体文件；演示模式不会写入任何数据。
+          </p>
+          <DialogFooter>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setDeleteOpen(false);
+                setNotice('演示：已模拟从媒体库移除（不会删除任何文件）');
+              }}
+            >
+              确认移除
+            </Button>
+            <DialogClose asChild>
+              <Button variant="outline">取消</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }

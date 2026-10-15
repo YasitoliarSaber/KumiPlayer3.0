@@ -3,7 +3,6 @@
  * 这里不验证视觉，只验证装配、状态展示与关键交互存在。
  */
 
-import { MantineProvider } from '@mantine/core';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
@@ -47,13 +46,11 @@ const readyStatus: DesktopStatus = {
 
 function renderWithProviders(node: React.ReactNode) {
   return render(
-    <MantineProvider>
-      <QueryClientProvider client={createAppQueryClient()}>
-        <ServiceProvider>
-          <MemoryRouter>{node}</MemoryRouter>
-        </ServiceProvider>
-      </QueryClientProvider>
-    </MantineProvider>,
+    <QueryClientProvider client={createAppQueryClient()}>
+      <ServiceProvider>
+        <MemoryRouter>{node}</MemoryRouter>
+      </ServiceProvider>
+    </QueryClientProvider>,
   );
 }
 

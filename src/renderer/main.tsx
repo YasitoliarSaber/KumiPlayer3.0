@@ -4,10 +4,6 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-
-// 详情 / 媒体管理 / 设置仍在迁移中，暂时保留 Mantine 样式表；
-// 这三个页面迁出 Mantine 后与 @mantine 依赖一并移除。
-import '@mantine/core/styles.css';
 import './styles/tailwind.css';
 import './styles/global.css';
 

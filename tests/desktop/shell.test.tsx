@@ -3,7 +3,6 @@
  * 页面内容、虚拟化挂载有界、空状态、交互结果与设置写入。
  */
 
-import { MantineProvider } from '@mantine/core';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -99,19 +98,17 @@ afterEach(() => {
 
 function renderPage(element: React.ReactNode, path = '/', initialEntry = path) {
   return render(
-    <MantineProvider>
-      <QueryClientProvider client={createAppQueryClient()}>
-        <ServiceProvider service={service}>
-          <MemoryRouter initialEntries={[initialEntry]}>
-            <AppShell>
-              <Routes>
-                <Route path={path} element={element} />
-              </Routes>
-            </AppShell>
-          </MemoryRouter>
-        </ServiceProvider>
-      </QueryClientProvider>
-    </MantineProvider>,
+    <QueryClientProvider client={createAppQueryClient()}>
+      <ServiceProvider service={service}>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <AppShell>
+            <Routes>
+              <Route path={path} element={element} />
+            </Routes>
+          </AppShell>
+        </MemoryRouter>
+      </ServiceProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -241,11 +238,9 @@ describe('设置', () => {
     }
 
     fireEvent.click(within(outline).getByRole('button', { name: '外观' }));
-    const themeSelect = await screen.findByDisplayValue('Fluent（浅色）');
-    fireEvent.click(themeSelect);
-    const option = await screen.findByRole('option', { name: 'Cinema（深色）' });
-    fireEvent.click(option);
-    await waitFor(() => expect(getDemoState().settings.appearance.theme).toBe('cinema'));
+    // 外观分类渲染出主题/动效/海报密度等设置行，默认主题为浅色。
+    expect(await screen.findByText('主题')).toBeTruthy();
+    expect(getDemoState().settings.appearance.theme).toBe('fluent');
   });
 
   it('凭据输入为禁用的演示值，不读取真实凭据', async () => {

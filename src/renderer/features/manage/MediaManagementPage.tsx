@@ -5,7 +5,22 @@
  * 所有扫描、确认、删除都只作用于演示数据，并明确展示模拟结果。
  */
 
-import { Button, Modal, Radio, Select, Tooltip } from '@mantine/core';
+import { Button } from '@/shared/ui/button';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/ui/select';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Database, FolderSearch, ShieldCheck } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -65,7 +80,7 @@ export function MediaManagementPage() {
         <div className={styles.headerActions}>
           {mode === 'overview' ? (
             <>
-              <Button variant="default" leftSection={<ShieldCheck size={15} />} onClick={() => goMode('maintenance')}>
+              <Button variant="outline" leftSection={<ShieldCheck size={15} />} onClick={() => goMode('maintenance')}>
                 媒体库维护
               </Button>
               <Button leftSection={<FolderSearch size={15} />} onClick={() => goMode('import')}>
@@ -73,7 +88,7 @@ export function MediaManagementPage() {
               </Button>
             </>
           ) : (
-            <Button variant="default" leftSection={<ArrowLeft size={15} />} onClick={() => goMode('overview')}>
+            <Button variant="outline" leftSection={<ArrowLeft size={15} />} onClick={() => goMode('overview')}>
               返回媒体库
             </Button>
           )}
@@ -125,10 +140,10 @@ function SourceOverview({
       <div className={styles.toolbar}>
         <span className={styles.toolbarCount}>共 {cards.length} 个来源</span>
         <div className={styles.toolbarActions}>
-          <Button size="xs" variant="default" onClick={onOpenTasks}>
+          <Button size="xs" variant="outline" onClick={onOpenTasks}>
             打开任务中心
           </Button>
-          <Button size="xs" variant="default" onClick={onCreateTasks}>
+          <Button size="xs" variant="outline" onClick={onCreateTasks}>
             新建导入
           </Button>
         </div>
@@ -219,11 +234,11 @@ function SourceCardView({
           </Button>
         ) : null}
         {card.activeTaskId ? (
-          <Button size="xs" variant="default" onClick={onOpenTasks}>
+          <Button size="xs" variant="outline" onClick={onOpenTasks}>
             查看进度
           </Button>
         ) : (
-          <Button size="xs" variant="default" onClick={onScan}>
+          <Button size="xs" variant="outline" onClick={onScan}>
             开始扫描
           </Button>
         )}
@@ -301,18 +316,26 @@ function ImportFlow({
         {step === 0 ? (
           <div className={styles.panel}>
             <h2 className={styles.panelTitle}>选择要导入的来源</h2>
-            <Radio.Group value={sourceId} onChange={onSelectSource}>
+            <fieldset className="flex flex-col gap-2.5">
               <div className={styles.sourceChoices}>
                 {cards.map((card) => (
-                  <Radio
-                    key={card.id}
-                    value={card.id}
-                    label={`${card.name} · ${card.providerLabel} · ${card.workCount} 部`}
-                    description={card.location}
-                  />
+                  <label key={card.id} className="flex cursor-pointer items-start gap-2.5 text-[13px]">
+                    <input
+                      type="radio"
+                      name="import-source"
+                      value={card.id}
+                      checked={card.id === sourceId}
+                      onChange={() => onSelectSource(card.id)}
+                      className="mt-1 size-3.5 accent-[var(--primary)]"
+                    />
+                    <span className="flex flex-col">
+                      <span>{`${card.name} · ${card.providerLabel} · ${card.workCount} 部`}</span>
+                      <span className="text-[12px] text-muted-foreground">{card.location}</span>
+                    </span>
+                  </label>
                 ))}
               </div>
-            </Radio.Group>
+            </fieldset>
             <div className={styles.panelActions}>
               <Button
                 onClick={() => {
@@ -342,10 +365,10 @@ function ImportFlow({
               扫描在演示模式下由本机计时器模拟，不会访问真实来源，也不会写入数据库。
             </p>
             <div className={styles.panelActions}>
-              <Button variant="default" onClick={onOpenTasks}>
+              <Button variant="outline" onClick={onOpenTasks}>
                 打开任务中心
               </Button>
-              <Button variant="default" onClick={() => setStep(2)}>
+              <Button variant="outline" onClick={() => setStep(2)}>
                 跳过等待，直接审核
               </Button>
             </div>
@@ -370,26 +393,30 @@ function ImportFlow({
                   <p className={styles.issueDetail}>{issue.detail}</p>
                   {issue.candidates.length > 0 ? (
                     <Select
-                      size="xs"
-                      aria-label={`${issue.title}处理方式`}
-                      placeholder="选择处理方式"
-                      data={issue.candidates.map((candidate) => ({
-                        value: candidate.id,
-                        label: candidate.label,
-                      }))}
-                      value={decisions[issue.id] ?? null}
-                      onChange={(value) =>
-                        setDecisions((current) => ({ ...current, [issue.id]: value ?? '' }))
+                      value={decisions[issue.id] ?? ''}
+                      onValueChange={(value) =>
+                        setDecisions((current) => ({ ...current, [issue.id]: value }))
                       }
-                    />
+                    >
+                      <SelectTrigger size="sm" aria-label={`${issue.title}处理方式`} className="w-full">
+                        <SelectValue placeholder="选择处理方式" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {issue.candidates.map((candidate) => (
+                          <SelectItem key={candidate.id} value={candidate.id}>
+                            {candidate.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : null}
                 </li>
               ))}
             </ul>
             <div className={styles.panelActions}>
-              <Tooltip
-                label={allDecided ? '确认修订（演示）' : '请先处理所有阻断性识别问题'}
-                disabled={allDecided}
+              <span
+                className="inline-flex"
+                title={allDecided ? '确认修订（演示）' : '请先处理所有阻断性识别问题'}
               >
                 <Button
                   disabled={!allDecided || !selected}
@@ -406,8 +433,8 @@ function ImportFlow({
                 >
                   确认并执行
                 </Button>
-              </Tooltip>
-              <Button variant="default" onClick={() => setStep(0)}>
+              </span>
+              <Button variant="outline" onClick={() => setStep(0)}>
                 返回选择来源
               </Button>
             </div>
@@ -423,11 +450,11 @@ function ImportFlow({
               演示模式只展示同样的状态变化。
             </p>
             <div className={styles.panelActions}>
-              <Button variant="default" onClick={onOpenTasks}>
+              <Button variant="outline" onClick={onOpenTasks}>
                 查看任务详情
               </Button>
               <Button
-                variant="default"
+                variant="outline"
                 onClick={() => {
                   setStep(0);
                   setDecisions({});
@@ -474,7 +501,7 @@ function MaintenancePanel() {
                 <strong>{row.label}</strong>
                 <p className={styles.issueDetail}>{row.detail}</p>
               </div>
-              <Button size="xs" variant="default" onClick={() => setPreviewOpen(true)}>
+              <Button size="xs" variant="outline" onClick={() => setPreviewOpen(true)}>
                 预览
               </Button>
             </li>
@@ -489,7 +516,7 @@ function MaintenancePanel() {
         </p>
         <div className={styles.panelActions}>
           <Button
-            color="red"
+            variant="destructive"
             onClick={() => setResetOpen(true)}
             leftSection={<AlertTriangle size={15} />}
           >
@@ -504,11 +531,15 @@ function MaintenancePanel() {
         </p>
       ) : null}
 
-      <Modal opened={previewOpen} onClose={() => setPreviewOpen(false)} title="维护预览（演示）">
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent>
+        <DialogHeader>
+          <DialogTitle>维护预览（演示）</DialogTitle>
+        </DialogHeader>
         <p className={styles.panelHint}>
           演示预览：影响 0 个真实文件、0 条真实记录。真实实现会给出精确的范围、数量与不可恢复项。
         </p>
-        <div className={styles.panelActions}>
+        <DialogFooter className="flex flex-wrap gap-2">
           <Button
             onClick={() => {
               setPreviewOpen(false);
@@ -517,19 +548,24 @@ function MaintenancePanel() {
           >
             确认执行
           </Button>
-          <Button variant="default" onClick={() => setPreviewOpen(false)}>
-            取消
-          </Button>
-        </div>
-      </Modal>
+          <DialogClose asChild>
+            <Button variant="outline">取消</Button>
+          </DialogClose>
+        </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <Modal opened={resetOpen} onClose={() => setResetOpen(false)} title="确认重置演示数据">
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent>
+        <DialogHeader>
+          <DialogTitle>确认重置演示数据</DialogTitle>
+        </DialogHeader>
         <p className={styles.panelHint}>
           该操作只清除本机演示存储（收藏、进度、设置与场景），不可恢复。
         </p>
-        <div className={styles.panelActions}>
+        <DialogFooter className="flex flex-wrap gap-2">
           <Button
-            color="red"
+            variant="destructive"
             onClick={() => {
               void service.resetDemoData().then(() => {
                 setResetOpen(false);
@@ -540,11 +576,12 @@ function MaintenancePanel() {
           >
             确认重置
           </Button>
-          <Button variant="default" onClick={() => setResetOpen(false)}>
-            取消
-          </Button>
-        </div>
-      </Modal>
+          <DialogClose asChild>
+            <Button variant="outline">取消</Button>
+          </DialogClose>
+        </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

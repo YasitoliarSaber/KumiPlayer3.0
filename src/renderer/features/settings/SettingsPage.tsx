@@ -5,7 +5,10 @@
  * 凭据区一律为禁用的演示输入，不读取也不保存任何真实凭据。
  */
 
-import { Button, NumberInput, Select, Switch, TextInput, Tooltip } from '@mantine/core';
+import { Button } from '@/shared/ui/button';
+import { Input } from '@/shared/ui/input';
+import { Switch } from '@/shared/ui/switch';
+import { NumberInput, Select, Tooltip } from './demo-form';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Database,
@@ -126,7 +129,7 @@ export function SettingsPage() {
               <Row label="设置引导" hint="首次使用引导的完成状态。">
                 <div className={styles.rowControl}>
                   <StatusChip tone="success">{data.application.setupState}</StatusChip>
-                  <Button size="xs" variant="default" onClick={() => setNotice('演示：已模拟重新运行设置引导')}>
+                  <Button size="xs" variant="outline" onClick={() => setNotice('演示：已模拟重新运行设置引导')}>
                     重新运行引导
                   </Button>
                 </div>
@@ -138,7 +141,6 @@ export function SettingsPage() {
             <Panel title="外观">
               <Row label="主题" hint="与当前应用一致的三套主题。">
                 <Select
-                  size="xs"
                   data={[
                     { value: 'fluent', label: 'Fluent（浅色）' },
                     { value: 'cinema', label: 'Cinema（深色）' },
@@ -148,12 +150,10 @@ export function SettingsPage() {
                   onChange={(value) =>
                     value && save('appearance', { theme: value }, '已切换主题（演示）')
                   }
-                  allowDeselect={false}
                 />
               </Row>
               <Row label="动效" hint="减弱动效时停用自动轮播与交互动画。">
                 <Select
-                  size="xs"
                   data={[
                     { value: 'standard', label: '标准' },
                     { value: 'expressive', label: '丰富' },
@@ -161,12 +161,10 @@ export function SettingsPage() {
                   ]}
                   value={data.appearance.motion}
                   onChange={(value) => value && save('appearance', { motion: value }, '已更新动效偏好（演示）')}
-                  allowDeselect={false}
                 />
               </Row>
               <Row label="海报墙列数" hint="分类页与媒体库使用的目标列数。">
                 <NumberInput
-                  size="xs"
                   min={2}
                   max={10}
                   value={data.appearance.posterSize}
@@ -177,14 +175,12 @@ export function SettingsPage() {
               </Row>
               <Row label="卡片图片" hint="系列卡片使用海报或背景图。">
                 <Select
-                  size="xs"
                   data={[
                     { value: 'poster', label: '海报' },
                     { value: 'fanart', label: '背景图' },
                   ]}
                   value={data.appearance.cardImageMode}
                   onChange={(value) => value && save('appearance', { cardImageMode: value }, '已更新卡片图片偏好（演示）')}
-                  allowDeselect={false}
                 />
               </Row>
             </Panel>
@@ -199,14 +195,14 @@ export function SettingsPage() {
                       <strong>{root.name}</strong>
                       <p className={styles.listHint}>{root.path}</p>
                     </div>
-                    <Button size="xs" variant="default" onClick={() => setNotice(`演示：移除来源「${root.name}」需要服务端预览`)}>
+                    <Button size="xs" variant="outline" onClick={() => setNotice(`演示：移除来源「${root.name}」需要服务端预览`)}>
                       移除
                     </Button>
                   </li>
                 ))}
               </ul>
               <Row label="添加本地目录" hint="真实实现使用原生目录选择器。">
-                <Button size="xs" variant="default" onClick={() => setNotice('演示：已模拟打开目录选择器')}>
+                <Button size="xs" variant="outline" onClick={() => setNotice('演示：已模拟打开目录选择器')}>
                   选择目录
                 </Button>
               </Row>
@@ -218,7 +214,6 @@ export function SettingsPage() {
               />
               <Row label="定时更新间隔（分钟）" hint="关闭为 0；允许 15 到 10080 分钟。">
                 <NumberInput
-                  size="xs"
                   min={0}
                   max={10080}
                   step={15}
@@ -263,7 +258,7 @@ export function SettingsPage() {
                 </ul>
               </Row>
               <Row label="连接测试" hint="真实实现会验证凭据与目录可达性。">
-                <Button size="xs" variant="default" onClick={() => setNotice('演示：已模拟连接测试（未发起任何网络请求）')}>
+                <Button size="xs" variant="outline" onClick={() => setNotice('演示：已模拟连接测试（未发起任何网络请求）')}>
                   测试连接
                 </Button>
               </Row>
@@ -274,7 +269,6 @@ export function SettingsPage() {
             <Panel title="元数据与图片">
               <Row label="资料语言" hint="TMDB 查询使用的语言。">
                 <Select
-                  size="xs"
                   data={[
                     { value: 'zh-CN', label: '简体中文' },
                     { value: 'zh-TW', label: '繁体中文' },
@@ -283,12 +277,11 @@ export function SettingsPage() {
                   ]}
                   value={data.scrape.tmdbLanguage}
                   onChange={(value) => value && save('scrape', { tmdbLanguage: value }, '已更新资料语言（演示）')}
-                  allowDeselect={false}
                 />
               </Row>
               <Row label="TMDB 读取令牌" hint="凭据由系统凭据管理器保存，演示模式不读取真实值。">
                 <div className={styles.rowControl}>
-                  <TextInput size="xs" type="password" value="demo-token-not-real" disabled aria-label="TMDB 令牌（演示）" />
+                  <Input type="password" value="demo-token-not-real" disabled aria-label="TMDB 令牌（演示）" />
                   <StatusChip tone={data.scrape.tmdbConfigured ? 'success' : 'neutral'}>
                     {data.scrape.tmdbConfigured ? '已配置（演示）' : '未配置'}
                   </StatusChip>
@@ -302,18 +295,16 @@ export function SettingsPage() {
               />
               <Row label="图片存储模式" hint="独立本地图片库的存储策略。">
                 <Select
-                  size="xs"
                   data={[
                     { value: 'auto', label: '自动' },
                     { value: 'managed', label: '受管目录' },
                   ]}
                   value={data.scrape.imageStorageMode}
                   onChange={(value) => value && save('scrape', { imageStorageMode: value }, '已更新图片存储模式（演示）')}
-                  allowDeselect={false}
                 />
               </Row>
               <Row label="图片连接检测" hint="真实实现会实测图片域名连通性，并给出受控修复。">
-                <Button size="xs" variant="default" onClick={() => setNotice('演示：已模拟图片连接检测（未发起网络请求）')}>
+                <Button size="xs" variant="outline" onClick={() => setNotice('演示：已模拟图片连接检测（未发起网络请求）')}>
                   检测图片连接
                 </Button>
               </Row>
@@ -324,18 +315,16 @@ export function SettingsPage() {
             <Panel title="播放">
               <Row label="播放器模式" hint="内置 MPV 或外部 MPV 整合包。">
                 <Select
-                  size="xs"
                   data={[
                     { value: 'internal', label: '内置播放器' },
                     { value: 'external', label: '外部 MPV' },
                   ]}
                   value={data.player.mode}
                   onChange={(value) => value && save('player', { mode: value }, '已更新播放器模式（演示）')}
-                  allowDeselect={false}
                 />
               </Row>
               <Row label="外部 MPV 路径" hint="演示模式不读取也不写入真实路径。">
-                <TextInput size="xs" value="演示：未配置外部播放器" disabled aria-label="外部 MPV 路径（演示）" />
+                <Input value="演示：未配置外部播放器" disabled aria-label="外部 MPV 路径（演示）" />
               </Row>
               <ToggleRow
                 label="自动连播下一集"
@@ -345,7 +334,6 @@ export function SettingsPage() {
               />
               <Row label="Anime4K 模式" hint="内置播放器的着色器档位。">
                 <Select
-                  size="xs"
                   data={[
                     { value: 'off', label: '关闭' },
                     { value: 'a', label: '模式 A' },
@@ -354,12 +342,10 @@ export function SettingsPage() {
                   ]}
                   value={data.player.anime4kMode}
                   onChange={(value) => value && save('player', { anime4kMode: value }, '已更新 Anime4K 设置（演示）')}
-                  allowDeselect={false}
                 />
               </Row>
               <Row label="Anime4K 质量" hint="与模式组合使用。">
                 <Select
-                  size="xs"
                   data={[
                     { value: 'fast', label: '快速' },
                     { value: 'light', label: '轻量' },
@@ -368,7 +354,6 @@ export function SettingsPage() {
                   ]}
                   value={data.player.anime4kQuality}
                   onChange={(value) => value && save('player', { anime4kQuality: value }, '已更新 Anime4K 质量（演示）')}
-                  allowDeselect={false}
                 />
               </Row>
             </Panel>
@@ -383,16 +368,15 @@ export function SettingsPage() {
               </Row>
               <Row label="账号" hint="演示模式不读取真实令牌。">
                 <div className={styles.rowControl}>
-                  <TextInput size="xs" value={data.bangumi.username || 'demo-user'} disabled aria-label="Bangumi 账号（演示）" />
-                  <TextInput
-                    size="xs"
+                  <Input value={data.bangumi.username || 'demo-user'} disabled aria-label="Bangumi 账号（演示）" />
+                  <Input
                     type="password"
                     value="demo-access-token"
                     disabled
                     aria-label="Bangumi 令牌（演示）"
                   />
                   <Tooltip label="演示模式不会登录或保存凭据">
-                    <Button size="xs" variant="default" onClick={() => setNotice('演示：已模拟登录流程（不访问网络）')}>
+                    <Button size="xs" variant="outline" onClick={() => setNotice('演示：已模拟登录流程（不访问网络）')}>
                       登录
                     </Button>
                   </Tooltip>
@@ -454,7 +438,7 @@ function ToggleRow({
 }) {
   return (
     <Row label={label} hint={hint}>
-      <Switch checked={value} onChange={(event) => onChange(event.currentTarget.checked)} aria-label={label} />
+      <Switch checked={value} onCheckedChange={onChange} aria-label={label} />
     </Row>
   );
 }
