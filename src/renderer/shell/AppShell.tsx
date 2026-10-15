@@ -49,6 +49,7 @@ import {
 import { Input } from '@/shared/ui/input';
 import { Separator } from '@/shared/ui/separator';
 import { Dialog, DialogContent, DialogTitle } from '@/shared/ui/dialog';
+import { CommandPalette } from './CommandPalette';
 import { MainScrollContext } from './main-scroll';
 import styles from './AppShell.module.css';
 
@@ -83,12 +84,27 @@ const BOTTOM: readonly NavItem[] = [
 
 export function AppShell({ children }: { readonly children: ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
   useRecordLocation(location.key, useNavigationType());
   const [main, setMain] = useState<HTMLElement | null>(null);
   // 窄窗没有常驻侧栏，用抽屉承载同一套导航。
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const library = useLibrary();
   const sidebarMode = useUiStore((state) => state.sidebarMode);
   const mainRef = useCallback((node: HTMLElement | null) => setMain(node), []);
+
+  // Ctrl/Cmd+K 唤起快捷搜索；只拦截组合键，不影响普通输入与输入法组合。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey) && !event.altKey) {
+        event.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return (
     <div className={styles.shell} data-sidebar={sidebarMode}>
@@ -105,6 +121,12 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
           <NavList expanded onNavigate={() => setDrawerOpen(false)} />
         </DialogContent>
       </Dialog>
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        works={library.data?.works ?? []}
+        onOpenWork={(workId) => navigate(`/work/${workId}`)}
+      />
     </div>
   );
 }
@@ -245,7 +267,7 @@ function TitleBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
             type="search"
             className="h-8 pl-8"
             value={search}
-            placeholder="搜索作品"
+            placeholder="搜索作品  (Ctrl+K)"
             aria-label="搜索作品"
             onChange={(event) => {
               const value = event.currentTarget.value;

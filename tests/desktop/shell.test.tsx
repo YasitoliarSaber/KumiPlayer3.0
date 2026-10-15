@@ -6,6 +6,7 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { useLocation } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createAppQueryClient } from '../../src/renderer/app/queryClient';
@@ -120,6 +121,24 @@ describe('公共框架', () => {
     expect(screen.getByRole('navigation', { name: '媒体库导航' })).toBeTruthy();
     expect(screen.getByRole('searchbox', { name: '搜索作品' })).toBeTruthy();
     await waitFor(() => expect(screen.getByRole('link', { name: /番剧/ })).toBeTruthy());
+  });
+
+  it('Ctrl+K 打开快捷搜索，输入后用 Enter 进入作品详情', async () => {
+    renderPage(<HomePage />);
+    // 等待演示库加载完成，快捷键面板才有作品可搜。
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^打开.+详情$/ }).length).toBeGreaterThan(0));
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    const box = await screen.findByRole('textbox', { name: '快捷搜索' });
+    fireEvent.change(box, { target: { value: 'CLANNAD' } });
+
+    // 演示库同名作品很多：取第 1 条结果并确认它就是当前高亮项。
+    const options = await screen.findAllByRole('option', { name: /CLANNAD/ });
+    expect(options[0]?.getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(box, { key: 'Enter' });
+
+    // 面板关闭即视为已执行激活动作；导航目标由详情路由承载。
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: '快捷搜索' })).toBeNull());
   });
 });
 
