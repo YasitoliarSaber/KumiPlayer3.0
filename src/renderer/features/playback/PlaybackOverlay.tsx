@@ -5,7 +5,6 @@
  * 推进一个本地计时器，用来展示播放中界面与进度回写交互。
  */
 
-import { Button, Tooltip } from '@mantine/core';
 import { Pause, Play, Square, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -13,6 +12,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { demoQueryKeys, useMediaService } from '../../shared/api/service-context';
 import { useDemoState } from '../../mock/demo-store';
 import { ProgressBar } from '../../shared/ui/Surface';
+import { Button } from '@/shared/ui/button';
 import styles from './PlaybackOverlay.module.css';
 
 export function PlaybackOverlay() {
@@ -79,28 +79,23 @@ export function PlaybackOverlay() {
         {formatTime(position)} / {formatTime(session.duration)}
       </div>
       <div className={styles.actions}>
-        <Button
-          variant="default"
-          size="xs"
-          leftSection={paused ? <Play size={14} /> : <Pause size={14} />}
-          onClick={() => setPaused((value) => !value)}
-        >
+        <Button variant="outline" size="xs" onClick={() => setPaused((value) => !value)}>
+          {paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
           {paused ? '继续' : '暂停'}
         </Button>
-        <Tooltip label="停止并保存模拟进度">
-          <Button
-            variant="default"
-            size="xs"
-            leftSection={<Square size={13} />}
-            onClick={() => {
-              void service.stopPlayback().then(() =>
-                queryClient.invalidateQueries({ queryKey: demoQueryKeys.library }),
-              );
-            }}
-          >
-            停止
-          </Button>
-        </Tooltip>
+        <Button
+          variant="outline"
+          size="xs"
+          title="停止并保存模拟进度"
+          onClick={() => {
+            void service.stopPlayback().then(() =>
+              queryClient.invalidateQueries({ queryKey: demoQueryKeys.library }),
+            );
+          }}
+        >
+          <Square className="size-3.5" />
+          停止
+        </Button>
         <span className={styles.volume} aria-hidden="true">
           <Volume2 size={15} />
         </span>

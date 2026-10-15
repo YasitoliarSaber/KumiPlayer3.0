@@ -71,8 +71,7 @@ describe('新 Renderer 装配', () => {
 
     renderWithProviders(<SessionPage />);
 
-    expect(screen.getByText('KumiPlayer 基础切片')).toBeTruthy();
-    expect(screen.getByText(/进程保护/)).toBeTruthy();
+    expect(await screen.findByText('本地后端')).toBeTruthy();
     expect(screen.getByText('job-object-helper')).toBeTruthy();
     await waitFor(() => expect(screen.getByText(/health.app/)).toBeTruthy());
   });

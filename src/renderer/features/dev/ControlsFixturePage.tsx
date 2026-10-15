@@ -1,39 +1,31 @@
 /**
- * 开发入口：组件库中性控件夹具 + 演示状态切换工具。
- *
- * 夹具只用于验证控件、焦点与 CSP；演示场景工具只影响本机演示数据，
- * 明确放在开发入口，不进入产品页面。
+ * 开发入口：演示场景切换 + 控件夹具。
+ * 场景工具只影响本机演示数据；两者都收在开发路径，不进入产品导航。
  */
 
-import {
-  ActionIcon,
-  Alert,
-  Badge,
-  Button,
-  Checkbox,
-  Drawer,
-  Group,
-  Menu,
-  Modal,
-  NumberInput,
-  SegmentedControl,
-  Select,
-  Stack,
-  Switch,
-  Table,
-  Tabs,
-  Text,
-  TextInput,
-  Title,
-} from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
-import { updateDemoState, useDemoState, type DemoScenario } from '../../mock/demo-store';
-import { useMediaService } from '../../shared/api/service-context';
-import styles from './ControlsFixturePage.module.css';
+import { updateDemoState, useDemoState, type DemoScenario } from '@/mock/demo-store';
+import { useMediaService } from '@/shared/api/service-context';
+import { Badge } from '@/shared/ui/badge';
+import { Button } from '@/shared/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/shared/ui/dialog';
+import { Input } from '@/shared/ui/input';
+import { Label } from '@/shared/ui/label';
+import { Switch } from '@/shared/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs';
 
 const SCENARIOS: ReadonlyArray<{ value: DemoScenario; label: string; hint: string }> = [
   { value: 'default', label: '默认', hint: '约 240 条演示作品的正常媒体库' },
@@ -43,189 +35,133 @@ const SCENARIOS: ReadonlyArray<{ value: DemoScenario; label: string; hint: strin
 ];
 
 export function ControlsFixturePage() {
-  const [modalOpen, modal] = useDisclosure(false);
-  const [drawerOpen, drawer] = useDisclosure(false);
   const [text, setText] = useState('');
-  const [choice, setChoice] = useState<string | null>('a');
-  const [segment, setSegment] = useState('one');
-  const [checked, setChecked] = useState(false);
   const [switched, setSwitched] = useState(false);
-  const [count, setCount] = useState<number | string>(3);
   const service = useMediaService();
   const queryClient = useQueryClient();
   const demo = useDemoState();
 
   return (
-    <Stack p="lg" gap="lg" maw={820} mx="auto" data-route="dev">
-      <Stack gap={4}>
-        <Title order={3}>开发入口</Title>
-        <Text size="sm" c="dimmed">
-          组件库夹具与演示状态工具；不进入产品导航，也不影响真实数据。
-        </Text>
-      </Stack>
-
-      <section className={styles.block}>
-        <Title order={4}>演示场景</Title>
-        <Text size="sm" c="dimmed">
-          当前场景：{demo.scenario}
-        </Text>
-        <Group gap="xs">
+    <div className="mx-auto flex max-w-[860px] flex-col gap-4" data-route="dev">
+      <Card>
+        <CardHeader>
+          <CardTitle>演示场景</CardTitle>
+          <p className="text-[12.5px] text-muted-foreground">
+            当前场景：{demo.scenario} · 切换只影响本机演示数据与查询缓存。
+          </p>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
           {SCENARIOS.map((scenario) => (
             <Button
               key={scenario.value}
-              size="xs"
-              variant={demo.scenario === scenario.value ? 'filled' : 'default'}
+              size="sm"
+              variant={demo.scenario === scenario.value ? 'default' : 'outline'}
+              title={scenario.hint}
               onClick={() => {
                 updateDemoState(() => ({ scenario: scenario.value }));
                 void queryClient.invalidateQueries();
               }}
-              title={scenario.hint}
             >
               {scenario.label}
             </Button>
           ))}
           <Button
-            size="xs"
-            variant="default"
-            onClick={() =>
-              void service.resetDemoData().then(() => {
-                void queryClient.invalidateQueries();
-              })
-            }
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void service.resetDemoData().then(() => queryClient.invalidateQueries());
+            }}
           >
             重置演示数据
           </Button>
-        </Group>
-        <Text size="xs" c="dimmed">
-          「长加载」场景会保持读取等待：它用于人工检查加载态，不影响其它场景。
-        </Text>
-      </section>
+        </CardContent>
+      </Card>
 
-      <section className={styles.block}>
-        <Title order={4}>开发路由</Title>
-        <Group gap="xs">
-          <Button component={Link} to="/dev/session" size="xs" variant="default">
-            桌面链路自检（真实后端路径）
-          </Button>
-          <Button component={Link} to="/" size="xs" variant="default">
+      <Card>
+        <CardHeader>
+          <CardTitle>开发路由</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Link
+            to="/dev/session"
+            className="inline-flex h-8 items-center rounded-md border border-border bg-card px-3 text-[12.5px] hover:bg-accent"
+          >
+            桌面链路自检
+          </Link>
+          <Link
+            to="/"
+            className="inline-flex h-8 items-center rounded-md border border-border bg-card px-3 text-[12.5px] hover:bg-accent"
+          >
             返回首页
-          </Button>
-        </Group>
-      </section>
+          </Link>
+        </CardContent>
+      </Card>
 
-      <section className={styles.block}>
-        <Title order={4}>组件库控件夹具</Title>
-        <Group>
-          <Button>主按钮</Button>
-          <Button variant="default">次按钮</Button>
-          <ActionIcon aria-label="图标按钮" variant="default">
-            ★
-          </ActionIcon>
-          <Menu withinPortal>
-            <Menu.Target>
-              <Button variant="default">菜单</Button>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item>第一项</Menu.Item>
-              <Menu.Item>第二项</Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-          <Badge variant="light">标签</Badge>
-        </Group>
-
-        <TextInput
-          label="文本输入（输入法）"
-          placeholder="输入中文以验证 IME"
-          value={text}
-          onChange={(event) => setText(event.currentTarget.value)}
-        />
-        <NumberInput label="数字输入" value={count} onChange={setCount} min={0} max={100} />
-        <Select
-          label="单选下拉"
-          data={[
-            { value: 'a', label: '选项 A' },
-            { value: 'b', label: '选项 B' },
-          ]}
-          value={choice}
-          onChange={setChoice}
-          checkIconPosition="right"
-        />
-        <SegmentedControl
-          value={segment}
-          onChange={setSegment}
-          data={[
-            { value: 'one', label: '一' },
-            { value: 'two', label: '二' },
-          ]}
-        />
-        <Group>
-          <Checkbox
-            label="复选框"
-            checked={checked}
-            onChange={(event) => setChecked(event.currentTarget.checked)}
-          />
-          <Switch
-            label="开关"
-            checked={switched}
-            onChange={(event) => setSwitched(event.currentTarget.checked)}
-          />
-        </Group>
-
-        <Group>
-          <Button onClick={modal.open}>打开对话框</Button>
-          <Button variant="default" onClick={drawer.open}>
-            打开抽屉
-          </Button>
-        </Group>
-
-        <Tabs defaultValue="first">
-          <Tabs.List>
-            <Tabs.Tab value="first">标签一</Tabs.Tab>
-            <Tabs.Tab value="second">标签二</Tabs.Tab>
-          </Tabs.List>
-          <Tabs.Panel value="first" pt="sm">
-            <Text size="sm">面板一</Text>
-          </Tabs.Panel>
-          <Tabs.Panel value="second" pt="sm">
-            <Text size="sm">面板二</Text>
-          </Tabs.Panel>
-        </Tabs>
-
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>名称</Table.Th>
-              <Table.Th>状态</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            <Table.Tr>
-              <Table.Td>示例条目</Table.Td>
-              <Table.Td>等待</Table.Td>
-            </Table.Tr>
-          </Table.Tbody>
-        </Table>
-
-        <Alert title="提示" color="blue">
-          运行时样式注入应在 CSP 下通过 nonce 生效。
-        </Alert>
-      </section>
-
-      <Modal opened={modalOpen} onClose={modal.close} title="对话框">
-        <Stack gap="sm">
-          <Text size="sm">Esc 关闭并通过 portal 恢复焦点。</Text>
-          <Group>
-            <Button onClick={modal.close}>确认</Button>
-            <Button variant="default" onClick={modal.close}>
-              取消
+      <Card>
+        <CardHeader>
+          <CardTitle>控件夹具</CardTitle>
+          <p className="text-[12.5px] text-muted-foreground">
+            仅用于技术核对：键盘与焦点、弹层与 portal、输入法与状态。
+          </p>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button>主按钮</Button>
+            <Button variant="outline">次按钮</Button>
+            <Button variant="ghost" size="icon-sm" aria-label="图标按钮">
+              ★
             </Button>
-          </Group>
-        </Stack>
-      </Modal>
+            <Badge variant="soft">标签</Badge>
+          </div>
 
-      <Drawer opened={drawerOpen} onClose={drawer.close} title="抽屉">
-        <Text size="sm">抽屉内容</Text>
-      </Drawer>
-    </Stack>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="fixture-text">文本输入（输入法）</Label>
+            <Input
+              id="fixture-text"
+              value={text}
+              placeholder="输入中文以验证 IME"
+              onChange={(event) => setText(event.currentTarget.value)}
+            />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Switch id="fixture-switch" checked={switched} onCheckedChange={setSwitched} aria-label="开关" />
+            <Label htmlFor="fixture-switch">开关</Label>
+          </div>
+
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="self-start">
+                打开对话框
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>对话框</DialogTitle>
+                <DialogDescription>Esc 关闭并把焦点还给触发按钮。</DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button>关闭</Button>
+                </DialogClose>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Tabs defaultValue="first">
+            <TabsList>
+              <TabsTrigger value="first">标签一</TabsTrigger>
+              <TabsTrigger value="second">标签二</TabsTrigger>
+            </TabsList>
+            <TabsContent value="first" className="pt-3 text-[13px]">
+              面板一
+            </TabsContent>
+            <TabsContent value="second" className="pt-3 text-[13px]">
+              面板二
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

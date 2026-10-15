@@ -2,8 +2,10 @@
  * 恢复边界：React 未捕获异常不留下空白窗口，直接进入可操作的恢复界面。
  */
 
-import { Button, Card, Group, Stack, Text, Title } from '@mantine/core';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+
+import { Button } from '@/shared/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 
 interface Props {
   readonly children: ReactNode;
@@ -25,27 +27,27 @@ export class RecoveryBoundary extends Component<Props, State> {
     console.error('[renderer] 组件异常', error.message, info.componentStack);
   }
 
-  private reload = (): void => {
-    window.location.reload();
-  };
-
   override render(): ReactNode {
     if (this.state.message.length === 0) {
       return this.props.children;
     }
     return (
-      <Card maw={560} mx="auto" mt="10vh" padding="lg" withBorder>
-        <Stack gap="sm">
-          <Title order={3}>界面需要恢复</Title>
-          <Text size="sm">{this.state.message}</Text>
-          <Text size="xs" c="dimmed">
-            本地媒体库与后台任务不受影响；重新加载界面不会重启后端。
-          </Text>
-          <Group>
-            <Button onClick={this.reload}>重新加载界面</Button>
-          </Group>
-        </Stack>
-      </Card>
+      <div className="mx-auto mt-[10vh] w-[min(560px,calc(100vw-2rem))]">
+        <Card>
+          <CardHeader>
+            <CardTitle>界面需要恢复</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <p className="text-[13.5px] text-foreground">{this.state.message}</p>
+            <p className="text-[12.5px] text-muted-foreground">
+              媒体库与后台任务不受影响；重新加载界面不会重启任何服务。
+            </p>
+            <div>
+              <Button onClick={() => window.location.reload()}>重新加载界面</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 }

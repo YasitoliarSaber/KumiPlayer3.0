@@ -3,7 +3,6 @@
  * 后端只提供 0/1 进度，这里不伪造百分比，只区分"进行中"与"终态"。
  */
 
-import { Button, Tooltip } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router';
@@ -11,6 +10,7 @@ import { useNavigate } from 'react-router';
 import type { TaskEntry, TaskStatus } from '../../shared/api/service';
 import { demoQueryKeys, useMediaService, useTasks } from '../../shared/api/service-context';
 import { EmptySurface, ErrorSurface, LoadingSurface, ProgressBar, StatusChip } from '../../shared/ui/Surface';
+import { Button } from '@/shared/ui/button';
 import styles from './TaskCenter.module.css';
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -75,7 +75,7 @@ export function TaskCenter() {
             演示任务完全在本机模拟：不启动后台 worker、不访问来源、不写入数据库。
           </p>
         </div>
-        <Button variant="default" onClick={() => navigate('/manage')}>
+        <Button variant="outline" onClick={() => navigate('/manage')}>
           触发一个新任务
         </Button>
       </header>
@@ -94,7 +94,7 @@ export function TaskCenter() {
           kicker="任务"
           title="还没有任务"
           detail="在媒体管理里发起一次扫描或确认，这里就会出现对应的等待、进行与终态记录。"
-          action={<Button variant="default" onClick={() => navigate('/manage')}>前往媒体管理</Button>}
+          action={<Button variant="outline" onClick={() => navigate('/manage')}>前往媒体管理</Button>}
         />
       ) : (
         <ul className={styles.list}>
@@ -148,14 +148,18 @@ function TaskRow({
         </span>
         <div className={styles.taskActions}>
           {task.cancellable ? (
-            <Tooltip label="取消作用于整个修订（演示）">
-              <Button size="xs" variant="default" onClick={onCancel} disabled={task.status === 'cancelling'}>
-                终止任务
-              </Button>
-            </Tooltip>
+            <Button
+              size="xs"
+              variant="outline"
+              title="取消作用于整个修订（演示）"
+              onClick={onCancel}
+              disabled={task.status === 'cancelling'}
+            >
+              终止任务
+            </Button>
           ) : null}
           {task.status === 'failed' || task.status === 'cancelled' ? (
-            <Button size="xs" variant="default" onClick={onRetry}>
+            <Button size="xs" variant="outline" onClick={onRetry}>
               重试
             </Button>
           ) : null}

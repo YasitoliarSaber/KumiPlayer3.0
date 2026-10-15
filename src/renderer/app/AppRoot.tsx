@@ -1,44 +1,41 @@
 /**
- * 根装配：Provider 顺序固定为 Mantine → Query → 恢复边界 → Router。
- * 这里不定义页面结构、导航或配色；页面由后续设计 Skill 提供。
+ * 根装配：Query → 服务注入 → 恢复边界 → Router。
+ * 不再有组件库 Provider：主题由 data-theme 与语义变量驱动。
  */
 
-import { MantineProvider } from '@mantine/core';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router';
 
-import { ServiceProvider } from '../shared/api/service-context';
-import { useDemoState } from '../mock/demo-store';
-import { useDesktopStatusSubscription } from '../shared/hooks/use-desktop-bridge';
+import { useDemoState } from '@/mock/demo-store';
+import { ServiceProvider } from '@/shared/api/service-context';
 import { createAppQueryClient } from './queryClient';
 import { RecoveryBoundary } from './recovery-boundary';
 import { appRouter } from './router';
-import { applyThemeToDocument, colorSchemeFor, createAppTheme, kumiCssVariablesResolver } from './theme';
+import { applyThemeToDocument, resolveTheme } from './theme';
 
-export function AppRoot({ styleNonce }: { readonly styleNonce?: string }) {
+export function AppRoot() {
   const [queryClient] = useState(createAppQueryClient);
-  useDesktopStatusSubscription();
-  const themeName = useDemoState().settings.appearance.theme;
+  const preference = useDemoState().settings.appearance.theme;
 
   useEffect(() => {
-    applyThemeToDocument(themeName);
-  }, [themeName]);
+    const media =
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-color-scheme: dark)')
+        : null;
+    const sync = () => applyThemeToDocument(resolveTheme(preference, media?.matches ?? false));
+    sync();
+    media?.addEventListener('change', sync);
+    return () => media?.removeEventListener('change', sync);
+  }, [preference]);
 
   return (
-    <MantineProvider
-      theme={createAppTheme(themeName)}
-      forceColorScheme={colorSchemeFor(themeName)}
-      cssVariablesResolver={kumiCssVariablesResolver}
-      {...(styleNonce ? { getStyleNonce: () => styleNonce } : {})}
-    >
-      <QueryClientProvider client={queryClient}>
-        <ServiceProvider>
-          <RecoveryBoundary>
-            <RouterProvider router={appRouter} />
-          </RecoveryBoundary>
-        </ServiceProvider>
-      </QueryClientProvider>
-    </MantineProvider>
+    <QueryClientProvider client={queryClient}>
+      <ServiceProvider>
+        <RecoveryBoundary>
+          <RouterProvider router={appRouter} />
+        </RecoveryBoundary>
+      </ServiceProvider>
+    </QueryClientProvider>
   );
 }
