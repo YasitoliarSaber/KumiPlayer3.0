@@ -76,6 +76,8 @@ def require_regular_episode_metadata(episodes: list[dict], metadata: dict) -> di
     # 无效响应仍可单独重试恢复，所以只承接已记录的临时故障，不整体放开重试。
     retryable = bool(result.get('retryable')) or any(
         str(item.get('reason') or '') == 'provider_unavailable'
+        and isinstance(item.get('provider_failure'), dict)
+        and bool(item['provider_failure'].get('retryable'))
         for item in result.get('unmapped_reasons') or [] if isinstance(item, dict)
     ) or any(
         bool(item.get('retryable'))

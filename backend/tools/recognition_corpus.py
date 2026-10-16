@@ -117,8 +117,8 @@ def identity_metrics(samples: list[dict]) -> dict:
         "candidate_recall": rate(retrieved, len(positives)),
         "false_negative_rate": rate(len(positives) - correct, len(positives)),
         "false_positive_rate": rate(sum(bool(s.get("predicted_provider_id")) for s in reviews), len(reviews)),
-        "review_rate": rate(count(DECISION_MACHINE_REVIEW), len(labelled)),
-        "unresolved_rate": rate(count(DECISION_MACHINE_NO_CANDIDATE), len(labelled)),
+        "review_rate": rate(sum(s.get("decision_source") == DECISION_MACHINE_REVIEW for s in labelled), len(labelled)),
+        "unresolved_rate": rate(sum(s.get("decision_source") == DECISION_MACHINE_NO_CANDIDATE for s in labelled), len(labelled)),
         "not_adopted_rate": rate(sum(not s.get("predicted_provider_id") for s in labelled), len(labelled)),
     }
 
@@ -151,7 +151,7 @@ def _select_fact_baseline(
         if evidence_id in referenced and referenced[evidence_id] != fact_id:
             conflicts.append(evidence_id)
         referenced.setdefault(evidence_id, fact_id)
-    if conflicts:
+    if conflicts and parser_version is None:
         raise ValueError(
             "同一 Evidence 被不同 revision 指向了不同 ParsedFacts，没有唯一事实基线"
             f"（{len(conflicts)} 条），拒绝计分"

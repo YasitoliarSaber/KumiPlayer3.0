@@ -103,6 +103,19 @@ def test_decision_source_distribution_covers_unlabelled_units():
     assert metrics["auto_adopt_precision"] is None
 
 
+def test_review_rates_use_only_the_labelled_population():
+    metrics = corpus.identity_metrics([
+        {"expected_provider_id": "a", "decision_source": "machine_review"},
+        {"expected_provider_id": "b", "decision_source": "machine_no_candidate"},
+        *({"decision_source": "machine_review"} for _ in range(4)),
+        *({"decision_source": "machine_no_candidate"} for _ in range(4)),
+    ])
+    assert metrics["machine_review_decisions"] == 5
+    assert metrics["machine_no_candidate_decisions"] == 5
+    assert metrics["review_rate"] == 0.5
+    assert metrics["unresolved_rate"] == 0.5
+
+
 def _baseline_conn(facts, references=()):
     """最小夹具：只提供基线选择需要的事实与 revision 指向。"""
 
@@ -153,6 +166,16 @@ def test_fact_baseline_falls_back_to_single_unreferenced_version():
 
     assert baseline["ev-1"]["parsed_fact_id"] == "f1"
     assert info["unreferenced_single_version_facts"] == 1
+
+
+def test_explicit_parser_version_disambiguates_different_revision_references():
+    conn = _baseline_conn(
+        [("f1", "ev-1", "v4-parser-18"), ("f2", "ev-1", "v4-parser-19")],
+        [("rev-1", "ev-1", "f1"), ("rev-2", "ev-1", "f2")],
+    )
+    baseline, info = corpus._select_fact_baseline(conn, "v4-parser-19")
+    assert baseline["ev-1"]["parsed_fact_id"] == "f2"
+    assert info["mode"] == "parser_version"
 
 
 def test_export_opens_database_read_only_and_rejects_output_in_data_directory(tmp_path):

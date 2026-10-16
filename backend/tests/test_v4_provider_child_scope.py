@@ -138,6 +138,47 @@ def test_dedicated_entry_with_confirmed_child_identity_still_maps_own_title():
     }
 
 
+def test_parent_entry_alias_does_not_authorize_child_before_any_other_binding():
+    detail = {**DETAIL, "title_aliases": ["Child Romanized"]}
+    for title in ("Child Localized", "Child Romanized"):
+        value = target(title)
+        value["provider_identity_scope"] = {
+            "confirmed_child": True, "series_groups": ["Parent Family"],
+            "shared_distinct_tv_ids": [],
+        }
+        client = OfflineProvider()
+        diagnostics = metadata._empty_mapping_diagnostics()
+        assert metadata._build_tv_episode_mappings(
+            client, 42, value, work_detail=detail, diagnostics=diagnostics,
+        ) == []
+        assert client.requests == []
+
+
+@pytest.mark.parametrize("reason_code", ["provider_auth_required", "invalid_response"])
+def test_permanent_provider_failure_is_not_made_retryable_by_coordinate_conflict(reason_code):
+    value = target()
+    value["episodes"].append({**value["episodes"][0], "episode_id": "blocked", "local_season_number": 4})
+    value["episodes"][0].update(provider_season_number=1, provider_episode_number=1)
+
+    class PermanentFailure(OfflineProvider):
+        def get_tv_season_episodes(self, _provider_id, _season):
+            raise metadata.TMDBClientError("fixture permanent failure", reason_code=reason_code, retryable=False)
+
+    diagnostics = metadata._empty_mapping_diagnostics()
+    seasons = []
+    mappings = metadata._build_tv_episode_mappings(
+        PermanentFailure(), 42, value, work_detail=DETAIL, diagnostics=diagnostics, season_results=seasons,
+    )
+    result = metadata.finalize_metadata_statuses(value, {
+        "provider": "tmdb", "provider_id": "42", "metadata_state": "ready",
+        "episode_mappings": mappings, "season_results": seasons, "_mapping_diagnostics": diagnostics,
+    })
+    assert {r["reason"] for r in result["unmapped_reasons"]} == {
+        "provider_unavailable", "ambiguous_provider_child_scope"}
+    assert result["retryable"] is False
+    assert metadata.finalize_metadata_statuses(value, result)["retryable"] is False
+
+
 def test_combined_local_title_never_borrows_dedicated_entry_coordinates():
     """组合目录只匹配到一个英文片段时，不按该片段取得整部作品的坐标。"""
 

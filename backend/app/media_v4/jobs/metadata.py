@@ -633,6 +633,8 @@ def _record_unmapped(
     diagnostics: dict[str, Any] | None,
     episode: dict,
     reason: str,
+    *,
+    provider_failure: dict | None = None,
 ) -> None:
     """为单个未映射 Episode 记录唯一原因（C-005/STEP-007）。"""
 
@@ -644,12 +646,19 @@ def _record_unmapped(
     for item in reasons:
         if isinstance(item, dict) and item.get("episode_id") == episode_id:
             return
-    reasons.append({
+    entry: dict[str, Any] = {
         "episode_id": episode_id,
         "reason": code,
         "local_season_number": _positive_int(episode.get("local_season_number")),
         "local_episode_number": _positive_int(episode.get("local_episode_number")),
-    })
+    }
+    if provider_failure:
+        # 保留每次请求的业务分类；provider_unavailable 本身无法区分认证与临时故障。
+        entry["provider_failure"] = {
+            "reason_code": str(provider_failure.get("reason_code") or ""),
+            "retryable": bool(provider_failure.get("retryable")),
+        }
+    reasons.append(entry)
     ids = diagnostics.setdefault("unmapped_episode_ids", [])
     if episode_id and episode_id not in ids:
         ids.append(episode_id)
@@ -1670,11 +1679,12 @@ def provider_range_decision(
        大于本作品（收纳合集 / 母系列 / 多个本地子范围共享一个在线 ID）。此时
        名称证据——包括把首选标题换成已保存的罗马音或本地化等值名——不得授权
        整部作品的坐标，范围保持未确定。
-    2. 否则只有本作品的**首选标题**与在线条目标题等值（正式名或在线别名）时，
+    2. 已确认母系列就是在线正式条目时，子作品别名不能绕过范围保护，哪怕尚无共享绑定。
+    3. 否则只有本作品的**首选标题**与在线条目标题等值（正式名或在线别名）时，
        才认为在线条目代表整部作品。独立外传用自己的线上条目仍然可用；中/日/罗马音
        显示名互换不会改变结论，因为两条路径命中同一集合。
-    3. 已确认的系列子作品（含系列组名等值）保持范围保护；只有显式坐标证据能解除。
-    4. 其余独立作品沿用既有许可，不因补充证据而无谓收紧。
+    4. 已确认的系列子作品（含系列组名等值）保持范围保护；只有显式坐标证据能解除。
+    5. 其余独立作品沿用既有许可，不因补充证据而无谓收紧。
     """
 
     scope = target.get("provider_identity_scope") or {}
@@ -1703,6 +1713,18 @@ def provider_range_decision(
             ),
         )
     local = _normalize_title(target.get("preferred_title"))
+    related = (target.get("card_type") == "standalone"
+               or target.get("relation_type") in {"related", "spin_off", "sequel"})
+    parent_titles = {
+        _normalize_title(value)
+        for value in [target.get("series_group"), *(scope.get("series_groups") or [])]
+        if value
+    } - {"", local}
+    if (scope.get("confirmed_child") or related) and parent_titles & canonical_titles:
+        return ProviderRangeDecision(
+            PROVIDER_SCOPE_UNRESOLVED, RANGE_BASIS_SERIES_GROUP,
+            matched_titles=matched_titles,
+        )
     if local and local in provider_titles:
         # 独立作品或独立外传：本作品首选标题就是该在线条目的标题。
         return ProviderRangeDecision(
@@ -1716,8 +1738,6 @@ def provider_range_decision(
             matched_titles=matched_titles,
         )
     group = _normalize_title(target.get("series_group"))
-    related = (target.get("card_type") == "standalone"
-               or target.get("relation_type") in {"related", "spin_off", "sequel"})
     if group and local and group != local and related and group in provider_titles:
         return ProviderRangeDecision(
             PROVIDER_SCOPE_UNRESOLVED, RANGE_BASIS_SERIES_GROUP,
@@ -1849,7 +1869,7 @@ def _build_tv_episode_mappings(
                     "retryable": bool(error.get("retryable")),
                 })
             for episode in episodes:
-                _record_unmapped(diagnostics, episode, reason)
+                _record_unmapped(diagnostics, episode, reason, provider_failure=error)
             continue
         aligned = _map_continuous_season(
             episodes, online_season, verified_offsets=verified_offsets,
@@ -2026,7 +2046,8 @@ def _build_tv_episode_mappings(
                 if episode_detail_error:
                     if needs_identity:
                         _record_unmapped(diagnostics, episode, UNMAPPED_PROVIDER_RESOURCE_MISSING
-                                         if episode_detail_error['verified_missing'] else UNMAPPED_PROVIDER_UNAVAILABLE)
+                                         if episode_detail_error['verified_missing'] else UNMAPPED_PROVIDER_UNAVAILABLE,
+                                         provider_failure=episode_detail_error)
                     if season_results is not None and provider_season not in reported_seasons:
                         reported_seasons.add(provider_season)
                         season_results.append({
@@ -2055,6 +2076,7 @@ def _build_tv_episode_mappings(
                     diagnostics,
                     episode,
                     failure_reason or UNMAPPED_PROVIDER_RESOURCE_MISSING,
+                    provider_failure=season_errors.get(provider_season),
                 )
                 continue
             still = str(remote.get("still_path") or "")
