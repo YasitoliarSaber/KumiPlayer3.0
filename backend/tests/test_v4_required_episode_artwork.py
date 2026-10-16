@@ -2,11 +2,11 @@
 import json
 
 import pytest
+
 from app.media_v4.jobs.metadata_quality import require_regular_episode_metadata
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.revisions.service import V4RevisionService, metadata_recovery_policy
-
 from tests.test_v4_import_metadata_lifecycle import confirm, provider
 from tests.test_v4_import_numbering_status import _episode, _install_client, _target
 
@@ -102,3 +102,25 @@ def test_image_sources_are_snapshotted_without_blocking_metadata_completion(tmp_
     assert metadata['episode_mappings'][0]['still_url'].endswith('/episode.jpg')
     assert 'local_thumb_path' not in metadata['episode_mappings'][0]
     assert any(row['source_url'].endswith('/episode.jpg') and row['state'] == 'pending' for row in bindings)
+
+
+def test_episode_beyond_provider_season_boundary_keeps_missing_source(monkeypatch):
+    """92 个缺项的真实形态：本地集号超出在线季集数（独立核对见施工产物），
+
+    图片阶段必须保留"缺源"分类，不能因为资料 ready 就伪造就绪或重新发起请求。
+    """
+
+    from app.media_v4.jobs import metadata as module
+
+    requested: list[int] = []
+    _install_client(monkeypatch, seasons={1: [1, 2]}, requested=requested)
+    result = module.default_metadata_provider(_target([_episode('e1', season=1, episode=3)]))
+
+    assert requested == [1]
+    assert result['episode_mappings'] == []
+    assert result['unmapped_reason_codes'] == ['provider_resource_missing']
+    assert result['metadata_state'] == 'ready'
+    after_quality = require_regular_episode_metadata(
+        [{'episode_id': 'e1', 'local_season_number': 1, 'local_episode_number': 3}], result)
+    assert after_quality['missing_episode_still_count'] == 1
+    assert after_quality['episode_artwork_status'] != 'complete'
