@@ -1,5 +1,6 @@
 """Provider numbering stays inside confirmed child identity and coordinate scope."""
 
+import json
 from copy import deepcopy
 
 import pytest
@@ -472,3 +473,92 @@ def test_one_local_season_spanning_provider_seasons_never_uses_last_claim(tmp_pa
         saved = json.loads(conn.execute("SELECT metadata_json FROM scrape_bindings").fetchone()[0])
         assert saved["season_mapping_status"] == "partial"
         assert saved["season_mapping_conflicts"] == [season_id]
+
+
+def test_transient_failure_recovers_individually_while_conflict_stays_pending(tmp_path):
+    """辉夜形态：已授权逐集坐标上的临时故障可单独恢复，范围冲突成员继续待确认。
+
+    真实基线（rev-3a6ee525 / 83121）为 37 条 provider_unavailable + 2 条
+    ambiguous_provider_child_scope；这里用同样形状验证局部恢复与请求范围。
+    """
+
+    from dataclasses import replace
+
+    from app.media_v4.revisions.service import metadata_recovery_policy
+
+    entries = []
+    for key, number, season in (("s1e1", 1, 1), ("s1e2", 2, 1), ("s4e1", 1, 4)):
+        evidence, facts = entry(key, number=number)
+        if season != 1:
+            evidence = replace(evidence, relative_path=f"Child A/Season {season}/Child A S{season:02d}E{number:02d}.mkv")
+            facts = replace(facts, season_candidate=season)
+        entries.append((evidence, facts))
+    db, revisions, job = setup_db(tmp_path, entries)
+    # 已确认的另一个标题不同的作品绑定同一个在线 ID：S4 成员因此保持范围保护。
+    other_evidence, other_facts = entry("other", title="Sibling Work")
+    other_evidence = replace(other_evidence, root_id="sibling-root", scan_id="sibling-scan")
+    revisions.create_draft("sibling-revision", [(other_evidence, other_facts)])
+    revisions.confirm("sibling-revision")
+    with db.connect() as conn:
+        sibling = conn.execute("SELECT work_id FROM revision_bindings WHERE revision_id='sibling-revision'").fetchone()[0]
+        conn.execute("INSERT INTO provider_bindings(work_id,provider,media_type,provider_id) VALUES (?,'tmdb','tv','83121')", (sibling,))
+        episodes = [dict(r) for r in conn.execute(
+            "SELECT e.episode_id,s.local_season_number,e.local_episode_number FROM episodes e JOIN seasons s USING(season_id) "
+            "JOIN revision_bindings rb ON rb.episode_id=e.episode_id AND rb.revision_id=? AND rb.work_id=? "
+            "ORDER BY s.local_season_number,e.local_episode_number", ("revision", job["work_id"]))]
+        for item in episodes:
+            if item["local_season_number"] == 1:
+                conn.execute("INSERT INTO episode_provider_mappings VALUES (?,'tmdb',1,?,'')",
+                             (item["episode_id"], item["local_episode_number"]))
+        facts_before = [tuple(row) for row in conn.execute("SELECT * FROM parsed_facts")]
+
+    class Flaky(OfflineProvider):
+        def __init__(self):
+            super().__init__()
+            self.failing = True
+
+        def get_tv_season_episodes(self, provider_id, season):
+            self.requests.append((provider_id, season))
+            if self.failing:
+                raise metadata.TMDBClientError("fixture transport failure")
+            return {"episodes": [{"episode_number": n, "id": 9000 + season * 100 + n,
+                                  "name": f"Remote {season}-{n}", "still_path": "/fixture.jpg"}
+                                 for n in range(1, 30)]}
+
+    detail = {"name": "Child A", "original_name": "Child A",
+              "seasons": [{"season_number": 0}, {"season_number": 1}, {"season_number": 2}, {"season_number": 3}]}
+    client = Flaky()
+    captured = []
+
+    def provider(value):
+        diagnostics = metadata._empty_mapping_diagnostics()
+        mappings = metadata._build_tv_episode_mappings(client, 83121, value, work_detail=detail, diagnostics=diagnostics)
+        captured.append({"mappings": mappings, "reasons": diagnostics["unmapped_reasons"],
+                         "scope": diagnostics["provider_range"]})
+        return {"provider": "tmdb", "provider_id": "83121", "media_type": "tv", "title": "Child A",
+                "metadata_state": "ready", "episode_mappings": mappings, "_mapping_diagnostics": diagnostics}
+
+    service = scrape.V4ScrapeService(db)
+    service.process(job["job_id"], provider, mirror_root=tmp_path / "mirror")
+    first = captured[0]
+    assert client.requests == [(83121, 1)]  # S4 未授权，绝不请求
+    assert sorted(item["reason"] for item in first["reasons"]) == [
+        "ambiguous_provider_child_scope", "provider_unavailable", "provider_unavailable"]
+    assert first["mappings"] == []
+    assert first["scope"]["basis"] == "shared_online_identity"
+
+    with db.connect() as conn:
+        stored = json.loads(conn.execute("SELECT metadata_json FROM scrape_bindings").fetchone()[0])
+    assert stored["retryable"] is True
+    # 混合故障仍可重试资料，但不能被当成"补全特别篇"或身份重选。
+    assert metadata_recovery_policy(stored)["action"] == "retry_metadata"
+
+    client.failing = False
+    retry = service.requeue_work("revision", job["work_id"])
+    service.process(retry["job_id"], provider, mirror_root=tmp_path / "mirror")
+    second = captured[1]
+    assert client.requests == [(83121, 1), (83121, 1)]
+    assert [item["reason"] for item in second["reasons"]] == ["ambiguous_provider_child_scope"]
+    assert sorted((m["provider_season_number"], m["provider_episode_number"]) for m in second["mappings"]) == [(1, 1), (1, 2)]
+    with db.connect() as conn:
+        assert [tuple(row) for row in conn.execute("SELECT * FROM parsed_facts")] == facts_before

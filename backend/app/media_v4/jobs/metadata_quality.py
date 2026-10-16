@@ -72,9 +72,18 @@ def require_regular_episode_metadata(episodes: list[dict], metadata: dict) -> di
         return result
     code = 'episode_mapping_incomplete'
     reason = f'{len(blocked)} 个本地正片的分季或集号依据尚未确认，请核对编号对应关系。'
+    # 编号待核对不能抹掉"确有临时服务故障"这一事实：已授权坐标上的超时/限流/
+    # 无效响应仍可单独重试恢复，所以只承接已记录的临时故障，不整体放开重试。
+    retryable = bool(result.get('retryable')) or any(
+        str(item.get('reason') or '') == 'provider_unavailable'
+        for item in result.get('unmapped_reasons') or [] if isinstance(item, dict)
+    ) or any(
+        bool(item.get('retryable'))
+        for item in result.get('season_results') or [] if isinstance(item, dict)
+    )
     result.update(
         metadata_state='failed', reason_code=code, reason=reason,
-        failure_stage='episode_mapping', retryable=False, refresh_status='partial',
+        failure_stage='episode_mapping', retryable=retryable, refresh_status='partial',
         refresh_reason_code=code,
     )
     result.pop('metadata_warning', None)
