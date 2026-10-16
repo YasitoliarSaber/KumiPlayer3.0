@@ -6,6 +6,7 @@
 
 .head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
@@ -13,6 +14,7 @@
 
 .titleBlock {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 10px;
 }

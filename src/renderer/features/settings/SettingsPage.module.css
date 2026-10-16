@@ -2,6 +2,9 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+  width: 100%;
+  max-width: 1240px;
+  margin-inline: auto;
 }
 
 .head {
@@ -26,8 +29,8 @@
 
 .layout {
   display: grid;
-  grid-template-columns: 208px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: 184px minmax(0, 1fr);
+  gap: 28px;
   align-items: start;
 }
 
@@ -92,6 +95,7 @@
   padding: 16px 18px;
   border: var(--hairline);
   border-radius: var(--radius-card);
+  background: var(--card);
 }
 
 .panelTitle {
@@ -103,7 +107,7 @@
 .panelBody {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0;
 }
 
 .panelHint {
@@ -115,9 +119,20 @@
 
 .row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(0, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 280px);
   gap: 16px;
   align-items: center;
+  padding-block: 16px;
+  border-bottom: var(--hairline);
+}
+
+.row:first-child {
+  padding-top: 4px;
+}
+
+.row:last-child {
+  padding-bottom: 4px;
+  border-bottom: none;
 }
 
 .rowText {
@@ -137,7 +152,16 @@
 }
 
 .rowValue {
-  justify-self: start;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  width: 100%;
+}
+
+.rowValue > input,
+.rowValue > [role='combobox'],
+.rowValue > .rowControl {
   width: 100%;
 }
 
@@ -188,5 +212,10 @@
 
   .row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rowValue {
+    justify-content: flex-start;
+    max-width: 360px;
   }
 }

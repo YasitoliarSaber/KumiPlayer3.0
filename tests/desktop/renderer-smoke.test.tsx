@@ -89,7 +89,7 @@ describe('新 Renderer 装配', () => {
     renderWithProviders(<ControlsFixturePage />);
     fireEvent.click(screen.getByText('打开对话框'));
     await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
-    // 在对话框元素上派发 Escape，让它冒泡到 Mantine 的 window 监听器。
+    // 在对话框元素上派发 Escape，验证 Radix 的关闭与焦点路径。
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });

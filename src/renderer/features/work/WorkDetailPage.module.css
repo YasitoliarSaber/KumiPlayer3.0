@@ -144,7 +144,7 @@
 
 .body {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
   gap: 22px;
   align-items: start;
 }

@@ -94,6 +94,34 @@ describe('新旧前端模块边界', () => {
     expect(styleHits).toEqual([]);
   });
 
+  it('全局基础样式只经 Tailwind base 层进入，不能从 TS 入口绕过层级', () => {
+    const theme = fs.readFileSync(path.join(projectRoot, 'src/renderer/styles/tailwind.css'), 'utf8');
+    expect(theme).toMatch(/@import\s+['"]\.\/global\.css['"]\s+layer\(base\)/);
+    const bypasses = listSourceFiles('src/renderer').filter((file) =>
+      importsOf(file).some((specifier) => /(?:global|tokens)\.css$/.test(specifier)),
+    );
+    expect(bypasses.map((file) => path.relative(projectRoot, file))).toEqual([]);
+  });
+
+  it('新前端样式不消费已移除组件库的变量，项目变量都有定义', () => {
+    const files = [...listStyleFiles('src/renderer'), ...listSourceFiles('src/renderer')];
+    const sources = files.map((file) => ({ file, source: fs.readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '') }));
+    const definitions = new Set(sources.flatMap(({ source }) =>
+      [...source.matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]!),
+    ));
+    const missing: string[] = [];
+    for (const { file, source } of sources) {
+      for (const match of source.matchAll(/var\((--[\w-]+)/g)) {
+        const name = match[1]!;
+        if (!definitions.has(name) && !/^--(?:radix|tw)-/.test(name)) {
+          missing.push(`${path.relative(projectRoot, file)} -> ${name}`);
+        }
+        expect(name).not.toMatch(/^--(?:mantine|fluent)-/);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
   it('新 Renderer 只用一套 UI 原语（shadcn/ui + radix-ui）', () => {
     const files = listSourceFiles('src/renderer');
     const uiImports = new Set<string>();

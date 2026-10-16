@@ -1,14 +1,8 @@
 /*
- * 全局样式只允许：reset、字体加载策略、语义 Token 声明与应用级可访问性。
- * 这里不定义配色、圆角和动效数值；语义名映射到组件库自身变量，
- * 具体视觉由后续设计 Skill 决定。
+ * 仅由 tailwind.css 以 layer(base) 导入，低于 shadcn 的 utilities 层。
+ * Tailwind Preflight 负责 reset；不重复清空按钮的背景、边框、内边距与字体。
+ * 页面布局交给 CSS Modules，控件外观交给 shared/ui。
  */
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
 
 html,
 body,
@@ -19,60 +13,31 @@ body,
 
 body {
   font-family: var(--font-sans);
-  /* 与当前应用一致的基础排版：17px / 1.6，正文可读性优先。 */
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
   line-height: 1.6;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  color: var(--kumi-text);
-  background: var(--kumi-surface);
+  color: var(--foreground);
+  background: var(--background);
 }
 
 /* 键盘焦点下限：可见、不被裁切，且不依赖颜色单独表达。 */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
-/* 基础元素 reset：与当前应用的 foundation 层一致，只清除浏览器默认外观；
-   组件库自身样式（类选择器）优先级更高，不受影响。 */
-* {
-  box-sizing: border-box;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-button {
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']) {
   cursor: pointer;
 }
 
-img {
-  display: block;
-  max-width: 100%;
-}
-
-ul,
-ol {
-  margin: 0;
-}
-
-:root {
-  /* 语义类别（B 7.2）的最小映射：只别名到组件库变量，不引入自有视觉数值。 */
-  --kumi-surface: var(--mantine-color-body);
-  --kumi-surface-raised: var(--mantine-color-default);
-  --kumi-text: var(--mantine-color-text);
-  --kumi-text-muted: var(--mantine-color-dimmed);
-  --kumi-border: var(--mantine-color-default-border);
-  --kumi-accent: var(--mantine-primary-color-filled);
-  --kumi-focus: var(--mantine-primary-color-filled);
+:root[data-motion='reduced'] *,
+:root[data-motion='reduced'] *::before,
+:root[data-motion='reduced'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

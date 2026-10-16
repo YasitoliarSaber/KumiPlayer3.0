@@ -2,6 +2,9 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
 }
 
 .header {
@@ -27,11 +30,13 @@
 
 .headerActions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -70,6 +75,7 @@
   padding: 16px 18px;
   border: var(--hairline);
   border-radius: var(--radius-card);
+  background: var(--card);
 }
 
 .sourceHead {
@@ -120,8 +126,10 @@
 
 .sourceActions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .steps {
@@ -147,7 +155,7 @@
 }
 
 .stepActive {
-  border-color: var(--accent);
+  border-color: var(--primary);
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-weight: 600;
@@ -268,4 +276,11 @@
   border: var(--hairline);
   border-radius: var(--radius-card);
   background: var(--surface-soft);
+}
+
+@media (max-width: 820px) {
+  .header,
+  .maintenanceRow {
+    flex-wrap: wrap;
+  }
 }

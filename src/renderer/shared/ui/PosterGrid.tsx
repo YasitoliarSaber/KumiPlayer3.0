@@ -17,11 +17,13 @@ export interface PosterGridProps {
   readonly desiredColumns?: number;
   readonly scrollRef: RefObject<HTMLElement | null>;
   readonly emptyLabel?: string;
+  readonly imageMode?: 'poster' | 'fanart';
 }
 
 const MIN_CARD_WIDTH = 150;
 const GAP = 18;
-const META_HEIGHT = 52;
+// 海报卡固定 64px 文本区 + 8px 图文间距，必须与 PosterCard 一致。
+const META_HEIGHT = 72;
 const OVERSCAN = 2;
 
 export function PosterGrid({
@@ -30,35 +32,43 @@ export function PosterGrid({
   desiredColumns = 8,
   scrollRef,
   emptyLabel = '这个筛选下还没有作品',
+  imageMode = 'poster',
 }: PosterGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
+  const [{ width, scrollMargin }, setGeometry] = useState({ width: 0, scrollMargin: 0 });
 
   useLayoutEffect(() => {
     const element = containerRef.current;
     if (!element) {
       return undefined;
     }
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) {
-        setWidth(entry.contentRect.width);
-      }
-    });
+    const measure = () => {
+      const scrollElement = scrollRef.current;
+      const nextWidth = element.clientWidth;
+      const nextMargin = scrollElement
+        ? element.getBoundingClientRect().top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop
+        : 0;
+      setGeometry((previous) => previous.width === nextWidth && Math.abs(previous.scrollMargin - nextMargin) < 0.5
+        ? previous
+        : { width: nextWidth, scrollMargin: nextMargin });
+    };
+    const observer = new ResizeObserver(measure);
     observer.observe(element);
-    setWidth(element.clientWidth);
+    if (scrollRef.current) observer.observe(scrollRef.current);
+    measure();
     return () => observer.disconnect();
-  }, []);
+  }, [scrollRef]);
 
   const columns = resolveColumns(width, desiredColumns);
   const rowCount = Math.ceil(works.length / columns);
   const cardWidth = width > 0 ? (width - GAP * (columns - 1)) / columns : MIN_CARD_WIDTH;
-  const rowHeight = Math.round((cardWidth * 3) / 2) + META_HEIGHT + GAP;
+  const rowHeight = Math.ceil(cardWidth * (imageMode === 'fanart' ? 9 / 16 : 3 / 2)) + META_HEIGHT + GAP;
 
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => rowHeight,
+    scrollMargin,
     overscan: OVERSCAN,
   });
 
@@ -83,12 +93,12 @@ export function PosterGrid({
               key={row.key}
               className="absolute inset-x-0 top-0 grid gap-[18px] pb-[18px]"
               style={{
-                transform: `translateY(${row.start}px)`,
+                transform: `translateY(${row.start - scrollMargin}px)`,
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
               }}
             >
               {rowWorks.map((work) => (
-                <PosterCard key={work.id} work={work} onOpen={onOpen} eager={row.index <= 1} />
+                <PosterCard key={work.id} work={work} onOpen={onOpen} eager={row.index <= 1} imageMode={imageMode} />
               ))}
             </div>
           );
@@ -101,5 +111,6 @@ export function PosterGrid({
 /** 列数由容器宽度决定，并受海报墙密度设置限制。 */
 export function resolveColumns(width: number, desired: number): number {
   const byWidth = width > 0 ? Math.floor((width + GAP) / (MIN_CARD_WIDTH + GAP)) : 2;
-  return Math.max(2, Math.min(desired, Math.max(byWidth, 2)));
+  const target = Number.isFinite(desired) ? Math.max(2, Math.min(10, Math.floor(desired))) : 8;
+  return Math.max(2, Math.min(target, Math.max(byWidth, 2)));
 }

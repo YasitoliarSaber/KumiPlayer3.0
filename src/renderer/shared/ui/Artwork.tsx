@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 
 import type { ArtworkRef } from '../api/service';
+import { cn } from '@/shared/lib/utils';
 
 export type ArtworkKind = 'poster' | 'fanart' | 'logo' | 'episode';
 
@@ -33,7 +34,7 @@ export function Artwork({
 
   if (!artwork || failed) {
     return (
-      <span className={className} data-artwork-fallback={kind} aria-hidden="true">
+      <span className={cn('grid place-items-center overflow-hidden bg-muted px-3 text-center text-[12px] text-muted-foreground', className)} data-artwork-fallback={kind} aria-hidden="true">
         {fallbackLabel}
       </span>
     );

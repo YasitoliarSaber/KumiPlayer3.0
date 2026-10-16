@@ -16,7 +16,11 @@ import { applyThemeToDocument, resolveTheme } from './theme';
 
 export function AppRoot() {
   const [queryClient] = useState(createAppQueryClient);
-  const preference = useDemoState().settings.appearance.theme;
+  const { theme: preference, motion } = useDemoState().settings.appearance;
+
+  useEffect(() => {
+    document.documentElement.dataset.motion = motion;
+  }, [motion]);
 
   useEffect(() => {
     const media =

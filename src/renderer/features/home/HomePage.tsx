@@ -15,6 +15,7 @@ import { PosterCard } from '../../shared/ui/PosterCard';
 import { EmptySurface, ErrorSurface, LoadingSurface, SectionHeading } from '../../shared/ui/Surface';
 import { matchView } from '../../shell/AppShell';
 import { useUiStore } from '../../app/ui-store';
+import { useDemoState } from '@/mock/demo-store';
 import styles from './HomePage.module.css';
 
 const SECTIONS: ReadonlyArray<{ view: 'anime_series' | 'anime_movie' | 'live_series' | 'live_movie'; label: string }> = [
@@ -30,7 +31,9 @@ export function HomePage() {
   const source = useUiStore((state) => state.source);
   const [index, setIndex] = useState(0);
   const [autoPaused, setAutoPaused] = useState(false);
-  const reducedMotion = usePrefersReducedMotion();
+  const appearance = useDemoState().settings.appearance;
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const reducedMotion = prefersReducedMotion || appearance.motion === 'reduced';
 
   const works = useMemo(
     () => (library.data?.works ?? []).filter((work) => source === 'all' || work.sources.includes(source)),
@@ -112,7 +115,7 @@ export function HomePage() {
           </button>
         </p>
       ) : null}
-      <section className={styles.showcase} aria-label="媒体展示">
+      <section className={styles.showcase} aria-label="媒体展示" data-has-side={sideFeatured.length > 0}>
         <div className={styles.feature}>
           <button
             type="button"
@@ -178,11 +181,11 @@ export function HomePage() {
         </div>
 
         <div className={styles.sideList}>
-          {sideFeatured.map((work, tileIndex) => (
+          {sideFeatured.map((work) => (
             <button
               key={work.id}
               type="button"
-              className={tileIndex === 0 ? `${styles.tile} ${styles.tileWide}` : styles.tile}
+              className={styles.tile}
               onClick={() => open(work.id)}
               aria-label={`打开${work.title}详情`}
             >
@@ -243,7 +246,7 @@ export function HomePage() {
             />
             <div className={styles.grid}>
               {sectionWorks.slice(0, 8).map((work) => (
-                <PosterCard key={work.id} work={work} onOpen={open} />
+                <PosterCard key={work.id} work={work} onOpen={open} imageMode={appearance.cardImageMode} />
               ))}
             </div>
           </section>

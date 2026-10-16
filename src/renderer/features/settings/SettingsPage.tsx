@@ -26,6 +26,7 @@ import type { SettingsSection } from '../../shared/api/service';
 import { demoQueryKeys, useMediaService, useSettings } from '../../shared/api/service-context';
 import { ErrorSurface, LoadingSurface, StatusChip } from '../../shared/ui/Surface';
 import { useUiStore } from '@/app/ui-store';
+import { THEME_LABELS } from '@/app/theme';
 import styles from './SettingsPage.module.css';
 
 const SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string; icon: LucideIcon }> = [
@@ -155,13 +156,10 @@ export function SettingsPage() {
 
           {active === 'appearance' ? (
             <Panel title="外观">
-              <Row label="主题" hint="与当前应用一致的三套主题。">
+              <Row label="主题" hint="选择浅色、深色、纯白，或跟随系统外观。">
                 <Select
-                  data={[
-                    { value: 'fluent', label: 'Fluent（浅色）' },
-                    { value: 'cinema', label: 'Cinema（深色）' },
-                    { value: 'mica', label: 'Mica（纯白）' },
-                  ]}
+                  label="主题"
+                  data={THEME_LABELS}
                   value={data.appearance.theme}
                   onChange={(value) =>
                     value && save('appearance', { theme: value }, '已切换主题（演示）')
@@ -170,6 +168,7 @@ export function SettingsPage() {
               </Row>
               <Row label="动效" hint="减弱动效时停用自动轮播与交互动画。">
                 <Select
+                  label="动效"
                   data={[
                     { value: 'standard', label: '标准' },
                     { value: 'expressive', label: '丰富' },
@@ -181,6 +180,7 @@ export function SettingsPage() {
               </Row>
               <Row label="海报墙列数" hint="分类页与媒体库使用的目标列数。">
                 <NumberInput
+                  label="海报墙列数"
                   min={2}
                   max={10}
                   value={data.appearance.posterSize}
@@ -191,6 +191,7 @@ export function SettingsPage() {
               </Row>
               <Row label="卡片图片" hint="系列卡片使用海报或背景图。">
                 <Select
+                  label="卡片图片"
                   data={[
                     { value: 'poster', label: '海报' },
                     { value: 'fanart', label: '背景图' },

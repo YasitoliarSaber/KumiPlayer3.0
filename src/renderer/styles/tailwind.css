@@ -8,6 +8,7 @@
 
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import './global.css' layer(base);
 
 /* 深色主题由 data-theme 驱动，而不是系统的 .dark 类。 */
 @custom-variant dark (&:where([data-theme='cinema'], [data-theme='cinema'] *));
@@ -64,6 +65,7 @@
   /* 与 CSS Modules 共用的语义别名。 */
   --app-bg: var(--background);
   --surface: var(--card);
+  --surface-solid: var(--card);
   --surface-soft: #f3f6fa;
   --surface-hover: #eef2f8;
   --text: var(--foreground);
@@ -83,7 +85,7 @@
   --titlebar-height: 48px;
   --sidebar-width-expanded: 248px;
   --sidebar-width-collapsed: 56px;
-  --page-gutter: 18px;
+  --page-gutter: clamp(16px, 2vw, 28px);
   --font-sans-stack: 'Microsoft YaHei UI', 'Segoe UI Variable Text', 'Segoe UI', -apple-system,
     BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
   --text-xs: 12px;
@@ -92,6 +94,8 @@
   --text-lg: 17px;
   --text-title: 22px;
   --text-display: 34px;
+  --line-body: 1.7;
+  --line-tight: 1.35;
   color-scheme: light;
 }
 

@@ -233,6 +233,16 @@ describe('公共框架', () => {
 });
 
 describe('首页', () => {
+  it('本机减弱动效偏好会停用自动橱窗与暂停按钮', async () => {
+    updateDemoState((current) => ({
+      settings: { ...current.settings, appearance: { ...current.settings.appearance, motion: 'reduced' } },
+    }));
+    renderPage(<HomePage />);
+    await screen.findByLabelText('媒体展示');
+    expect(screen.queryByRole('button', { name: '暂停自动推荐' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '恢复自动推荐' })).toBeNull();
+  });
+
   it('渲染橱窗、继续观看与分类分区', async () => {
     renderPage(<HomePage />);
     await waitFor(() => expect(screen.getByLabelText('媒体展示')).toBeTruthy());

@@ -18,6 +18,7 @@ import { useUiStore } from '../../app/ui-store';
 import { pushDemoPreference } from '../../mock/preferences';
 import { matchView } from '../../shell/AppShell';
 import { Button } from '@/shared/ui/button';
+import { useDemoState } from '@/mock/demo-store';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -56,7 +57,7 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const source = useUiStore((state) => state.source);
-  const posterSize = 8;
+  const { posterSize, cardImageMode } = useDemoState().settings.appearance;
   const mainScroll = useMainScroll();
   const view = mode.kind === 'view' ? params.view ?? 'anime_series' : mode.kind;
   const query = mode.kind === 'search' ? (searchParams.get('q') ?? '').trim() : '';
@@ -189,6 +190,7 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
           works={sorted}
           onOpen={open}
           desiredColumns={posterSize}
+          imageMode={cardImageMode}
           scrollRef={mainScroll}
           emptyLabel="这个筛选下还没有作品"
         />

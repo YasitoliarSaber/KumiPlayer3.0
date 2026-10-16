@@ -1,9 +1,0 @@
-.block {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px 18px;
-  border: var(--hairline);
-  border-radius: var(--radius-card);
-  background: var(--surface);
-}

@@ -226,12 +226,14 @@
 .main {
   grid-area: main;
   min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
 }
 
 .content {
-  padding: 16px var(--page-gutter) 40px;
+  min-width: 0;
+  padding: 24px var(--page-gutter) 48px;
 }
 
 .drawer {
@@ -240,6 +242,7 @@
   width: 264px;
   max-height: calc(100vh - 72px);
   transform: none;
+  translate: none;
   padding: 8px;
 }
 
@@ -250,6 +253,16 @@
 @media (max-width: 1024px) {
   .shell {
     --sidebar-width: var(--sidebar-width-collapsed);
+  }
+
+  .sidebar .sidebarHeaderLabel,
+  .sidebar .navLabel,
+  .sidebar .navCount {
+    display: none;
+  }
+
+  .sidebar .sidebarHeaderButton {
+    justify-content: center;
   }
 }
 
@@ -263,5 +276,9 @@
 
   .sidebar {
     display: none;
+  }
+
+  .content {
+    padding-top: 18px;
   }
 }

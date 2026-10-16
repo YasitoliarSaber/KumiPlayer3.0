@@ -15,30 +15,32 @@ export interface PosterCardProps {
   readonly variant?: 'poster' | 'wide';
   readonly onOpen: (workId: string) => void;
   readonly eager?: boolean;
+  readonly imageMode?: 'poster' | 'fanart';
 }
 
-function PosterCardComponent({ work, variant = 'poster', onOpen, eager = false }: PosterCardProps) {
+function PosterCardComponent({ work, variant = 'poster', onOpen, eager = false, imageMode = 'poster' }: PosterCardProps) {
   const wide = variant === 'wide';
-  const image = wide ? work.artwork.fanart ?? work.artwork.poster : work.artwork.poster;
+  const landscape = wide || imageMode === 'fanart';
+  const image = landscape ? work.artwork.fanart ?? work.artwork.poster : work.artwork.poster;
   const percent =
-    work.progress && work.progress.duration > 0
+    work.progress?.completed
+      ? 100
+      : work.progress && work.progress.duration > 0
       ? (work.progress.position / work.progress.duration) * 100
-      : work.progress?.completed
-        ? 100
-        : null;
+      : null;
 
   return (
     <button
       type="button"
       onClick={() => onOpen(work.id)}
       aria-label={`打开${work.title}详情`}
-      className="group flex flex-col gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+      className="group flex min-w-0 flex-col gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
     >
       <span
         className={cn(
           'relative block overflow-hidden rounded-lg bg-[var(--surface-soft)] ring-1 ring-inset ring-[var(--border)]',
           'transition-shadow duration-150 group-hover:ring-[var(--border-strong)]',
-          wide ? 'aspect-video' : 'aspect-[2/3]',
+          landscape ? 'aspect-video' : 'aspect-[2/3]',
         )}
       >
         <Artwork
@@ -68,8 +70,11 @@ function PosterCardComponent({ work, variant = 'poster', onOpen, eager = false }
           </span>
         ) : null}
       </span>
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="line-clamp-2 text-[13.5px] leading-tight font-semibold text-foreground group-hover:text-[var(--accent-strong)]">
+      <span className={cn('flex w-full min-w-0 flex-col gap-1', wide ? 'h-11' : 'h-16')}>
+        <span className={cn(
+          'text-[14px] leading-[1.35] font-semibold text-foreground group-hover:text-[var(--accent-strong)]',
+          wide ? 'line-clamp-1 h-[1.35em]' : 'line-clamp-2 h-[2.7em]',
+        )} title={work.title}>
           {work.title}
         </span>
         <span className="truncate text-[12px] text-muted-foreground">{subtitle(work, wide)}</span>
