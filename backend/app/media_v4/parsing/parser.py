@@ -348,7 +348,8 @@ def _parse_sidecar_nfo(evidence: SourceEvidence) -> tuple[int | None, str, str, 
 class V4Parser:
     """从一个 SourceEvidence 生成一个不可变 ParsedFacts。"""
 
-    VERSION = "v4-parser-19"
+    #: v20：作品边界内的内嵌剧场版/总集篇目录可作为电影证据（上/下篇与合集子作品区分）。
+    VERSION = "v4-parser-20"
 
     @classmethod
     def _parsed_fact_id(cls, evidence: SourceEvidence) -> str:

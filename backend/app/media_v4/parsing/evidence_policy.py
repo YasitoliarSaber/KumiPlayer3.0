@@ -150,6 +150,14 @@ _MOVIE_FILE_RES = (
     re.compile(r"(?i)(?<![A-Za-z])(?:THE\s+)?MOVIE\b"),
 )
 _MOVIE_DIR_TOKENS = frozenset({"剧场版", "劇場版", "映画", "动画电影", "电影", "movie", "movies", "总集篇", "總集篇"})
+#: 目录名里内嵌的类型标记（如"孤独摇滚！剧场总集篇 2024"）。只在当前作品边界内生效，
+#: 祖先合集带 Movie/OVA 字样不影响其中的各个子作品。
+_MOVIE_DIR_MARKER_RE = re.compile(r"剧场版|劇場版|总集篇|總集篇|映画")
+#: 作品的(上)/(下)、前/后篇只是同一部电影的拆分标记，参与同名比较时要剥掉。
+_MOVIE_PART_SUFFIX_RE = re.compile(
+    r"(?i)(?:\s*[（(]\s*(?:上|下|前篇|后篇|前編|後編|part\s*\d+)\s*[）)]"
+    r"|\s+(?:上|下|前篇|后篇|前編|後編|part\s*\d+))\s*$"
+)
 
 #: 独立作品/外传证据。
 _STANDALONE_FILE_RE = re.compile(r"(?i)外传|外傳|(?<![A-Za-z])SPIN[-\s]?OFF(?![A-Za-z])")
@@ -357,6 +365,36 @@ def _segment_token(value: str) -> str:
 def _nearest_semantic_directory(directory: tuple[DirectoryToken, ...]) -> DirectoryToken | None:
     for token in directory:
         if token.semantic:
+            return token
+    return None
+
+
+def _work_title_base(name: str) -> str:
+    """作品目录的命名基干：剥掉 (上)/(下)/前篇等拆分标记后再比较。"""
+
+    return _normalize_segment(_MOVIE_PART_SUFFIX_RE.sub("", name or ""))
+
+
+def _movie_marker_directory(directory: tuple[DirectoryToken, ...]) -> DirectoryToken | None:
+    """返回可作电影证据的类型目录；类型目录必须属于当前作品边界。
+
+    只有两种情况成立：整段就是类型名（`剧场版`、`总集篇`、`Movie`…），或
+    作品目录自身/其上一级目录内嵌类型标记且与本作品同名（`孤独摇滚！剧场总集篇 2024`
+    之于 `孤独摇滚 (上)`）。祖先合集目录带 Movie/OVA 字样不会影响其中的子作品。
+    """
+
+    if not directory:
+        return None
+    exact = next((token for token in directory if _segment_token(token.name) in _MOVIE_DIR_TOKENS), None)
+    if exact is not None:
+        return exact
+    for index, token in enumerate(directory[:2]):
+        if not _MOVIE_DIR_MARKER_RE.search(token.name):
+            continue
+        if index == 0:
+            return token
+        base = _work_title_base(directory[0].name)
+        if base and base in _normalize_segment(token.name):
             return token
     return None
 
@@ -646,10 +684,7 @@ def classify_content(
     )
     classification_prefix = classification_title_prefix(stem)
     movie_hit = next((p.pattern for p in _MOVIE_FILE_RES if p.search(classification_prefix)), "")
-    movie_dir = next(
-        (token for token in directory if _segment_token(token.name) in _MOVIE_DIR_TOKENS),
-        None,
-    )
+    movie_dir = _movie_marker_directory(directory)
     standalone_hit = _STANDALONE_FILE_RE.search(classification_prefix)
     standalone_dir = next(
         (token for token in directory if _segment_token(token.name) in _STANDALONE_DIR_TOKENS),

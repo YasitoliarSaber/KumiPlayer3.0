@@ -2,6 +2,7 @@
 from pathlib import PurePosixPath
 
 import pytest
+
 from app.media_v4.domain.models import SourceEvidence
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.resolution.resolver import MediaResolver
@@ -231,3 +232,55 @@ def test_regular_scrape_snapshot_does_not_require_special_metadata(tmp_path, mon
         assert snapshot['covers_members']
         metadata = referenced_metadata(conn, card['work_id'])
         assert len(metadata['episode_mappings']) == 1
+
+
+@pytest.mark.parametrize("part", ["上", "下"])
+def test_in_work_compilation_movie_directory_is_movie_evidence(part):
+    """孤独摇滚形态：作品目录上一级是同名的剧场总集篇目录，上/下篇都是电影。"""
+
+    path = (f"孤独摇滚 剧场版/孤独摇滚！剧场总集篇 2024/孤独摇滚 ({part})/"
+            f"孤独摇滚 ({part}) （2024.4）[Ma10p_2160p][x265_4flac_DTS_ass].mkv")
+    facts = pair(path)[1]
+
+    assert facts.content_class == "movie"
+    assert facts.media_type == "movie"
+    assert facts.is_importable
+    assert any(trace.origin == "directory" for trace in facts.decision_trace
+               if trace.field == "content_class")
+
+
+@pytest.mark.parametrize("path,expected_media_type", [
+    # 祖先合集目录带类型字样，不能影响其中的子作品。
+    ("剧场版合集/作品A/作品A S01E01.mkv", "tv"),
+    # 没有类型目录标记的独立电影：片名本身不构成类型证据，保持 unknown。
+    ("W 4k 物语系列/13.伤物语/[Ygm] Kizumonogatari I - Tekketsu Hen [Ma10p].mkv", "unknown"),
+    ("S 4k 赛马娘/赛马娘 巅峰之路/[Ygm] Uma Musume Pretty Derby Road to the Top [Ma10p].mkv", "unknown"),
+    ("动画/[Nekomoe kissaten&VCB-Studio] Boku no Kokoro no Yabai Yatsu [Ma10p_1080p]/"
+     "[Nekomoe kissaten&VCB-Studio] Boku no Kokoro no Yabai Yatsu [Twi-Yaba][Ma10p_1080p].mkv", "unknown"),
+    ("动画/[VCB-Studio] Yama no Susume/[VCB-Studio] Yama no Susume Omoide Present [Ma10p_1080p]/"
+     "[VCB-Studio] Yama no Susume Omoide Present [Ma10p_1080p].mkv", "unknown"),
+])
+def test_type_marker_scope_and_unknown_movie_titles(path, expected_media_type):
+    facts = pair(path)[1]
+
+    assert facts.content_class != "movie"
+    assert facts.media_type == expected_media_type
+    assert facts.is_importable
+
+
+def test_ancestor_ova_directory_excludes_content_without_making_it_a_movie():
+    """祖先合集/类型目录带 OVA 字样时仍按用户规则排除特别篇，不升级为电影。"""
+
+    facts = pair("动画/OVA/作品A/作品A S01E01.mkv")[1]
+
+    assert facts.content_class == "attached_special"
+    assert not facts.is_importable
+
+
+def test_work_directory_itself_may_carry_the_type_marker():
+    """作品目录自身就是剧场版目录时仍是电影证据（既有行为保留）。"""
+
+    facts = pair("4k 京阿尼合集/孤独摇滚 剧场版/孤独摇滚 剧场版.mkv")[1]
+
+    assert facts.content_class == "movie"
+    assert facts.media_type == "movie"
