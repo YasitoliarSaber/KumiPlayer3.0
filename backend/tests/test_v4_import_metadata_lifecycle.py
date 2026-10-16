@@ -336,10 +336,15 @@ def test_failed_snapshot_publication_preserves_previous_reference(tmp_path, monk
     def fail(*args, **kwargs):
         raise OSError('fixture write failed')
     monkeypatch.setattr('app.media_v4.persistence.metadata_lifecycle.publish_snapshot', fail)
-    with pytest.raises(OSError, match='fixture write failed'):
-        V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
+    # Runner 不再把批次异常外抛给调用方；异常登记为该任务的失败结果。
+    V4JobRunner(database, metadata_provider=provider).process_available(mirror_root=mirror)
     with database.connect() as conn:
         assert dict(conn.execute('SELECT * FROM revision_metadata_refs').fetchone()) == before
+        job_row = dict(conn.execute(
+            "SELECT status,last_error FROM jobs WHERE revision_id='r1' AND job_type='scrape_work' "
+            "ORDER BY updated_at DESC LIMIT 1").fetchone())
+    assert job_row['status'] == 'failed', job_row
+    assert 'fixture write failed' in (job_row['last_error'] or '')
     card = V4LibraryProjection(database).rebuild().cards[0]
     assert card['title'] == 'Online title'
     assert card['metadata']['refresh_status'] == 'failed'

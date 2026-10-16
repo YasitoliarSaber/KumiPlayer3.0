@@ -19,14 +19,27 @@ def _app_root() -> Path:
     return Path(__file__).resolve().parents[1] / "app"
 
 
-def test_user_version_literal_matches_the_schema_constant():
+def test_runtime_user_version_matches_the_schema_constant(tmp_path):
+    """运行态版本号必须等于唯一常量；重复初始化不得改写或回退版本。"""
+
+    import sqlite3
+
+    from app.media_v4.persistence.database import V4Database
     from app.media_v4.persistence.schema_v4 import V4_SCHEMA_VERSION
 
-    source = (_app_root() / "media_v4" / "persistence" / "database.py").read_text(encoding="utf-8")
+    path = tmp_path / "schema-version.db"
+    V4Database(path).initialize()
+    with sqlite3.connect(path) as conn:
+        written = int(conn.execute("PRAGMA user_version").fetchone()[0])
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert written == V4_SCHEMA_VERSION
+    assert {"source_evidence", "parsed_facts", "works", "episodes"} <= tables
+    # 再次打开既有库：版本读回一致，不会"旧后端数据架构需要重置"。
+    V4Database(path).initialize()
+    with sqlite3.connect(path) as conn:
+        assert int(conn.execute("PRAGMA user_version").fetchone()[0]) == V4_SCHEMA_VERSION
 
-    assert f"PRAGMA user_version = {V4_SCHEMA_VERSION}" in source, (
-        f"database.py 的 PRAGMA 字面量必须与 V4_SCHEMA_VERSION({V4_SCHEMA_VERSION}) 一致"
-    )
+    source = (_app_root() / "media_v4" / "persistence" / "database.py").read_text(encoding="utf-8")
     # 只允许一处写入字面量：多出来的那一份迟早与常量漂移。
     assert source.count("PRAGMA user_version = ") == 1
 

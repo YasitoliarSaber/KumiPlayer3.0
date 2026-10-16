@@ -89,7 +89,10 @@ def test_image_sources_are_snapshotted_without_blocking_metadata_completion(tmp_
     confirm(database, 'r1')
     V4JobRunner(database, metadata_provider=provider).process_available()
     unit = V4RevisionService(database).get_execution_progress('r1')['work_units'][0]
-    assert unit['overall_status'] == 'completed'
+    # 资料本身已完成；整体仍在等必需图片，两者必须分开断言。
+    assert unit['metadata_state'] == 'ready'
+    assert unit['episode_mapping_status'] == 'complete'
+    assert unit['overall_status'] == 'running_artwork'
     assert unit['artwork']['status'] == 'pending'
     with database.connect() as conn:
         metadata = json.loads(conn.execute('SELECT metadata_json FROM scrape_bindings').fetchone()[0])

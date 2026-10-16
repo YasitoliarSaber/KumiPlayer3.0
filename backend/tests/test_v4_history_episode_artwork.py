@@ -30,9 +30,19 @@ def _metadata(database, mappings):
         )
 
 
-def test_history_returns_played_episode_number_and_its_local_thumbnail(history_database):
+def _publish_episode_artwork(database, work_id: str = "w1") -> None:
+    """登记已发布图片记录：历史缩略图只消费已发布资源，不读 mirror 路径。"""
+
+    from tests.artwork_fixtures import ready_artwork
+
+    with database.connect() as conn:
+        ready_artwork(conn, work_id)
+
+
+def test_history_returns_played_episode_number_and_its_published_thumbnail(history_database):
     from app.api.playback_v4 import history
 
+    _publish_episode_artwork(history_database)
     _metadata(history_database, [
         {"episode_id": "ep-w1-1-1", "still_url": "/wrong-episode.jpg"},
         {"episode_id": "ep-w1-1-3", "local_thumb_path": "/mirror/ep-three.jpg", "still_url": "/remote.jpg", "title": "第三集标题"},
@@ -40,7 +50,9 @@ def test_history_returns_played_episode_number_and_its_local_thumbnail(history_d
     item = history(limit=1)["items"][0]
     assert item["season_number"] == 1
     assert item["episode_number"] == 3
-    assert item["thumb_path"] == "/mirror/ep-three.jpg"
+    assert item["thumb_path"].startswith("/api/assets/artwork/fixture:ep-w1-1-3:episode_thumb/")
+    assert item["thumb_path"].endswith("/768")
+    assert item["thumb_path"] != "/mirror/ep-three.jpg"
     assert item["episode_title"] == "第三集标题"
     assert item["position"] == 694
     assert item["season_snapshot"] == "第 1 季"
@@ -58,12 +70,18 @@ def test_unmapped_history_episode_never_uses_work_background(history_database):
 def test_history_uses_retained_successful_episode_artwork(history_database, monkeypatch):
     from app.api.playback_v4 import history
 
+    _publish_episode_artwork(history_database)
     _metadata(history_database, [{"episode_id": "ep-w1-1-3", "still_url": "/partial-refresh.jpg"}])
     monkeypatch.setattr(
         "app.media_v4.persistence.metadata_lifecycle.referenced_metadata",
-        lambda _conn, _work_id: {"episode_mappings": [{"episode_id": "ep-w1-1-3", "local_thumb_path": "/mirror/retained.jpg"}]},
+        lambda _conn, _work_id: {"episode_mappings": [
+            {"episode_id": "ep-w1-1-3", "local_thumb_path": "/mirror/retained.jpg", "title": "保留的成功标题"}]},
     )
-    assert history(limit=1)["items"][0]["thumb_path"] == "/mirror/retained.jpg"
+    item = history(limit=1)["items"][0]
+    # retained 成功资料继续提供标题；图片仍只来自已发布资源，不回退旧路径。
+    assert item["episode_title"] == "保留的成功标题"
+    assert item["thumb_path"].startswith("/api/assets/artwork/fixture:ep-w1-1-3:episode_thumb/")
+    assert item["thumb_path"] != "/mirror/retained.jpg"
 
 
 def test_history_preserves_orphan_event_snapshots_without_inventing_numbers(history_database):
