@@ -69,6 +69,8 @@ UNMAPPED_PROVIDER_UNAVAILABLE = "provider_unavailable"
 UNMAPPED_NUMBERING_CONFLICT = "numbering_conflict"
 UNMAPPED_CHILD_SCOPE = "ambiguous_provider_child_scope"
 UNMAPPED_INCOMPLETE_COORDINATES = "incomplete_provider_coordinates"
+#: 本地另一条已映射集已经占用同一在线集：不是"缺编号依据"，而是重复本地区间。
+UNMAPPED_DUPLICATE_LOCAL_RANGE = "duplicate_local_range"
 UNMAPPED_REASONS = (
     UNMAPPED_MISSING_LOCAL_NUMBER,
     UNMAPPED_UNKNOWN_LOCAL_SEASON,
@@ -78,6 +80,7 @@ UNMAPPED_REASONS = (
     UNMAPPED_NUMBERING_CONFLICT,
     UNMAPPED_CHILD_SCOPE,
     UNMAPPED_INCOMPLETE_COORDINATES,
+    UNMAPPED_DUPLICATE_LOCAL_RANGE,
 )
 
 #: 只有这些状态证明远端服务/协议确有故障；其余无映射一律不得写成"服务不可用"。
@@ -116,6 +119,7 @@ _UNMAPPED_REASON_LABELS = {
     UNMAPPED_NUMBERING_CONFLICT: "编号证据互相冲突",
     UNMAPPED_CHILD_SCOPE: "子作品与在线大系列的编号范围未对齐",
     UNMAPPED_INCOMPLETE_COORDINATES: "已有逐集在线季集坐标不完整",
+    UNMAPPED_DUPLICATE_LOCAL_RANGE: "已有本地集映射到同一在线集（重复本地区间）",
 }
 
 
@@ -649,6 +653,24 @@ def _record_unmapped(
     ids = diagnostics.setdefault("unmapped_episode_ids", [])
     if episode_id and episode_id not in ids:
         ids.append(episode_id)
+
+
+def _replace_unmapped_reason(
+    diagnostics: dict[str, Any] | None,
+    episode: dict,
+    reason: str,
+) -> None:
+    """把已记录的拒绝原因改成更精确的一条；同一集在诊断里只保留唯一原因。"""
+
+    if diagnostics is None:
+        return
+    code = reason if reason in UNMAPPED_REASONS else UNMAPPED_INSUFFICIENT_EVIDENCE
+    episode_id = _episode_key(episode)
+    for item in diagnostics.setdefault("unmapped_reasons", []):
+        if isinstance(item, dict) and item.get("episode_id") == episode_id:
+            item["reason"] = code
+            return
+    _record_unmapped(diagnostics, episode, code)
 
 
 def _record_conflict(diagnostics: dict[str, Any] | None, episode: dict, reason: str) -> None:
@@ -2220,6 +2242,27 @@ def _map_continuous_season(
             item.pop("mapping_evidence", None)
             item["unmapped_reason"] = UNMAPPED_NUMBERING_CONFLICT
             _record_unmapped(diagnostics, item, UNMAPPED_NUMBERING_CONFLICT)
+    # 规则把本地季上限锁住后仍超出的集，如果其"同号即在线集"的坐标已被本作品另一条
+    # 已映射集占用，真正原因是重复本地区间，不是缺少编号依据。只在已核验规则明确
+    # 表示本地编号即在线编号（offset=0）且确实越界时成立，避免误标其它布局。
+    for item in mapped:
+        if item.get("unmapped_reason") != UNMAPPED_INSUFFICIENT_EVIDENCE:
+            continue
+        season = _positive_int(item.get("local_season_number"))
+        number = _positive_int(item.get("local_episode_number"))
+        season_rule = rules.get(season) if season else None
+        if not number or not season_rule or season_rule.get("offset") != 0:
+            continue
+        maximum = _positive_int(season_rule.get("max_local_episode_number"))
+        if maximum is None or number <= maximum:
+            continue
+        identity = (provider_season_number, number)
+        owners = {key for key in claims.get(identity, set()) if key != _episode_key(item)}
+        if not owners:
+            continue
+        item["unmapped_reason"] = UNMAPPED_DUPLICATE_LOCAL_RANGE
+        item["duplicate_range_owner_episode_ids"] = sorted(owners)
+        _replace_unmapped_reason(diagnostics, item, UNMAPPED_DUPLICATE_LOCAL_RANGE)
     return mapped
 
 

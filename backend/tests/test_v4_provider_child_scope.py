@@ -174,6 +174,31 @@ def test_provider_range_basis_is_saved_with_finalized_metadata():
     assert finalized["provider_range"]["basis"] == metadata.RANGE_BASIS_PREFERRED_TITLE_ENTRY
 
 
+def test_shared_online_id_with_inconsistent_local_seasons_never_requests_own_number():
+    """鬼灭/弦音形态：同一在线 ID 下各本地作品的季号与在线季号不一致，不能按本地季号请求。"""
+
+    detail = {"name": "鬼灭之刃", "original_name": "鬼滅の刃",
+              "title_aliases": ["鬼灭之刃 游郭篇", "Demon Slayer"], "seasons": [
+                  {"season_number": 1}, {"season_number": 2}, {"season_number": 3}]}
+    scope = {"confirmed_child": True, "series_groups": ["鬼灭之刃系列"],
+             "shared_distinct_tv_ids": ["85937"],
+             "shared_tv_titles": [{"provider_id": "85937", "preferred_title": "Demon Slayer"}]}
+    value = target("鬼灭之刃 游郭篇")
+    value["episodes"] = [
+        {**value["episodes"][0], "episode_id": f"ep-{n}", "local_season_number": 2,
+         "local_episode_number": n} for n in range(1, 12)
+    ]
+    value["provider_identity_scope"] = scope
+    client = OfflineProvider()
+    diagnostics = metadata._empty_mapping_diagnostics()
+
+    assert metadata._build_tv_episode_mappings(client, 85937, value, work_detail=detail,
+                                               diagnostics=diagnostics) == []
+    assert client.requests == []
+    assert {item["reason"] for item in diagnostics["unmapped_reasons"]} == {
+        "ambiguous_provider_child_scope"}
+
+
 def test_child_explicit_mapping_beats_local_coordinates():
     value = target()
     value["episodes"][0].update(provider_season_number=2, provider_episode_number=1)

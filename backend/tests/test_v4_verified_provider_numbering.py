@@ -4,6 +4,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
+
 from app.media_v4.jobs import metadata
 
 CASES = [
@@ -120,6 +121,61 @@ def test_unknown_work_does_not_infer_offset_from_same_counts(monkeypatch):
     result = metadata.default_metadata_provider(target_for(42, (12, 12)))
     assert result['metadata_state'] == 'failed'
     assert len(result['episode_mappings']) == 12
+
+
+def test_unruled_second_local_season_keeps_explicit_reason_not_service_failure(monkeypatch):
+    """药屋/命运石之门形态：在线只有一个常规季，本地 S2 与在线编号空间冲突。"""
+
+    requested, _ = install_client(monkeypatch, 24)
+    result = metadata.default_metadata_provider(target_for(42, (12, 12)))
+
+    assert requested == [1]
+    assert result['reason_code'] == 'episode_mapping_incomplete'
+    assert 'insufficient_numbering_evidence' in result['unmapped_reason_codes']
+    assert 'provider_unavailable' not in result['unmapped_reason_codes']
+    assert {m['episode_id'] for m in result['episode_mappings']} == {f'1-{n}' for n in range(1, 13)}
+    # 已接受的对应必须带依据，拒绝的集必须带唯一原因。
+    assert all(m.get('mapping_basis') for m in result['episode_mappings'])
+    assert {item['episode_id'] for item in result['unmapped_reasons']} == {f'2-{n}' for n in range(1, 13)}
+
+
+def test_provider_season_without_episodes_never_falls_back_to_other_coordinates(monkeypatch):
+    """弦音形态：本地季号不在 Provider 边界内时不借用其他在线季的集号。"""
+
+    requested, _ = install_client(monkeypatch, 13, seasons=(1, 2))
+    target = target_for(42, (13,), 3)
+    target['preferred_title'] = 'Fixture'
+    result = metadata.default_metadata_provider(target)
+
+    assert requested == [3]
+    assert result['episode_mappings'] == []
+    assert set(result['unmapped_reason_codes']) == {'provider_resource_missing'}
+
+
+def test_continuous_local_range_reused_by_verified_rule_reports_duplicate_range(monkeypatch):
+    """咒术形态：本地 S1 用连续编号，S1 超出规则上限的集与 S2 的在线坐标重复。"""
+
+    install_client(monkeypatch, 47)
+    target = target_for(95479, (47,))
+    target['episodes'].extend(target_for(95479, (23,), 2)['episodes'])
+    result = metadata.default_metadata_provider(target)
+
+    duplicates = {item['episode_id'] for item in result['unmapped_reasons']
+                  if item['reason'] == 'duplicate_local_range'}
+    assert duplicates == {f'1-{n}' for n in range(25, 48)}
+    assert 'insufficient_numbering_evidence' not in result['unmapped_reason_codes']
+    # 重复区间不影响已按规则映射的 S1E1-24 与 S2E1-23。
+    assert len(result['episode_mappings']) == 47
+
+
+def test_unruled_local_season_is_not_mislabeled_as_duplicate_range(monkeypatch):
+    """药屋/命运石之门形态没有已核验规则，必须继续记为证据不足。"""
+
+    install_client(monkeypatch, 24)
+    result = metadata.default_metadata_provider(target_for(42, (12, 12)))
+
+    assert 'duplicate_local_range' not in result['unmapped_reason_codes']
+    assert 'insufficient_numbering_evidence' in result['unmapped_reason_codes']
 
 
 @pytest.mark.parametrize('missing', ['id', 'name', 'still_path'])

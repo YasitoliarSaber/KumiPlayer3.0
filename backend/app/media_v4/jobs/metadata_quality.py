@@ -35,7 +35,8 @@ def require_regular_episode_metadata(episodes: list[dict], metadata: dict) -> di
     conflicts = {str(item.get('episode_id')) for item in result.get('mapping_conflicts') or []
                  if isinstance(item, dict)}
     unresolved = {'missing_local_number', 'unknown_local_season', 'insufficient_numbering_evidence',
-                  'numbering_conflict', 'ambiguous_provider_child_scope', 'incomplete_provider_coordinates'}
+                  'numbering_conflict', 'ambiguous_provider_child_scope', 'incomplete_provider_coordinates',
+                  'duplicate_local_range'}
     by_id = {str(item.get('episode_id')): item for item in episodes if isinstance(item, dict)}
     blocked = regular & conflicts | {key for key in missing if reasons.get(key) in unresolved
                or not _positive_coordinate(by_id[key].get('local_episode_number'))
