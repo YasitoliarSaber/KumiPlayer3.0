@@ -375,12 +375,15 @@ def _work_title_base(name: str) -> str:
     return _normalize_segment(_MOVIE_PART_SUFFIX_RE.sub("", name or ""))
 
 
-def _movie_marker_directory(directory: tuple[DirectoryToken, ...]) -> DirectoryToken | None:
+def _movie_marker_directory(
+    directory: tuple[DirectoryToken, ...], *, numbered: bool = False
+) -> DirectoryToken | None:
     """返回可作电影证据的类型目录；类型目录必须属于当前作品边界。
 
     只有两种情况成立：整段就是类型名（`剧场版`、`总集篇`、`Movie`…），或
     作品目录自身/其上一级目录内嵌类型标记且与本作品同名（`孤独摇滚！剧场总集篇 2024`
     之于 `孤独摇滚 (上)`）。祖先合集目录带 Movie/OVA 字样不会影响其中的子作品。
+    文件或目录已经给出显式季集编号时，编号证据优先，不再按内嵌标记升格电影。
     """
 
     if not directory:
@@ -388,6 +391,8 @@ def _movie_marker_directory(directory: tuple[DirectoryToken, ...]) -> DirectoryT
     exact = next((token for token in directory if _segment_token(token.name) in _MOVIE_DIR_TOKENS), None)
     if exact is not None:
         return exact
+    if numbered:
+        return None
     for index, token in enumerate(directory[:2]):
         if not _MOVIE_DIR_MARKER_RE.search(token.name):
             continue
@@ -684,7 +689,14 @@ def classify_content(
     )
     classification_prefix = classification_title_prefix(stem)
     movie_hit = next((p.pattern for p in _MOVIE_FILE_RES if p.search(classification_prefix)), "")
-    movie_dir = _movie_marker_directory(directory)
+    has_numbering = numbering.episode is not None or numbering.absolute is not None
+    # 显式季/集/绝对号都属于"编号证据优先"，零集等特例同样算已给出编号。
+    explicit_numbering = any(
+        value is not None for value in (numbering.season, numbering.episode, numbering.absolute)
+    )
+    movie_dir = _movie_marker_directory(
+        directory, numbered=explicit_numbering,
+    )
     standalone_hit = _STANDALONE_FILE_RE.search(classification_prefix)
     standalone_dir = next(
         (token for token in directory if _segment_token(token.name) in _STANDALONE_DIR_TOKENS),
@@ -700,7 +712,6 @@ def classify_content(
         attached_hit = _ANNOTATED_RELEASE_RE.pattern
     # 保留附属标记来源，普通正片不因合集容器带 OVA 字样被排除。
     modified_before_attached = bool(attached_hit) or attached_dir is not None
-    has_numbering = numbering.episode is not None or numbering.absolute is not None
 
     def trace(value: str, origin: str, rule_id: str, alternatives: tuple[str, ...] = ()) -> None:
         traces.append(

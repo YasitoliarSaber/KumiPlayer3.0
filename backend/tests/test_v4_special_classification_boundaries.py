@@ -284,3 +284,16 @@ def test_work_directory_itself_may_carry_the_type_marker():
 
     assert facts.content_class == "movie"
     assert facts.media_type == "movie"
+
+
+@pytest.mark.parametrize("path", [
+    "动画/刀剑神域.S1-S3+剧场版/刀剑神域 [S1]/刀剑神域 S01E01.mkv",
+])
+def test_explicit_numbering_keeps_tv_scope_inside_type_marked_ancestor(path):
+    """祖先/作品目录带类型字样但文件有显式季集：编号证据优先，不能升格为电影。"""
+
+    facts = pair(path)[1]
+
+    assert facts.content_class != "movie"
+    assert facts.media_type == "tv"
+    assert facts.episode_candidate == 1
