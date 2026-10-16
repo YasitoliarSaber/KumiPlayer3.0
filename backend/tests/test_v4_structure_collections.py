@@ -5,6 +5,7 @@ import sqlite3
 from dataclasses import asdict, replace
 
 import pytest
+from backend.tests.test_v4_library_projection import _ready_library
 from backend.tests.test_v4_structure_context import resolve as _resolve
 
 from app.media_v4.persistence.database import V4Database
@@ -44,8 +45,9 @@ def test_ordinary_standalone_movie_keeps_online_canonical_title(tmp_path, parsed
     service.confirm("ordinary-movie")
     with db.connect() as conn:
         conn.execute("INSERT INTO scrape_bindings(binding_id,revision_id,work_id,provider,provider_id,metadata_json,status,created_at,updated_at) "
-                     "SELECT 'binding-'||work_id,'ordinary-movie',work_id,'local','',?,'waiting_metadata','now','now' FROM works",
-                     (json.dumps({"title": "Canonical Online Film", "metadata_state": "waiting_metadata"}),))
+                     "SELECT 'binding-'||work_id,'ordinary-movie',work_id,'tmdb','42',?,'confirmed','now','now' FROM works",
+                     (json.dumps({"title": "Canonical Online Film", "metadata_state": "ready"}),))
+    _ready_library(db)
     card = V4LibraryProjection(db).rebuild().cards[0]
     assert card["card_type"] == "standalone"
     assert card["metadata"]["collections"] == []
@@ -87,6 +89,7 @@ def test_verified_movie_title_is_stable_across_projection_detail_and_refresh(tmp
                      (work_id, json.dumps(metadata, ensure_ascii=False)))
     monkeypatch.setattr(library_v4, "get_database", lambda: db)
     projection = V4LibraryProjection(db)
+    _ready_library(db)
     projected = next(card for card in projection.rebuild().cards if card["work_id"] == work_id)
     assert projected["title"] == metadata["title"]
     with db.connect() as conn:
@@ -116,12 +119,13 @@ def test_shared_tv_title_guard_is_identical_in_list_and_detail(tmp_path, monkeyp
     service = V4RevisionService(db)
     service.create_draft("shared", pairs)
     service.confirm("shared")
-    metadata = {"title": "在线母系列", "provider": "tmdb", "provider_id": "42",
+    metadata = {"title": "Online Parent", "provider": "tmdb", "provider_id": "42",
                 "media_type": "tv", "metadata_state": "ready"}
     with db.connect() as conn:
         conn.execute("INSERT INTO provider_bindings(work_id,provider,provider_id,media_type) SELECT work_id,'tmdb','42','tv' FROM works")
         conn.execute("INSERT INTO scrape_bindings(binding_id,revision_id,work_id,provider,provider_id,metadata_json,status,created_at,updated_at) SELECT 'binding-'||work_id,'shared',work_id,'tmdb','42',?,'ready','now','now' FROM works", (json.dumps(metadata, ensure_ascii=False),))
     monkeypatch.setattr(library_v4, "get_database", lambda: db)
+    _ready_library(db)
     V4LibraryProjection(db).rebuild()  # 先由后台发布，再核对只读列表与详情的一致性。
     listed = library_v4.get_library()["works"]
     assert {work["title"] for work in listed} == {"来自深渊", "来自深渊 烈日的黄金乡"}
@@ -160,11 +164,12 @@ def test_confirmed_child_identity_protects_title_without_collection(tmp_path, sc
     service.confirm("child-title")
     with db.connect() as conn:
         conn.execute("INSERT INTO scrape_bindings(binding_id,revision_id,work_id,provider,provider_id,metadata_json,status,created_at,updated_at) "
-                     "SELECT 'binding-'||work_id,'child-title',work_id,'local','',?,'waiting_metadata','now','now' FROM works",
-                     (json.dumps({"title": "Online Parent Title", "metadata_state": "waiting_metadata"}),))
+                     "SELECT 'binding-'||work_id,'child-title',work_id,'tmdb','42',?,'confirmed','now','now' FROM works",
+                     (json.dumps({"title": "Online Parent Title", "metadata_state": "ready"}),))
         if scope == "shared_tv_identity":
             conn.execute("INSERT INTO provider_bindings(work_id,provider,provider_id,media_type) "
                          "SELECT work_id,'tmdb','42','tv' FROM works")
+    _ready_library(db)
     cards = V4LibraryProjection(db).rebuild().cards
     child_title = "玉子爱情故事" if scope == "confirmed_parent" else "来自深渊 烈日的黄金乡"
     assert child_title in {card["title"] for card in cards}
@@ -209,8 +214,9 @@ def test_confirmed_collection_persists_projects_and_obeys_retirement(tmp_path, m
     service.confirm("rev")
     with db.connect() as conn:
         conn.execute("INSERT INTO scrape_bindings(binding_id,revision_id,work_id,provider,provider_id,metadata_json,status,created_at,updated_at) "
-                     "SELECT 'binding-'||work_id,'rev',work_id,'local','',?,'waiting_metadata','now','now' FROM works",
-                     (json.dumps({"title": "母系列在线标题", "metadata_state": "waiting_metadata", "related_works": None}),))
+                     "SELECT 'binding-'||work_id,'rev',work_id,'tmdb','42',?,'confirmed','now','now' FROM works",
+                     (json.dumps({"title": "母系列在线标题", "metadata_state": "ready", "related_works": None}),))
+    _ready_library(db)
     first = V4LibraryProjection(db).rebuild()
     assert len(first.cards) == 2
     assert all(card["metadata"]["collections"][0]["title"] == "物语系列" for card in first.cards)

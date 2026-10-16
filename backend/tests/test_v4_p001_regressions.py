@@ -212,7 +212,7 @@ def test_local_only_metadata_must_not_become_confirmed_binding_or_succeeded_job(
 # ---------------------------------------------------------------------------
 
 
-def test_projection_publishes_confirmed_local_only_work_while_metadata_waits(tmp_path):
+def test_projection_keeps_confirmed_local_only_work_unpublished_while_metadata_waits(tmp_path):
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.projection.library import V4LibraryProjection
@@ -245,9 +245,8 @@ def test_projection_publishes_confirmed_local_only_work_while_metadata_waits(tmp
 
     with database.connect() as conn:
         confirmed_work_id = str(conn.execute("SELECT work_id FROM works").fetchone()[0])
-    assert len(snapshot.cards) == 1
-    assert snapshot.cards[0]["work_id"] == confirmed_work_id
-    assert snapshot.cards[0]["metadata"]["metadata_state"] == "waiting_metadata"
+        assert conn.execute('SELECT COUNT(*) FROM revision_bindings WHERE work_id=?', (confirmed_work_id,)).fetchone()[0] == 1
+    assert not snapshot.cards
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +301,10 @@ def test_projection_reports_regular_season_count_excluding_specials(tmp_path):
     revision_service = V4RevisionService(database)
     revision_service.create_draft("rev-p001-season", entries)
     revision_service.confirm("rev-p001-season")
+
+    from backend.tests.test_v4_library_projection import _ready_library
+
+    _ready_library(database)
 
     snapshot = V4LibraryProjection(database).rebuild()
 

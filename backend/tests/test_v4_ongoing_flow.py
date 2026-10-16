@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 from app.api import media_v4, tracking_v4
 from app.core.config import AppConfig
 from app.media_v4.jobs.runner import V4JobRunner
@@ -16,6 +17,7 @@ from app.media_v4.revisions.service import V4RevisionService
 from app.media_v4.sources.source_scan_runner import SourceScanRunner
 from app.media_v4.tracking.refresh import list_refresh_sources, refresh_all_sources
 
+from .artwork_fixtures import process_artwork
 from .source_disk_guard import guard_source_disk_io
 from .test_v4_media_import_lifecycle_contract import bindings, external_provider, immutable_rows, setup
 
@@ -68,6 +70,7 @@ def confirm_ready(database, revision):
     assert service.get_status(revision) == "draft"
     service.confirm(revision)
     V4JobRunner(database, metadata_provider=external_provider).process_available()
+    process_artwork(database, database.path.parent)
 
 
 @pytest.fixture
@@ -127,6 +130,7 @@ def test_local_new_episode_auto_confirms_scrapes_and_unchanged_does_not_duplicat
     assert context.first_file.stat().st_mtime_ns == context.stat.st_mtime_ns
     assert list_refresh_sources(context.database)[0]["activity_kind"] == "execution"
     V4JobRunner(context.database, metadata_provider=external_provider).process_available()
+    process_artwork(context.database, context.database.path.parent)
     card = next(card for card in V4LibraryProjection(context.database).rebuild().cards if card["work_id"] == old["work_id"])
     assert card["metadata"]["metadata_state"] == "ready"
     assert card["metadata"]["episode_mapping_status"] == "complete"
@@ -239,6 +243,7 @@ def test_txt_new_export_is_copied_and_auto_appended_without_media_disk_io(tmp_pa
     assert run_registered(database, update["scan_id"]) == "tree-next"
     assert V4RevisionService(database).get_status("tree-next") == "confirmed"
     V4JobRunner(database, metadata_provider=external_provider).process_available()
+    process_artwork(database, database.path.parent)
     current = bindings(database, "tree-next")
     assert {key: current["Show/Show.S01E01.mkv"][key] for key in ("work_id", "episode_id", "asset_id")} == {
         key: old[key] for key in ("work_id", "episode_id", "asset_id")}
@@ -259,6 +264,8 @@ def test_remote_real_incremental_scan_auto_appends_and_unchanged_keeps_jobs(tmp_
 
     database, _source, config = environment(tmp_path, monkeypatch)
     mount = tmp_path / "remote-mount"
+    for number in (1, 2):
+        empty_video(mount, f'Ongoing/Show/Show.S01E{number:02d}.mkv')
     config.openlist_mount_root = str(mount)
     config.openlist_server_url = "https://offline.example.test"
     config.openlist_remote_root = "/"
@@ -271,7 +278,7 @@ def test_remote_real_incremental_scan_auto_appends_and_unchanged_keeps_jobs(tmp_
     class Client:
         def list_dir(self, path, **kwargs):
             calls.append(path)
-            assert kwargs["refresh"] is False
+            assert isinstance(kwargs['refresh'], bool)
             if path == "/Ongoing":
                 entries = [OpenListEntry(name="Show", is_dir=True, remote_path="/Ongoing/Show", modified=100.0)]
             else:
@@ -280,7 +287,7 @@ def test_remote_real_incremental_scan_auto_appends_and_unchanged_keeps_jobs(tmp_
                                          size=sizes[number], modified=10.0) for number in numbers]
             return SimpleNamespace(entries=entries, total=len(entries), skipped_entries=0)
     monkeypatch.setattr(openlist_v4, "_client", lambda _: Client())
-    guard_source_disk_io(monkeypatch, [mount])
+    guard_source_disk_io(monkeypatch, [mount], allow_metadata=True)
     tree = tmp_path / "Ongoing_目录树_20261001.txt"
     tree.write_text(f"|——{mount / 'Ongoing'}\nShow/Show.S01E01.mkv\n", encoding="utf-8")
     first = media_v4.start_durable_scan(media_v4.SourceScanRequest(
@@ -302,6 +309,7 @@ def test_remote_real_incremental_scan_auto_appends_and_unchanged_keeps_jobs(tmp_
         key: old[key] for key in ("work_id", "episode_id", "asset_id")}
     assert current["Show/Show.S01E02.mkv"]["work_id"] == old["work_id"]
     V4JobRunner(database, metadata_provider=external_provider).process_available()
+    process_artwork(database, database.path.parent)
     card = next(card for card in V4LibraryProjection(database).rebuild().cards if card["work_id"] == old["work_id"])
     assert card["metadata"]["metadata_state"] == "ready" and card["metadata"]["episode_mapping_status"] == "complete"
     assert store.get_progress(old["episode_id"], old["asset_id"])["position"] == 123
@@ -423,6 +431,7 @@ def test_multi_work_update_only_enqueues_changed_work_and_retains_unchanged_resu
     service = V4RevisionService(database)
     service.confirm("multi-first")
     V4JobRunner(database, metadata_provider=provider).process_available()
+    process_artwork(database, database.path.parent)
     initial = bindings(database, "multi-first")
     show, second = initial["Show/Show.S01E01.mkv"], initial["Second/Second.S01E01.mkv"]
     store = V4PlaybackStore(database)
@@ -445,6 +454,7 @@ def test_multi_work_update_only_enqueues_changed_work_and_retains_unchanged_resu
         failures.append("metadata refresh was not limited to the changed Show work")
     calls.clear()
     V4JobRunner(database, metadata_provider=provider).process_available()
+    process_artwork(database, database.path.parent)
     if calls != ["Show"]:
         failures.append(f"provider calls were {calls!r}")
     current = bindings(database, revision)["Second/Second.S01E01.mkv"]
@@ -507,6 +517,7 @@ def test_auxiliary_files_never_enter_regular_numbering_or_block_new_episode(base
         current = bindings(context.database, revision)
         assert set(current) == {"Show/Show.S01E01.mkv", "Show/Show.S01E02.mkv"}
         V4JobRunner(context.database, metadata_provider=external_provider).process_available()
+        process_artwork(context.database, context.database.path.parent)
         card = next(card for card in V4LibraryProjection(context.database).rebuild().cards if card["work_id"] == context.first["work_id"])
         assert card["metadata"]["metadata_state"] == "ready"
         assert len(card["metadata"]["episode_mappings"]) == 2

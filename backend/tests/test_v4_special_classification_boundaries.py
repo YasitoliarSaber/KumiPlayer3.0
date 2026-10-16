@@ -144,14 +144,16 @@ def test_excluded_specials_never_create_import_jobs_or_cards(tmp_path, monkeypat
         received.append(target)
         assert target['episodes']
         assert all(row['episode_kind'] == 'regular' for row in target['episodes'])
-        return {'provider': 'local', 'metadata_state': 'waiting_metadata'}
+        return {'provider': 'tmdb', 'provider_id': '42', 'metadata_state': 'ready', 'title': '作品甲',
+                'episode_mappings': [{'episode_id': e['episode_id'], 'provider_episode_id': '101',
+                                      'title': '正片'} for e in target['episodes']]}
 
     runner = V4JobRunner(database, metadata_provider=provider)
     runner.process_available()
     assert len(received) == int(with_regular)
     with database.connect() as conn:
         work_row = conn.execute('SELECT work_id FROM works').fetchone()
-        assert conn.execute('SELECT COUNT(*) FROM episode_provider_mappings').fetchone()[0] == 0
+        assert conn.execute('SELECT COUNT(*) FROM episode_provider_mappings').fetchone()[0] == int(with_regular)
         from app.media_v4.persistence.metadata_lifecycle import current_episode_signatures
 
         assert conn.execute('SELECT COUNT(*) FROM assets').fetchone()[0] == int(with_regular)
@@ -171,6 +173,15 @@ def test_excluded_specials_never_create_import_jobs_or_cards(tmp_path, monkeypat
         assert conn.execute('SELECT COUNT(*) FROM artifacts').fetchone()[0] == 0
     monkeypatch.setattr(library_v4, 'get_database', lambda: database)
     if with_regular:
+        from backend.tests.artwork_fixtures import ready_artwork
+
+        from app.media_v4.projection.library import V4LibraryProjection
+
+        # 原始确认图仍未发布；随后为正片补齐独立的资料与图片夹具。
+        assert not runner.projection.current().cards
+        with database.connect() as conn:
+            ready_artwork(conn, work_id)
+        V4LibraryProjection(database).rebuild()
         detail = library_v4.get_work_detail(work_id)
         assert len(detail['episodes']) == 1
         assert detail['episodes'][0]['kind'] == 'regular'
@@ -225,6 +236,12 @@ def test_regular_scrape_snapshot_does_not_require_special_metadata(tmp_path, mon
 
     runner = V4JobRunner(database, metadata_provider=provider)
     runner.process_available()
+    from backend.tests.artwork_fixtures import ready_artwork
+
+    assert not runner.projection.current().cards
+    with database.connect() as conn:
+        ready_artwork(conn, conn.execute('SELECT work_id FROM works').fetchone()[0])
+    runner.projection.rebuild()
     card = runner.projection.current().cards[0]
     assert card['metadata']['metadata_state'] == 'ready'
     with database.connect() as conn:

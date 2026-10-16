@@ -58,7 +58,7 @@ def test_missing_projection_is_readable_without_synchronous_build(database, monk
 
 def test_compact_avoids_decoding_detail_metadata_and_preparing_images(database, monkeypatch):
     _published(database, {
-        'metadata_state': 'not_required', 'plot': 'Home synopsis', 'rating': 8,
+        'metadata_state': 'ready', 'plot': 'Home synopsis', 'rating': 8,
         'cast': [{'name': 'Detail actor'}], 'episode_mappings': [{'episode_id': 'large-detail'}],
         'sources': ['pan115'], 'related_works': [{'title': 'Search alias'}],
         'collections': [{'collection_id': 'c1', 'title': 'Local grouping'}],
@@ -76,7 +76,8 @@ def test_compact_avoids_decoding_detail_metadata_and_preparing_images(database, 
                         lambda *_a, **_k: pytest.fail('GET prepared artwork'))
     result = library_v4.get_library()
     assert result['works'][0]['plot'] == 'Home synopsis'
-    assert result['works'][0]['related_works'][0]['title'] == 'Search alias'
+    # 没有绑定到已入库作品的在线关系不能伪装成可导航的媒体条目。
+    assert result['works'][0]['related_works'] == []
     assert result['collections'][0]['work_ids'] == ['w1']
     assert 'cast' not in result['works'][0]
     assert decoded and all('episode_mappings' not in metadata and 'cast' not in metadata for metadata in decoded)

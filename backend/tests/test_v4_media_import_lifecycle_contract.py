@@ -7,6 +7,7 @@ import threading
 from types import SimpleNamespace
 
 import pytest
+
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.playback.session import V4PlaybackManager
@@ -16,6 +17,8 @@ from app.media_v4.revisions.service import V4RevisionService
 from app.media_v4.sources import durable_scan
 from app.media_v4.sources.scan_finalize import draft_finalizer
 from app.media_v4.sources.scanner import _root_id, scan_local_directory
+
+from .artwork_fixtures import process_artwork
 
 
 def scan(database, source, revision, monkeypatch, *, confirm_revision=True):
@@ -117,6 +120,8 @@ def test_scan_runner_rescan_append_failure_and_replacement(tmp_path, monkeypatch
             (snapshot['snapshot_id'],),
         )}
         assert {'poster', 'fanart', 'episode_thumb'} <= pending_roles
+    process_artwork(database, tmp_path)
+    assert V4LibraryProjection(database).rebuild().cards
     main = first[names[0]]
     store = V4PlaybackStore(database)
     store.save_progress(main['work_id'], main['episode_id'], main['asset_id'], 123, 1500, False)
@@ -157,10 +162,14 @@ def test_scan_runner_rescan_append_failure_and_replacement(tmp_path, monkeypatch
     V4JobRunner(database, metadata_provider=lambda target: {
         'provider': 'tmdb', 'provider_id': '321', 'metadata_state': 'source_unavailable', 'reason_code': 'provider_unavailable',
     }).process_available()
-    card = next(c for c in V4LibraryProjection(database).rebuild().cards if c['work_id'] == main['work_id'])
-    assert card['metadata']['metadata_source'] == 'retained'
-    assert card['metadata']['refresh_status'] == 'failed'
-    assert card['metadata']['episode_mapping_status'] == 'partial'
+    assert all(c['work_id'] != main['work_id'] for c in V4LibraryProjection(database).rebuild().cards)
+    from app.media_v4.persistence.metadata_lifecycle import referenced_metadata
+
+    with database.connect() as conn:
+        metadata = referenced_metadata(conn, main['work_id'])
+    assert metadata['metadata_source'] == 'retained'
+    assert metadata['refresh_status'] == 'failed'
+    assert metadata['episode_mapping_status'] == 'partial'
     assert all(p.is_file() and p.read_bytes() == data for p, data in source_files.items())
     write_video(source, names[0], b'replacement-longer-content')
     scan(database, source, 'r4', monkeypatch)

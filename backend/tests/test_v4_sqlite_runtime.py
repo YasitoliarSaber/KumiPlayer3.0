@@ -1,10 +1,11 @@
 """确认、资料和展示在没有镜像、NFO 或图片时仍走同一 SQLite 执行链。"""
 
+from backend.tests.artwork_fixtures import ready_artwork
+from backend.tests.test_v4_import_metadata_lifecycle import confirm, provider
+
 from app.media_v4.jobs.runner import V4JobRunner
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.library import V4LibraryProjection
-
-from backend.tests.test_v4_import_metadata_lifecycle import confirm, provider
 
 
 def _ready_database(tmp_path):
@@ -12,6 +13,10 @@ def _ready_database(tmp_path):
     database.initialize()
     confirm(database, 'r1')
     V4JobRunner(database, metadata_provider=provider).process_available()
+    with database.connect() as conn:
+        work_id = conn.execute('SELECT work_id FROM works').fetchone()[0]
+        ready_artwork(conn, work_id)
+    V4LibraryProjection(database).rebuild()
     return database, V4LibraryProjection(database).current().cards[0]['work_id']
 
 
@@ -36,6 +41,10 @@ def test_metadata_and_published_cards_need_no_mirror_or_nfo(tmp_path, monkeypatc
     monkeypatch.setattr("app.media_v4.jobs.metadata_artifacts.publish_metadata_artifacts", forbid)
     monkeypatch.setattr("app.media_v4.jobs.completeness.assess_persisted_completeness", forbid)
     V4JobRunner(database, metadata_provider=provider).process_available()
+    assert not V4LibraryProjection(database).current().cards
+    with database.connect() as conn:
+        ready_artwork(conn, conn.execute('SELECT work_id FROM works').fetchone()[0])
+    V4LibraryProjection(database).rebuild()
     snapshot = V4LibraryProjection(database).current()
     assert snapshot and snapshot.cards[0]["metadata"]["metadata_state"] == "ready"
     assert snapshot.cards[0]["title"] == "Online title"
@@ -45,18 +54,22 @@ def test_metadata_and_published_cards_need_no_mirror_or_nfo(tmp_path, monkeypatc
         assert conn.execute("SELECT COUNT(*) FROM jobs WHERE status!='succeeded'").fetchone()[0] == 0
 
 
-def test_confirmed_media_is_published_before_optional_metadata(tmp_path):
+def test_confirmed_media_waits_for_metadata_and_required_artwork(tmp_path):
     database = V4Database(tmp_path / "runtime.db")
     database.initialize()
     confirm(database, "r1")
-    card = V4LibraryProjection(database).rebuild().cards[0]
-    assert card["title"] == "Show"
-    assert card["metadata"]["metadata_state"] == "waiting_metadata"
+    assert not V4LibraryProjection(database).rebuild().cards
     from unittest.mock import patch
 
     from app.api import library_v4
 
     with patch.object(library_v4, "get_database", return_value=database):
+        assert library_v4.get_library()["works"] == []
+        V4JobRunner(database, metadata_provider=provider).process_available()
+        assert library_v4.get_library()["works"] == []
+        with database.connect() as conn:
+            ready_artwork(conn, conn.execute('SELECT work_id FROM works').fetchone()[0])
+        card = V4LibraryProjection(database).rebuild().cards[0]
         assert library_v4.get_library()["works"][0]["work_id"] == card["work_id"]
 
 
@@ -131,8 +144,21 @@ def test_bad_image_does_not_change_metadata_or_rebuild_library(tmp_path, monkeyp
     with database.connect() as conn:
         snapshot_before = tuple(conn.execute('SELECT * FROM metadata_snapshots').fetchone())
     service = ArtworkService(database, data_root=tmp_path)
-    monkeypatch.setattr(service, '_download', lambda *args: b'not an image')
+    from app.media_v4.assets.catalog import enqueue_metadata
+
+    with database.connect() as conn:
+        ref = conn.execute('SELECT * FROM revision_metadata_refs WHERE work_id=?', (work_id,)).fetchone()
+        enqueue_metadata(conn, revision_id=ref['revision_id'], work_id=work_id,
+                         snapshot_id=ref['snapshot_id'], metadata={})
+    requested = []
+
+    def corrupt_image(*args):
+        requested.append(args)
+        return b'not an image'
+
+    monkeypatch.setattr(service, '_download', corrupt_image)
     service.process_available()
+    assert requested
     after = V4LibraryProjection(database).current()
     assert before.generation_id == after.generation_id and after.cards[0]['metadata']['metadata_state'] == 'ready'
     with database.connect() as conn:
@@ -144,11 +170,12 @@ def test_import_confirm_rejects_missing_or_remote_final_path(tmp_path, monkeypat
     from dataclasses import replace
 
     import pytest
+    from fastapi import HTTPException
+
     from app.api import media_v4
     from app.media_v4.parsing.parser import V4Parser
     from app.media_v4.revisions.service import V4RevisionService
     from app.media_v4.sources.adapters import SourceEntry, to_source_evidence
-    from fastapi import HTTPException
 
     database = V4Database(tmp_path / 'paths.db')
     database.initialize()
@@ -202,9 +229,10 @@ def test_projection_cannot_promote_unreferenced_legacy_binding(tmp_path):
         conn.execute('INSERT INTO scrape_bindings(binding_id,revision_id,work_id,provider,provider_id,metadata_json,status,created_at,updated_at) '
                      "VALUES ('legacy','r1',?,'tmdb','123',?,'confirmed','now','now')",
                      (work_id, json.dumps({'metadata_state': 'ready', 'provider': 'tmdb', 'title': 'unreferenced title'})))
-    card = V4LibraryProjection(database).rebuild().cards[0]
-    assert card['title'] == 'Show'
-    assert card['metadata']['metadata_state'] == 'waiting_metadata'
+        ready_artwork(conn, work_id)
+    assert not V4LibraryProjection(database).rebuild().cards
+    with database.connect() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM revision_metadata_refs').fetchone()[0] == 0
 
 
 def test_noop_dirty_does_not_publish_events_or_change_digest(tmp_path):
@@ -237,10 +265,11 @@ def test_manual_cover_api_keeps_old_display_until_ready_and_preserves_original(t
     import base64
     import io
 
+    from PIL import Image
+
     from app.api import media_v4
     from app.media_v4.assets.catalog import get_work_artwork
     from app.media_v4.assets.service import ArtworkService
-    from PIL import Image
 
     database, work_id = _ready_database(tmp_path)
     monkeypatch.setattr(media_v4, 'get_database', lambda: database)
@@ -251,6 +280,12 @@ def test_manual_cover_api_keeps_old_display_until_ready_and_preserves_original(t
         return output.getvalue()
     service = ArtworkService(database, data_root=tmp_path)
     monkeypatch.setattr(service, '_download', lambda *args: png('red'))
+    from app.media_v4.assets.catalog import enqueue_metadata
+
+    with database.connect() as conn:
+        ref = conn.execute('SELECT * FROM revision_metadata_refs WHERE work_id=?', (work_id,)).fetchone()
+        enqueue_metadata(conn, revision_id=ref['revision_id'], work_id=work_id,
+                         snapshot_id=ref['snapshot_id'], metadata={})
     service.process_available()
     with database.connect() as conn:
         automatic = get_work_artwork(conn, work_id)['poster']

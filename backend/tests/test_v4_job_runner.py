@@ -50,7 +50,9 @@ def test_runner_scrapes_snapshots_and_publishes_without_mirror_files(tmp_path):
             "provider_id": "9",
             "title": "Runner Online",
             "plot": "metadata reached the projection",
-            "episode_mappings": [dict(e, provider_season_number=1, provider_episode_number=1) for e in _target['episodes']],
+            "episode_mappings": [dict(e, provider_season_number=1, provider_episode_number=1,
+                                      provider_episode_id='episode-1', title='Online episode')
+                                 for e in _target['episodes']],
         },
     )
     results = runner.process_available(mirror_root=tmp_path / "mirror")
@@ -73,6 +75,12 @@ def test_runner_scrapes_snapshots_and_publishes_without_mirror_files(tmp_path):
         assert conn.execute("SELECT COUNT(*) FROM metadata_snapshots").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM artifacts").fetchone()[0] == 0
     assert not (tmp_path / "mirror").exists()
+    from .artwork_fixtures import ready_artwork
+
+    assert not runner.projection.current().cards
+    with database.connect() as conn:
+        ready_artwork(conn, conn.execute('SELECT work_id FROM works').fetchone()[0])
+    runner.projection.rebuild()
     card = runner.projection.current().cards[0]
     assert card["title"] == "Runner Online"
     assert card["metadata"]["plot"] == "metadata reached the projection"
@@ -176,6 +184,15 @@ def test_successful_scrape_is_published_by_background_refresh_before_final_job(t
 
     runner.process_job(scrape["job_id"], mirror_root=tmp_path / "mirror")
     assert runner.projection.current().digest == before.digest
+    assert not runner.projection.refresh_if_needed().cards
+    from app.media_v4.projection.library import mark_projection_dirty
+
+    from .artwork_fixtures import ready_artwork
+
+    with database.connect() as conn:
+        work_id = conn.execute('SELECT work_id FROM works').fetchone()[0]
+        ready_artwork(conn, work_id)
+        mark_projection_dirty(conn, [work_id])
     runner.projection.refresh_if_needed()
     after = runner.projection.current()
     assert after.digest != before.digest
@@ -189,7 +206,7 @@ def test_successful_scrape_is_published_by_background_refresh_before_final_job(t
     assert final_job["status"] == "queued"
 
 
-def test_failed_scrape_does_not_block_publishing_confirmed_local_media(tmp_path):
+def test_failed_scrape_preserves_local_media_without_publishing_incomplete_card(tmp_path):
     from app.media_v4.jobs.runner import V4JobRunner
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService
@@ -219,7 +236,10 @@ def test_failed_scrape_does_not_block_publishing_confirmed_local_media(tmp_path)
         "scrape_work": "failed",
         "refresh_projection": "succeeded",
     }
-    assert runner.projection.current().cards[0]['title'] == 'Runner'
+    assert not runner.projection.current().cards
+    with database.connect() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM assets').fetchone()[0] == 1
+        assert conn.execute("SELECT status FROM import_revisions WHERE revision_id='rev-blocked'").fetchone()[0] == 'confirmed'
     assert not (tmp_path / 'mirror').exists()
 
 

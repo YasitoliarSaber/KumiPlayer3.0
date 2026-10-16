@@ -2,6 +2,24 @@
 from app.media_v4.assets.catalog import RECIPE_VERSION, ROLE_WIDTHS
 
 
+def process_artwork(database, data_root):
+    """让真实图片管线消费内存图片，生成临时文件并保留自动绑定语义。"""
+    import io
+
+    from PIL import Image
+
+    from app.media_v4.assets.service import ArtworkService
+
+    output = io.BytesIO()
+    Image.new('RGB', (60, 90), 'navy').save(output, 'PNG')
+    service = ArtworkService(database, data_root=data_root)
+    service._download = lambda *_args: output.getvalue()
+    service.process_available()
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    V4LibraryProjection(database).refresh_if_needed()
+
+
 def ready_artwork(conn, work_id: str):
     required = [('work', work_id, 'poster'), ('work', work_id, 'fanart')]
     required.extend(('episode', row[0], 'episode_thumb') for row in conn.execute(

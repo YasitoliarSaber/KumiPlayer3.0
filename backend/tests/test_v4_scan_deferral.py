@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+
 from app.integrations.openlist.models import OpenListEntry, OpenListRateLimitedError
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.sources import scan_frontier, scan_handlers, source_scan_runner
@@ -55,8 +56,16 @@ def environment(tmp_path, monkeypatch):
                 "INSERT INTO source_roots(root_id,provider,ingest_method,created_at,updated_at) VALUES (?,?,?,?,?)",
                 (root_id, provider, ingest, "now", "now"),
             )
+    from app.media_v4.sources.openlist_playback_mapping import choose_mapping
+
+    mount = tmp_path / 'mount'
+    for title in ('A', 'B'):
+        (mount / title).mkdir(parents=True)
+        (mount / title / f'{title}.S01E01.mkv').write_bytes(b'')
+    proof = choose_mapping(remote_root='/Anime', mapping_root='/Anime', mount_root=str(mount),
+                           routes=[], samples=['/Anime/A/A.S01E01.mkv'])
     request = {"connection_id": "one", "remote_root": "/Anime", "mapping_root": "/Anime",
-               "mount_root": "", "provider": "quark", "directory_budget": 1,
+               "mount_root": str(mount), "playback_mapping": proof, "provider": "quark", "directory_budget": 1,
                "revision_id": "rev-cloud", "source_display_name": "Fixture"}
     register_source_scan(database, scan_id="cloud", root_id="root-cloud", scan_kind="openlist_full",
                          source_mode="openlist_full", request=request)

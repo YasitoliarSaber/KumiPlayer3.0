@@ -64,9 +64,10 @@ def _patch_database(tmp_path, monkeypatch):
 
 
 def _client(tmp_path, monkeypatch):
-    from app.api import library_v4, media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import library_v4, media_v4
 
     _patch_database(tmp_path, monkeypatch)
     application = FastAPI()
@@ -528,8 +529,11 @@ def test_library_returns_persisted_show_type_and_card_type(tmp_path, monkeypatch
     V4RevisionService(media_v4._database).create_draft("rev-card", [(evidence, facts)], candidate_search=lambda *a, **k: [])
     assert client.post("/api/v4/imports/rev-card/confirm").status_code == 200
 
+    from backend.tests.test_v4_library_projection import _ready_library
+
     from app.media_v4.projection.library import V4LibraryProjection
 
+    _ready_library(media_v4._database)
     V4LibraryProjection(media_v4._database).rebuild()
 
     response = client.get("/api/library?include_all=true")

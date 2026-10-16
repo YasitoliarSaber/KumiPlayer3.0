@@ -15,8 +15,8 @@ import os
 from pathlib import Path
 
 
-def guard_source_disk_io(monkeypatch, roots) -> None:
-    """源根路径限定的 I/O 哨兵：命中任何 stat/open/枚举/解析即失败。"""
+def guard_source_disk_io(monkeypatch, roots, *, allow_metadata: bool = False) -> None:
+    """默认禁止源根 I/O；挂载验证可显式允许属性探测，仍禁止打开和枚举。"""
 
     prefixes = tuple(
         str(Path(root).expanduser()).replace("/", "\\").rstrip("\\").casefold()
@@ -44,17 +44,17 @@ def guard_source_disk_io(monkeypatch, roots) -> None:
     original_os_isfile = os.path.isfile
 
     def guarded_is_file(self, *args, **kwargs):
-        if _hit(self):
+        if not allow_metadata and _hit(self):
             raise sentinel
         return original_is_file(self, *args, **kwargs)
 
     def guarded_is_dir(self, *args, **kwargs):
-        if _hit(self):
+        if not allow_metadata and _hit(self):
             raise sentinel
         return original_is_dir(self, *args, **kwargs)
 
     def guarded_exists(self, *args, **kwargs):
-        if _hit(self):
+        if not allow_metadata and _hit(self):
             raise sentinel
         return original_exists(self, *args, **kwargs)
 
@@ -64,7 +64,7 @@ def guard_source_disk_io(monkeypatch, roots) -> None:
         return original_open(self, *args, **kwargs)
 
     def guarded_stat(self, *args, **kwargs):
-        if _hit(self):
+        if not allow_metadata and _hit(self):
             raise sentinel
         return original_stat(self, *args, **kwargs)
 
@@ -84,17 +84,17 @@ def guard_source_disk_io(monkeypatch, roots) -> None:
         return original_os_scandir(path)
 
     def guarded_os_exists(path):
-        if _hit(path):
+        if not allow_metadata and _hit(path):
             raise sentinel
         return original_os_exists(path)
 
     def guarded_os_isdir(path):
-        if _hit(path):
+        if not allow_metadata and _hit(path):
             raise sentinel
         return original_os_isdir(path)
 
     def guarded_os_isfile(path):
-        if _hit(path):
+        if not allow_metadata and _hit(path):
             raise sentinel
         return original_os_isfile(path)
 

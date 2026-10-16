@@ -1,5 +1,6 @@
 """CHECK-009: unknown values survive detail/projection/playback consumption."""
 import pytest
+
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.revisions.service import V4RevisionService
@@ -32,9 +33,18 @@ def test_unknown_detail_and_playback_title_do_not_claim_movie_or_special(tmp_pat
         generation_before = conn.execute(
             "SELECT value FROM v4_meta WHERE key='current_library_generation'"
         ).fetchone()['value']
-    detail = library_v4.get_work_detail(binding['work_id'])
-    # 详情 GET 只读已发布投影，不隐式重建或推进 generation。
-    assert library_v4.get_work_detail(binding['work_id']) == detail
+    import pytest
+    from fastapi import HTTPException
+
+    from app.media_v4.projection.details import build_work_detail
+
+    # 未知身份没有就绪资料，详情 GET 不能暗中发布；结构与播放仍保留原分类。
+    for _ in range(2):
+        with pytest.raises(HTTPException) as exc:
+            library_v4.get_work_detail(binding['work_id'])
+        assert exc.value.status_code == 404
+    with database.connect() as conn:
+        detail = build_work_detail(conn, binding['work_id'], {'preserve_identity_title': False})
     with database.connect() as conn:
         generation_after = conn.execute(
             "SELECT value FROM v4_meta WHERE key='current_library_generation'"
@@ -51,6 +61,7 @@ def test_unknown_detail_and_playback_title_do_not_claim_movie_or_special(tmp_pat
 
 def test_started_session_final_checkpoint_does_not_open_public_history_writes(tmp_path):
     import pytest
+
     from app.media_v4.playback.store import V4PlaybackStore
     database = V4Database(tmp_path / 'checkpoint.db')
     database.initialize()
@@ -99,7 +110,6 @@ def test_all_media_kinds_keep_progress_without_replaying_history(tmp_path, monke
     """CHECK-009A: real scan/confirm and manager resolution, per-Asset progress."""
     from app.media_v4.playback.session import V4PlaybackManager
     from app.media_v4.playback.store import V4PlaybackStore
-
     from tests.test_v4_media_import_lifecycle_contract import bindings, scan, setup, write_video
     database, source = setup(tmp_path, monkeypatch)
     write_video(source, name)

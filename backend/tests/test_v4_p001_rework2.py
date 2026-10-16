@@ -53,9 +53,10 @@ def _patch_database(tmp_path, monkeypatch):
 
 
 def _client(tmp_path, monkeypatch):
-    from app.api import library_v4, media_v4
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import library_v4, media_v4
 
     _patch_database(tmp_path, monkeypatch)
     application = FastAPI()
@@ -202,12 +203,8 @@ def test_spinoff_series_group_is_not_used_as_candidate_identity_query(tmp_path, 
 # ---------------------------------------------------------------------------
 
 
-def test_manual_confirm_publishes_work_when_only_artwork_is_missing(tmp_path, monkeypatch):
-    """B1-2：手动确认候选后，若只缺图片产物，作品仍应 confirmed 并进入媒体墙。
-
-    P-001 R3 的原意是“没有可用产物不得冒充成功发布”；现行合同以不可变 SQLite
-    metadata snapshot 发布资料，图片候选通过 artwork_bindings 等待独立准备。
-    """
+def test_manual_confirm_publishes_work_after_required_artwork_is_ready(tmp_path, monkeypatch):
+    """手动身份确认先发布资料快照，必需图片就绪后再发布作品卡片。"""
 
     import json as _json
 
@@ -277,6 +274,13 @@ def test_manual_confirm_publishes_work_when_only_artwork_is_missing(tmp_path, mo
     V4LibraryProjection(database).rebuild()
     library = client.get("/api/library")
     assert library.status_code == 200
+    assert library.json()["works"] == []
+    from backend.tests.artwork_fixtures import ready_artwork
+
+    with database.connect() as conn:
+        ready_artwork(conn, work_id)
+    V4LibraryProjection(database).rebuild()
+    library = client.get("/api/library")
     assert len(library.json()["works"]) == 1
 
 
@@ -328,6 +332,12 @@ def test_projection_reads_persisted_metadata_and_pending_artwork_without_file_ch
             "ON b.candidate_id=r.resource_id WHERE b.snapshot_id=? AND r.state='pending'",
             (snapshot_id,),
         ).fetchone()[0] == 3
+    snapshot = V4LibraryProjection(database).rebuild()
+    assert not snapshot.cards
+    from backend.tests.artwork_fixtures import ready_artwork
+
+    with database.connect() as conn:
+        ready_artwork(conn, conn.execute('SELECT work_id FROM works').fetchone()[0])
     snapshot = V4LibraryProjection(database).rebuild()
     card = snapshot.cards[0]
     assert card["metadata"].get("metadata_state") == "ready"

@@ -166,6 +166,7 @@ def test_export_includes_latest_metadata_problem_hierarchy_without_provider_payl
     service.create_draft("rev-metadata", [(evidence, facts)], root_id="root-metadata", scan_id="scan-metadata")
     service.confirm("rev-metadata")
     with database.connect() as conn:
+        conn.execute("UPDATE jobs SET created_at='2026-10-14T09:00:00Z',updated_at='2026-10-14T09:00:00Z'")
         work_id = str(conn.execute("SELECT work_id FROM revision_bindings WHERE revision_id='rev-metadata' LIMIT 1").fetchone()[0])
         conn.execute(
             "INSERT INTO scrape_bindings(binding_id, revision_id, work_id, provider, provider_id, metadata_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",

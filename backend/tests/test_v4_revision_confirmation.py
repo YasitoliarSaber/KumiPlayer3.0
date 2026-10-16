@@ -684,6 +684,9 @@ def test_new_confirmed_revision_supersedes_same_root_without_unlocking_snapshot(
         }
     assert statuses == {"rev-old": "superseded", "rev-new": "confirmed"}
     assert len(reused_work_ids) == 1, "同根连续导入必须沿当前结构绑定续接同一个本地 Work"
+    from backend.tests.test_v4_library_projection import _ready_library
+
+    _ready_library(database)
     card = V4LibraryProjection(database).rebuild().cards[0]
     assert card["episode_count"] == 1
     assert card["asset_count"] == 1

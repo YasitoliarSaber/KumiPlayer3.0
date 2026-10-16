@@ -12,12 +12,15 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from .artwork_fixtures import ready_artwork
+
 
 def _client(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+
     from app.api import media_v4
     from app.core.config import AppConfig
     from app.media_v4.persistence.database import V4Database
-    from fastapi import FastAPI
 
     monkeypatch.setattr('app.media_v4.jobs.completeness.load_config', lambda: AppConfig(artwork_storage_mode='remote'))
 
@@ -113,6 +116,7 @@ def _seed_confirmed_work(database, *, revision_id: str = "rev-detail", work_id: 
                 "VALUES (?, 'tmdb', 1, ?, ?)",
                 (local_episode_ids[index], index, f"90{index}"),
             )
+        ready_artwork(conn, work_id)
     return work_id
 
 
@@ -132,13 +136,13 @@ def test_legacy_confirmed_binding_keeps_numbered_local_episodes_without_online_d
     ).json()
 
     assert body["work"]["metadata_state"] == "confirmed"
-    assert body["artwork"]["status"] == "not_required"
+    assert body["artwork"]["status"] == "ready"
     assert {episode["episode_number"] for episode in body["episodes"]} == {1, 2}
     assert all(not episode["mapped"] and not episode["provider_episode_id"] for episode in body["episodes"])
 
 
 @pytest.mark.parametrize('content_scope', ['ongoing', 'completed'])
-def test_legacy_partial_metadata_is_completed_in_progress_and_detail(tmp_path, monkeypatch, content_scope):
+def test_legacy_partial_metadata_normalizes_details_but_waits_for_publication(tmp_path, monkeypatch, content_scope):
     from app.media_v4.revisions.service import V4RevisionService
 
     client, database = _client(tmp_path, monkeypatch)
@@ -156,7 +160,7 @@ def test_legacy_partial_metadata_is_completed_in_progress_and_detail(tmp_path, m
         conn.execute('UPDATE source_roots SET content_scope=?', (content_scope,))
 
     unit = V4RevisionService(database).get_execution_progress('rev-detail')['work_units'][0]
-    assert unit['overall_status'] == 'completed'
+    assert unit['overall_status'] == 'waiting_publication'
     assert unit['metadata_recovery_action'] == 'none'
     assert unit['metadata_reason'] == ''
     body = client.get(f'/api/v4/revisions/rev-detail/works/{work_id}/execution-detail').json()
@@ -392,7 +396,7 @@ def test_completed_work_returns_work_level_and_episode_results(tmp_path, monkeyp
     assert body["work"]["provider_id"] == "12345"
     assert body["work"]["metadata_state"] == "ready"
     # artwork 只反映已发布本地图片绑定，不从旧 artifacts 表拼装文件列表。
-    assert body["artwork"]["status"] == "not_required"
+    assert body["artwork"]["status"] == "ready"
     # 剧集结果：本地季集号 + 刮削后完整集名 + 映射状态 + 播放定位生成。
     episodes = body["episodes"]
     assert len(episodes) == 2
@@ -573,7 +577,7 @@ def test_failed_work_reports_failed_stage(tmp_path, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["metadata_job_status"] == "failed"
-    assert body["artwork"]["status"] == "not_required"
+    assert body["artwork"]["status"] == "ready"
     assert body["has_detail"] is True
 
 

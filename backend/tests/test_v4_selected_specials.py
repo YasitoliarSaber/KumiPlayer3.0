@@ -3,6 +3,7 @@ from dataclasses import replace
 from pathlib import PurePosixPath
 
 import pytest
+
 from app.media_v4.domain.models import SourceEvidence
 from app.media_v4.parsing.parser import V4Parser
 from app.media_v4.persistence.database import V4Database
@@ -98,8 +99,11 @@ def test_mixed_specials_confirm_only_regular_episodes_to_sqlite(tmp_path, monkey
     }
     assert job_types == {"scrape_work", "refresh_projection"}
     assert artifacts == 0
+    from backend.tests.test_v4_library_projection import _ready_library
+
     from app.media_v4.projection.library import V4LibraryProjection
 
+    _ready_library(database)
     V4LibraryProjection(database).rebuild()
     monkeypatch.setattr(library_v4, "get_database", lambda: database)
     detail = library_v4.get_work_detail(work_id)

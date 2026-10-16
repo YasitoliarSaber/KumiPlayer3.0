@@ -3,11 +3,13 @@ import json
 from dataclasses import replace
 
 import pytest
+
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.projection.source_libraries import list_source_cards
 from app.media_v4.resolution.resolver import MediaResolver
 from app.media_v4.revisions.service import V4RevisionService
 
+from .artwork_fixtures import ready_artwork
 from .test_v4_revision_confirmation import _entry
 
 
@@ -39,6 +41,13 @@ def _completed_source(tmp_path):
             "VALUES ('sb','rev',?,'tmdb','42',?,'confirmed','now','now')",
             (wid, json.dumps({'metadata_state': 'ready', 'episode_mappings': mappings})),
         )
+        ready_artwork(conn, wid)
+    from app.media_v4.projection.library import V4LibraryProjection
+
+    from .test_v4_library_projection import _ready_library
+
+    _ready_library(database)
+    V4LibraryProjection(database).rebuild()
     return database, wid
 
 
@@ -64,6 +73,7 @@ def test_real_failure_is_counted_even_when_work_is_in_library(tmp_path, failure)
     with database.connect() as conn:
         if failure == 'metadata':
             conn.execute("UPDATE scrape_bindings SET metadata_json=?", (json.dumps({'metadata_state': 'source_unavailable'}),))
+            conn.execute("UPDATE jobs SET status='failed' WHERE job_type='scrape_work'")
         else:
             conn.execute("UPDATE jobs SET status='failed' WHERE job_type='refresh_projection'")
     card = list_source_cards(database)[0]
@@ -72,9 +82,20 @@ def test_real_failure_is_counted_even_when_work_is_in_library(tmp_path, failure)
     assert card['attention_count'] == 1
 
 
-def test_artwork_failure_does_not_block_source_publication(tmp_path):
+@pytest.mark.parametrize(('role', 'blocked'), [('clearlogo', False), ('poster', True)])
+def test_artwork_failure_blocks_source_only_for_required_roles(tmp_path, role, blocked):
     database, wid = _completed_source(tmp_path)
     with database.connect() as conn:
+        resource_id = f'fixture:{wid}:{role}'
+        conn.execute("INSERT OR IGNORE INTO artwork_resources(resource_id,state,created_at) VALUES (?,'failed','now')",
+                     (resource_id,))
+        conn.execute("UPDATE artwork_resources SET state='failed',error_kind='network_error' WHERE resource_id=?",
+                     (resource_id,))
+        conn.execute("INSERT OR IGNORE INTO artwork_bindings(subject_type,subject_id,work_id,role,candidate_id) "
+                     "VALUES ('work',?,?,?,?)", (wid, wid, role, resource_id))
+        if blocked:
+            # 模拟必需图从未发布；已发布的可用变体不会因后续下载失败而失效。
+            conn.execute('UPDATE artwork_bindings SET published_id=NULL WHERE work_id=? AND role=?', (wid, role))
         conn.execute(
             "INSERT INTO jobs(job_id,job_type,revision_id,work_id,idempotency_key,status,attempts,created_at,updated_at) "
             "VALUES ('images','prepare_artwork','rev',?,'images:rev','failed',1,'now','now')",
@@ -82,9 +103,10 @@ def test_artwork_failure_does_not_block_source_publication(tmp_path):
         )
         conn.execute("UPDATE jobs SET finished_at='finished' WHERE status='succeeded'")
     card = list_source_cards(database)[0]
-    assert card['overall_status'] == 'completed'
-    assert card['attention_count'] == 0
-    assert card['import_completed_at'] == 'finished'
+    assert card['overall_status'] == ('needs_attention' if blocked else 'completed')
+    assert card['attention_count'] == int(blocked)
+    if not blocked:
+        assert card['import_completed_at'] == 'finished'
 
 
 def test_active_artwork_progress_does_not_reuse_completed_media_percent():

@@ -149,18 +149,22 @@ def test_durable_full_scan_cancel_discards_result(tmp_path):
 
 
 def test_durable_scan_api_contract(tmp_path, monkeypatch):
-    from app.api import media_v4
-    from app.api.media_v4 import openlist_root_id
-    from app.integrations.openlist.providers import OpenListRouteConfig
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
+    from app.api import media_v4
+    from app.api.media_v4 import openlist_root_id
+    from app.integrations.openlist.providers import OpenListRouteConfig
+
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)
+    mount = tmp_path / 'mount'
+    (mount / 'Anime' / 'Show').mkdir(parents=True)
+    (mount / 'Anime' / 'Show' / 'Show.S01E01.mkv').write_bytes(b'')
     config = SimpleNamespaceType(
         openlist_server_url="https://openlist.example.test",
         openlist_remote_root="/",
-        openlist_mount_root="X:\\OpenList",
+        openlist_mount_root=str(mount),
         openlist_routes=[OpenListRouteConfig(
             route_id="route-anime",
             remote_prefix="/Anime",
@@ -181,15 +185,24 @@ def test_durable_scan_api_contract(tmp_path, monkeypatch):
             ingest_method="openlist_api",
             relative_path="Show/Show.S01E01.mkv",
             source_key="Show/Show.S01E01.mkv",
-            source_locator="Show/Show.S01E01.mkv",
-            playback_locator="X:\\OpenList\\Anime\\Show\\Show.S01E01.mkv",
+            source_locator="/Anime/Show/Show.S01E01.mkv",
+            playback_locator=str(mount / 'Anime' / 'Show' / 'Show.S01E01.mkv'),
         ))]
         return kwargs["scan_id"], evidence
 
     monkeypatch.setattr(media_v4, "scan_openlist_directory", fake_full_scan)
-    from app.api import openlist_v4
+    from types import SimpleNamespace
 
-    monkeypatch.setattr(openlist_v4, "_client", lambda _config: object())
+    from app.api import openlist_v4
+    from app.integrations.openlist.models import OpenListEntry
+
+    class Client:
+        def list_dir(self, path, **_kwargs):
+            entry = (OpenListEntry(name='Show', is_dir=True, remote_path='/Anime/Show') if path == '/Anime'
+                     else OpenListEntry(name='Show.S01E01.mkv', remote_path='/Anime/Show/Show.S01E01.mkv'))
+            return SimpleNamespace(entries=[entry], total=1)
+
+    monkeypatch.setattr(openlist_v4, "_client", lambda _config: Client())
 
     application = FastAPI()
     application.include_router(media_v4.router)
@@ -222,10 +235,11 @@ def test_durable_scan_api_contract(tmp_path, monkeypatch):
 
 
 def test_durable_incremental_without_baseline_is_rejected(tmp_path, monkeypatch):
-    from app.api import media_v4
-    from app.integrations.openlist.providers import OpenListRouteConfig
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    from app.api import media_v4
+    from app.integrations.openlist.providers import OpenListRouteConfig
 
     database = _fresh_database(tmp_path)
     monkeypatch.setattr(media_v4, "_database", database)

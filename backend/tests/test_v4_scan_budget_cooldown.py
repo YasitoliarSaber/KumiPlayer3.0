@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import pytest
+
 from app.media_v4.persistence.database import V4Database
 from app.media_v4.persistence.repositories import V4Repository
 from app.media_v4.sources import scan_frontier, scan_handlers
@@ -55,14 +56,14 @@ def test_auto_cooldown_has_a_cap_so_it_can_still_fall_back_to_manual_resume():
     assert scan_handlers.SCAN_BUDGET_COOLDOWN_SECONDS <= 30
 
 
-def _handler_task(budget_cooldowns=0):
+def _handler_task(budget_cooldowns=0, *, mount_root=''):
     from types import SimpleNamespace
 
     return SimpleNamespace(
         request={
             "remote_root": "/动画",
             "mapping_root": "/动画",
-            "mount_root": "",
+            "mount_root": str(mount_root),
             "provider": "quark",
         },
         root_id="root-c",
@@ -81,10 +82,18 @@ def _handler_runtime(database):
     )
 
 
-def _patch_handler_globals(monkeypatch) -> None:
+def _patch_handler_globals(monkeypatch, tmp_path) -> None:
     from types import SimpleNamespace
 
-    monkeypatch.setattr("app.api.openlist_v4._client", lambda _config: object())
+    from app.integrations.openlist.models import OpenListEntry
+
+    (tmp_path / 'Probe.mkv').write_bytes(b'')
+
+    class Client:
+        def list_dir(self, path, **_kwargs):
+            return SimpleNamespace(entries=[OpenListEntry(name='Probe.mkv', remote_path=f'{path}/Probe.mkv')], total=1)
+
+    monkeypatch.setattr("app.api.openlist_v4._client", lambda _config: Client())
     monkeypatch.setattr("app.api.openlist_v4._remote_root", lambda _config: "/动画")
     monkeypatch.setattr("app.core.config.load_config", lambda: SimpleNamespace())
 
@@ -117,12 +126,12 @@ def test_full_scan_defers_then_continues_with_all_persisted_evidence(tmp_path, m
         return kwargs["scan_id"], [evidence]
 
     monkeypatch.setattr("app.api.media_v4.scan_openlist_directory", fake_scan)
-    _patch_handler_globals(monkeypatch)
+    _patch_handler_globals(monkeypatch, tmp_path)
 
     with pytest.raises(SourceScanDeferred):
-        scan_handlers.scan_openlist_full_source(database, _handler_task(), _handler_runtime(database))
+        scan_handlers.scan_openlist_full_source(database, _handler_task(mount_root=tmp_path), _handler_runtime(database))
     evidence = scan_handlers.scan_openlist_full_source(
-        database, _handler_task(1), _handler_runtime(database)
+        database, _handler_task(1, mount_root=tmp_path), _handler_runtime(database)
     )
 
     assert len(rounds) == 2
@@ -134,6 +143,7 @@ def test_full_scan_pauses_only_after_auto_cooldown_cap(tmp_path, monkeypatch):
     """兜底仍然存在：连续撞预算超过上限时回到"可继续扫描"。"""
 
     import pytest
+
     from app.media_v4.sources.scanner import SourceScanPaused
 
     database = _database(tmp_path)
@@ -146,9 +156,9 @@ def test_full_scan_pauses_only_after_auto_cooldown_cap(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.api.media_v4.scan_openlist_directory", always_budget_exhausted)
     monkeypatch.setattr(scan_handlers, "SCAN_BUDGET_MAX_AUTO_COOLDOWNS", 2)
-    _patch_handler_globals(monkeypatch)
+    _patch_handler_globals(monkeypatch, tmp_path)
 
     with pytest.raises(SourceScanPaused):
         scan_handlers.scan_openlist_full_source(
-            database, _handler_task(2), _handler_runtime(database)
+            database, _handler_task(2, mount_root=tmp_path), _handler_runtime(database)
         )
