@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 import pytest
+
 from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.jobs import metadata, scrape
 from app.media_v4.persistence.database import V4Database
@@ -75,6 +76,102 @@ def test_children_do_not_guess_parent_provider_coordinates(seasons):
     assert [item["reason"] for item in diagnostics["unmapped_reasons"]] == [
         "ambiguous_provider_child_scope", "ambiguous_provider_child_scope"]
     assert client.requests == []
+
+
+def shared_identity_scope():
+    """真实形态：同一在线 ID 已被另一个标题不同的确认作品使用。"""
+
+    return {
+        "confirmed_child": True,
+        "series_groups": ["京阿尼合集"],
+        "shared_distinct_tv_ids": ["45501"],
+        "shared_tv_titles": [{"provider_id": "45501", "preferred_title": "中二病也要谈恋爱！"}],
+    }
+
+
+def test_equivalent_display_title_never_grants_shared_online_coordinates():
+    """换用已保存的罗马音等值标题不能改变坐标许可（第一阶段实际风险路径）。"""
+
+    detail = {
+        "name": "中二病也要谈恋爱！", "original_name": "中二病でも恋がしたい!",
+        "title_aliases": ["中二病也要谈恋爱！", "Chuunibyou demo Koi ga Shitai! Ren"],
+        "seasons": [{"season_number": 0}, {"season_number": 1}, {"season_number": 2}],
+    }
+    for title in ("中二病也要谈恋爱！恋", "Chuunibyou demo Koi ga Shitai! Ren"):
+        value = target(title)
+        value["provider_identity_scope"] = shared_identity_scope()
+        original = deepcopy(value)
+        client = OfflineProvider()
+        diagnostics = metadata._empty_mapping_diagnostics()
+
+        assert metadata._provider_child_scope(value, 45501, detail) is True
+        assert metadata._build_tv_episode_mappings(
+            client, 45501, value, work_detail=detail, diagnostics=diagnostics,
+        ) == []
+        assert client.requests == []
+        assert value == original
+        assert diagnostics["unmapped_reasons"][0]["reason"] == "ambiguous_provider_child_scope"
+        assert diagnostics["provider_range"]["basis"] == metadata.RANGE_BASIS_SHARED_ONLINE_IDENTITY
+        assert diagnostics["provider_range"]["shared_online_works"] == ["中二病也要谈恋爱！"]
+
+
+def test_dedicated_entry_with_confirmed_child_identity_still_maps_own_title():
+    """独立外传使用自己的线上条目时仍是正常整作品许可，并记录依据。"""
+
+    value = target("Heya Camp")
+    value["provider_identity_scope"] = {"confirmed_child": True, "shared_distinct_tv_ids": []}
+    detail = {"name": "房间露营△", "original_name": "へやキャン△",
+              "title_aliases": ["Heya Camp"], "seasons": [{"season_number": 1}]}
+    diagnostics = metadata._empty_mapping_diagnostics()
+
+    mappings = metadata._build_tv_episode_mappings(
+        OfflineProvider(), 95213, value, work_detail=detail, diagnostics=diagnostics,
+    )
+
+    assert len(mappings) == 1
+    assert diagnostics["provider_range"] == {
+        "scope": metadata.PROVIDER_SCOPE_FULL_WORK,
+        "basis": metadata.RANGE_BASIS_PREFERRED_TITLE_ENTRY,
+        "matched_titles": ["Heya Camp"],
+        "shared_online_works": [],
+    }
+
+
+def test_combined_local_title_never_borrows_dedicated_entry_coordinates():
+    """组合目录只匹配到一个英文片段时，不按该片段取得整部作品的坐标。"""
+
+    value = target("玉子市场&爱情故事")
+    value["identity_titles"] = ["玉子市场&爱情故事", "Tamako Market"]
+    value["provider_identity_scope"] = {"confirmed_child": True, "shared_distinct_tv_ids": []}
+    detail = {"name": "玉子市场", "original_name": "たまこまーけっと",
+              "title_aliases": ["Tamako Market"], "seasons": [{"season_number": 1}]}
+    client = OfflineProvider()
+    diagnostics = metadata._empty_mapping_diagnostics()
+
+    assert metadata._build_tv_episode_mappings(client, 48561, value, work_detail=detail,
+                                               diagnostics=diagnostics) == []
+    assert client.requests == []
+    assert diagnostics["provider_range"]["basis"] == metadata.RANGE_BASIS_CONFIRMED_CHILD
+
+
+def test_provider_range_basis_is_saved_with_finalized_metadata():
+    """许可依据必须随元数据落库，便于回放与纠错。"""
+
+    value = target("Heya Camp")
+    value["provider_identity_scope"] = {"confirmed_child": True, "shared_distinct_tv_ids": []}
+    detail = {"name": "房间露营△", "original_name": "へやキャン△",
+              "title_aliases": ["Heya Camp"], "seasons": [{"season_number": 1}]}
+    diagnostics = metadata._empty_mapping_diagnostics()
+    mappings = metadata._build_tv_episode_mappings(
+        OfflineProvider(), 95213, value, work_detail=detail, diagnostics=diagnostics,
+    )
+
+    finalized = metadata.finalize_metadata_statuses(value, {
+        "provider": "tmdb", "provider_id": "95213", "metadata_state": "ready",
+        "episode_mappings": mappings, "_mapping_diagnostics": diagnostics,
+    })
+
+    assert finalized["provider_range"]["basis"] == metadata.RANGE_BASIS_PREFERRED_TITLE_ENTRY
 
 
 def test_child_explicit_mapping_beats_local_coordinates():

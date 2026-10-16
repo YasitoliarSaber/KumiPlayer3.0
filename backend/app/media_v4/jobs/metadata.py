@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
 from typing import Any
 
 from app.core.config import load_config
@@ -91,6 +92,18 @@ MAPPING_BASIS_VERIFIED_OFFSET = "verified_season_offset"
 MAPPING_BASIS_EPISODE_TITLE = "verified_episode_title"
 MAPPING_BASIS_PROVIDER_BOUNDARY = "provider_season_boundary"
 MAPPING_BASIS_SINGLE_PROVIDER_SEASON = "single_provider_season"
+
+#: 在线坐标范围决策：整部作品可用本地季集号查坐标；范围未确定只接受显式坐标证据。
+#: 名称等值只建立身份，不自动等于坐标许可（见 provider_range_decision）。
+PROVIDER_SCOPE_FULL_WORK = "full_work"
+PROVIDER_SCOPE_UNRESOLVED = "unresolved"
+
+#: 范围决策依据；写进诊断 JSON，说明为什么允许或拒绝使用在线季集坐标。
+RANGE_BASIS_SHARED_ONLINE_IDENTITY = "shared_online_identity"
+RANGE_BASIS_PREFERRED_TITLE_ENTRY = "preferred_title_equals_provider_entry"
+RANGE_BASIS_CONFIRMED_CHILD = "confirmed_series_child"
+RANGE_BASIS_SERIES_GROUP = "series_group_matches_provider_entry"
+RANGE_BASIS_NO_CONFLICT = "no_conflicting_scope_evidence"
 
 #: 这些来源的"绝对编号"只是局部编号，不构成全作品编号证据。
 _UNUSABLE_ABSOLUTE_ORIGINS = frozenset({"unknown", "local_unscoped"})
@@ -601,6 +614,7 @@ def _empty_mapping_diagnostics() -> dict[str, Any]:
         "unmapped_reasons": [],
         "mapping_conflicts": [],
         "mapping_basis_counts": {},
+        "provider_range": None,
     }
 
 
@@ -722,6 +736,9 @@ def _episode_mapping_accounting(
         str(key): int(value)
         for key, value in (diagnostics.get("mapping_basis_counts") or {}).items()
     }
+    provider_range = diagnostics.get("provider_range")
+    # 电影/未进入 TV 映射的单元不写这个字段，避免给无关快照添加空键。
+    range_payload = {} if not isinstance(provider_range, dict) else {"provider_range": provider_range}
     total_ids = [
         _episode_key(item)
         for item in target.get("episodes") or []
@@ -738,6 +755,7 @@ def _episode_mapping_accounting(
             "unmapped_reason_codes": [],
             "mapping_basis_counts": {},
             "mapping_conflicts": [],
+            **range_payload,
         }
     current_ids = set(total_ids)
     unmapped_ids = [episode_id for episode_id in total_ids if episode_id not in mapped_ids]
@@ -770,6 +788,7 @@ def _episode_mapping_accounting(
             dict(item) for item in diagnostics.get("mapping_conflicts") or []
             if isinstance(item, dict) and str(item.get("episode_id") or "") in current_ids
         ],
+        **range_payload,
     }
 
 
@@ -1570,36 +1589,128 @@ def _fetch_provider_metadata(target: dict) -> dict:
         )
 
 
-def _provider_child_scope(target: dict, provider_id: int, work_detail: dict | None) -> bool:
-    """关系与共享在线身份提供范围证据；仅本地/在线标题不同不构成子作品。"""
-    scope = target.get("provider_identity_scope") or {}
+@dataclass(frozen=True)
+class ProviderRangeDecision:
+    """作品身份到在线坐标范围的纯决策结果（不读写任何本地事实）。
+
+    身份（Provider / 类型 / Provider ID）与坐标范围是两件事：
+    - ``PROVIDER_SCOPE_FULL_WORK``：在线条目代表整部本地作品，本地季集号可
+      直接作为查询坐标（含"本地 null 季号 + 在线唯一常规季"的既有约定）；
+    - ``PROVIDER_SCOPE_UNRESOLVED``：范围未确定，只有显式坐标证据（逐集/整季
+      已存对应、明确 absolute、已核验偏移规则、Provider 明确边界）才能映射。
+    """
+
+    scope: str
+    basis: str
+    matched_titles: tuple[str, ...] = ()
+    shared_online_works: tuple[str, ...] = ()
+
+    @property
+    def allows_local_coordinates(self) -> bool:
+        return self.scope == PROVIDER_SCOPE_FULL_WORK
+
+    def diagnostic(self) -> dict[str, Any]:
+        """可持久化的脱敏解释：只含标题证据与依据，不含定位符或凭据。"""
+
+        return {
+            "scope": self.scope,
+            "basis": self.basis,
+            "matched_titles": list(self.matched_titles),
+            "shared_online_works": list(self.shared_online_works),
+        }
+
+
+def _provider_entry_titles(work_detail: dict | None) -> tuple[set[str], set[str]]:
+    """把在线详情拆成"条目自身的正式名"与"可信别名"两类规范化标题。"""
+
     detail = work_detail or {}
+    canonical = {
+        _normalize_title(detail.get(key)) for key in ("name", "original_name")
+    } - {""}
+    aliases = {
+        _normalize_title(value) for value in _extract_aliases(detail, "tv")
+    } | {
+        _normalize_title(value) for value in detail.get("title_aliases") or []
+    }
+    aliases -= canonical
+    aliases.discard("")
+    return canonical, aliases
+
+
+def provider_range_decision(
+    target: dict, provider_id: int, work_detail: dict | None
+) -> ProviderRangeDecision:
+    """判断在线条目是否代表整部本地作品，从而允许使用本地季集坐标。
+
+    规则顺序对应第一阶段核实过的风险路径：
+
+    1. 同一个在线 ID 已被**另一个标题不同的确认作品**使用时，该条目覆盖的范围
+       大于本作品（收纳合集 / 母系列 / 多个本地子范围共享一个在线 ID）。此时
+       名称证据——包括把首选标题换成已保存的罗马音或本地化等值名——不得授权
+       整部作品的坐标，范围保持未确定。
+    2. 否则只有本作品的**首选标题**与在线条目标题等值（正式名或在线别名）时，
+       才认为在线条目代表整部作品。独立外传用自己的线上条目仍然可用；中/日/罗马音
+       显示名互换不会改变结论，因为两条路径命中同一集合。
+    3. 已确认的系列子作品（含系列组名等值）保持范围保护；只有显式坐标证据能解除。
+    4. 其余独立作品沿用既有许可，不因补充证据而无谓收紧。
+    """
+
+    scope = target.get("provider_identity_scope") or {}
+    canonical_titles, alias_titles = _provider_entry_titles(work_detail)
+    provider_titles = canonical_titles | alias_titles
+    local_titles = _target_titles(target)
+    matched_titles = tuple(title for title in local_titles
+                           if _normalize_title(title) in provider_titles)
+    shared_ids = {
+        str(value) for value in (scope.get("shared_distinct_tv_ids") or [])
+    }
+    shared_rows = [
+        item for item in (scope.get("shared_tv_titles") or [])
+        if isinstance(item, dict)
+        and str(item.get("provider_id")) == str(provider_id)
+        and str(item.get("preferred_title") or "").strip()
+    ]
+    if str(provider_id) in shared_ids or shared_rows:
+        # 旧响应缺少逐作品标题证据时同样保留范围保护。
+        return ProviderRangeDecision(
+            PROVIDER_SCOPE_UNRESOLVED,
+            RANGE_BASIS_SHARED_ONLINE_IDENTITY,
+            matched_titles=matched_titles,
+            shared_online_works=tuple(
+                str(item.get("preferred_title") or "").strip() for item in shared_rows
+            ),
+        )
     local = _normalize_title(target.get("preferred_title"))
-    remote_titles = {_normalize_title(detail.get(key)) for key in ("name", "original_name")}
-    remote_titles.update(_normalize_title(value) for value in _extract_aliases(detail, "tv"))
-    remote_titles.update(_normalize_title(value) for value in detail.get("title_aliases") or [])
-    remote_titles.discard('')
-    if isinstance(scope, dict) and str(provider_id) in {
-        str(value) for value in scope.get("shared_distinct_tv_ids") or []
-    }:
-        shared_titles = [item for item in scope.get('shared_tv_titles') or []
-                         if isinstance(item, dict) and str(item.get('provider_id')) == str(provider_id)]
-        # 不同来源的中/日/罗马音标题，只有在线详情的可信完整别名能证明同一身份。
-        # 没有逐作品标题证据的旧响应，或真实子作品，仍保留范围保护。
-        if not shared_titles or any(
-            _normalize_title(item.get('preferred_title')) not in remote_titles for item in shared_titles
-        ):
-            return True
-    if local and local in remote_titles:
-        # 独立外传有自己的线上作品时，父系列关系不把其编号限制成母作品子区间。
-        # 只认当前 Provider 详情的完整同名，共享身份的范围冲突仍优先保护。
-        return False
+    if local and local in provider_titles:
+        # 独立作品或独立外传：本作品首选标题就是该在线条目的标题。
+        return ProviderRangeDecision(
+            PROVIDER_SCOPE_FULL_WORK,
+            RANGE_BASIS_PREFERRED_TITLE_ENTRY,
+            matched_titles=matched_titles,
+        )
     if isinstance(scope, dict) and scope.get("confirmed_child"):
-        return True
+        return ProviderRangeDecision(
+            PROVIDER_SCOPE_UNRESOLVED, RANGE_BASIS_CONFIRMED_CHILD,
+            matched_titles=matched_titles,
+        )
     group = _normalize_title(target.get("series_group"))
     related = (target.get("card_type") == "standalone"
                or target.get("relation_type") in {"related", "spin_off", "sequel"})
-    return bool(group and local and group != local and related and group in remote_titles)
+    if group and local and group != local and related and group in provider_titles:
+        return ProviderRangeDecision(
+            PROVIDER_SCOPE_UNRESOLVED, RANGE_BASIS_SERIES_GROUP,
+            matched_titles=matched_titles,
+        )
+    return ProviderRangeDecision(
+        PROVIDER_SCOPE_FULL_WORK, RANGE_BASIS_NO_CONFLICT,
+        matched_titles=matched_titles,
+    )
+
+
+def _provider_child_scope(target: dict, provider_id: int, work_detail: dict | None) -> bool:
+    """兼容入口：范围未确定即需要额外坐标证据。"""
+
+    return not provider_range_decision(target, provider_id, work_detail).allows_local_coordinates
 
 
 def _build_tv_episode_mappings(
@@ -1631,7 +1742,11 @@ def _build_tv_episode_mappings(
         if isinstance(item, dict) and _positive_int(item.get("season_number"))
     })
     verified_offsets = _normalize_verified_offsets(target.get("verified_season_offsets"))
-    child_scope = _provider_child_scope(target, provider_id, work_detail)
+    range_decision = provider_range_decision(target, provider_id, work_detail)
+    if diagnostics is not None:
+        # 把"为什么允许/拒绝本地季集坐标"随诊断一起保存，便于回放与纠错。
+        diagnostics["provider_range"] = range_decision.diagnostic()
+    child_scope = not range_decision.allows_local_coordinates
     eligible: list[dict] = []
     child_candidates: dict[int, list[dict]] = {}
     for episode in local_episodes:
