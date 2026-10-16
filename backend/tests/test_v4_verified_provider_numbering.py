@@ -270,6 +270,15 @@ def test_confirmed_import_and_rescrape_publish_correct_fields_in_sqlite_and_deta
             'SELECT episode_id,local_episode_number,display_title FROM episodes ORDER BY episode_id')]
     runner = V4JobRunner(database, metadata_provider=metadata.default_metadata_provider)
     runner.process_available()
+    from backend.tests.artwork_fixtures import ready_artwork
+
+    # 资料正确仍须等本地图片完成才能发布；准备前先验证真实任务登记。
+    assert V4LibraryProjection(database).rebuild().cards == ()
+    with database.connect() as conn:
+        work_id = conn.execute('SELECT work_id FROM works').fetchone()[0]
+        assert conn.execute("SELECT COUNT(*) FROM artwork_bindings WHERE work_id=? AND role='episode_thumb'",
+                            (work_id,)).fetchone()[0] == sum(counts)
+        ready_artwork(conn, work_id)
     card = V4LibraryProjection(database).rebuild().cards[0]
     assert card['episode_count'] == sum(counts)
     assert card['metadata']['metadata_state'] == 'ready'
@@ -286,12 +295,16 @@ def test_confirmed_import_and_rescrape_publish_correct_fields_in_sqlite_and_deta
     # 从已入库作品触发重新刮削，沿用在线身份与每集对应，不需要再扫描来源。
     V4ScrapeService(database).requeue_work('r1', card['work_id'])
     runner.process_available()
+    with database.connect() as conn:
+        ready_artwork(conn, work_id)
     refreshed = V4LibraryProjection(database).rebuild().cards[0]
     assert refreshed['metadata']['metadata_state'] == 'ready'
     assert requested == [1, 1]
     # 局部刷新按本地季选择成员，但在线请求仍在正确的 Provider 命名空间。
     V4ScrapeService(database).requeue_work('r1', card['work_id'], season_number=first_season + len(counts) - 1)
     runner.process_available()
+    with database.connect() as conn:
+        ready_artwork(conn, work_id)
     assert V4LibraryProjection(database).rebuild().cards[0]['metadata']['metadata_state'] == 'ready'
     assert requested == [1, 1, 1]
     from app.api import library_v4
@@ -300,7 +313,7 @@ def test_confirmed_import_and_rescrape_publish_correct_fields_in_sqlite_and_deta
     assert len(detail['episodes']) == sum(counts)
     for number, episode in enumerate(detail['episodes'], 1):
         assert episode['title'] == f'Online episode {number}'
-        assert episode['thumb_path'] == ''
+        assert episode['thumb_path'].startswith('/api/assets/artwork/')
     assert [(e['season_number'], e['episode_number']) for e in detail['episodes']] == [
         (e['local_season_number'], e['local_episode_number']) for e in target['episodes']]
     with database.connect() as conn:
@@ -317,4 +330,4 @@ def test_confirmed_import_and_rescrape_publish_correct_fields_in_sqlite_and_deta
             (metadata_row['snapshot_id'],),
         ).fetchone()[0]
     assert len(json.loads(metadata_row['metadata_json'])['episode_mappings']) == sum(counts)
-    assert pending_stills == sum(counts)
+    assert pending_stills == 0

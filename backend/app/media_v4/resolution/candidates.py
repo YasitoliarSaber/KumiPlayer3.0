@@ -25,6 +25,7 @@ from app.media_v4.domain.models import (
     SourceEvidence,
 )
 from app.media_v4.parsing.parser import _normalize_filename_stem
+from app.media_v4.parsing.season_tokens import ORDINAL_SEASONS
 from app.media_v4.resolution.title_norm import normalize_identity_title, normalize_match_title
 
 _SUPPORTED_PROVIDERS = frozenset({"tmdb", "anilist", "bangumi"})
@@ -163,6 +164,7 @@ _SEASON_SUFFIX_PATTERN = re.compile(
     r"第\s*[一二三四五六七八九十百零〇0-9]+\s*[季期部]"
     r"|season\s*\d+"
     r"|\d+(?:st|nd|rd|th)\s*season"
+    r"|(?:" + "|".join(ORDINAL_SEASONS) + r")\s+season"
     r"|s\d{1,2}"
     r")\s*$",
     re.IGNORECASE,
@@ -214,6 +216,31 @@ def clean_search_title(title: str) -> str:
     return cleaned if len(cleaned) >= 2 else value
 
 
+def _strip_edition_markers(value: str) -> str:
+    for marker in _EDITION_MARKERS:
+        # OAD/OVA 必须是完整发行词；Road、Broadway 等片名不能被截掉正文。
+        pattern = re.escape(marker)
+        if marker.isascii():
+            pattern = r"(?<![A-Za-z0-9])" + pattern + r"(?![A-Za-z0-9])"
+        value = re.sub(pattern, " ", value, flags=re.IGNORECASE)
+    value = re.sub(r"\s+([：:、·|])", r"\1", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def identity_title_variants(title: str, media_type: str) -> list[str]:
+    """只归一化完整标题的组织/发行标记；不把副标题或母系列片段当成别名。"""
+
+    value = str(title or "").strip()
+    if not value:
+        return []
+    values = [value, clean_search_title(value)]
+    if media_type == "movie":
+        values.extend(_strip_edition_markers(item) for item in tuple(values))
+    elif media_type == "tv":
+        values.extend(strip_season_marker(item) for item in tuple(values))
+    return list(dict.fromkeys(item for item in values if item))
+
+
 def _query_variants(title: str) -> list[str]:
     """生成检索变体：先剥"版本标记"，再按分隔符拆分（检索专用）。
 
@@ -249,12 +276,7 @@ def _query_variants(title: str) -> list[str]:
     # 剥一次，再把「清洗 + 剥季度」的组合加入检索词，保证基名一定被搜到。
     cleaned = clean_search_title(value)
     push(cleaned)
-    stripped = value
-    for marker in _EDITION_MARKERS:
-        stripped = re.sub(re.escape(marker), " ", stripped, flags=re.IGNORECASE)
-    # 去掉"版本标记"后常留下多余空格与分隔符前空格：`魔法禁书目录 剧场版：X` → `魔法禁书目录：X`
-    stripped = re.sub(r"\s+([：:、·|])", r"\1", stripped)
-    stripped = re.sub(r"\s+", " ", stripped).strip()
+    stripped = _strip_edition_markers(value)
     push(stripped)
     for base in (value, stripped, cleaned):
         season_base = strip_season_marker(base)
@@ -607,8 +629,13 @@ def plan_work_candidates(
 
         # 规则必须属于解析后的作品本身。整个路径中的父目录/赠品文件名
         # 可能包含另一作品名，不能因此把它的 ID 提升为本作品的权威。
-        queries = build_query_inputs(work, entries, related_facts=[facts for _e, facts in related])
-        for title in queries:
+        related_facts = [facts for _e, facts in related]
+        queries = build_query_inputs(work, entries, related_facts=related_facts)
+        identity_queries = list(dict.fromkeys(
+            variant for title in work_identity_title_inputs(work, related_facts)
+            for variant in identity_title_variants(title, work.media_type)
+        ))
+        for title in identity_queries:
             binding = match_verified_tmdb_binding(title)
             if binding is None or binding.tmdb_type != work.media_type:
                 continue
@@ -667,7 +694,7 @@ def plan_work_candidates(
             scored = (
                 candidate
                 if preserve_candidate_status
-                else _score_candidate(candidate, work, queries, nfo_titles)
+                else _score_candidate(candidate, work, identity_queries, nfo_titles)
             )
             if not preserve_candidate_status and verified_keys and key not in verified_keys:
                 scored = replace(scored, confidence="medium", status="rejected")

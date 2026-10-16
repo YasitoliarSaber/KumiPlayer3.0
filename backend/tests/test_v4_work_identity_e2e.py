@@ -76,25 +76,31 @@ def _metadata_for(provider_id: str, title: str, marker: str, *, media_type: str 
 
 def _publish_artwork(conn, work_id: str, marker: str) -> dict[str, str]:
     """用已发布索引验证作品隔离，详情 GET 不下载或检查真实图片。"""
+    from app.media_v4.assets.catalog import ROLE_WIDTHS
+
+    from backend.tests.artwork_fixtures import ready_artwork
+
+    ready_artwork(conn, work_id)
     urls = {}
-    for role, width in (("fanart", 768), ("clearlogo", 384)):
+    for role, display_width in (("fanart", 512), ("clearlogo", 384)):
         resource_id = hashlib.sha256(f"{marker}-{role}".encode()).hexdigest()
         digest = hashlib.sha256(f"{marker}-{role}-contents".encode()).hexdigest()
         conn.execute(
             "INSERT INTO artwork_resources(resource_id,content_digest,state,created_at) VALUES (?,?,'ready','now')",
             (resource_id, digest),
         )
+        for variant_width in ROLE_WIDTHS[role]:
+            conn.execute(
+                "INSERT INTO artwork_variants(content_digest,recipe_version,width,relative_path,"
+                "pixel_width,pixel_height,byte_size,etag) VALUES (?,'webp-v1',?,?,?,100,12,?)",
+                (digest, variant_width, f"{digest}/{variant_width}.webp", variant_width, digest),
+            )
         conn.execute(
-            "INSERT INTO artwork_variants(content_digest,recipe_version,width,relative_path,"
-            "pixel_width,pixel_height,byte_size,etag) VALUES (?,'webp-v1',?,?,?,100,12,?)",
-            (digest, width, f"{digest}/{width}.webp", width, digest),
-        )
-        conn.execute(
-            "INSERT INTO artwork_bindings(subject_type,subject_id,work_id,role,candidate_id,published_id) "
+            "INSERT OR REPLACE INTO artwork_bindings(subject_type,subject_id,work_id,role,candidate_id,published_id) "
             "VALUES ('work',?,?,?,?,?)",
             (work_id, work_id, role, resource_id, resource_id),
         )
-        urls[role] = f"/api/assets/artwork/{resource_id}/{digest}-webp-v1/{width}"
+        urls[role] = f"/api/assets/artwork/{resource_id}/{digest}-webp-v1/{display_width}"
     return urls
 
 

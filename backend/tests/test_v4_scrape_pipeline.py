@@ -512,8 +512,10 @@ def test_legacy_missing_local_thumbnail_preserves_metadata_without_rewriting_dat
     detail = revisions.get_work_execution_detail("rev-legacy", work_id)
     assert detail["work"]["metadata_state"] == "ready"
     assert detail["work"]["metadata_reason_code"] != "episode_artwork_incomplete"
-    assert detail["work"]["artifact_state"] == "not_required"
-    assert detail["work"]["artifact_reasons"] == []
+    # 资料仍有效，但未提供必需海报/背景，不能冒充无需图片。
+    assert detail["work"]["artifact_state"] == "degraded"
+    assert all(any(label in reason for reason in detail["work"]["artifact_reasons"])
+               for label in ("海报", "背景图", "预览图"))
     # 只读归一：数据库里的历史失败记录保持原样。
     with database.connect() as conn:
         raw = str(conn.execute(
@@ -875,7 +877,6 @@ def test_scrape_stores_episode_still_as_pending_artwork_requirement(tmp_path):
 
 def test_invalid_scrape_mapping_is_rejected_before_metadata_files_are_published(tmp_path):
     import pytest
-
     from app.media_v4.jobs.scrape import V4ScrapeService
     from app.media_v4.persistence.database import V4Database
     from app.media_v4.revisions.service import V4RevisionService

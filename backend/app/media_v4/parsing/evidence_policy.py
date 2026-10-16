@@ -47,6 +47,8 @@ from app.media_v4.domain.identity import (
     DecisionTrace,
     NumberingEvidence,
 )
+from app.media_v4.generic_container import is_generic_container_name
+from app.media_v4.parsing.season_tokens import ORDINAL_SEASON_RE, ORDINAL_SEASONS
 from app.recognition.episode_title import (
     classification_title_prefix,
     mask_technical_decimals,
@@ -336,7 +338,7 @@ def collect_nearest_semantic_directory_tokens(relative_path: str) -> tuple[Direc
             DirectoryToken(
                 name=name,
                 depth=depth,
-                semantic=not _STRUCTURAL_DIR_RE.match(cleaned),
+                semantic=not (_STRUCTURAL_DIR_RE.match(cleaned) or is_generic_container_name(name)),
             )
         )
     return tuple(result)
@@ -430,9 +432,9 @@ def parse_numbering(
                     episode = bare
                     episode_origin = ORIGIN_LOCAL_UNSCOPED
 
-    explicit_season = _SEASON_TOKEN_RE.search(stem)
+    explicit_season = _SEASON_TOKEN_RE.search(stem) or ORDINAL_SEASON_RE.search(stem)
     if explicit_season is not None:
-        value = int(explicit_season.group(1))
+        value = _season_number_from_match(explicit_season.group(1))
         if season is None:
             season = value
             season_origin = ORIGIN_EXPLICIT_FILENAME
@@ -548,6 +550,7 @@ _DIR_SEASON_RES = (
     re.compile(r"(?:^|[\s._-])Season\s*0?(\d{1,2})(?:[\s._-]|$)", re.IGNORECASE),
     re.compile(r"第\s*(一|二|两|三|四|五|六|七|八|九|十|十一|十二|\d{1,2})\s*季"),
     re.compile(r"(?:^|[\s._-])S0?(\d{1,2})(?:[\s._-]|$)", re.IGNORECASE),
+    ORDINAL_SEASON_RE,
 )
 
 
@@ -555,7 +558,7 @@ def _season_number_from_match(value: str) -> int | None:
     text = (value or "").strip()
     if text.isdigit():
         return int(text)
-    return _CJK_SEASON_NUMERALS.get(text)
+    return _CJK_SEASON_NUMERALS.get(text) or ORDINAL_SEASONS.get(text.casefold())
 
 
 def _explicit_season_from_directory(directory: tuple[DirectoryToken, ...]) -> int | None:

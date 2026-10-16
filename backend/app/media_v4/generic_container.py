@@ -71,6 +71,11 @@ _EPISODE_RANGE = re.compile(
     r"^(?:e\d{1,3}\s*[-~]\s*e?\d{1,3}|\d{1,3}\s*[-~]\s*\d{1,3})$",
     re.IGNORECASE,
 )
+# 导出目录中的编号加类型标签不含作品名；仅整段命中，保留 Special 26 等正式片名。
+_NUMBERED_MOVIE_CONTAINER = re.compile(
+    r"^(?:specials?|sp)\s*\d{1,3}[\s._-]+(?:剧场版|劇場版|映画|movies?)$",
+    re.IGNORECASE,
+)
 
 
 def _normalize(value: str) -> str:
@@ -98,6 +103,8 @@ def is_generic_container_name(value: str) -> bool:
     if _PURE_NUMBER.fullmatch(lower):
         return True
     if _EPISODE_RANGE.fullmatch(lower):
+        return True
+    if _NUMBERED_MOVIE_CONTAINER.fullmatch(_normalize(raw)):
         return True
     decorated = _normalize(re.sub(
         r"(?:[ ._-]+|\s*\()(?:19|20)\d{2}\)?$", "", _normalize(raw),

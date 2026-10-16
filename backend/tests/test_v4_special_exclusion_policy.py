@@ -72,6 +72,20 @@ def test_existing_special_members_disappear_from_projection_and_detail_without_d
     paths = ["Show/Season 1/Show.S01E01.mkv", "Show/Season 1/Show.S01E02.mkv"]
     service.create_draft("legacy", [pair(path) for path in paths])
     service.confirm("legacy")
+    from app.media_v4.jobs.scrape import V4ScrapeService
+
+    from backend.tests.artwork_fixtures import ready_artwork
+
+    job = next(job for job in service.list_jobs("legacy") if job["job_type"] == "scrape_work")
+    V4ScrapeService(database).process(job["job_id"], lambda target: {
+        "provider": "tmdb", "provider_id": "42", "media_type": "tv",
+        "title": "Show", "metadata_state": "ready",
+        "episode_mappings": [{"episode_id": episode["episode_id"], "provider_episode_id": str(index),
+                              "title": "Episode", "still_url": "https://image.tmdb.org/still.jpg"}
+                             for index, episode in enumerate(target["episodes"], 1)],
+    })
+    with database.connect() as conn:
+        ready_artwork(conn, job["work_id"])
     projection = V4LibraryProjection(database)
     projection.rebuild()
     # 只构造历史数据库夹具；不调用新识别器伪造旧解析结果。

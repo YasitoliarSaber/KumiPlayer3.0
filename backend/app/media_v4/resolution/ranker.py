@@ -19,7 +19,7 @@ from dataclasses import dataclass, field, replace
 
 from app.media_v4.resolution.title_norm import normalize_match_title
 
-# 自动采用门槛（由人工确认语料回放校准：recall ≥ 95%、precision ≥ 98%）。
+# 现有采用门槛；回归语料的通过率不能冒充真实媒体库的身份准确率。
 AUTO_ADOPT_MIN_SCORE = 55.0
 AUTO_ADOPT_MIN_MARGIN = 10.0
 
@@ -52,6 +52,9 @@ class RankedCandidate:
     recommended: bool = False
     identity_safe: bool = False
     blocked: bool = False
+    positive_evidence: tuple[str, ...] = ()
+    negative_evidence: tuple[str, ...] = ()
+    hard_conflicts: tuple[str, ...] = ()
     extra: dict = field(default_factory=dict)
 
 
@@ -145,6 +148,13 @@ def _title_identity_level(target_titles: list[str], candidate: dict) -> tuple[in
         if direct:
             return 2, "完整标题等值"
         return 3, "可信别名链等值"
+
+    # 双语目录不能靠任意一段命中；只有完整两侧都由同一个 Provider 的
+    # 正式标题/别名证明才等值（红猪.Porco.Rosso），不把母系列片段升级。
+    for target_norm in target_norms:
+        bilingual = re.fullmatch(r"([\u3400-\u9fff\u3040-\u30ff]+)([a-z][a-z0-9]+)", target_norm)
+        if bilingual and all(part in provider_norms for part in bilingual.groups()):
+            return 3, "完整双语标题均有可信别名证据"
 
     # 装饰符（如 △）已由 normalize 去除；剩余副标题是作品身份的一部分。
     # 前缀只能用于展示弱候选，不能和真正的完整标题同分。
@@ -312,6 +322,28 @@ def score_candidate(
         reasons=tuple(reasons),
         identity_safe=identity_safe,
         blocked=blocked,
+        positive_evidence=tuple(code for condition, code in (
+            (identity_level == 3, "provider_alias_exact"),
+            (identity_level == 2, "title_exact"),
+            (identity_level == 1, "title_prefix"),
+            (year_level == 2, "year_exact"),
+            (year_level == 1, "year_adjacent"),
+            (type_match, "media_type_match"),
+            (domain_level == 1, "domain_match"),
+        ) if condition),
+        negative_evidence=tuple(code for condition, code in (
+            (year_level == -1, "year_conflict"),
+            (not type_match, "media_type_conflict"),
+            (domain_level == -1, "domain_conflict"),
+            (bool(part_mismatch), "part_conflict"),
+            (bool(target_titles) and _is_generic_title(target_titles[0]) and identity_level < 2, "generic_query"),
+        ) if condition),
+        hard_conflicts=tuple(code for condition, code in (
+            (year_level == -1, "year_conflict"),
+            (not type_match, "media_type_conflict"),
+            (domain_level == -1, "domain_conflict"),
+            (bool(part_mismatch), "part_conflict"),
+        ) if condition),
         extra={
             "genre_ids": tuple(candidate.get("genre_ids") or ()),
             "genres": tuple(candidate.get("genres") or ()),
@@ -397,7 +429,8 @@ def auto_adopt(
     competitors = [
         item
         for item in viable[1:]
-        if item.identity_safe and item.score >= min_score
+        if (item.provider, item.media_type, item.provider_id)
+        != (best.provider, best.media_type, best.provider_id)
     ]
     if competitors:
         runner_up = competitors[0]

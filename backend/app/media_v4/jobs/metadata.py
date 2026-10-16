@@ -116,6 +116,8 @@ def _tmdb_collection_related_works(client: TMDBClient, movie_detail: dict) -> li
     if not isinstance(collection, dict):
         return []
     raw_id = collection.get("id")
+    if raw_id is None:
+        return []
     try:
         collection_id = int(raw_id)
     except (TypeError, ValueError):
@@ -316,6 +318,12 @@ def _ranked_candidate_payload(ranked: list) -> list[dict]:
             "recommended": item.recommended,
             "identity_safe": item.identity_safe,
             "blocked": item.blocked,
+            # 保留评分输入，离线回放不能靠中文 reasons 反推动画域。
+            "genre_ids": list(item.extra.get("genre_ids") or ()),
+            "genres": list(item.extra.get("genres") or ()),
+            "positive_evidence": list(item.positive_evidence),
+            "negative_evidence": list(item.negative_evidence),
+            "hard_conflicts": list(item.hard_conflicts),
         }
         for item in ranked
     ]
@@ -325,8 +333,10 @@ def _candidate_decision_payload(
     ranked: list[RankedCandidate],
     adopted: RankedCandidate | None,
     reason: str,
+    *,
+    identity_input: dict | None = None,
 ) -> dict:
-    return {
+    result: dict[str, Any] = {
         "decision": "auto_adopted" if adopted is not None else "waiting_review",
         "reason": reason,
         "selected_provider": adopted.provider if adopted is not None else "",
@@ -334,6 +344,9 @@ def _candidate_decision_payload(
         "selected_score": adopted.score if adopted is not None else None,
         "ranked_candidates": _ranked_candidate_payload(ranked),
     }
+    if identity_input is not None:
+        result["identity_input"] = identity_input
+    return result
 
 
 def _search_with_year_fallback(
@@ -360,8 +373,8 @@ def _rank_metadata_candidates(
 ) -> tuple[list[RankedCandidate], RankedCandidate | None, str]:
     """把多次搜索结果统一交给 CandidateRanker 决策。"""
 
-    # 恢复来源只提供检索词；身份证据仍来自 confirmed Work 的本地标题变体。
-    identity_titles = _search_titles(target) if "recovery_search_queries" in target else titles
+    identity_input = _candidate_identity_input(target, media_type)
+    identity_titles = identity_input["queries"]
     candidates = enrich_candidate_aliases(
         [_candidate_summary(item) for item in results_by_id.values()],
         identity_titles,
@@ -370,21 +383,30 @@ def _rank_metadata_candidates(
     )
     ranker = CandidateRanker()
     ranked = ranker.rank(
-        {
-            "preferred_title": target.get("preferred_title") or "",
-            "queries": identity_titles,
-            "media_type": media_type,
-            "year": target.get("year"),
-            "show_type": target.get("show_type") or "",
-            # 季度基名：本地是"某作品的第 N 季"时，在线条目是整部作品，
-            # 标题必然不等值；基名等值 + tv 类型允许自动采用（见 `_season_base_titles`）。
-            "season_base_titles": _season_base_titles(_target_titles(target)),
-            "season_numbers": _local_season_numbers(target),
-        },
+        identity_input,
         candidates,
     )
     adopted, reason = ranker.auto_adopt(ranked)
     return ranked, adopted, reason
+
+
+def _candidate_identity_input(target: dict, media_type: str) -> dict:
+    """可持久化的评分输入白名单；不包含定位符、凭据或外部恢复检索词。"""
+
+    from app.media_v4.resolution.candidates import identity_title_variants
+
+    titles = _target_titles(target)
+    return {
+        "preferred_title": target.get("preferred_title") or "",
+        "queries": list(dict.fromkeys(
+            variant for title in titles for variant in identity_title_variants(title, media_type)
+        )),
+        "media_type": media_type,
+        "year": target.get("year"),
+        "show_type": target.get("show_type") or "",
+        "season_base_titles": _season_base_titles(titles),
+        "season_numbers": _local_season_numbers(target),
+    }
 
 
 def _target_titles(target: dict) -> list[str]:
@@ -1262,7 +1284,10 @@ def _fetch_provider_metadata(target: dict) -> dict:
                     results_by_id,
                     client,
                 )
-                candidate_decision = _candidate_decision_payload(ranked, adopted, adopt_reason)
+                candidate_decision = _candidate_decision_payload(
+                    ranked, adopted, adopt_reason,
+                    identity_input=_candidate_identity_input(target, media_type),
+                )
                 if adopted is None:
                     ranked_payload = _ranked_candidate_payload(ranked)
                     review_reason = (
@@ -1283,7 +1308,7 @@ def _fetch_provider_metadata(target: dict) -> dict:
                         candidates=ranked_payload,
                         reason_code="no_candidates" if not ranked else "ambiguous_candidates",
                         candidate_decision=candidate_decision,
-                        failure_stage="search",
+                        failure_stage="candidate_retrieval" if not ranked else "identity_resolution",
                         retryable=False,
                         mapping_scope=False,
                         refresh_status=REFRESH_STATUS_FAILED,

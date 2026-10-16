@@ -306,11 +306,13 @@ def test_corpus_replay_meets_recall_and_precision_thresholds():
     for target, candidates, want in CORPUS:
         ranked = rank_candidates(target, candidates)
         adopted, _reason = ranker.auto_adopt(ranked)
+        if adopted is not None:
+            # 错绑同样进入分母，否则所有错误自动采用都会被漏计而显示 100%。
+            adoptions += 1
         if want is not None:
             if adopted is not None and adopted.provider_id == want:
                 recalled += 1
                 correct_adoptions += 1
-                adoptions += 1
         else:
             assert adopted is None, "硬阻断语料被错误自动采用"
     recall = recalled / expected_positive if expected_positive else 1.0

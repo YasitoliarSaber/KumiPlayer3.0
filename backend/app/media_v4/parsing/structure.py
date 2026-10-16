@@ -11,6 +11,7 @@ from app.media_v4.domain.models import ParsedFacts, SourceEvidence
 from app.media_v4.generic_container import is_generic_container_name
 from app.media_v4.parsing.edition import edition_tags
 from app.media_v4.parsing.evidence_policy import _filename_title_head, parse_numbering, tokenize_filename
+from app.media_v4.parsing.season_tokens import ORDINAL_SEASON_PATTERN, ORDINAL_SEASON_RE, ordinal_season_number
 from app.recognition.media import (
     _extract_release_movie_title,
     _extract_series_name_from_filename,
@@ -28,7 +29,20 @@ from app.recognition.title_cleaner import clean_work_title_container
 def normalized_title(value: str) -> str:
     title, _ = _parse_work_title_and_year(value)
     title = re.sub(r"(?i)(?:\bseason\s*\d+|\bS\d{1,2}\b|第[一二三四五六七八九十\d]+季)", "", title)
+    title = ORDINAL_SEASON_RE.sub("", title)
     return re.sub(r"[^a-z0-9\u3400-\u9fff]+", "", title.casefold())
+
+
+def _context_season(parent_dirs: list[str]) -> int | None:
+    # 只补英文序数，不顺带改变既有中文副标题/外传的结构归属规则。
+    if any(ORDINAL_SEASON_RE.search(directory) for directory in parent_dirs):
+        for directory in reversed(parent_dirs):
+            season = ordinal_season_number(directory)
+            if season is None:
+                season = _infer_season_from_context([directory])
+            if season is not None:
+                return season
+    return _infer_season_from_context(parent_dirs)
 
 
 def is_collection_container(value: str) -> bool:
@@ -130,12 +144,12 @@ def structure_context(evidence: SourceEvidence, root_container: str = "") -> Str
                                 tuple(collection_scope(index) for index in indexes))
     work_index = leaf
     numbered_edition_parent = False
-    leaf_season = _infer_season_from_context([directories[leaf]])
+    leaf_season = _context_season([directories[leaf]])
     if len(named) > 1:
         parent = named[-2]
         leaf_title = normalized_title(directories[leaf])
         parent_title = normalized_title(directories[parent])
-        season_pattern = r"(?:\bS\d{1,2}\b|\bSeason\s*\d+|第[一二三四五六七八九十\d]+季)"
+        season_pattern = r"(?:\bS\d{1,2}\b|\bSeason\s*\d+|第[一二三四五六七八九十\d]+季|" + ORDINAL_SEASON_PATTERN + ")"
         season_marker = re.search(season_pattern, directories[leaf], re.IGNORECASE)
         clean_parent = _parse_work_title_and_year(directories[parent])[0]
         clean_leaf = _parse_work_title_and_year(directories[leaf])[0]
@@ -188,11 +202,11 @@ def structure_context(evidence: SourceEvidence, root_container: str = "") -> Str
         # 已确认归属的版本目录不再参与子作品命名。
         subwork = ""
         parent_dirs = (work_container,)
-    directory_season = _infer_season_from_context(list(parent_dirs))
+    directory_season = _context_season(list(parent_dirs))
     season_scoped = bool(
         (leaf_season is not None and not _looks_like_plain_season_dir(directories[leaf]))
         or (_is_series_container(work_container)
-            and any(_infer_season_from_context([value]) is not None for value in parent_dirs[1:]))
+            and any(_context_season([value]) is not None for value in parent_dirs[1:]))
     )
     filename_identity = ""
     if collection_indexes and any(normalized_title(work_container) == normalized_title(directories[index])

@@ -9,6 +9,7 @@ PV/CM/Menu/Trailer/Eyecatch 等附属视频只保留播放结构，不进入 Spe
 import re
 from dataclasses import dataclass, field
 
+from app.media_v4.generic_container import is_generic_container_name
 from app.recognition.episode_title import (
     classification_title_prefix,
     fractional_episode_token,
@@ -1028,6 +1029,8 @@ def _clean_standalone_dir_title(dirname: str) -> str:
 
 def _is_generic_movie_directory_title(title: str) -> bool:
     """判断目录名是否仅是电影分类标签，而不是可刮削的作品标题。"""
+    if is_generic_container_name(title):
+        return True
     normalized = re.sub(r"[\s._\-·:：/\\()（）【】\[\]]+", "", title or "").casefold()
     return normalized in {"剧场版", "movie", "movies", "映画", "电影", "剧场版合集", "电影合集", "moviecollection", "moviescollection"}
 
