@@ -24,7 +24,7 @@ import {
 import { useCallback, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { RestorePreview, SettingsSection } from '../../shared/api/service';
+import type { BangumiAccountSession, RestorePreview, SettingsSection } from '../../shared/api/service';
 import { demoQueryKeys, useMediaService, useSettings } from '../../shared/api/service-context';
 import { ErrorSurface, LoadingSurface, StatusChip } from '../../shared/ui/Surface';
 import { Button } from '@/shared/ui/button';
@@ -912,7 +912,7 @@ function AccountGroup({
     setSessionBusy(true);
     try {
       const next = await service.bangumiVerify();
-      setNotice(`会话验证完成：授权 ${next.authStatus || '未知'}，连通性 ${next.connectivity || '未知'}`);
+      setNotice(bangumiVerifyNotice(next));
       refreshSession();
     } catch (error) {
       setNotice(`会话验证失败：${error instanceof Error ? error.message : '后端拒绝'}`);
@@ -974,73 +974,12 @@ function AccountGroup({
             </StatusChip>
           </Row>
         ) : (
-          <>
-            <Row label="当前状态">
-              <div className={styles.rowControl}>
-                <StatusChip
-                  tone={
-                    session.data.status === 'connected'
-                      ? 'success'
-                      : session.data.credentialState === 'found'
-                        ? 'neutral'
-                        : 'warning'
-                  }
-                >
-                  {session.data.status || '未知状态'}
-                </StatusChip>
-                <span className={styles.listHint}>
-                  {/* 账号显示名优先昵称，空则退用户名；两者都空时如实说明后端未返回。 */}
-                  {session.data.nickname || session.data.username || '后端未返回账号名'}
-                </span>
-              </div>
-            </Row>
-            <Row label="凭据状态">
-              <span className={styles.listHint}>
-                {session.data.credentialState === 'found'
-                  ? '已保存（found）'
-                  : session.data.credentialState === 'unavailable'
-                    ? '本机凭据存储暂不可读（unavailable）'
-                    : `未配置（${session.data.credentialState}）`}
-              </span>
-            </Row>
-            <Row label="授权状态">
-              <span className={styles.listHint}>{session.data.authStatus || '未知'}</span>
-            </Row>
-            <Row label="连通性">
-              <span className={styles.listHint}>{session.data.connectivity || '未知'}</span>
-            </Row>
-            <Row label="最后验证时间">
-              <span className={styles.listHint}>
-                {session.data.lastVerifiedAt
-                  ? session.data.lastVerifiedAt.slice(0, 19).replace('T', ' ')
-                  : '尚未验证'}
-              </span>
-            </Row>
-            {session.data.lastErrorCode || session.data.lastErrorMessage ? (
-              <Row label="最后错误">
-                <span className={styles.listHint}>
-                  {session.data.lastErrorCode ? `${session.data.lastErrorCode}：` : ''}
-                  {session.data.lastErrorMessage || '后端未提供错误详情'}
-                </span>
-              </Row>
-            ) : null}
-            <Row label="会话操作">
-              <div className={styles.rowControl}>
-                <Button size="xs" variant="outline" loading={sessionBusy} onClick={() => void verifySession()}>
-                  验证会话
-                </Button>
-                <Button
-                  size="xs"
-                  variant="outline"
-                  disabled={sessionBusy}
-                  onClick={() => setSignOutOpen(true)}
-                >
-                  退出登录
-                </Button>
-              </div>
-            </Row>
-            <p className={styles.panelHint}>退出登录会清除本机凭据与账号快照。</p>
-          </>
+          <BangumiSessionView
+            session={session.data}
+            busy={sessionBusy}
+            onVerify={() => void verifySession()}
+            onSignOut={() => setSignOutOpen(true)}
+          />
         )}
         <Row
           label="Bangumi 访问令牌"
@@ -1282,6 +1221,121 @@ function AccountGroup({
       </Dialog>
     </>
   );
+}
+
+/**
+ * Bangumi 会话摘要：只展示用户能自己判断的结论（是否登录、上次验证是否通过、要不要处理），
+ * 不把 `found / valid / online` 这类后端枚举搬到界面上；原始值仍由接口提供，需要时可在日志里查。
+ */
+function BangumiSessionView({
+  session,
+  busy,
+  onVerify,
+  onSignOut,
+}: {
+  readonly session: BangumiAccountSession;
+  readonly busy: boolean;
+  readonly onVerify: () => void;
+  readonly onSignOut: () => void;
+}) {
+  const chip = bangumiStatusChip(session);
+  const name = session.nickname || session.username;
+  const problem = bangumiProblemHint(session);
+  return (
+    <>
+      <Row label="当前状态">
+        <div className={styles.rowControl}>
+          <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
+          {/* 账号显示名优先昵称、空则退用户名；两者都空时不补占位文案，状态标签已经说明结果。 */}
+          {name ? <span className={styles.listHint}>{name}</span> : null}
+        </div>
+      </Row>
+      <Row label="上次验证">
+        <span className={styles.listHint}>{bangumiVerifiedLine(session)}</span>
+      </Row>
+      {problem ? <p className={styles.panelHint}>{problem}</p> : null}
+      <Row label="账号操作">
+        <div className={styles.rowControl}>
+          <Button size="xs" variant="outline" loading={busy} onClick={onVerify}>
+            验证账号
+          </Button>
+          <Button size="xs" variant="outline" disabled={busy} onClick={onSignOut}>
+            退出登录
+          </Button>
+        </div>
+      </Row>
+      <p className={styles.panelHint}>退出登录会清除本机凭据与账号快照。</p>
+    </>
+  );
+}
+
+function bangumiStatusChip(session: BangumiAccountSession): {
+  readonly label: string;
+  readonly tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+} {
+  if (session.credentialState === 'not_found' || session.status === 'signed_out') {
+    return { label: '未登录', tone: 'neutral' };
+  }
+  if (session.credentialState === 'unavailable') {
+    return { label: '凭据暂不可读', tone: 'warning' };
+  }
+  if (session.authStatus === 'reauth_required') {
+    return { label: '需要重新登录', tone: 'warning' };
+  }
+  // 标签只说「登录」这件事，不说「在线」：连通性只属于某一次验证，不冒充实时网络状态。
+  if (session.status === 'connected') {
+    return { label: '已登录', tone: 'success' };
+  }
+  return { label: '待验证', tone: 'info' };
+}
+
+/** 上次验证的时间与结论。连通性只是「上一次验证那一刻」的结果，不冒充实时在线状态。 */
+function bangumiVerifiedLine(session: BangumiAccountSession): string {
+  if (!session.lastVerifiedAt) {
+    return '还没有验证过';
+  }
+  const at = session.lastVerifiedAt.slice(0, 19).replace('T', ' ');
+  if (session.lastErrorCode || session.lastErrorMessage) {
+    return `${at} · 未通过`;
+  }
+  return session.authStatus === 'valid' ? `${at} · 验证通过` : `${at} · 已验证`;
+}
+
+/** 只在需要用户动手时给一条提示；返回 null 表示当前会话没有需要处理的问题。 */
+function bangumiProblemHint(session: BangumiAccountSession): string | null {
+  if (session.authStatus === 'reauth_required') {
+    return '访问令牌已失效，请重新保存令牌后再验证。';
+  }
+  if (session.credentialState === 'unavailable') {
+    return '本机凭据存储暂时读不到，可稍后重新验证；凭据与账号快照没有被删除。';
+  }
+  switch (session.connectivity) {
+    case 'offline':
+      return session.lastErrorMessage
+        ? `上次验证没连上 Bangumi：${session.lastErrorMessage}。网络或代理恢复后重新验证即可。`
+        : '上次验证没连上 Bangumi。网络或代理恢复后重新验证即可。';
+    case 'rate_limited':
+      return 'Bangumi 暂时限制了请求频率，请稍后重新验证。';
+    case 'forbidden':
+      return 'Bangumi 拒绝了这次请求，请确认账号状态后重新验证。';
+    case 'server_error':
+      return 'Bangumi 服务暂时异常，请稍后重新验证。';
+    default:
+      return session.lastErrorMessage ? `上次验证未通过：${session.lastErrorMessage}` : null;
+  }
+}
+
+function bangumiVerifyNotice(session: BangumiAccountSession): string {
+  if (session.authStatus === 'valid') {
+    const name = session.nickname || session.username;
+    return `验证成功${name ? `：${name}` : ''}，本机凭据可用。`;
+  }
+  if (session.authStatus === 'reauth_required') {
+    return '验证未通过：访问令牌已失效，请重新保存令牌。';
+  }
+  return session.lastErrorMessage
+    ? `验证未通过：${session.lastErrorMessage}（本机凭据已保留）。`
+    : '验证未通过：暂时没连上 Bangumi（本机凭据已保留）。';
 }
 
 /* ------------------------------------------------------------------ 关于 */

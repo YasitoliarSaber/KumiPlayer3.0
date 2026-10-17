@@ -128,12 +128,11 @@ describe('设置页 Bangumi 会话（任务 B）', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '账户与同步' }));
 
-    // 账号名来自 bangumiSession（昵称优先），不再恒空。
+    // 账号名来自 bangumiSession（昵称优先）；状态用人话呈现，不回显后端枚举。
     expect((await screen.findAllByText('KumiNick')).length).toBeGreaterThan(0);
-    expect(screen.getByText(/已保存（found）/)).toBeTruthy();
-    expect(screen.getByText('valid')).toBeTruthy();
-    expect(screen.getByText('online')).toBeTruthy();
-    expect(screen.getByText('connected')).toBeTruthy();
+    expect(screen.getByText('已登录')).toBeTruthy();
+    expect(screen.getByText('2026-10-17 10:00:00 · 验证通过')).toBeTruthy();
+    expect(screen.queryByText(/found|valid|online|connected/)).toBeNull();
 
     const input = screen.getByLabelText('Bangumi 访问令牌') as HTMLInputElement;
     // 只输入、未提交时不得调用登录端点。
@@ -148,6 +147,32 @@ describe('设置页 Bangumi 会话（任务 B）', () => {
     // 成功后清空输入且不回显令牌。
     await waitFor(() => expect((screen.getByLabelText('Bangumi 访问令牌') as HTMLInputElement).value).toBe(''));
     expect(screen.queryByText(/bgm-secret-token/)).toBeNull();
+  });
+
+  it('上次验证超时时说清原因，仍显示账号已登录而不是让用户看到离线枚举', async () => {
+    // 快照语义：凭据与账号仍然有效（status=connected），只是上一次远程验证超时。
+    const offline: BangumiAccountSession = {
+      ...SESSION,
+      connectivity: 'offline',
+      lastVerifiedAt: '2026-10-17T09:35:56+08:00',
+      lastErrorCode: 'timeout',
+      lastErrorMessage: 'Bangumi 请求超时',
+    };
+    const base = createMockMediaService({ latencyMs: 0, catalog });
+    renderNode(
+      { ...base, bangumiSession: async () => offline, bangumiVerify: async () => offline },
+      <SettingsPage />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '账户与同步' }));
+
+    expect(await screen.findByText('已登录')).toBeTruthy();
+    expect(screen.getByText('2026-10-17 09:35:56 · 未通过')).toBeTruthy();
+    expect(
+      screen.getByText('上次验证没连上 Bangumi：Bangumi 请求超时。网络或代理恢复后重新验证即可。'),
+    ).toBeTruthy();
+    expect(screen.queryByText('offline')).toBeNull();
+    expect(screen.queryByText(/timeout/)).toBeNull();
   });
 
   it('登录失败保留输入并显示后端 detail', async () => {
