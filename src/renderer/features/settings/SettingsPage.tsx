@@ -853,9 +853,12 @@ function AccountGroup({
   readonly setNotice: (value: string) => void;
 }) {
   const service = useMediaService();
+  const queryClient = useQueryClient();
   const [token, setToken] = useState('');
   const [preview, setPreview] = useState<RestorePreview | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const backups = useQuery({
@@ -863,6 +866,79 @@ function AccountGroup({
     enabled: typeof service.listBackups === 'function',
     queryFn: () => service.listBackups!(),
   });
+
+  // 账号名只来自后端会话（昵称优先，空则退用户名）；`GET /api/config` 从不返回账号名。
+  const session = useQuery({
+    queryKey: ['bangumi-session'],
+    enabled: typeof service.bangumiSession === 'function',
+    queryFn: () => service.bangumiSession!(),
+  });
+
+  const refreshSession = () => {
+    void queryClient.invalidateQueries({ queryKey: ['bangumi-session'] });
+    void queryClient.invalidateQueries({ queryKey: demoQueryKeys.settings });
+  };
+
+  const submitToken = async () => {
+    if (typeof service.bangumiSignIn !== 'function') {
+      setNotice('演示模式不提供真实 Bangumi 会话。');
+      return;
+    }
+    const value = token.trim();
+    if (value.length === 0) {
+      setNotice('请填写 Bangumi 访问令牌；空值不会保存。');
+      return;
+    }
+    setSessionBusy(true);
+    try {
+      const next = await service.bangumiSignIn(value);
+      // 成功后清空输入且不回显令牌；失败路径保留输入。
+      setToken('');
+      const name = next.nickname || next.username;
+      setNotice(`已保存 Bangumi 访问令牌${name ? `：${name}` : ''}`);
+      refreshSession();
+    } catch (error) {
+      setNotice(`未保存：${error instanceof Error ? error.message : '后端拒绝了这次修改'}`);
+    } finally {
+      setSessionBusy(false);
+    }
+  };
+
+  const verifySession = async () => {
+    if (typeof service.bangumiVerify !== 'function') {
+      setNotice('演示模式不提供真实 Bangumi 会话。');
+      return;
+    }
+    setSessionBusy(true);
+    try {
+      const next = await service.bangumiVerify();
+      setNotice(`会话验证完成：授权 ${next.authStatus || '未知'}，连通性 ${next.connectivity || '未知'}`);
+      refreshSession();
+    } catch (error) {
+      setNotice(`会话验证失败：${error instanceof Error ? error.message : '后端拒绝'}`);
+    } finally {
+      setSessionBusy(false);
+    }
+  };
+
+  const signOut = async () => {
+    if (typeof service.bangumiSignOut !== 'function') {
+      setSignOutOpen(false);
+      setNotice('演示模式不提供真实 Bangumi 会话。');
+      return;
+    }
+    setSessionBusy(true);
+    try {
+      await service.bangumiSignOut();
+      setSignOutOpen(false);
+      setNotice('已退出登录：本机凭据与账号快照已清除。');
+      refreshSession();
+    } catch (error) {
+      setNotice(`退出登录失败：${error instanceof Error ? error.message : '后端拒绝'}`);
+    } finally {
+      setSessionBusy(false);
+    }
+  };
 
   const restorePreview = async (file: File) => {
     if (!service.previewRestore) {
@@ -883,14 +959,93 @@ function AccountGroup({
   return (
     <>
       <Panel title="Bangumi 账号" hint="只用于匹配后的收藏与看完同步；不参与本地作品身份与编号。">
-        <Row label="当前状态">
-          <StatusChip tone={data.bangumi.configured ? 'success' : 'neutral'}>
-            {data.bangumi.configured
-              ? `已配置${data.bangumi.username ? ` · ${data.bangumi.username}` : ''}`
-              : '未配置'}
-          </StatusChip>
-        </Row>
-        <Row label="Bangumi 访问令牌" hint="填写即更新并保存到本机凭据存储；留空不修改。">
+        {typeof service.bangumiSession !== 'function' ? (
+          <Row label="当前状态">
+            <StatusChip tone="neutral">演示模式不提供真实 Bangumi 会话</StatusChip>
+          </Row>
+        ) : session.isPending ? (
+          <Row label="当前状态">
+            <StatusChip tone="neutral">正在读取会话…</StatusChip>
+          </Row>
+        ) : session.isError || !session.data ? (
+          <Row label="当前状态">
+            <StatusChip tone="danger">
+              会话读取失败：{session.error instanceof Error ? session.error.message : '后端拒绝'}
+            </StatusChip>
+          </Row>
+        ) : (
+          <>
+            <Row label="当前状态">
+              <div className={styles.rowControl}>
+                <StatusChip
+                  tone={
+                    session.data.status === 'connected'
+                      ? 'success'
+                      : session.data.credentialState === 'found'
+                        ? 'neutral'
+                        : 'warning'
+                  }
+                >
+                  {session.data.status || '未知状态'}
+                </StatusChip>
+                <span className={styles.listHint}>
+                  {/* 账号显示名优先昵称，空则退用户名；两者都空时如实说明后端未返回。 */}
+                  {session.data.nickname || session.data.username || '后端未返回账号名'}
+                </span>
+              </div>
+            </Row>
+            <Row label="凭据状态">
+              <span className={styles.listHint}>
+                {session.data.credentialState === 'found'
+                  ? '已保存（found）'
+                  : session.data.credentialState === 'unavailable'
+                    ? '本机凭据存储暂不可读（unavailable）'
+                    : `未配置（${session.data.credentialState}）`}
+              </span>
+            </Row>
+            <Row label="授权状态">
+              <span className={styles.listHint}>{session.data.authStatus || '未知'}</span>
+            </Row>
+            <Row label="连通性">
+              <span className={styles.listHint}>{session.data.connectivity || '未知'}</span>
+            </Row>
+            <Row label="最后验证时间">
+              <span className={styles.listHint}>
+                {session.data.lastVerifiedAt
+                  ? session.data.lastVerifiedAt.slice(0, 19).replace('T', ' ')
+                  : '尚未验证'}
+              </span>
+            </Row>
+            {session.data.lastErrorCode || session.data.lastErrorMessage ? (
+              <Row label="最后错误">
+                <span className={styles.listHint}>
+                  {session.data.lastErrorCode ? `${session.data.lastErrorCode}：` : ''}
+                  {session.data.lastErrorMessage || '后端未提供错误详情'}
+                </span>
+              </Row>
+            ) : null}
+            <Row label="会话操作">
+              <div className={styles.rowControl}>
+                <Button size="xs" variant="outline" loading={sessionBusy} onClick={() => void verifySession()}>
+                  验证会话
+                </Button>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={sessionBusy}
+                  onClick={() => setSignOutOpen(true)}
+                >
+                  退出登录
+                </Button>
+              </div>
+            </Row>
+            <p className={styles.panelHint}>退出登录会清除本机凭据与账号快照。</p>
+          </>
+        )}
+        <Row
+          label="Bangumi 访问令牌"
+          hint="提交给本机后端先验证再落本机凭据存储；失败保留输入，成功后清空且不回显。"
+        >
           <div className={styles.rowControl}>
             <Input
               type="password"
@@ -903,11 +1058,9 @@ function AccountGroup({
             <Button
               size="xs"
               variant="outline"
+              loading={sessionBusy}
               disabled={token.trim().length === 0}
-              onClick={() => {
-                save('bangumi', { token: token.trim() }, '已保存 Bangumi 访问令牌');
-                setToken('');
-              }}
+              onClick={() => void submitToken()}
             >
               保存令牌
             </Button>
@@ -918,6 +1071,25 @@ function AccountGroup({
           也不建设 KumiPlayer 云账号或设置云同步。
         </p>
       </Panel>
+
+      <Dialog open={signOutOpen} onOpenChange={setSignOutOpen}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>退出 Bangumi 登录</DialogTitle>
+          </DialogHeader>
+          <p className={styles.panelHint}>
+            退出会清除本机凭据与账号快照；已同步到 Bangumi 的收藏与进度不受影响。
+          </p>
+          <DialogFooter>
+            <Button variant="destructive" loading={sessionBusy} onClick={() => void signOut()}>
+              确认退出
+            </Button>
+            <Button variant="outline" disabled={sessionBusy} onClick={() => setSignOutOpen(false)}>
+              取消
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Panel
         title="备份"
@@ -1162,7 +1334,8 @@ interface SettingsData {
   readonly openlist: { readonly connections: readonly { readonly id: string; readonly name: string; readonly serverUrl: string; readonly remoteRoot: string; readonly mountRoot: string; readonly configured: boolean }[]; readonly routes: readonly { readonly id: string; readonly label: string; readonly remote: string; readonly local: string }[] };
   readonly scrape: { readonly tmdbLanguage: string; readonly tmdbConfigured: boolean; readonly bangumiAliasEnabled: boolean; readonly anilistEnabled: boolean };
   readonly player: { readonly mode: 'internal' | 'external'; readonly externalPath: string; readonly autoPlayNext: boolean; readonly anime4kMode: string; readonly anime4kQuality: string; readonly completedThresholdPercent: number };
-  readonly bangumi: { readonly configured: boolean; readonly username: string };
+  /** 账号名不在这里：`GET /api/config` 从不返回昵称/用户名，账号显示名只来自 `bangumiSession()`。 */
+  readonly bangumi: { readonly configured: boolean; readonly syncEnabled: boolean };
   readonly backup: { readonly autoDailyEnabled: boolean; readonly autoDailyTime: string };
 }
 

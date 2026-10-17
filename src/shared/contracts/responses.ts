@@ -10,24 +10,49 @@ import type { GatewayError, GatewayErrorKind, GatewayValidationIssue } from './e
 import { isRetryableKind } from './errors';
 import type { OperationId } from './operations';
 import {
+  parseBangumiCollectionSet,
+  parseBangumiMatch,
+  parseBangumiMatchRemoved,
+  parseBangumiProgressSync,
+  parseBangumiSession,
+  parseBangumiSubjectSearch,
+  parseBangumiTokenResult,
   parseHealth,
   parseLibraryChanges,
   parseLibrarySnapshot,
+  parseOpenFolderResult,
   parsePlaybackStatus,
   parsePublicConfig,
   parseTask,
   parseTaskList,
+  parseWorkDeletePreview,
+  parseWorkDeleteResult,
   parseWorkDetail,
+  parseWorkFolderInfo,
+  parseWorkScrapeResult,
+  type BangumiCollectionSet,
+  type BangumiMatch,
+  type BangumiMatchRemoved,
+  type BangumiProgressSync,
+  type BangumiSession,
+  type BangumiSubjectSearch,
+  type BangumiTokenResult,
   type LibraryChanges,
   type LibrarySnapshot,
+  type OpenFolderResult,
   type PlaybackStatus,
   type PublicConfig,
   type TaskList,
   type TaskRecord,
+  type WorkDeletePreview,
+  type WorkDeleteResult,
   type WorkDetail,
+  type WorkFolderInfo,
+  type WorkScrapeResult,
   type HealthResponse,
 } from './dto';
 import type { Reader } from './validate';
+import { boolean, field, objectWith, string } from './validate';
 
 /** 已登记操作的响应形状。只登记本轮实际消费的端点。 */
 export interface ResponseShapes {
@@ -45,7 +70,46 @@ export interface ResponseShapes {
   readonly 'tasks.get': TaskRecord;
   readonly 'tasks.cancel': TaskRecord;
   readonly 'playback.status': PlaybackStatus;
+  readonly 'work.title.set': WorkTitleSet;
+  readonly 'work.title.restore': WorkTitleRestored;
+  readonly 'work.folder': WorkFolderInfo;
+  readonly 'work.scrape': WorkScrapeResult;
+  readonly 'work.deletePreview': WorkDeletePreview;
+  readonly 'work.deleteConfirm': WorkDeleteResult;
+  readonly 'system.openFolder': OpenFolderResult;
+  readonly 'bangumi.session': BangumiSession;
+  readonly 'bangumi.sessionVerify': BangumiSession;
+  readonly 'bangumi.token.set': BangumiTokenResult;
+  readonly 'bangumi.token.clear': BangumiTokenResult;
+  readonly 'bangumi.search': BangumiSubjectSearch;
+  readonly 'bangumi.match.get': BangumiMatch;
+  readonly 'bangumi.match.set': BangumiMatch;
+  readonly 'bangumi.match.remove': BangumiMatchRemoved;
+  readonly 'bangumi.collection.set': BangumiCollectionSet;
+  readonly 'bangumi.progress.sync': BangumiProgressSync;
 }
+
+/** `PATCH /api/v4/works/{work_id}/title`（`backend/app/api/media_v4.py:2195-2221`）。 */
+export interface WorkTitleSet {
+  readonly work_id: string;
+  readonly title: string;
+}
+
+const workTitleSetReader: Reader<WorkTitleSet> = objectWith<WorkTitleSet>({
+  work_id: field(string(), true),
+  title: field(string()),
+});
+
+/** `DELETE /api/v4/works/{work_id}/title`（`backend/app/api/media_v4.py:2224-2237`）。 */
+export interface WorkTitleRestored {
+  readonly work_id: string;
+  readonly restored: boolean;
+}
+
+const workTitleRestoredReader: Reader<WorkTitleRestored> = objectWith<WorkTitleRestored>({
+  work_id: field(string(), true),
+  restored: field(boolean(), true),
+});
 
 function cardsReader(value: unknown): ReturnType<Reader<{ works: readonly unknown[] }>> {
   if (typeof value !== 'object' || value === null) {
@@ -74,6 +138,23 @@ export const OPERATION_RESPONSE_PARSERS: {
   'tasks.get': parseTask,
   'tasks.cancel': parseTask,
   'playback.status': parsePlaybackStatus,
+  'work.title.set': workTitleSetReader,
+  'work.title.restore': workTitleRestoredReader,
+  'work.folder': parseWorkFolderInfo,
+  'work.scrape': parseWorkScrapeResult,
+  'work.deletePreview': parseWorkDeletePreview,
+  'work.deleteConfirm': parseWorkDeleteResult,
+  'system.openFolder': parseOpenFolderResult,
+  'bangumi.session': parseBangumiSession,
+  'bangumi.sessionVerify': parseBangumiSession,
+  'bangumi.token.set': parseBangumiTokenResult,
+  'bangumi.token.clear': parseBangumiTokenResult,
+  'bangumi.search': parseBangumiSubjectSearch,
+  'bangumi.match.get': parseBangumiMatch,
+  'bangumi.match.set': parseBangumiMatch,
+  'bangumi.match.remove': parseBangumiMatchRemoved,
+  'bangumi.collection.set': parseBangumiCollectionSet,
+  'bangumi.progress.sync': parseBangumiProgressSync,
 };
 
 /** 收窄到"已登记响应形状"的操作，避免在网关里用类型断言索引解析表。 */

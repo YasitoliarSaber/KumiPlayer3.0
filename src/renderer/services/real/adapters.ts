@@ -7,7 +7,7 @@
  * 未发布时不回退原图、远程地址或示例图片。
  */
 
-import type { ArtworkVariants, WorkCard } from '@shared/contracts/dto';
+import type { WorkArtwork, WorkCard } from '@shared/contracts/dto';
 
 import type {
   ArtworkRef,
@@ -24,7 +24,21 @@ import type {
   WorkSummary,
 } from '../../shared/api/service';
 
+/**
+ * 已发布派生 URL：`/api/assets/artwork/<resource_id>/<content_digest>-webp-v1/<width>`。
+ * 事实来源：`backend/app/media_v4/assets/catalog.py:424-426`；原图、远程地址、
+ * 未编排尺寸一律不属于契约，不得退化采用。
+ */
 const PUBLISHED_ARTWORK = /^\/api\/assets\/artwork\/[0-9a-f]{64}\/[0-9a-f]{64}-webp-v1\/(?:256|384|512|768|1280)$/;
+
+/** 已发布派生 URL → ArtworkRef（宽度取 URL 末段）。非契约 URL 返回 null，不做兜底。 */
+export function publishedArtworkRef(url: unknown): ArtworkRef | null {
+  if (typeof url !== 'string' || !PUBLISHED_ARTWORK.test(url)) {
+    return null;
+  }
+  const width = Number(url.slice(url.lastIndexOf('/') + 1));
+  return Number.isFinite(width) ? { url, width, height: 0 } : null;
+}
 
 /** 详情接口多返回的字段（`work_detail` = WorkIndex + studios/tags）。 */
 export interface BackendWorkDetailDto extends WorkCard {
@@ -59,11 +73,12 @@ function strArray(value: unknown): readonly string[] {
  * 目标宽度对应虚拟海报墙与详情背景的实际渲染尺寸。
  */
 export function pickArtwork(
-  variants: ArtworkVariants | undefined,
+  artwork: WorkArtwork | undefined,
   role: 'poster' | 'fanart' | 'clearlogo',
   targetWidth: number,
 ): ArtworkRef | null {
-  const roleVariants = variants?.[role];
+  // 角色值是图片对象，尺寸表在它的 `variants` 里（见 dto.ts 的 ArtworkImage）。
+  const roleVariants = artwork?.[role]?.variants;
   if (!roleVariants) {
     return null;
   }
@@ -148,13 +163,16 @@ function toEpisode(dto: Record<string, unknown>): EpisodeEntry {
   const assets = Array.isArray(dto.assets) ? dto.assets : [];
   const runtimeMinutes = num(dto.runtime, 0);
   const episodeNumber = typeof dto.episode_number === 'number' ? dto.episode_number : null;
+  // 详情每集带 `thumb_path`（后端 `library_v4.py:43` 取已发布 variants['384']）；
+  // 只有通过同一发布 URL 校验时才产出缩略图，其余情况保持 null，不放宽校验。
+  const thumb = publishedArtworkRef(dto.thumb_path);
   return {
     id: str(dto.episode_id),
     number: episodeNumber ?? 0,
     code: episodeNumber === null ? str(dto.title, '未编号') : String(episodeNumber).padStart(2, '0'),
     title: str(dto.title),
     // 后端 runtime 来自 TMDB 的分钟数；未知时保持 0，由界面显示“时长未知”。
-    thumb: null,
+    thumb,
     durationSec: runtimeMinutes > 0 ? runtimeMinutes * 60 : 0,
     position: 0,
     watched: false,

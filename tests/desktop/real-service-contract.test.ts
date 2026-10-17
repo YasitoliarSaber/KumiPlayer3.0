@@ -323,9 +323,265 @@ describe('真实服务的响应适配与能力边界', () => {
     expect(recorded[1]?.options.body).toEqual({ preview_id: 'prev_1', digest: 'd'.repeat(64) });
   });
 
-  it('浏览/播放等未接入的后端能力显式失败，不用演示数据顶替', async () => {
+  it('仍未接入的能力显式失败，不用演示数据顶替', async () => {
     const service = createHttpMediaService({ transport: stubTransport({}) });
     await expect(service.getReviewIssues('root_1')).rejects.toBeInstanceOf(ServiceCapabilityError);
-    await expect(service.bangumiSync('work_1')).rejects.toBeInstanceOf(ServiceCapabilityError);
+  });
+
+  it('TXT 路径多解按真实分支返回候选，不伪造 scan_id 或"已开始扫描"', async () => {
+    const service = createHttpMediaService({
+      transport: stubTransport({
+        'sources.durableScan.start': {
+          scan_id: '',
+          root_id: '',
+          status: 'mapping_required',
+          source_mode: 'tree_snapshot',
+          scan_mode: 'tree_snapshot',
+          entries: [],
+          evidence_count: 2,
+          path_validation: {
+            ok: false,
+            root: '',
+            reason: '多个来源根都可能覆盖该目录树',
+            state: 'ambiguous',
+            mapping_mode: 'auto',
+            mapping_scope: '',
+            selected_count: 2,
+            skipped_count: 0,
+            path_samples: ['Z:/动画/01.mkv'],
+            requires_confirmation: true,
+            choices: [
+              {
+                id: 'c1',
+                root: 'Z:/动画',
+                mapping_scope: '/动画',
+                path_samples: ['Z:/动画/01.mkv'],
+                selected_count: 2,
+                skipped_count: 0,
+              },
+              {
+                id: 'c2',
+                root: 'Y:/动画',
+                mapping_scope: '/动画',
+                path_samples: ['Y:/动画/01.mkv'],
+                selected_count: 1,
+                skipped_count: 1,
+              },
+            ],
+          },
+        },
+      }),
+    });
+
+    const result = await service.startSourceScan!({
+      source: 'tree',
+      treeFile: 'C:/fixtures/tree.txt',
+      provider: 'baidu',
+    });
+    // 多解不落库：没有 scan_id，界面不能进入扫描状态。
+    expect(result.scanId).toBe('');
+    expect(result.status).toBe('mapping_required');
+    expect(result.mapping?.choices.map((choice) => choice.id)).toEqual(['c1', 'c2']);
+    expect(result.mapping?.choices[1]).toMatchObject({ selectedCount: 1, skippedCount: 1, root: 'Y:/动画' });
+  });
+
+  it('多解但没有候选时如实失败，不把空候选当成扫描已开始', async () => {
+    const service = createHttpMediaService({
+      transport: stubTransport({
+        'sources.durableScan.start': {
+          scan_id: '',
+          status: 'mapping_required',
+          path_validation: { choices: [] },
+        },
+      }),
+    });
+    await expect(service.startSourceScan!({ source: 'tree', treeFile: 'C:/f/tree.txt' })).rejects.toThrow(
+      /没有返回可选候选/,
+    );
+  });
+
+  it('选定映射回填 tree_mapping_choice，且请求体仍能通过具名操作白名单', async () => {
+    const recorded: Recorded[] = [];
+    const service = createHttpMediaService({
+      transport: stubTransport(
+        { 'sources.durableScan.start': { scan_id: 'scan_9', root_id: 'root_9', status: 'queued' } },
+        recorded,
+      ),
+    });
+
+    const result = await service.startSourceScan!({
+      source: 'tree',
+      treeFile: 'C:/f/tree.txt',
+      provider: 'baidu',
+      treeMappingChoice: 'c2',
+    });
+    expect(result.scanId).toBe('scan_9');
+    expect(recorded[0]?.options.body).toMatchObject({
+      tree_mapping_choice: 'c2',
+      tree_file: 'C:/f/tree.txt',
+      provider: 'baidu',
+    });
+    const resolved = resolveHttpTarget({
+      operation: 'sources.durableScan.start',
+      body: recorded[0]?.options.body as Record<string, unknown>,
+      requestId: 'r',
+    });
+    expect(resolved.ok).toBe(true);
+  });
+
+  it('打开位置只提交身份 ID，删除按服务端预览身份确认', async () => {
+    const recorded: Recorded[] = [];
+    const service = createHttpMediaService({
+      transport: stubTransport(
+        {
+          'system.openFolder': {
+            ok: true,
+            opened: true,
+            exists: true,
+            folder_path: 'Z:/115/anime/作品',
+            source_path: 'Z:/115/anime/作品/01.mkv',
+          },
+          'work.deletePreview': {
+            preview_id: 'prev_work_1',
+            digest: 'd'.repeat(64),
+            work_id: 'w1',
+            revision_id: 'rev_1',
+            artifact_count: 2,
+            playback_count: 3,
+            tracking_count: 1,
+            blocked: false,
+            blocked_job_count: 0,
+            blocked_job_types: [],
+            artifact_paths: ['Z:/mirror/a.nfo'],
+          },
+          'work.deleteConfirm': {
+            preview_id: 'prev_work_1',
+            work_id: 'w1',
+            status: 'completed',
+            projection_status: 'ok',
+            artifact_results: [
+              { path: 'Z:/mirror/a.nfo', status: 'removed' },
+              { path: 'Z:/mirror/b.jpg', status: 'blocked' },
+            ],
+          },
+        },
+        recorded,
+      ),
+    });
+
+    const opened = await service.openWorkFolder!({ workId: 'w1' });
+    expect(opened).toEqual({ opened: true, exists: true, folderPath: 'Z:/115/anime/作品' });
+    expect(recorded[0]?.options.body).toEqual({ work_id: 'w1' });
+
+    const preview = await service.previewWorkDelete!('w1');
+    expect(preview).toMatchObject({
+      previewId: 'prev_work_1',
+      artifactCount: 2,
+      playbackCount: 3,
+      trackingCount: 1,
+      blocked: false,
+    });
+    // 预览里的绝对路径不进入视图模型。
+    expect(Object.keys(preview)).not.toContain('artifact_paths');
+
+    const applied = await service.confirmWorkDelete!('w1', {
+      previewId: preview.previewId,
+      digest: preview.digest,
+    });
+    expect(recorded[2]?.options.body).toEqual({ preview_id: 'prev_work_1', digest: 'd'.repeat(64) });
+    expect(applied).toMatchObject({
+      status: 'completed',
+      projectionStatus: 'ok',
+      removedArtifacts: 1,
+      blockedArtifacts: 1,
+      failedArtifacts: 0,
+    });
+  });
+
+  it('Bangumi 账号名来自 session，登录走验证端点而不是普通配置写入', async () => {
+    const recorded: Recorded[] = [];
+    const service = createHttpMediaService({
+      transport: stubTransport(
+        {
+          'bangumi.session': {
+            credential_state: 'found',
+            credential_saved: true,
+            auth_status: 'valid',
+            connectivity: 'online',
+            status: 'connected',
+            user: { id: 42, username: 'kumi', nickname: '久美子', avatar: '/api/integrations/bangumi/avatar?url=x', sign: '' },
+            last_verified_at: '2026-10-17T10:00:00+08:00',
+            last_success_at: '',
+            last_failure_at: '',
+            last_http_status: 200,
+            last_error_code: '',
+            last_error_message: '',
+          },
+          'bangumi.token.set': { ok: true, me: { nickname: '久美子' }, config: { bangumi_configured: true } },
+        },
+        recorded,
+      ),
+    });
+
+    const session = await service.bangumiSession!();
+    expect(session).toMatchObject({
+      credentialState: 'found',
+      authStatus: 'valid',
+      nickname: '久美子',
+      username: 'kumi',
+    });
+
+    const after = await service.bangumiSignIn!('  token-value  ');
+    expect(recorded[1]?.operation).toBe('bangumi.token.set');
+    expect(recorded[1]?.options.body).toEqual({ access_token: 'token-value' });
+    expect(recorded[2]?.operation).toBe('bangumi.session');
+    expect(after.nickname).toBe('久美子');
+  });
+
+  it('Bangumi 未匹配按 404 映射为 null；同步显式发送必填 season_number', async () => {
+    const recorded: Recorded[] = [];
+    const notMatched: GatewayError = {
+      kind: 'validation',
+      message: '尚未确认 Bangumi 匹配',
+      status: 404,
+      retryable: false,
+    };
+    const transport: BrowserTransport = {
+      async call<T>(operation: OperationId, options: CallOptions = {}): Promise<OperationOutcome<T>> {
+        recorded.push({ operation, options });
+        if (operation === 'bangumi.match.get') {
+          return { ok: false, error: notMatched, epoch: 0 };
+        }
+        if (operation === 'bangumi.progress.sync') {
+          const data = {
+            ok: true,
+            status: 'synchronized',
+            work_id: 'w1',
+            subject_id: 7,
+            remote_done_before: 5,
+            local_done_before: 2,
+            pulled: 1,
+            pushed: 3,
+            pending: 0,
+          };
+          return { ok: true, data: data as T, epoch: 0 };
+        }
+        return { ok: false, error: { kind: 'unavailable', message: '桩未定义该操作', retryable: false }, epoch: 0 };
+      },
+      async upload<T>(operation: OperationId, form: FormData, options: CallOptions = {}): Promise<OperationOutcome<T>> {
+        recorded.push({ operation, options });
+        void form;
+        return { ok: true, data: {} as T, epoch: 0 };
+      },
+      async download() {
+        return { ok: true, blob: new Blob(['x']), filename: 'x' };
+      },
+    };
+    const service = createHttpMediaService({ transport });
+
+    expect(await service.bangumiMatch!('w1')).toBeNull();
+    const summary = await service.bangumiSync('w1');
+    expect(summary).toMatchObject({ status: 'synchronized', subjectId: '7', pulled: 1, pushed: 3 });
+    expect(recorded[1]?.options.body).toEqual({ season_number: null });
   });
 });

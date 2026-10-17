@@ -192,13 +192,20 @@ describe('演示业务服务', () => {
     const subjects = await instance.bangumiSearch(work.title);
     expect(subjects.length).toBeGreaterThan(0);
     const good = subjects.find((subject) => !subject.id.startsWith('bgm-3'))!;
-    const bound = await instance.bangumiBind(work.id, good.id);
-    expect(bound.bangumi?.status).toBe('matched');
+    await instance.bangumiBind(work.id, good.id);
+    // 绑定契约只返回 void，绑定状态以演示库覆盖数据为准。
+    expect(getDemoState().overrides[work.id]?.bangumi?.status).toBe('matched');
 
-    const task = await instance.bangumiSync(work.id);
-    expect(task.type).toBe('bangumi_sync');
-    expect(await instance.listTasks()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: task.id })]),
+    const sync = await instance.bangumiSync(work.id);
+    // 同步契约返回进度摘要，任务仅登记到本机任务中心。
+    expect(sync).toMatchObject({
+      status: 'synchronized',
+      subjectId: good.id,
+      pushed: work.episodeCount,
+    });
+    const tasks = await instance.listTasks();
+    expect(tasks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'bangumi_sync' })]),
     );
 
     // 解除绑定后同步必须失败，且不留下绑定。

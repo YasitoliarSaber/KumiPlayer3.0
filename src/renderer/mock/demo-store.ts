@@ -123,9 +123,8 @@ export const DEFAULT_SETTINGS: SettingsSnapshot = {
     completedThresholdPercent: 90,
   },
   bangumi: {
+    // 账号显示名不来自配置：真实后端只在 Bangumi session 响应里返回昵称/用户名。
     configured: false,
-    username: '',
-    nickname: '',
     syncEnabled: false,
   },
   backup: {

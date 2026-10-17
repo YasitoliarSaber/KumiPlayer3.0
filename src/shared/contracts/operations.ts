@@ -374,6 +374,8 @@ export const OPERATION_SPECS = {
       'provider',
       'source_root',
       'tree_mapping_choice',
+      'tree_mapping_mode',
+      'tree_mapping_scope',
       'tree_verify_paths',
       'scan_mode',
       'revision_id',
@@ -513,6 +515,16 @@ export const OPERATION_SPECS = {
     body: [],
     timeoutMs: MUTATION_TIMEOUT_MS,
   },
+  /** 只读解析作品在当前确认绑定里的安全播放目录；不打开任何窗口。 */
+  'work.folder': {
+    transport: 'http',
+    kind: 'read',
+    method: 'GET',
+    path: '/api/v4/works/:workId/folder',
+    query: [],
+    body: [],
+    timeoutMs: READ_TIMEOUT_MS,
+  },
   'work.deletePreview': {
     transport: 'http',
     kind: 'mutation',
@@ -529,6 +541,19 @@ export const OPERATION_SPECS = {
     path: '/api/v4/works/:workId/delete-confirm',
     query: [],
     body: ['preview_id', 'digest'],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+  /**
+   * 由本机后端按作品/剧集/Asset 身份打开所在位置（`backend/app/api/system.py:40-68`）。
+   * 前端只提交身份 ID，不提交任何文件系统路径；后端宿主进程执行真实打开动作。
+   */
+  'system.openFolder': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'POST',
+    path: '/api/system/open-folder',
+    query: [],
+    body: ['work_id', 'episode_id', 'asset_id', 'folder_type', 'open'],
     timeoutMs: MUTATION_TIMEOUT_MS,
   },
   'metadata.search': {
@@ -569,6 +594,110 @@ export const OPERATION_SPECS = {
   },
 
   /* ------------------------- 图片缓存维护 ------------------------- */
+
+  /* ------------------------- Bangumi 账号与同步 ------------------------- */
+
+  /**
+   * Bangumi 只做同步：账号会话、搜索、条目匹配与观看进度同步。
+   * 不参与本地作品身份与编号，也不接受任何凭据回显。
+   * 路径与请求体依据 `backend/app/api/bangumi.py` 的当前实现登记。
+   */
+  'bangumi.session': {
+    transport: 'http',
+    kind: 'read',
+    method: 'GET',
+    path: '/api/integrations/bangumi/session',
+    query: [],
+    body: [],
+    timeoutMs: READ_TIMEOUT_MS,
+  },
+  /** 显式远程验证：远端失败仍返回 200，状态只在响应体里。 */
+  'bangumi.sessionVerify': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'POST',
+    path: '/api/integrations/bangumi/session/verify',
+    query: [],
+    body: [],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+  /** 令牌只在请求体出现一次：后端先验证再落 Windows 凭据存储，不写入任何本地存储。 */
+  'bangumi.token.set': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'POST',
+    path: '/api/integrations/bangumi/token',
+    query: [],
+    body: ['access_token'],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+  'bangumi.token.clear': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'DELETE',
+    path: '/api/integrations/bangumi/token',
+    query: [],
+    body: [],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+  'bangumi.search': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'POST',
+    path: '/api/integrations/bangumi/search',
+    query: [],
+    body: ['keyword', 'limit', 'offset', 'subject_types'],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+  'bangumi.match.get': {
+    transport: 'http',
+    kind: 'read',
+    method: 'GET',
+    path: '/api/integrations/bangumi/matches/:workId',
+    query: ['season_number'],
+    body: [],
+    timeoutMs: READ_TIMEOUT_MS,
+  },
+  'bangumi.match.set': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'POST',
+    path: '/api/integrations/bangumi/matches/:workId',
+    query: [],
+    body: ['subject_id', 'season_number', 'subject_name', 'subject_name_cn'],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+  'bangumi.match.remove': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'DELETE',
+    path: '/api/integrations/bangumi/matches/:workId',
+    query: ['season_number'],
+    body: [],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+  'bangumi.collection.set': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'PATCH',
+    path: '/api/integrations/bangumi/collections/:workId',
+    query: [],
+    body: ['season_number', 'type'],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+  /**
+   * 整季双向同步：拉远端已看 + 推本地已完成。
+   * 后端请求模型是必填 body（`season_number`），空对象会被 422 拒绝，因此调用方必须至少带该字段。
+   */
+  'bangumi.progress.sync': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'POST',
+    path: '/api/integrations/bangumi/progress/:workId/sync',
+    query: [],
+    body: ['season_number'],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
 
   'artwork.cache.preview': {
     transport: 'http',

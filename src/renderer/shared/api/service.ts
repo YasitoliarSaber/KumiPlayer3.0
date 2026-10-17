@@ -260,8 +260,6 @@ export interface SettingsSnapshot {
   };
   readonly bangumi: {
     readonly configured: boolean;
-    readonly username: string;
-    readonly nickname: string;
     readonly syncEnabled: boolean;
   };
   /** 备份偏好：每日自动备份默认关闭，保留最近 7 份（轮换由后端执行）。 */
@@ -313,12 +311,63 @@ export interface BangumiBinding {
   readonly lastSyncAt: string;
   readonly syncedEpisodes: number;
   readonly error?: string;
+  /**
+   * 真实后端在远端不可用时仍返回 200 并保存"空剧集映射"
+   * （`backend/app/api/bangumi.py:542-545`）：条目已保存，但剧集映射待同步。
+   * 这不是失败，界面必须如实区分，不能宣布"已完全同步"。
+   */
+  readonly episodeMappingPending?: boolean;
 }
+
+/**
+ * Bangumi 账号会话（`GET /api/integrations/bangumi/session` 的视图模型）。
+ * 账号显示名只来自 `user.nickname` / `user.username`：
+ * `GET /api/config` 从不返回 `bangumi_username` / `bangumi_nickname`。
+ */
+export interface BangumiAccountSession {
+  /** 凭据三态：`found` 已保存 / `unavailable` 本机凭据存储暂不可读 / `not_found` 未配置。 */
+  readonly credentialState: 'found' | 'unavailable' | 'not_found';
+  /** `unknown` / `valid` / `reauth_required`（`backend/app/api/bangumi.py:271-273`）。 */
+  readonly authStatus: string;
+  /** `unknown` / `online` / `offline` / `rate_limited` / `forbidden` / `server_error`。 */
+  readonly connectivity: string;
+  /** `signed_out` / `unavailable` / `available` / `connected`。 */
+  readonly status: string;
+  readonly nickname: string;
+  readonly username: string;
+  readonly avatarUrl: string;
+  readonly lastVerifiedAt: string;
+  readonly lastErrorCode: string;
+  readonly lastErrorMessage: string;
+}
+
+/** 作品当前的 Bangumi 匹配身份（`GET|POST /api/integrations/bangumi/matches/{work_id}`）。 */
+export interface BangumiMatchState {
+  readonly subjectId: string;
+  readonly title: string;
+  readonly seasonNumber: number | null;
+  /** 已建立映射的本地剧集数；`0` 表示条目已保存但剧集映射待同步。 */
+  readonly mappedEpisodeCount: number;
+  readonly updatedAt: string;
+}
+
+/** `POST /api/integrations/bangumi/progress/{work_id}/sync` 的双向同步摘要。 */
+export interface BangumiSyncResult {
+  readonly status: string;
+  readonly subjectId: string;
+  readonly remoteDoneBefore: number;
+  readonly localDoneBefore: number;
+  readonly pulled: number;
+  readonly pushed: number;
+}
+
+/** Bangumi 收藏状态；与后端 `SUBJECT_COLLECTION_*` 数值一一对应（`type` 1..5）。 */
+export type BangumiCollectionState = 'wish' | 'collect' | 'doing' | 'on_hold' | 'dropped';
 
 /** 用户手动覆盖：标题、图片，以及线上候选与 Bangumi 绑定。 */
 export interface WorkOverride {
   readonly manualTitle?: string;
-  readonly manualArtwork?: ArtworkRef & { readonly role: 'poster' | 'fanart' };
+  readonly manualArtwork?: ArtworkRef & { readonly role: 'poster' | 'fanart' | 'clearlogo' };
   readonly metadataCandidateId?: string;
   readonly metadataProvenance?: 'auto' | 'manual';
   readonly bangumi?: BangumiBinding;
@@ -354,13 +403,21 @@ export interface MediaService {
   confirmCandidate(workId: string, candidateId: string): Promise<WorkOverride>;
   setManualTitle(workId: string, title: string): Promise<WorkOverride>;
   resetManualTitle(workId: string): Promise<WorkOverride>;
-  setManualArtwork(workId: string, role: 'poster' | 'fanart', artwork: ArtworkRef): Promise<WorkOverride>;
-  resetManualArtwork(workId: string): Promise<WorkOverride>;
+  setManualArtwork(
+    workId: string,
+    role: 'poster' | 'fanart' | 'clearlogo',
+    artwork: ArtworkRef,
+  ): Promise<WorkOverride>;
+  /** 恢复自动图片必须按角色恢复：后端 `DELETE /works/{id}/artwork/{kind}` 逐个角色处理。 */
+  resetManualArtwork(
+    workId: string,
+    role?: 'poster' | 'fanart' | 'clearlogo',
+  ): Promise<WorkOverride>;
   /** N13：Bangumi 只做同步，不参与本地身份。 */
   bangumiSearch(query: string): Promise<readonly BangumiSubject[]>;
-  bangumiBind(workId: string, subjectId: string): Promise<WorkOverride>;
-  bangumiUnbind(workId: string): Promise<WorkOverride>;
-  bangumiSync(workId: string): Promise<TaskEntry>;
+  bangumiBind(workId: string, subjectId: string): Promise<void>;
+  bangumiUnbind(workId: string): Promise<void>;
+  bangumiSync(workId: string): Promise<BangumiSyncResult>;
   resetDemoData(): Promise<void>;
 
   /* ---------------- 可选能力：只有真实后端实现，界面按能力存在与否决定是否可操作 ---------------- */
@@ -405,6 +462,89 @@ export interface MediaService {
     readonly username?: string;
     readonly password?: string;
   }): Promise<{ readonly ok: boolean; readonly code: string; readonly message: string; readonly phase: string }>;
+
+  /* ---------------- 作品详情真实操作（后端既有端点，只是此前未接） ---------------- */
+
+  /** 手动重新刮削：为指定作品重排队同一 V4 job 链（`POST /api/v4/works/{id}/scrape`）。 */
+  scrapeWork?(workId: string): Promise<WorkScrapeResult>;
+  /** 只读解析该作品已确认 Asset 的所在目录（`GET /api/v4/works/{id}/folder`），不打开窗口。 */
+  getWorkFolder?(workId: string): Promise<WorkFolderInfo>;
+  /**
+   * 由本机后端按身份打开所在位置（`POST /api/system/open-folder`）。
+   * 只提交身份 ID，不提交路径；打开动作由后端宿主进程在真实文件系统上执行。
+   */
+  openWorkFolder?(input: WorkFolderOpenInput): Promise<WorkFolderOpenResult>;
+  /** 删除前服务端影响预览（只读，不删任何内容）。 */
+  previewWorkDelete?(workId: string): Promise<WorkDeletePreview>;
+  /** 按预览身份确认删除：只退役受控库记录与受管生成物，绝不删除真实影片。 */
+  confirmWorkDelete?(workId: string, input: WorkDeleteConfirmInput): Promise<WorkDeleteResult>;
+
+  /* ---------------- Bangumi 账号与同步（后端既有端点，只是此前未接） ---------------- */
+
+  /** 本地会话恢复（0 个远程请求）：凭据三态 + 上次验证快照。 */
+  bangumiSession?(): Promise<BangumiAccountSession>;
+  /** 显式远程验证；远端失败仍返回 200，必须读 `authStatus` / `connectivity`。 */
+  bangumiVerify?(): Promise<BangumiAccountSession>;
+  /** 提交访问令牌：后端先验证再落本机凭据存储，前端不保存任何令牌副本。 */
+  bangumiSignIn?(accessToken: string): Promise<BangumiAccountSession>;
+  /** 退出登录：后端清除令牌与本地账户快照。 */
+  bangumiSignOut?(): Promise<void>;
+  /** 作品当前匹配身份；未匹配返回 null（后端用 404 表达）。 */
+  bangumiMatch?(workId: string): Promise<BangumiMatchState | null>;
+  /** 同步 Bangumi 收藏状态（`PATCH /api/integrations/bangumi/collections/{id}`）。 */
+  bangumiSetCollection?(workId: string, state: BangumiCollectionState): Promise<void>;
+}
+
+/** 作品详情真实操作的结果视图模型。 */
+export interface WorkScrapeResult {
+  readonly jobId: string;
+  readonly status: string;
+}
+
+export interface WorkFolderInfo {
+  readonly folder: string;
+  readonly exists: boolean;
+}
+
+export interface WorkFolderOpenInput {
+  readonly workId: string;
+  readonly episodeId?: string;
+  readonly assetId?: string;
+}
+
+export interface WorkFolderOpenResult {
+  readonly opened: boolean;
+  readonly exists: boolean;
+  readonly folderPath: string;
+}
+
+/**
+ * 删除预览。后端还会回传 `artifact_paths` 等绝对路径，但渲染进程只需要
+ * 计数与类型（避免把本机绝对路径带进界面层）。
+ */
+export interface WorkDeletePreview {
+  readonly previewId: string;
+  readonly digest: string;
+  readonly revisionId: string;
+  readonly artifactCount: number;
+  readonly playbackCount: number;
+  readonly trackingCount: number;
+  readonly blocked: boolean;
+  readonly blockedJobCount: number;
+  readonly blockedJobTypes: readonly string[];
+}
+
+export interface WorkDeleteConfirmInput {
+  readonly previewId: string;
+  readonly digest: string;
+}
+
+export interface WorkDeleteResult {
+  readonly status: string;
+  readonly projectionStatus: string;
+  readonly removedArtifacts: number;
+  readonly blockedArtifacts: number;
+  readonly failedArtifacts: number;
 }
 
 /** 后端 `/api/library/search` 的单条命中；不含图片，展示端与已加载索引按 work_id 关联。 */
@@ -444,8 +584,47 @@ export interface ScanProgress {
   readonly error: string;
   readonly resumable: boolean;
   readonly cancelRequested: boolean;
+  /** `GET /api/v4/sources/scans/{id}` 的 `interrupted`：上次执行者心跳失联。 */
+  readonly interrupted: boolean;
+  readonly evidenceCount: number;
+  readonly parsedCount: number;
+  readonly directoriesCompleted: number;
+  readonly directoriesPending: number;
+  readonly heartbeatAt: string;
+  /** 派生字段（后端不返回 `can_cancel`）：由状态推断，不当作后端事实展示。 */
   readonly canCancel: boolean;
   readonly progress: number | null;
+  /**
+   * 路径多解：只有**启动扫描**的响应可能给出
+   * `status='mapping_required'` + 空 `scan_id` + `path_validation.choices`
+   * （`backend/app/api/media_v4.py:541-549`）。它不落库，GET 永远不会返回。
+   */
+  readonly mapping: ScanPathValidation | null;
+}
+
+/** `path_validation.choices[]` 的元素（后端只外发这 6 个字段）。 */
+export interface ScanMappingChoice {
+  readonly id: string;
+  readonly root: string;
+  readonly mappingScope: string;
+  readonly pathSamples: readonly string[];
+  readonly selectedCount: number;
+  readonly skippedCount: number;
+}
+
+/** `path_validation`：路径映射校验结果；多解时必须由用户显式选择，不能静默取第一个候选。 */
+export interface ScanPathValidation {
+  readonly ok: boolean;
+  readonly root: string;
+  readonly reason: string;
+  readonly state: string;
+  readonly mappingMode: string;
+  readonly mappingScope: string;
+  readonly selectedCount: number;
+  readonly skippedCount: number;
+  readonly pathSamples: readonly string[];
+  readonly requiresConfirmation: boolean;
+  readonly choices: readonly ScanMappingChoice[];
 }
 
 export interface SourceScanRequest {
@@ -461,6 +640,12 @@ export interface SourceScanRequest {
   readonly sourceDisplayName?: string;
   readonly resumeScanId?: string;
   readonly connectionId?: string;
+  /** 用户在多解候选里选定的映射（`tree_mapping_choice`）；不选择就不提交。 */
+  readonly treeMappingChoice?: string;
+  readonly treeMappingMode?: 'auto' | 'manual';
+  readonly treeMappingScope?: string;
+  readonly treeVerifyPaths?: boolean;
+  readonly openlistMappingChoice?: string;
 }
 
 /**

@@ -6,21 +6,24 @@
 
 import { describe, expect, it } from 'vitest';
 
+import type { ArtworkImage } from '@shared/contracts/dto';
 import { pickArtwork, toWorkSummary } from '@/services/real/adapters';
 import { resolveServiceMode } from '@/app/service-mode';
 
-const POSTER_URL_384 =
-  '/api/assets/artwork/' +
-  'a'.repeat(64) +
-  '/' +
-  'b'.repeat(64) +
-  '-webp-v1/384';
-const POSTER_URL_512 =
-  '/api/assets/artwork/' +
-  'a'.repeat(64) +
-  '/' +
-  'c'.repeat(64) +
-  '-webp-v1/512';
+const RESOURCE_ID = 'a'.repeat(64);
+const POSTER_DIGEST = 'b'.repeat(64);
+
+function publishedUrl(digest: string, width: number): string {
+  return `/api/assets/artwork/${RESOURCE_ID}/${digest}-webp-v1/${width}`;
+}
+
+/** 夹具按后端真实结构构造图片对象（角色 → 图片对象，尺寸表在 variants 里）。 */
+function image(versions: Readonly<Record<string, string>>, digest = POSTER_DIGEST): ArtworkImage {
+  return { resource_id: RESOURCE_ID, content_version: `${digest}-webp-v1`, state: 'ready', variants: versions };
+}
+
+const POSTER_URL_384 = publishedUrl(POSTER_DIGEST, 384);
+const POSTER_URL_512 = publishedUrl(POSTER_DIGEST, 512);
 
 const CARD = {
   work_id: 'w01',
@@ -39,7 +42,9 @@ const CARD = {
   asset_count: 2,
   season_count: 2,
   watch_status: { work_id: 'w01', status: 'watching', note: '', favorite: true, updated_at: null },
-  artwork: { poster: { '384': POSTER_URL_384, '512': POSTER_URL_512 } },
+  artwork: {
+    poster: image({ '384': POSTER_URL_384, '512': POSTER_URL_512 }),
+  },
 };
 
 describe('后端 DTO 适配', () => {
@@ -47,7 +52,9 @@ describe('后端 DTO 适配', () => {
     expect(pickArtwork(CARD.artwork, 'poster', 384)?.url).toBe(POSTER_URL_384);
     expect(pickArtwork(CARD.artwork, 'poster', 600)?.url).toBe(POSTER_URL_512);
     // 未发布的远程地址不会被采用。
-    expect(pickArtwork({ poster: { '384': 'https://image.tmdb.org/x.jpg' } }, 'poster', 384)).toBeNull();
+    expect(pickArtwork({ poster: image({ '384': 'https://image.tmdb.org/x.jpg' }) }, 'poster', 384)).toBeNull();
+    // 角色没有可用尺寸时返回 null，不猜也不回退。
+    expect(pickArtwork({ poster: image({}) }, 'poster', 384)).toBeNull();
     expect(pickArtwork(undefined, 'fanart', 1280)).toBeNull();
   });
 

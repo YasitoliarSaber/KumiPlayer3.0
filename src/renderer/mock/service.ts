@@ -807,7 +807,7 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
       }));
     },
 
-    async bangumiBind(workId, subjectId) {
+    async bangumiBind(workId, subjectId): Promise<void> {
       await wait(undefined, 60);
       const subjects = await service.bangumiSearch(workById(workId).title);
       const subject = subjects.find((item) => item.id === subjectId);
@@ -816,7 +816,7 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
       }
       // 演示失败路径：条目 id 以 3 结尾时返回同步失败，保留"未匹配"以外的失败状态。
       const failing = subject.id.startsWith('bgm-3');
-      return setOverride(workId, {
+      setOverride(workId, {
         bangumi: {
           subjectId: subject.id,
           title: subject.title,
@@ -828,9 +828,9 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
       });
     },
 
-    async bangumiUnbind(workId) {
+    async bangumiUnbind(workId): Promise<void> {
       await wait(undefined, 20);
-      return setOverride(workId, { bangumi: undefined });
+      setOverride(workId, { bangumi: undefined });
     },
 
     async bangumiSync(workId) {
@@ -843,7 +843,9 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
       if (binding.status === 'failed') {
         throw new DemoServiceError(binding.error ?? 'Bangumi 同步失败');
       }
-      const task = createTask({
+      // 演示同步仍登记一条本机模拟任务，便于任务中心演示；返回值与真实后端
+      // `POST /api/integrations/bangumi/progress/{work_id}/sync` 的摘要形状保持一致。
+      createTask({
         type: 'bangumi_sync',
         title: '同步 Bangumi 观看进度',
         sourceId: 'bangumi',
@@ -855,7 +857,14 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
       setOverride(workId, {
         bangumi: { ...binding, lastSyncAt: new Date().toISOString(), syncedEpisodes: work.episodeCount },
       });
-      return task;
+      return {
+        status: 'synchronized',
+        subjectId: binding.subjectId,
+        remoteDoneBefore: 0,
+        localDoneBefore: 0,
+        pulled: 0,
+        pushed: work.episodeCount,
+      };
     },
 
     async resetDemoData() {

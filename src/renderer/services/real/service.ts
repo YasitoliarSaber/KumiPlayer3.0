@@ -20,6 +20,11 @@ import type { GatewayError } from '@shared/contracts/errors';
 
 import type {
   ArtworkCachePreview,
+  BangumiAccountSession,
+  BangumiCollectionState,
+  BangumiMatchState,
+  BangumiSubject,
+  BangumiSyncResult,
   BackupFileEntry,
   BackupList,
   ImportConfirmResult,
@@ -33,6 +38,8 @@ import type {
   ReviewIssue,
   RestoreApplied,
   RestorePreview,
+  ScanMappingChoice,
+  ScanPathValidation,
   ScanProgress,
   SetupCompletionInput,
   SettingsSection,
@@ -43,8 +50,15 @@ import type {
   SourceStatus,
   TaskEntry,
   TaskStatus,
+  WorkDeleteConfirmInput,
+  WorkDeletePreview,
+  WorkDeleteResult,
   WorkDetail,
+  WorkFolderInfo,
+  WorkFolderOpenInput,
+  WorkFolderOpenResult,
   WorkOverride,
+  WorkScrapeResult,
   WorkSummary,
 } from '../../shared/api/service';
 import { createBrowserTransport, type BrowserTransport } from '../../transport/http';
@@ -160,8 +174,61 @@ function toScanProgress(payload: unknown): ScanProgress {
     error: str(record.error),
     resumable: record.resumable === true,
     cancelRequested: record.cancel_requested === true,
+    interrupted: record.interrupted === true,
+    evidenceCount: num(record.evidence_count),
+    parsedCount: num(record.parsed_count),
+    directoriesCompleted: num(record.directories_completed),
+    directoriesPending: num(record.directories_pending),
+    heartbeatAt: str(record.heartbeat_at),
+    // 后端从不返回 `can_cancel`（`backend/app/media_v4/sources/durable_scan.py:424-450`）；
+    // 这里按状态派生，界面必须知道这是本端推断而不是后端事实。
     canCancel: record.can_cancel === true || status === 'running' || status === 'queued' || status === 'paused',
     progress: typeof record.progress === 'number' ? record.progress : null,
+    mapping: toScanPathValidation(record.path_validation),
+  };
+}
+
+/** `path_validation.choices[]` 的元素（`backend/app/api/media_v4.py:712` 只外发 6 个字段）。 */
+function toScanMappingChoice(value: unknown): ScanMappingChoice | null {
+  const record = asRecord(value);
+  const id = str(record.id);
+  if (id === '') {
+    return null;
+  }
+  return {
+    id,
+    root: str(record.root),
+    mappingScope: str(record.mapping_scope),
+    pathSamples: toStrArray(record.path_samples),
+    selectedCount: num(record.selected_count),
+    skippedCount: num(record.skipped_count),
+  };
+}
+
+/** `path_validation` 只做形状换算；缺少 `choices` 时返回空数组，不伪造候选。 */
+function toScanPathValidation(value: unknown): ScanPathValidation | null {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+  const record = asRecord(value);
+  const choices = Array.isArray(record.choices)
+    ? record.choices.map(toScanMappingChoice).filter((entry): entry is ScanMappingChoice => entry !== null)
+    : [];
+  if (choices.length === 0 && Object.keys(record).length === 0) {
+    return null;
+  }
+  return {
+    ok: record.ok === true,
+    root: str(record.root),
+    reason: str(record.reason),
+    state: str(record.state),
+    mappingMode: str(record.mapping_mode),
+    mappingScope: str(record.mapping_scope),
+    selectedCount: num(record.selected_count),
+    skippedCount: num(record.skipped_count),
+    pathSamples: toStrArray(record.path_samples),
+    requiresConfirmation: record.requires_confirmation === true,
+    choices,
   };
 }
 
@@ -293,6 +360,58 @@ function toStrArray(value: unknown): readonly string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 }
 
+/** Bangumi 收藏状态 → 后端 `SUBJECT_COLLECTION_*` 数值（`backend/app/integrations/bangumi.py:25-29`）。 */
+const BANGUMI_COLLECTION_TYPES: Readonly<Record<BangumiCollectionState, number>> = {
+  wish: 1,
+  collect: 2,
+  doing: 3,
+  on_hold: 4,
+  dropped: 5,
+};
+
+/** 会话响应的账号名只来自 `user.nickname` / `user.username`，`/api/config` 不提供账号名。 */
+function toBangumiSession(payload: unknown): BangumiAccountSession {
+  const record = asRecord(payload);
+  const rawState = str(record.credential_state);
+  const credentialState: BangumiAccountSession['credentialState'] =
+    rawState === 'found' || rawState === 'unavailable' ? rawState : 'not_found';
+  const user = asRecord(record.user);
+  return {
+    credentialState,
+    authStatus: str(record.auth_status, 'unknown') || 'unknown',
+    connectivity: str(record.connectivity, 'unknown') || 'unknown',
+    status: str(record.status),
+    nickname: str(user.nickname),
+    username: str(user.username),
+    avatarUrl: str(user.avatar),
+    lastVerifiedAt: str(record.last_verified_at),
+    lastErrorCode: str(record.last_error_code),
+    lastErrorMessage: str(record.last_error_message),
+  };
+}
+
+/** `Bangumi` 条目的年份只能从上游 `date`（`YYYY-MM-DD`）前缀取得，没有独立 year 字段。 */
+function parseBangumiYear(date: string): number {
+  const match = /^(\d{4})/.exec(date.trim());
+  return match ? Number(match[1]) : 0;
+}
+
+/** 匹配响应 → 视图模型；`subject_id` 缺失即不是有效匹配。 */
+function toBangumiMatchState(payload: unknown): BangumiMatchState | null {
+  const record = asRecord(payload);
+  const subjectId = record.subject_id;
+  if (typeof subjectId !== 'number' || !Number.isFinite(subjectId)) {
+    return null;
+  }
+  return {
+    subjectId: String(subjectId),
+    title: str(record.subject_name_cn) || str(record.subject_name),
+    seasonNumber: typeof record.season_number === 'number' ? record.season_number : null,
+    mappedEpisodeCount: Object.keys(asRecord(record.episode_map)).length,
+    updatedAt: str(record.updated_at),
+  };
+}
+
 function toOpenListConnections(value: unknown): SettingsSnapshot['openlist']['connections'] {
   if (!Array.isArray(value)) {
     return [];
@@ -362,6 +481,22 @@ function scanBody(request: SourceScanRequest): Record<string, unknown> {
   }
   if (request.connectionId) {
     body.connection_id = request.connectionId;
+  }
+  // 路径多解：只有用户显式选择后才提交映射，禁止在前端静默取第一个候选。
+  if (request.treeMappingChoice) {
+    body.tree_mapping_choice = request.treeMappingChoice;
+  }
+  if (request.treeMappingMode) {
+    body.tree_mapping_mode = request.treeMappingMode;
+  }
+  if (request.treeMappingScope) {
+    body.tree_mapping_scope = request.treeMappingScope;
+  }
+  if (request.treeVerifyPaths !== undefined) {
+    body.tree_verify_paths = request.treeVerifyPaths;
+  }
+  if (request.openlistMappingChoice) {
+    body.openlist_mapping_choice = request.openlistMappingChoice;
   }
   return body;
 }
@@ -607,9 +742,9 @@ function toSettingsSnapshot(record: Record<string, unknown>): SettingsSnapshot {
       completedThresholdPercent: num(record.completed_threshold_percent, 90),
     },
     bangumi: {
+      // `/api/config` 只返回 `bangumi_configured`；账号显示名不在这里，
+      // 它只来自 `GET /api/integrations/bangumi/session` 的 `user.nickname` / `user.username`。
       configured: record.bangumi_configured === true,
-      username: str(record.bangumi_username),
-      nickname: str(record.bangumi_nickname),
       syncEnabled: false,
     },
     backup: {
@@ -656,6 +791,15 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
 
   let settingsCache: SettingsSnapshot | null = null;
   const overrideCache = new Map<string, WorkOverride>();
+  /**
+   * 本次搜索的条目名：后端 `POST /matches` 会保存 `subject_name` / `subject_name_cn`，
+   * 而绑定调用只传条目 ID；这里复用同一次搜索的结果，避免显示名丢失。
+   */
+  const bangumiSubjectNames = new Map<string, { readonly title: string; readonly originalName: string }>();
+
+  async function loadBangumiSession(): Promise<BangumiAccountSession> {
+    return toBangumiSession(unwrapOrThrow(await transport.call<unknown>('bangumi.session', {})));
+  }
 
   async function library(
     signal?: AbortSignal,
@@ -1003,29 +1147,216 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
       return override;
     },
 
-    async resetManualArtwork(workId): Promise<WorkOverride> {
+    async resetManualArtwork(workId, role = 'poster'): Promise<WorkOverride> {
+      // 恢复按角色逐个处理（`backend/app/api/media_v4.py:2313-2332`）；
+      // 固定传 poster 会把 fanart / clearlogo 的恢复打到错误角色上。
       unwrapOrThrow(
         await transport.call<unknown>('work.artwork.restore', {
-          params: { workId, kind: 'poster' },
+          params: { workId, kind: role },
         }),
       );
       return {};
     },
 
-    async bangumiSearch(): Promise<never> {
-      throw new ServiceCapabilityError('Bangumi 账号会话由后端提供；浏览器版本尚未接入该端点的响应契约。');
+    /* ------------------------- 作品详情真实操作 ------------------------- */
+
+    async scrapeWork(workId): Promise<WorkScrapeResult> {
+      const payload = asRecord(
+        unwrapOrThrow(await transport.call<unknown>('work.scrape', { params: { workId } })),
+      );
+      return { jobId: str(payload.job_id), status: str(payload.status) };
     },
 
-    async bangumiBind(workId): Promise<WorkOverride> {
-      throw new ServiceCapabilityError(`Bangumi 匹配尚未接入：${workId}`);
+    async getWorkFolder(workId): Promise<WorkFolderInfo> {
+      const payload = asRecord(
+        unwrapOrThrow(await transport.call<unknown>('work.folder', { params: { workId } })),
+      );
+      return { folder: str(payload.folder), exists: payload.exists === true };
     },
 
-    async bangumiUnbind(): Promise<WorkOverride> {
-      throw new ServiceCapabilityError('Bangumi 解绑尚未接入。');
+    async openWorkFolder(input: WorkFolderOpenInput): Promise<WorkFolderOpenResult> {
+      // 只提交身份 ID：后端自己解析当前确认 Asset 的本地路径并执行真实打开动作
+      // （`backend/app/api/system.py:40-105`），前端不传、不猜任何文件系统路径。
+      const body: Record<string, unknown> = { work_id: input.workId };
+      if (input.episodeId) {
+        body.episode_id = input.episodeId;
+      }
+      if (input.assetId) {
+        body.asset_id = input.assetId;
+      }
+      const payload = asRecord(
+        unwrapOrThrow(await transport.call<unknown>('system.openFolder', { body })),
+      );
+      return {
+        opened: payload.opened === true,
+        exists: payload.exists === true,
+        folderPath: str(payload.folder_path),
+      };
     },
 
-    async bangumiSync(): Promise<TaskEntry> {
-      throw new ServiceCapabilityError('Bangumi 同步尚未接入。');
+    async previewWorkDelete(workId): Promise<WorkDeletePreview> {
+      const payload = asRecord(
+        unwrapOrThrow(await transport.call<unknown>('work.deletePreview', { params: { workId } })),
+      );
+      return {
+        previewId: str(payload.preview_id),
+        digest: str(payload.digest),
+        revisionId: str(payload.revision_id),
+        artifactCount: num(payload.artifact_count),
+        playbackCount: num(payload.playback_count),
+        trackingCount: num(payload.tracking_count),
+        blocked: payload.blocked === true,
+        blockedJobCount: num(payload.blocked_job_count),
+        blockedJobTypes: toStrArray(payload.blocked_job_types),
+      };
+    },
+
+    async confirmWorkDelete(workId: string, input: WorkDeleteConfirmInput): Promise<WorkDeleteResult> {
+      const payload = asRecord(
+        unwrapOrThrow(
+          await transport.call<unknown>('work.deleteConfirm', {
+            params: { workId },
+            body: { preview_id: input.previewId, digest: input.digest },
+          }),
+        ),
+      );
+      const statuses = Array.isArray(payload.artifact_results)
+        ? payload.artifact_results.map((entry) => str(asRecord(entry).status))
+        : [];
+      return {
+        status: str(payload.status),
+        projectionStatus: str(payload.projection_status),
+        removedArtifacts: statuses.filter((entry) => entry === 'removed').length,
+        blockedArtifacts: statuses.filter((entry) => entry === 'blocked').length,
+        failedArtifacts: statuses.filter((entry) => entry === 'failed').length,
+      };
+    },
+
+    /* ------------------------- Bangumi 账号与同步 ------------------------- */
+
+    bangumiSession: loadBangumiSession,
+    bangumiVerify: async (): Promise<BangumiAccountSession> =>
+      toBangumiSession(unwrapOrThrow(await transport.call<unknown>('bangumi.sessionVerify', {}))),
+
+    async bangumiSignIn(accessToken: string): Promise<BangumiAccountSession> {
+      const token = accessToken.trim();
+      if (token.length === 0) {
+        throw new ServiceCapabilityError('请填写 Bangumi 访问令牌；空值不会保存。');
+      }
+      // 令牌只出现在这一条请求体里；后端先验证再落 Windows 凭据存储，
+      // 前端不写 VITE_*、URL、localStorage 或日志，也不回显令牌。
+      const payload = asRecord(
+        unwrapOrThrow(await transport.call<unknown>('bangumi.token.set', { body: { access_token: token } })),
+      );
+      if (payload.config !== undefined && payload.config !== null) {
+        settingsCache = toSettingsSnapshot(asRecord(payload.config));
+      }
+      return loadBangumiSession();
+    },
+
+    async bangumiSignOut(): Promise<void> {
+      unwrapOrThrow(await transport.call<unknown>('bangumi.token.clear', {}));
+      invalidateSettings();
+    },
+
+    async bangumiMatch(workId: string): Promise<BangumiMatchState | null> {
+      const outcome = await transport.call<unknown>('bangumi.match.get', { params: { workId } });
+      if (!outcome.ok) {
+        // 后端用 404 + 「尚未确认 Bangumi 匹配」表达"未匹配"，这不是故障。
+        if (outcome.error.status === 404) {
+          return null;
+        }
+        throw new Error(describe(outcome.error));
+      }
+      return toBangumiMatchState(outcome.data);
+    },
+
+    async bangumiSearch(query: string): Promise<readonly BangumiSubject[]> {
+      const keyword = query.trim();
+      if (keyword.length === 0) {
+        return [];
+      }
+      const payload = asRecord(
+        unwrapOrThrow(
+          await transport.call<unknown>('bangumi.search', {
+            body: { keyword, limit: 20 },
+          }),
+        ),
+      );
+      const items = Array.isArray(payload.data) ? payload.data : [];
+      const subjects: BangumiSubject[] = [];
+      for (const entry of items) {
+        const record = asRecord(entry);
+        const rawId = record.id;
+        if (typeof rawId !== 'number' || !Number.isFinite(rawId)) {
+          continue;
+        }
+        const id = String(rawId);
+        const title = str(record.name_cn) || str(record.name);
+        // 后端 `POST /matches` 会保存 subject_name / subject_name_cn：
+        // 这里记住本次搜索的条目名，绑定成功后才不会丢掉显示名。
+        bangumiSubjectNames.set(id, { title, originalName: str(record.name) });
+        subjects.push({
+          id,
+          title,
+          year: parseBangumiYear(str(record.date)),
+          episodes: num(record.eps) || num(record.total_episodes),
+        });
+      }
+      return subjects;
+    },
+
+    async bangumiBind(workId: string, subjectId: string): Promise<void> {
+      const numeric = Number(subjectId);
+      if (!Number.isInteger(numeric) || numeric <= 0) {
+        throw new Error('Bangumi 条目 ID 无效，请重新搜索后选择条目。');
+      }
+      const known = bangumiSubjectNames.get(subjectId);
+      const body: Record<string, unknown> = { subject_id: numeric };
+      if (known) {
+        body.subject_name = known.originalName;
+        body.subject_name_cn = known.title;
+      }
+      // 后端在远端剧集查询失败时仍保存匹配并返回 200（`backend/app/api/bangumi.py:542-545`），
+      // 因此这里不再断言"剧集映射已建立"；界面以 bangumiMatch 的真实计数为准。
+      unwrapOrThrow(
+        await transport.call<unknown>('bangumi.match.set', { params: { workId }, body }),
+      );
+    },
+
+    async bangumiUnbind(workId: string): Promise<void> {
+      unwrapOrThrow(await transport.call<unknown>('bangumi.match.remove', { params: { workId } }));
+    },
+
+    async bangumiSync(workId: string): Promise<BangumiSyncResult> {
+      // 后端 `ProgressSyncRequest` 是必填 body（`extra="forbid"`，只有 season_number），
+      // 而传输层只在 body 非空时才发送，所以这里显式带上 season_number（未知为 null）。
+      const payload = asRecord(
+        unwrapOrThrow(
+          await transport.call<unknown>('bangumi.progress.sync', {
+            params: { workId },
+            body: { season_number: null },
+          }),
+        ),
+      );
+      return {
+        status: str(payload.status),
+        subjectId: String(num(payload.subject_id)),
+        remoteDoneBefore: num(payload.remote_done_before),
+        localDoneBefore: num(payload.local_done_before),
+        pulled: num(payload.pulled),
+        pushed: num(payload.pushed),
+      };
+    },
+
+    async bangumiSetCollection(workId: string, state: BangumiCollectionState): Promise<void> {
+      const type = BANGUMI_COLLECTION_TYPES[state];
+      unwrapOrThrow(
+        await transport.call<unknown>('bangumi.collection.set', {
+          params: { workId },
+          body: { type },
+        }),
+      );
     },
 
     async resetDemoData(): Promise<void> {
@@ -1073,7 +1404,15 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
       const payload = asRecord(
         unwrapOrThrow(await transport.call<unknown>('sources.durableScan.start', { body: scanBody(request) })),
       );
-      return toScanProgress(payload);
+      const progress = toScanProgress(payload);
+      // 路径多解：后端 200 返回 `status='mapping_required'` + 空 `scan_id` +
+      // `path_validation.choices`（`backend/app/api/media_v4.py:541-549`），
+      // 这次调用**没有创建任何扫描**。调用方必须展示候选并等用户选择，
+      // 不能当成"已开始扫描"。
+      if (progress.status === 'mapping_required' && (progress.mapping?.choices.length ?? 0) === 0) {
+        throw new Error('后端要求选择目录映射，但没有返回可选候选；请核对 TXT 导出范围后重试。');
+      }
+      return progress;
     },
 
     async getSourceScan(scanId): Promise<ScanProgress> {
@@ -1320,12 +1659,19 @@ function toConfigPatch(section: SettingsSection, patch: Record<string, unknown>)
       anime4kQuality: 'mpv_anime4k_quality',
       completedThresholdPercent: 'completed_threshold_percent',
     },
-    bangumi: { token: 'bangumi_access_token' },
+    // Bangumi 令牌**不**走普通 PATCH：`PATCH /api/config` 既不验证令牌也不写账户快照，
+    // 昵称会永远为空。登录必须走 `POST /api/integrations/bangumi/token`（见 bangumiSignIn）。
+    bangumi: {},
     backup: {
       autoDailyEnabled: 'backup_auto_daily_enabled',
       autoDailyTime: 'backup_auto_daily_time',
     },
   };
+  if (section === 'bangumi') {
+    throw new ServiceCapabilityError(
+      'Bangumi 登录必须经后端验证端点保存令牌，普通配置写入不会验证也不会保存账号资料。',
+    );
+  }
   const mapping = MAP[section] ?? {};
   const body: Record<string, unknown> = {};
   for (const [viewKey, configKey] of Object.entries(mapping)) {

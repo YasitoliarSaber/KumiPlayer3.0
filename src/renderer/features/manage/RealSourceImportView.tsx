@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useSettings } from '@/shared/api/service-context';
 import { Button } from '@/shared/ui/button';
@@ -20,6 +21,8 @@ export function RealSourceImportView({ view, rootId, onOpenTasks }: {
   const session = useImportSession(rootId, view === 'import');
   const settings = useSettings();
   const navigate = useNavigate();
+  // 多解候选必须由用户显式选中后才提交，不预选第一项。
+  const [mappingChoice, setMappingChoice] = useState('');
   if (view === 'overview') return null;
   if (view === 'maintenance') return <section className={styles.panel}>
     <h2 className={styles.panelTitle}>媒体记录维护</h2>
@@ -30,6 +33,10 @@ export function RealSourceImportView({ view, rootId, onOpenTasks }: {
     </div>
   </section>;
   const { scan, preview, busy } = session;
+  const mapping = session.mapping;
+  const mappingOptions = mapping?.choices ?? [];
+  // 候选刷新后旧选择可能已经失效：不再匹配就不允许提交。
+  const selectedMappingChoice = mappingOptions.some((choice) => choice.id === mappingChoice) ? mappingChoice : '';
   const scanned = !!scan && (scan.status === 'completed' || scan.status === 'validated');
   const active = !!scan && ['queued', 'running', 'cancelling'].includes(scan.status);
   const step = preview ? 2 : scan ? 1 : 0;
@@ -93,6 +100,40 @@ export function RealSourceImportView({ view, rootId, onOpenTasks }: {
         {scan?.canCancel ? <Button variant="ghost" loading={busy} onClick={() => void session.cancel()}>取消扫描</Button> : null}
       </div>
     </section>
+
+    {mapping ? <section className={`${styles.panel} ${styles.importPanel}`} aria-label="目录映射选择">
+      <header className={styles.sectionHead}>
+        <h2 className={styles.panelTitle}>需要选择目录映射</h2>
+        <StatusChip tone="warning">待选择</StatusChip>
+      </header>
+      <p className={styles.panelHint}>
+        这份 TXT / 来源目录在本地有多个可能的挂载位置。这是 TXT / 来源目录到本地挂载位置的映射选择，选择前不会开始扫描。
+      </p>
+      {mapping.reason ? <p className={styles.fieldHint}>后端说明：{mapping.reason}</p> : null}
+      <div className={styles.sourceChoices} role="radiogroup" aria-label="目录映射候选">
+        {mappingOptions.map((choice) => <div key={choice.id} className={styles.issue}>
+          <label className={styles.issueHead}>
+            <input type="radio" name="import-tree-mapping" value={choice.id}
+              checked={selectedMappingChoice === choice.id}
+              disabled={busy}
+              onChange={() => setMappingChoice(choice.id)} />
+            <strong>{choice.root || choice.id}</strong>
+          </label>
+          <p className={styles.sourceMeta}>
+            <span>映射范围：{choice.mappingScope || '未标注'}</span>
+            <span>进入扫描 {choice.selectedCount} 项</span>
+            <span>跳过 {choice.skippedCount} 项</span>
+          </p>
+          {choice.pathSamples.slice(0, 3).map((sample) => <p key={sample}
+            className={styles.sourceLocation} title={sample}>{sample}</p>)}
+        </div>)}
+      </div>
+      <div className={styles.panelActions}>
+        <Button loading={busy} disabled={!selectedMappingChoice}
+          onClick={() => void session.chooseMapping(selectedMappingChoice)}>使用这个映射继续扫描</Button>
+        <Button variant="outline" disabled={busy} onClick={session.cancelMapping}>取消</Button>
+      </div>
+    </section> : null}
 
     {scan ? <section className={`${styles.panel} ${styles.importPanel}`} aria-label="扫描进度">
       <h2 className={styles.panelTitle}>{scanned ? '扫描完成' : scan.status === 'failed' ? '扫描失败' : scan.status === 'cancelled' ? '扫描已取消' : '正在扫描'}</h2>

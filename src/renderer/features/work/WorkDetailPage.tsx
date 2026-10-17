@@ -13,13 +13,14 @@ import {
   Heart,
   MoreHorizontal,
   RefreshCw,
+  RotateCcw,
   Trash2,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 
-import type { EpisodeEntry, WorkDetail } from '../../shared/api/service';
+import type { EpisodeEntry, WorkDeletePreview, WorkDetail } from '../../shared/api/service';
 import { demoQueryKeys, useMediaService, useWorkDetail } from '../../shared/api/service-context';
 import { Artwork } from '../../shared/ui/Artwork';
 import { ErrorSurface, LoadingSurface } from '../../shared/ui/Surface';
@@ -61,6 +62,14 @@ export function WorkDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [managementOpen, setManagementOpen] = useState(false);
   const [pendingTitle, setPendingTitle] = useState('');
+  const [renameError, setRenameError] = useState('');
+  const [renameBusy, setRenameBusy] = useState(false);
+  // 删除是两段式：先取服务端影响预览，再用预览身份确认；失败后必须重新预览。
+  const [deletePreview, setDeletePreview] = useState<WorkDeletePreview | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  // 更多菜单里的真实操作共用一次加载态，不劫持播放按钮的忙碌态。
+  const [actionBusy, setActionBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [togglingFavorite, setTogglingFavorite] = useState(false);
@@ -76,6 +85,12 @@ export function WorkDetailPage() {
     // 切换作品时清掉上一部作品的临时状态，避免旧提示/旧忙碌态串到新作品。
     setNotice('');
     setBusy(false);
+    setActionBusy(false);
+    setRenameError('');
+    setRenameBusy(false);
+    setDeletePreview(null);
+    setDeleteError('');
+    setDeleteBusy(false);
     setTogglingFavorite(false);
     setPreferredSource('');
     setManagementOpen(false);
@@ -85,6 +100,7 @@ export function WorkDetailPage() {
     () => Promise.all([
       queryClient.invalidateQueries({ queryKey: demoQueryKeys.library }),
       queryClient.invalidateQueries({ queryKey: demoQueryKeys.detail(workId) }),
+      queryClient.invalidateQueries({ queryKey: demoQueryKeys.tasks }),
     ]),
     [queryClient, workId],
   );
@@ -137,6 +153,134 @@ export function WorkDetailPage() {
       />
     );
   }
+
+  // 重新刮削：真实走后端 job 队列；方法不存在时如实说明演示模式不执行真实操作。
+  const rescrape = async () => {
+    if (typeof service.scrapeWork !== 'function') {
+      setNotice('演示模式不执行真实操作：当前服务没有重新刮削能力。');
+      return;
+    }
+    setActionBusy(true);
+    setNotice('');
+    try {
+      const result = await service.scrapeWork(work.id);
+      setNotice(`已排队重新刮削，作业 ${result.jobId}`);
+      void refreshLibrary();
+    } catch (error) {
+      // 失败只显示后端真实原因，绝不显示成功。
+      setNotice(error instanceof Error ? error.message : '重新刮削未能排队');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const saveTitle = async () => {
+    setRenameError('');
+    setRenameBusy(true);
+    try {
+      await service.setManualTitle(work.id, pendingTitle);
+      setRenameOpen(false);
+      setNotice(`已保存手动标题：${pendingTitle}`);
+      void refreshLibrary();
+    } catch (error) {
+      // 失败保留输入并显示后端原因，不关闭成成功。
+      setRenameError(error instanceof Error ? error.message : '标题未保存');
+    } finally {
+      setRenameBusy(false);
+    }
+  };
+
+  const restoreTitle = async () => {
+    setRenameError('');
+    setRenameBusy(true);
+    try {
+      await service.resetManualTitle(work.id);
+      setRenameOpen(false);
+      setNotice('已恢复自动标题。');
+      void refreshLibrary();
+    } catch (error) {
+      setRenameError(error instanceof Error ? error.message : '未能恢复自动标题');
+    } finally {
+      setRenameBusy(false);
+    }
+  };
+
+  // 打开所在位置：只提交身份 ID，由后端宿主进程真正执行；浏览器承载时如实说明未打开。
+  const openFolder = async () => {
+    if (typeof service.openWorkFolder !== 'function') {
+      setNotice('演示模式不执行真实操作：当前服务没有打开所在位置的能力。');
+      return;
+    }
+    setActionBusy(true);
+    setNotice('');
+    try {
+      const result = await service.openWorkFolder({ workId: work.id });
+      if (result.opened) {
+        setNotice(`已在资源管理器中打开：${result.folderPath}`);
+      } else if (result.exists) {
+        setNotice(`后端未打开窗口（当前由浏览器承载，无法直接打开文件夹）：${result.folderPath}`);
+      } else {
+        setNotice(`该作品没有可打开的已确认媒体目录：${result.folderPath || '后端未返回路径'}`);
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '打开所在位置失败');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const loadDeletePreview = async () => {
+    if (typeof service.previewWorkDelete !== 'function') {
+      setDeleteError('演示模式不执行真实操作：当前服务没有删除预览能力。');
+      return;
+    }
+    setDeleteBusy(true);
+    setDeleteError('');
+    setDeletePreview(null);
+    try {
+      setDeletePreview(await service.previewWorkDelete(work.id));
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : '删除预览未能生成');
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const openDelete = async () => {
+    if (typeof service.previewWorkDelete !== 'function' || typeof service.confirmWorkDelete !== 'function') {
+      setNotice('演示模式不执行真实操作：当前服务没有从媒体库移除的能力。');
+      return;
+    }
+    setDeleteOpen(true);
+    await loadDeletePreview();
+  };
+
+  const confirmDelete = async () => {
+    if (!deletePreview || typeof service.confirmWorkDelete !== 'function') {
+      return;
+    }
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      const result = await service.confirmWorkDelete(work.id, {
+        previewId: deletePreview.previewId,
+        digest: deletePreview.digest,
+      });
+      setDeleteOpen(false);
+      setDeletePreview(null);
+      setNotice(
+        `已从媒体库移除：受控生成物移除 ${result.removedArtifacts} 项、被阻塞 ${result.blockedArtifacts} 项、失败 ${result.failedArtifacts} 项；真实影片文件未被删除。`,
+      );
+      void refreshLibrary();
+      navigate(-1);
+    } catch (error) {
+      // 409（digest 变化）等失败必须丢弃旧预览并要求重新生成，绝不假装已移除。
+      setDeletePreview(null);
+      setDeleteError(error instanceof Error ? error.message : '移除未执行，请重新生成删除预览');
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   const isRecentEpisode = Boolean(resume && work.progress && resume.id === work.progress.episodeId);
   const resumePosition = isRecentEpisode ? work.progress!.position : resume?.position ?? 0;
@@ -249,26 +393,25 @@ export function WorkDetailPage() {
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onSelect={() => setManagementOpen(true)}>资料与管理</DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setNotice('已排队重新刮削资料（演示，不会访问在线服务）')}
-                  >
+                  <DropdownMenuItem disabled={actionBusy} onClick={() => void rescrape()}>
                     <RefreshCw className="size-3.5" />
                     重新刮削资料
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
                       setPendingTitle(work.title);
+                      setRenameError('');
                       setRenameOpen(true);
                     }}
                   >
                     编辑标题
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setNotice(`已请求打开位置（演示）：${work.location}`)}>
+                  <DropdownMenuItem disabled={actionBusy} onClick={() => void openFolder()}>
                     <FolderOpen className="size-3.5" />
                     打开所在位置
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
+                  <DropdownMenuItem variant="destructive" onClick={() => void openDelete()}>
                     <Trash2 className="size-3.5" />
                     从媒体库移除
                   </DropdownMenuItem>
@@ -338,53 +481,110 @@ export function WorkDetailPage() {
       <WorkManagementSheet work={work} open={managementOpen} onOpenChange={setManagementOpen} onChanged={refreshLibrary}
         onReturnFocus={() => moreButtonRef.current?.focus({ preventScroll: true })} />
 
-      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+      <Dialog
+        open={renameOpen}
+        onOpenChange={(open) => {
+          setRenameOpen(open);
+          if (!open) {
+            setRenameError('');
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>编辑标题（演示）</DialogTitle>
+            <DialogTitle>编辑标题</DialogTitle>
           </DialogHeader>
           <label className="flex flex-col gap-1.5 text-[13px]">
             展示标题
-            <Input value={pendingTitle} onChange={(event) => setPendingTitle(event.currentTarget.value)} />
+            <Input
+              value={pendingTitle}
+              aria-label="展示标题"
+              onChange={(event) => setPendingTitle(event.currentTarget.value)}
+            />
           </label>
-          <p className={styles.panelHint}>演示模式只修改本机演示偏好，不会改写媒体事实或在线资料。</p>
+          <p className={styles.panelHint}>
+            只写入 KumiPlayer 的手动标题覆盖：不改动真实文件名、识别证据或线上资料。
+          </p>
+          {renameError ? (
+            <p role="alert" className="text-[12.5px] text-destructive">
+              {renameError}
+            </p>
+          ) : null}
           <DialogFooter>
-            <Button
-              onClick={() => {
-                setRenameOpen(false);
-                setNotice(`已保存演示标题：${pendingTitle}`);
-              }}
-            >
+            <Button loading={renameBusy} onClick={() => void saveTitle()}>
               <Check className="size-4" />
               保存
             </Button>
+            <Button variant="outline" disabled={renameBusy} onClick={() => void restoreTitle()}>
+              <RotateCcw className="size-4" />
+              恢复自动标题
+            </Button>
             <DialogClose asChild>
-              <Button variant="outline">取消</Button>
+              <Button variant="ghost">取消</Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          setDeleteOpen(open);
+          if (!open) {
+            setDeletePreview(null);
+            setDeleteError('');
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>从媒体库移除（演示）</DialogTitle>
+            <DialogTitle>从媒体库移除</DialogTitle>
           </DialogHeader>
           <p className={styles.panelHint}>
-            真实实现中，这里只退役受控媒体记录，绝不删除来源媒体文件；演示模式不会写入任何数据。
+            只退役 KumiPlayer 的库记录与受控生成物，绝不删除真实影片文件，也不改动来源目录。
           </p>
+          {deletePreview ? (
+            <ul className="flex flex-col gap-1 text-[12.5px]">
+              <li>{`受控生成物：${deletePreview.artifactCount} 项`}</li>
+              <li>{`播放记录：${deletePreview.playbackCount} 条`}</li>
+              <li>{`追更记录：${deletePreview.trackingCount} 条`}</li>
+              <li>
+                {deletePreview.blocked
+                  ? `存在后台任务：${deletePreview.blockedJobCount} 个${
+                      deletePreview.blockedJobTypes.length > 0
+                        ? `（${deletePreview.blockedJobTypes.join('、')}）`
+                        : ''
+                    }；请等待任务结束后重试。`
+                  : '当前没有排队或运行中的后台任务。'}
+              </li>
+            </ul>
+          ) : null}
+          {deleteBusy && !deletePreview ? (
+            <p className="text-[12.5px] text-muted-foreground" role="status">
+              正在读取服务端影响预览…
+            </p>
+          ) : null}
+          {deleteError ? (
+            <p role="alert" className="text-[12.5px] text-destructive">
+              {deleteError}
+            </p>
+          ) : null}
           <DialogFooter>
             <Button
               variant="destructive"
-              onClick={() => {
-                setDeleteOpen(false);
-                setNotice('演示：已模拟从媒体库移除（不会删除任何文件）');
-              }}
+              loading={deleteBusy}
+              disabled={!deletePreview || deletePreview.blocked}
+              onClick={() => void confirmDelete()}
             >
               确认移除
             </Button>
+            {deleteError ? (
+              <Button variant="outline" disabled={deleteBusy} onClick={() => void loadDeletePreview()}>
+                重新生成预览
+              </Button>
+            ) : null}
             <DialogClose asChild>
-              <Button variant="outline">取消</Button>
+              <Button variant="ghost">取消</Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>
