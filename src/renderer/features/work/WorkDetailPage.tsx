@@ -39,6 +39,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/shared/ui/tabs';
 import { WorkManagementSheet } from './WorkManagementSheet';
 import { EpisodeStrip } from './EpisodeStrip';
 import { WorkHero } from './WorkHero';
+import { WorkSuggestions } from './WorkSuggestions';
 import styles from './WorkDetailPage.module.css';
 
 export function WorkDetailPage() {
@@ -296,7 +297,7 @@ export function WorkDetailPage() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button ref={moreButtonRef} variant="outline" size="icon" className={styles.onArtworkButton} aria-label="更多操作" title="更多操作">
-            <MoreHorizontal className="size-4" />
+            <MoreHorizontal className="size-6" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -352,29 +353,7 @@ export function WorkDetailPage() {
           <EpisodeStrip episodes={season?.episodes ?? []} seasonId={season?.id ?? ''}
             label={season?.label ?? '全部剧集'} onPlay={(episode) => void play(episode)} />
 
-          {work.related.length > 0 ? (
-            <section className={styles.relatedSection} aria-label="相关推荐">
-              <h2 className={styles.blockTitle}>相关作品</h2>
-              <div className={styles.relatedRow}>
-                {work.related.slice(0, 6).map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={styles.relatedCard}
-                    onClick={() => navigate(`/work/${item.id}`)}
-                  >
-                    <span className={styles.relatedMedia}>
-                      <Artwork artwork={item.artwork.poster} alt={item.title} className={styles.relatedImage} />
-                    </span>
-                    <span className={styles.relatedTitle} title={item.title}>
-                      {item.title}
-                    </span>
-                    <span className={styles.relatedMeta}>{item.year}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
+          <WorkSuggestions work={work} onOpen={(id) => navigate(`/work/${id}`)} />
         </section>
 
       </div>

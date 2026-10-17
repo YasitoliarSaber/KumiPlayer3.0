@@ -1,5 +1,4 @@
-import { ChevronLeft, ChevronRight, CirclePlay } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { EpisodeEntry } from '@/shared/api/service';
 import { Artwork } from '@/shared/ui/Artwork';
 import { Button } from '@/shared/ui/button';
@@ -14,28 +13,8 @@ export function EpisodeStrip({ episodes, seasonId, label, onPlay }: {
   readonly onPlay: (episode: EpisodeEntry) => void;
 }) {
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
-  const [edges, setEdges] = useState({ previous: false, next: false });
   const drag = useRef({ active: false, startX: 0, startLeft: 0, moved: 0 });
   useLayoutEffect(() => { if (viewport) viewport.scrollLeft = 0; }, [viewport, seasonId]);
-  useEffect(() => {
-    if (!viewport) return;
-    const update = () => {
-      const previous = viewport.scrollLeft > 1;
-      const next = viewport.scrollLeft + viewport.clientWidth < viewport.scrollWidth - 1;
-      setEdges((old) => old.previous === previous && old.next === next ? old : { previous, next });
-    };
-    const observer = new ResizeObserver(update);
-    observer.observe(viewport);
-    if (viewport.firstElementChild) observer.observe(viewport.firstElementChild);
-    viewport.addEventListener('scroll', update, { passive: true });
-    update();
-    return () => { observer.disconnect(); viewport.removeEventListener('scroll', update); };
-  }, [viewport, episodes.length]);
-
-  const page = (direction: number) => {
-    const reduced = document.documentElement.dataset.motion === 'reduced' || matchMedia('(prefers-reduced-motion: reduce)').matches;
-    viewport?.scrollBy({ left: direction * Math.max(250, viewport.clientWidth * 0.86), behavior: reduced ? 'auto' : 'smooth' });
-  };
   const bindViewport = useCallback((node: HTMLDivElement | null) => {
     setViewport(node);
     if (!node) return;
@@ -86,7 +65,6 @@ export function EpisodeStrip({ episodes, seasonId, label, onPlay }: {
               {episode.position > 0 && episode.durationSec > 0 ? <span className={styles.episodeProgress}>
                 <ProgressBar value={episode.position / Math.max(episode.durationSec, 1) * 100} label={`${episode.code}观看进度`} />
               </span> : null}
-              <span className={styles.episodePlay} aria-hidden="true"><CirclePlay /></span>
             </span>
             <span className={styles.episodeCopy}>
               <span className={styles.episodeCode}>{episode.code}</span>
@@ -96,9 +74,5 @@ export function EpisodeStrip({ episodes, seasonId, label, onPlay }: {
         </li>)}
       </ul>
     </ScrollArea>
-    <Button size="icon" variant="outline" className={`${styles.episodeArrow} ${styles.episodePrevious}`}
-      aria-label="上一组剧集" disabled={!edges.previous} onClick={() => page(-1)}><ChevronLeft /></Button>
-    <Button size="icon" variant="outline" className={`${styles.episodeArrow} ${styles.episodeNext}`}
-      aria-label="下一组剧集" disabled={!edges.next} onClick={() => page(1)}><ChevronRight /></Button>
   </div>;
 }

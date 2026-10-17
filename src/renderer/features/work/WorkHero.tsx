@@ -1,5 +1,5 @@
 /** 参照归档旧版的单列概要；复用当前控件与图片生命周期，不引入旧 CSS。 */
-import { ArrowLeft, ChevronDown, CirclePlay, Database, Heart } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Play, Database, Heart } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { EpisodeEntry, WorkDetail } from '@/shared/api/service';
 import { SOURCE_LABELS } from '@/app/ui-store';
@@ -84,21 +84,24 @@ export function WorkHero({ work, resume, resumePosition, resumePercent, busy, fa
           aria-label={plotExpanded ? '收起作品简介' : '展开完整作品简介'}
           onClick={() => setPlotExpanded((expanded) => !expanded)}>{work.plot}</button> : null}
         <div className={styles.heroActions}>
-          <Button className={styles.continueButton} onClick={onPlay} disabled={!resume} loading={busy}
+          <Button variant="outline" className={styles.continueButton} onClick={onPlay} disabled={!resume} loading={busy}
             title={resume ? `${episodeLabel}${resumePercent > 0 ? `，已观看 ${resumePercent}%` : ''}` : undefined}>
             {resumePosition > 0 ? <span className={styles.continueFill} style={{ width: `${resumePercent}%` }}
               role="progressbar" aria-label="观看进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={resumePercent} /> : null}
-            {!busy ? <CirclePlay className="relative size-5" /> : null}
+            {!busy ? <Play className={styles.continueIcon} size={20} fill="currentColor" /> : null}
             <span className={styles.continueCopy}>
               <strong>{resumePosition > 0 ? '继续观看' : '播放'}</strong>
               {resume ? <small>{episodeLabel}</small> : null}
             </span>
-            {resumePercent > 0 ? <span className={styles.continuePercent}>{resumePercent}%</span> : null}
+            <span className={styles.continueHover} aria-hidden="true">
+              <span>{episodeLabel}</span>
+              {resumePercent > 0 ? <b className={styles.continuePercent}>{resumePercent}%</b> : null}
+            </span>
           </Button>
           <Button variant="outline" size="icon" className={styles.onArtworkButton} loading={favoriteBusy}
             aria-label={work.watch.favorite ? '取消收藏' : '收藏'} aria-pressed={work.watch.favorite}
             title={work.watch.favorite ? '取消收藏' : '收藏'} onClick={onFavorite}>
-            {!favoriteBusy ? <Heart className="size-5" fill={work.watch.favorite ? 'currentColor' : 'none'} /> : null}
+            {!favoriteBusy ? <Heart className="size-6" fill={work.watch.favorite ? 'currentColor' : 'none'} /> : null}
           </Button>
           {children}
         </div>

@@ -878,7 +878,14 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
 
     async getWorkDetail(workId): Promise<WorkDetail> {
       const dto = await detailDto(workId);
-      const history = await transport.call<unknown>('playback.history', { query: { work_id: workId, limit: 1 } });
+      const relatedIds = [...new Set((dto.related_works ?? []).map((entry) => str(asRecord(entry).work_id)))]
+        .filter((id) => id !== '' && id !== workId).slice(0, 6);
+      const [history, related] = await Promise.all([
+        transport.call<unknown>('playback.history', { query: { work_id: workId, limit: 1 } }),
+        relatedIds.length > 0
+          ? transport.call<unknown>('library.cards', { query: { work_ids: relatedIds.join(',') } })
+          : Promise.resolve(null),
+      ]);
       let progress: ProgressSnapshot | null = null;
       if (history.ok) {
         const items = asRecord(history.data).items;
@@ -887,7 +894,19 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
         }
       }
       const cached = new Map<string, WorkSummary>();
-      return toWorkDetail(dto, progress, (relatedId) => cached.get(relatedId) ?? null);
+      // 旧实现从刚创建的空 Map 解析关系，导致真实相关作品永远丢失。
+      // 有界读取关联卡片；次要内容读取失败不阻断作品本身的详情。
+      if (related?.ok) {
+        const cards = asRecord(related.data).works;
+        for (const row of Array.isArray(cards) ? cards : []) {
+          const parsed = parseWorkCard(row);
+          if (parsed.ok && relatedIds.includes(parsed.value.work_id)) {
+            cached.set(parsed.value.work_id, toWorkSummary(parsed.value, null));
+          }
+        }
+      }
+      return toWorkDetail({ ...dto, related_works: relatedIds.map((work_id) => ({ work_id })) },
+        progress, (relatedId) => cached.get(relatedId) ?? null);
     },
 
     async listSources(signal): Promise<readonly SourceCard[]> {
