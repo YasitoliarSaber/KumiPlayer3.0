@@ -32,7 +32,10 @@
 .headerActions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  margin-left: auto;
 }
 
 .headerText { min-width: 0; }
@@ -70,11 +73,6 @@
   color: var(--text-muted);
 }
 
-.toolbarActions {
-  display: flex;
-  gap: 8px;
-}
-
 .notice {
   margin: 0;
   padding: 8px 12px;
@@ -86,16 +84,19 @@
 }
 
 .sourceGrid {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
 }
 
 .sourceCard {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 20px;
-  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: 14px;
+  padding: 18px;
   border: var(--hairline);
   border-radius: var(--radius-card);
   background: var(--card);
@@ -103,13 +104,20 @@
 
 .sourceHead {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 10px;
 }
 
-.sourceCard > :not(.sourceActions) {
-  grid-column: 1;
+.sourceDetails {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  overscroll-behavior-y: contain;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -119,12 +127,17 @@
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
+  min-width: 0;
 }
+
+.sourceName svg { flex-shrink: 0; }
+.sourceName > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.sourceHead > :last-child { flex-shrink: 0; }
 
 .sourceMeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 4px 10px;
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -156,11 +169,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  grid-column: 2;
-  grid-row: 1 / span 6;
-  align-self: center;
-  justify-content: flex-end;
-  max-width: 320px;
+  margin-top: auto;
+  flex-shrink: 0;
+  padding-top: 12px;
+  border-top: var(--hairline);
 }
 
 .steps {
@@ -315,6 +327,5 @@
     flex-wrap: wrap;
   }
 
-  .sourceCard { grid-template-columns: minmax(0, 1fr); }
-  .sourceActions { grid-column: 1; grid-row: auto; justify-content: flex-start; padding-top: 8px; }
+  .headerActions { justify-content: flex-start; margin-left: 0; }
 }

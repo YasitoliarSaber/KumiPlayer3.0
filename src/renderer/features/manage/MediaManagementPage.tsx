@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/shared/ui/select';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, Database, FolderSearch, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Database, FolderSearch, ListTodo, ShieldCheck } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -85,11 +85,14 @@ export function MediaManagementPage() {
                 : '缓存预览、显式确认与状态重置；真实实现中源媒体永不被递归删除。'}
           </p>
         </div>
-        <div className={styles.headerActions}>
+        <div className={styles.headerActions} role="group" aria-label="媒体管理操作">
           {mode === 'overview' ? (
             <>
               <Button variant="outline" leftSection={<ShieldCheck size={15} />} onClick={() => goMode('maintenance')}>
                 媒体库维护
+              </Button>
+              <Button variant="outline" leftSection={<ListTodo size={15} />} onClick={() => navigate('/tasks')}>
+                打开任务中心
               </Button>
               <Button leftSection={<FolderSearch size={15} />} onClick={() => goMode('import')}>
                 导入媒体
@@ -103,7 +106,7 @@ export function MediaManagementPage() {
         </div>
       </header>
 
-      {mode === 'overview' ? <SourceOverview onCreateTasks={() => goMode('import')} onOpenTasks={() => navigate('/tasks')} /> : null}
+      {mode === 'overview' ? <SourceOverview onOpenTasks={() => navigate('/tasks')} /> : null}
       {mode === 'import' ? (
         <ImportFlow
           sourceId={importSourceId}
@@ -117,10 +120,8 @@ export function MediaManagementPage() {
 }
 
 function SourceOverview({
-  onCreateTasks,
   onOpenTasks,
 }: {
-  readonly onCreateTasks: () => void;
   readonly onOpenTasks: () => void;
 }) {
   const sources = useSources();
@@ -148,14 +149,6 @@ function SourceOverview({
     <div className={styles.overview}>
       <div className={styles.toolbar}>
         <span className={styles.toolbarCount}>共 {cards.length} 个来源</span>
-        <div className={styles.toolbarActions}>
-          <Button size="xs" variant="outline" onClick={onOpenTasks}>
-            打开任务中心
-          </Button>
-          <Button size="xs" variant="outline" onClick={onCreateTasks}>
-            新建导入
-          </Button>
-        </div>
       </div>
 
       {notice ? (
@@ -229,6 +222,7 @@ function SourceCardView({
         </div>
         <StatusChip tone={tone}>{card.statusLabel}</StatusChip>
       </header>
+      <div className={styles.sourceDetails}>
       <div className={styles.sourceMeta}>
         <span>{card.providerLabel}</span>
         <span>{card.contentScope === 'ongoing' ? '新番来源' : '媒体库来源'}</span>
@@ -247,6 +241,7 @@ function SourceCardView({
           <span>{activeTaskTitle}</span>
         </div>
       ) : null}
+      </div>
       <div className={styles.sourceActions}>
         {card.canResume ? (
           <Button size="xs" onClick={onReview}>

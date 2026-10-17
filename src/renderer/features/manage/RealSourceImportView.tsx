@@ -406,6 +406,7 @@ export function RealSourceImportView() {
                   {source.status}
                 </StatusChip>
               </div>
+              <div className={styles.sourceDetails}>
               <span className={styles.sourceMeta}>
                 {source.provider} · {source.contentScope === 'ongoing' ? '新番' : '媒体库'} · {source.ingestMethod || source.sourceMode}
               </span>
@@ -418,6 +419,7 @@ export function RealSourceImportView() {
                 作业 排队 {source.jobs.queued} · 运行 {source.jobs.running} · 失败 {source.jobs.failed}
                 {source.revision.draftRevisionId ? ' · 有待确认草稿' : ''}
               </span>
+              </div>
               <div className={styles.sourceActions}>
                 <Button
                   variant="outline"

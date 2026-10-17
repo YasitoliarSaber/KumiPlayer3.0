@@ -10,6 +10,8 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarSync,
+  ChevronDown,
+  ChevronUp,
   Clapperboard,
   Clock3,
   Film,
@@ -28,7 +30,7 @@ import {
   Tv,
   type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-router';
 
 import { SOURCE_LABELS, useUiStore, type SourceFilter } from '@/app/ui-store';
@@ -92,6 +94,15 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   // 窄窗没有常驻侧栏，用抽屉承载同一套导航。
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [titlebarHidden, setTitlebarHidden] = useState(false);
+  const [titlebarPeeking, setTitlebarPeeking] = useState(false);
+  const restoreTitlebarRef = useRef<HTMLButtonElement>(null);
+  const toggleTitlebarRef = useRef<HTMLButtonElement>(null);
+  const toggleTitlebar = () => {
+    setTitlebarHidden(!titlebarHidden);
+    setTitlebarPeeking(false);
+    requestAnimationFrame(() => (titlebarHidden ? toggleTitlebarRef : restoreTitlebarRef).current?.focus({ preventScroll: true }));
+  };
   const library = useLibrary();
   const setupOpen = useUiStore((state) => state.setupOpen);
   const openSetup = useUiStore((state) => state.openSetup);
@@ -129,8 +140,16 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   }, []);
 
   return (
-    <div className={styles.shell} data-sidebar={sidebarMode}>
-      <TitleBar onOpenDrawer={() => setDrawerOpen(true)} />
+    <div className={styles.shell} data-sidebar={sidebarMode} data-titlebar={titlebarHidden ? 'hidden' : 'full'} data-titlebar-peeking={titlebarPeeking}>
+      <TitleBar onOpenDrawer={() => setDrawerOpen(true)} titlebarHidden={titlebarHidden}
+        onToggleTitlebar={toggleTitlebar} onPeekChange={setTitlebarPeeking} toggleRef={toggleTitlebarRef} />
+      {titlebarHidden ? <>
+      <div className={styles.titlebarHotzone} aria-hidden="true" onPointerEnter={() => setTitlebarPeeking(true)} />
+      <Button ref={restoreTitlebarRef} variant="outline" size="icon-sm"
+        className={styles.restoreTitlebar} aria-label="展开顶栏" title="展开顶栏"
+        onClick={toggleTitlebar}>
+        <ChevronDown aria-hidden="true" />
+      </Button></> : null}
       <Sidebar onOpenSearch={() => setPaletteOpen(true)} />
       <main className={styles.main} ref={mainRef} data-testid="main-scroll">
         <div className={styles.content}>
@@ -161,7 +180,13 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   );
 }
 
-function TitleBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
+function TitleBar({ onOpenDrawer, titlebarHidden, onToggleTitlebar, onPeekChange, toggleRef }: {
+  readonly onOpenDrawer: () => void;
+  readonly titlebarHidden: boolean;
+  readonly onToggleTitlebar: () => void;
+  readonly onPeekChange: (peek: boolean) => void;
+  readonly toggleRef: RefObject<HTMLButtonElement | null>;
+}) {
   const navigate = useNavigate();
   const host = detectHost();
   const queryClient = useQueryClient();
@@ -169,7 +194,10 @@ function TitleBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
   const { sidebarMode, toggleSidebarVisibility } = useUiStore();
 
   return (
-    <header data-material-surface="chrome" className={styles.titlebar} data-drag={host.canDragWindow ? 'true' : undefined}>
+    <header data-material-surface="chrome" className={styles.titlebar} data-drag={host.canDragWindow ? 'true' : undefined}
+      onPointerEnter={() => { if (titlebarHidden) onPeekChange(true); }}
+      onPointerLeave={() => onPeekChange(false)}
+      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) onPeekChange(false); }}>
       <div className={styles.titlebarGroup} data-no-drag="true">
         <Button
           variant="ghost"
@@ -227,6 +255,13 @@ function TitleBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
         </div>
       </div>
 
+      <div className={styles.titlebarChrome} data-no-drag="true">
+        <Button ref={toggleRef} variant="ghost" size="icon-sm" onClick={onToggleTitlebar}
+          aria-pressed={titlebarHidden} aria-label={titlebarHidden ? '固定展开顶栏' : '收起顶栏'}
+          title={titlebarHidden ? '固定展开顶栏' : '收起顶栏'}>
+          {titlebarHidden ? <ChevronDown aria-hidden="true" /> : <ChevronUp aria-hidden="true" />}
+        </Button>
+      </div>
       {host.hasWindowControls ? (
         <div className={styles.windowControls} data-no-drag="true">
           <button

@@ -8,7 +8,7 @@
 
 .backdrop {
   position: fixed;
-  inset: var(--titlebar-height) 0 0 var(--sidebar-width);
+  inset: var(--titlebar-offset, var(--titlebar-height)) 0 0 var(--sidebar-width);
   z-index: -1;
   overflow: hidden;
   contain: paint;
@@ -20,18 +20,7 @@
   position: relative;
   display: flex;
   align-items: flex-end;
-  min-height: calc(100dvh - var(--titlebar-height));
-}
-
-/* 两层背景：模糊铺满提供氛围，contain 清晰层保证画面完整（原型最新一轮）。 */
-.heroBackdropBlur {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(34px) saturate(1.05) brightness(0.82);
-  opacity: 0.55;
+  min-height: calc(100dvh - var(--titlebar-offset, var(--titlebar-height)));
 }
 
 .heroBackdrop {
@@ -39,15 +28,7 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-}
-
-/* 只压左侧文字区，不再整页压黑。 */
-.heroShade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(6, 10, 16, 0.74), rgba(6, 10, 16, 0.5) 26%, rgba(6, 10, 16, 0.12) 48%, transparent 70%);
-  pointer-events: none;
+  object-fit: cover;
 }
 
 .heroBack {
@@ -108,6 +89,7 @@
   height: 84px;
   object-fit: contain;
   object-position: left center;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.65));
 }
 
 .heroTitle {
@@ -182,14 +164,32 @@
   margin-top: 4px;
 }
 
-.resumeState {
+.continueButton {
+  position: relative;
+  overflow: hidden;
+  height: 52px;
+  min-width: 186px;
+  gap: 12px;
+  justify-content: flex-start;
+  text-shadow: none;
+}
+.continueFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in srgb, var(--primary-foreground) 17%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--primary-foreground) 28%, transparent);
+  pointer-events: none;
+}
+.continueCopy {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 200px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.86);
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1.3;
 }
+.continueCopy strong { font-weight: 600; }
+.continueCopy small { font-size: 11px; opacity: 0.85; }
 
 .notice {
   margin: 0;
@@ -233,46 +233,49 @@
   min-width: 0;
 }
 
+.episodeRail { position: relative; min-width: 0; padding-inline: 20px; }
+.episodeScroll { width: 100%; }
+.episodeViewport { cursor: grab; }
+.episodeViewport[data-dragging='true'] { cursor: grabbing; user-select: none; }
+.episodeArrow {
+  position: absolute;
+  top: 40%;
+  transform: translateY(-50%);
+  z-index: 2;
+  border-radius: 50%;
+  box-shadow: var(--shadow-flyout);
+}
+.episodePrevious { left: 0; }
+.episodeNext { right: 0; }
 .episodes {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: clamp(210px, 26vw, 268px);
   gap: 14px;
   margin: 0;
-  padding: 4px 4px 14px;
+  width: max-content;
+  padding: 4px 4px 16px;
   list-style: none;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
-  cursor: grab;
-}
-
-.episodes[data-dragging='true'] {
-  cursor: grabbing;
-  scroll-snap-type: none;
-  user-select: none;
-}
-
-.episodes::-webkit-scrollbar {
-  height: 8px;
-}
-
-.episodes::-webkit-scrollbar-thumb {
-  border-radius: var(--radius-pill);
-  background: var(--border-strong);
 }
 
 .episode {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  scroll-snap-align: start;
+  height: auto;
+  width: 100%;
   min-width: 0;
-  padding: 10px;
-  border: var(--hairline);
+  padding: 0;
+  border: 0;
+  align-items: stretch;
+  white-space: normal;
+  text-align: left;
   border-radius: var(--radius-card);
-  background: var(--card);
+  background: transparent;
+  color: #fff;
 }
+.episode:hover { background: transparent; }
+.episode:focus-visible .episodePlay { opacity: 1; }
 
 .episodeThumb {
   position: relative;
@@ -287,6 +290,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  pointer-events: none;
 }
 
 .episodePlay {
@@ -316,12 +320,14 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  padding: 0 2px;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.85);
 }
 
 .episodeCode {
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent-strong);
+  color: rgba(255, 255, 255, 0.86);
 }
 
 .episodeTitle {
@@ -330,11 +336,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.episodeMeta {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
 }
 
 .blockTitle {

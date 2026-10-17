@@ -22,7 +22,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { EpisodeEntry, WorkDetail } from '../../shared/api/service';
 import { demoQueryKeys, useMediaService, useWorkDetail } from '../../shared/api/service-context';
 import { Artwork } from '../../shared/ui/Artwork';
-import { ProgressBar } from '../../shared/ui/Surface';
 import { ErrorSurface, LoadingSurface } from '../../shared/ui/Surface';
 import { Button } from '@/shared/ui/button';
 import {
@@ -47,6 +46,7 @@ import { Input } from '@/shared/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/shared/ui/tabs';
 import { SOURCE_LABELS } from '@/app/ui-store';
 import { WorkManagementSheet } from './WorkManagementSheet';
+import { EpisodeStrip } from './EpisodeStrip';
 import styles from './WorkDetailPage.module.css';
 
 export function WorkDetailPage() {
@@ -67,7 +67,6 @@ export function WorkDetailPage() {
   // 作品来源选择：真实影响播放使用哪个 Asset，不只是改标签。
   const [preferredSource, setPreferredSource] = useState<string>('');
   const moreButtonRef = useRef<HTMLButtonElement>(null);
-  const dragRef = useDragScroll();
 
   const work = detail.data;
   const season = work?.seasons[Math.min(seasonIndex, Math.max(0, work.seasons.length - 1))];
@@ -118,7 +117,12 @@ export function WorkDetailPage() {
       return null;
     }
     const episodes = work.seasons.flatMap((entry) => entry.episodes);
-    return episodes.find((episode) => episode.position > 0) ?? episodes[0] ?? null;
+    const recent = episodes.find((episode) => episode.id === work.progress?.episodeId);
+    if (recent) {
+      if (work.progress?.completed) return episodes.slice(episodes.indexOf(recent) + 1).find((episode) => !episode.watched) ?? recent;
+      return recent;
+    }
+    return episodes.find((episode) => episode.position > 0 && !episode.watched) ?? episodes.find((episode) => !episode.watched) ?? episodes[0] ?? null;
   }, [work]);
 
   if (detail.isPending) {
@@ -134,14 +138,17 @@ export function WorkDetailPage() {
     );
   }
 
+  const isRecentEpisode = Boolean(resume && work.progress && resume.id === work.progress.episodeId);
+  const resumePosition = isRecentEpisode ? work.progress!.position : resume?.position ?? 0;
+  const resumeDuration = isRecentEpisode ? work.progress!.duration : resume?.durationSec ?? 0;
+  const resumePercent = resumeDuration > 0 ? Math.min(100, Math.max(0, Math.round(resumePosition / resumeDuration * 100))) : 0;
+
   return (
     <article className={styles.page} data-route="work-detail">
       <div className={styles.backdrop} aria-hidden="true">
-        <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt="" loading="eager" className={styles.heroBackdropBlur} />
         <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt="" loading="eager" className={styles.heroBackdrop} />
       </div>
       <div className={styles.hero}>
-        <span className={styles.heroShade} aria-hidden="true" />
         <button type="button" className={styles.heroBack} onClick={() => navigate(-1)}>
           <ArrowLeft aria-hidden="true" />
           <span>返回</span>
@@ -200,23 +207,15 @@ export function WorkDetailPage() {
             </div>
             <p className={styles.heroPlot}>{work.plot}</p>
             <div className={styles.heroActions}>
-              <Button onClick={() => resume && void play(resume)} disabled={!resume || busy}>
-                <CirclePlay className="size-4" />
-                {work.progress && work.progress.position > 0 ? '继续观看' : '播放'}
+              <Button className={styles.continueButton} onClick={() => resume && void play(resume)} disabled={!resume || busy}
+                title={resume ? `${resume.code} ${resume.title}${resumePercent > 0 ? `，已观看 ${resumePercent}%` : ''}` : undefined}>
+                {resumePercent > 0 ? <span className={styles.continueFill} style={{ width: `${resumePercent}%` }} aria-hidden="true" /> : null}
+                <CirclePlay className="relative size-4" />
+                <span className={styles.continueCopy}>
+                  <strong>{resumePosition > 0 ? '继续观看' : '播放'}</strong>
+                  {resume ? <small>{resume.code}{resumePercent > 0 ? ` · 已看 ${resumePercent}%` : ''}</small> : null}
+                </span>
               </Button>
-              {work.progress && work.progress.position > 0 ? (
-                <div className={styles.resumeState}>
-                  <ProgressBar
-                    value={(work.progress.position / Math.max(work.progress.duration, 1)) * 100}
-                    label="演示观看进度"
-                    size={4}
-                  />
-                  <span>
-                    {work.progress.episodeCode} 已观看{' '}
-                    {Math.round((work.progress.position / Math.max(work.progress.duration, 1)) * 100)}%
-                  </span>
-                </div>
-              ) : null}
               <span title={work.watch.favorite ? '取消收藏' : '加入收藏'} className="inline-flex">
                 <Button
                   variant={work.watch.favorite ? 'subtle' : 'outline'}
@@ -286,7 +285,7 @@ export function WorkDetailPage() {
       </div>
 
       <div className={styles.body}>
-        <section className={styles.main} aria-label="季集与版本">
+        <section className={styles.main} aria-label="季集">
           <Tabs
             value={season?.id ?? ''}
             onValueChange={(value) => {
@@ -306,68 +305,8 @@ export function WorkDetailPage() {
             </TabsList>
           </Tabs>
 
-          <ul
-            className={styles.episodes}
-            ref={dragRef}
-            data-dragging="false"
-            tabIndex={0}
-            aria-label={`${season?.label ?? '全部剧集'}分集列表，可左右拖动`}
-          >
-            {(season?.episodes ?? []).map((episode) => (
-              <li key={episode.id} className={styles.episode}>
-                <button
-                  type="button"
-                  className={styles.episodeThumb}
-                  onClick={() => void play(episode)}
-                  aria-label={`播放 ${episode.code} ${episode.title}`}
-                >
-                  <Artwork
-                    artwork={episode.thumb}
-                    alt={`${episode.code} 缩略图`}
-                    kind="episode"
-                    fallbackLabel="暂无分集图片"
-                    className={styles.episodeImage}
-                  />
-                  {episode.position > 0 ? (
-                    <span className={styles.episodeProgress}>
-                      <ProgressBar
-                        value={(episode.position / Math.max(episode.durationSec, 1)) * 100}
-                        label={`${episode.code}观看进度`}
-                      />
-                    </span>
-                  ) : null}
-                  <span className={styles.episodePlay} aria-hidden="true">
-                    <CirclePlay />
-                  </span>
-                </button>
-                <div className={styles.episodeCopy}>
-                  <span className={styles.episodeCode}>{episode.code}</span>
-                  <span className={styles.episodeTitle} title={episode.title}>
-                    {episode.title}
-                  </span>
-                  <span className={styles.episodeMeta}>
-                    {formatDuration(episode.durationSec)} · {episode.assets.length} 个版本
-                    {episode.watched ? ' · 已看完' : ''}
-                  </span>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="xs">
-                      选择版本
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-[16rem]">
-                    <DropdownMenuLabel>{episode.code} 可用版本</DropdownMenuLabel>
-                    {episode.assets.map((asset) => (
-                      <DropdownMenuItem key={asset.id} onClick={() => void play(episode, asset.id)}>
-                        {asset.label} · {asset.codec} · {asset.sizeLabel} · {asset.source}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </li>
-            ))}
-          </ul>
+          <EpisodeStrip episodes={season?.episodes ?? []} seasonId={season?.id ?? ''}
+            label={season?.label ?? '全部剧集'} onPlay={(episode) => void play(episode)} />
 
           {work.related.length > 0 ? (
             <section className={styles.relatedSection} aria-label="相关推荐">
@@ -454,17 +393,6 @@ export function WorkDetailPage() {
   );
 }
 
-function formatDuration(seconds: number): string {
-  if (seconds <= 0) {
-    return '时长未知';
-  }
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes} 分钟`;
-  }
-  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
-}
-
 function sourceLabel(source: string): string {
   return SOURCE_LABELS.find((entry) => entry.value === source)?.label ?? source;
 }
@@ -481,68 +409,6 @@ function pickAssetForSource(
     return undefined;
   }
   return episode.assets.find((asset) => asset.source === source);
-}
-
-/**
- * 分集横向拖动。
- *
- * 只对鼠标拖动做手动滚动（触控板/触屏用原生滚动，不拦截滚轮）；
- * 拖动超过阈值时抑制随后的 click，避免把"拖到下一集"误当成"播放这一集"。
- */
-function useDragScroll(): (node: HTMLUListElement | null) => void {
-  const state = useRef({ active: false, startX: 0, startLeft: 0, moved: 0 });
-
-  return useCallback((node: HTMLUListElement | null) => {
-    if (!node) {
-      return;
-    }
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.pointerType !== 'mouse' || event.button !== 0) {
-        return;
-      }
-      state.current = { active: true, startX: event.clientX, startLeft: node.scrollLeft, moved: 0 };
-      node.dataset.dragging = 'true';
-      node.setPointerCapture(event.pointerId);
-    };
-    const onPointerMove = (event: PointerEvent) => {
-      if (!state.current.active) {
-        return;
-      }
-      const delta = event.clientX - state.current.startX;
-      state.current.moved = Math.max(state.current.moved, Math.abs(delta));
-      node.scrollLeft = state.current.startLeft - delta;
-    };
-    const finish = (event: PointerEvent) => {
-      if (!state.current.active) {
-        return;
-      }
-      state.current.active = false;
-      node.dataset.dragging = 'false';
-      if (node.hasPointerCapture(event.pointerId)) {
-        node.releasePointerCapture(event.pointerId);
-      }
-    };
-    const onClickCapture = (event: MouseEvent) => {
-      if (state.current.moved > 6) {
-        event.preventDefault();
-        event.stopPropagation();
-        state.current.moved = 0;
-      }
-    };
-
-    node.addEventListener('pointerdown', onPointerDown);
-    node.addEventListener('pointermove', onPointerMove);
-    node.addEventListener('pointerup', finish);
-    node.addEventListener('pointercancel', finish);
-    node.addEventListener('click', onClickCapture, true);
-    return () => {
-      node.removeEventListener('pointerdown', onPointerDown);
-      node.removeEventListener('pointermove', onPointerMove);
-      node.removeEventListener('pointerup', finish);
-      node.removeEventListener('pointercancel', finish);
-      node.removeEventListener('click', onClickCapture, true);
-    };
-  }, []);
 }
 
 export type { WorkDetail };

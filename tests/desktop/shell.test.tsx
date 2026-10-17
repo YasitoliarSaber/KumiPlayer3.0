@@ -132,6 +132,18 @@ function renderPage(
 }
 
 describe('公共框架', () => {
+  it('顶栏可以独立收起并通过展开入口恢复', async () => {
+    renderPage(<HomePage />);
+    const shell = screen.getByTestId('main-scroll').closest('[data-titlebar]')!;
+    fireEvent.click(screen.getByRole('button', { name: '收起顶栏', exact: true }));
+    expect(shell.getAttribute('data-titlebar')).toBe('hidden');
+    const restore = screen.getByRole('button', { name: '展开顶栏', exact: true });
+    fireEvent.pointerEnter(restore);
+    expect(shell.getAttribute('data-titlebar-peeking')).toBe('false');
+    fireEvent.click(restore);
+    expect(shell.getAttribute('data-titlebar')).toBe('full');
+    expect(screen.getByRole('button', { name: '收起顶栏', exact: true })).toBeTruthy();
+  });
   it('进入其他页面时清除主滚动区的旧偏移', async () => {
     renderPage(<HomePage />);
     const main = screen.getByTestId('main-scroll');
@@ -321,8 +333,40 @@ describe('作品详情', () => {
     fireEvent.click(playButton);
     await waitFor(() => expect(getDemoState().playback?.workId).toBe(target.id));
 
-    expect(screen.getAllByRole('button', { name: '选择版本' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: '选择版本' })).toBeNull();
+    expect(screen.getByRole('button', { name: '上一组剧集' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '下一组剧集' })).toBeTruthy();
     expect(screen.queryByText('资料状态')).toBeNull();
+  });
+
+  it('继续观看按最近剧集身份播放，进度留在按钮内部', async () => {
+    const target = catalog.works[0]!;
+    const work = await service.getWorkDetail(target.id);
+    const latest = work.seasons.flatMap((season) => season.episodes).at(-1)!;
+    const customService = { ...service, getWorkDetail: async () => ({ ...work,
+      progress: { episodeId: latest.id, episodeCode: latest.code, episodeTitle: latest.title,
+        position: 600, duration: 1200, completed: false, updatedAt: '2026-10-17T10:00:00' },
+    }) };
+    renderPage(<WorkDetailPage />, '/work/:workId', `/work/${target.id}`, createAppQueryClient(), customService);
+    const resume = await screen.findByRole('button', { name: /继续观看.*已看 50%/ });
+    fireEvent.click(resume);
+    await waitFor(() => expect(getDemoState().playback?.episodeId).toBe(latest.id));
+    expect(screen.queryByRole('progressbar', { name: '演示观看进度' })).toBeNull();
+  });
+
+  it('分集两侧箭头滚动原生视口', async () => {
+    const target = catalog.works[0]!;
+    renderPage(<WorkDetailPage />, '/work/:workId', `/work/${target.id}`);
+    const viewport = await screen.findByLabelText(/分集列表，可左右滚动/);
+    Object.defineProperty(viewport, 'scrollWidth', { value: 4000, configurable: true });
+    const scrollBy = vi.fn();
+    viewport.scrollBy = scrollBy;
+    fireEvent.scroll(viewport);
+    const next = screen.getByRole('button', { name: '下一组剧集' });
+    await waitFor(() => expect(next).toHaveProperty('disabled', false));
+    fireEvent.click(next);
+    expect(scrollBy).toHaveBeenCalledWith(expect.objectContaining({ left: expect.any(Number) }));
+    expect(scrollBy.mock.calls[0]![0].left).toBeGreaterThan(0);
   });
 
   it('管理抽屉保留资料、观看状态与匹配入口', async () => {
@@ -367,7 +411,12 @@ describe('媒体管理与任务', () => {
     renderPage(<MediaManagementPage />, '/manage');
     await waitFor(() => expect(screen.getByText('本地动画库')).toBeTruthy());
     expect(screen.getAllByRole('button', { name: '开始扫描' }).length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: '新建导入' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '新建导入' })).toBeNull();
+    const actions = screen.getByRole('group', { name: '媒体管理操作' });
+    expect(within(actions).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      '媒体库维护', '打开任务中心', '导入媒体',
+    ]);
+    expect(screen.getAllByRole('button', { name: '导入媒体', exact: true })).toHaveLength(1);
   });
 
   it('导入流程在阻断问题处理完之前不允许确认', async () => {

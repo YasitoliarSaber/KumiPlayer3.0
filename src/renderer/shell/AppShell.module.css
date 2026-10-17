@@ -11,7 +11,35 @@
   background: var(--app-bg);
   color: var(--text);
   --sidebar-width: var(--sidebar-width-expanded);
+  --titlebar-offset: var(--titlebar-height);
 }
+
+.shell[data-titlebar='hidden'] { grid-template-rows: 0 minmax(0, 1fr); --titlebar-offset: 0px; }
+.shell[data-titlebar='hidden'] .titlebar {
+  position: fixed;
+  inset: 0 0 auto;
+  transform: translateY(-100%);
+  visibility: hidden;
+}
+.shell[data-titlebar='hidden'][data-titlebar-peeking='true'] .titlebar {
+  transform: translateY(0);
+  visibility: visible;
+}
+.restoreTitlebar {
+  position: fixed;
+  z-index: 33;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  width: 48px;
+  height: 18px;
+  border-top: 0;
+  border-radius: 0 0 var(--radius-control) var(--radius-control);
+}
+.titlebarHotzone { position: fixed; inset: 0 0 auto; height: 6px; z-index: 32; }
+.shell[data-titlebar-peeking='true'] .titlebarHotzone { pointer-events: none; }
+.shell[data-titlebar-peeking='true'] .restoreTitlebar { opacity: 0; pointer-events: none; }
+.titlebarChrome { display: flex; align-items: center; margin-left: auto; padding-inline: 8px; border-left: var(--hairline); }
 
 .shell[data-sidebar='collapsed'] {
   --sidebar-width: var(--sidebar-width-collapsed);
@@ -26,6 +54,9 @@
 }
 
 .titlebar {
+  position: relative;
+  z-index: 30;
+  height: var(--titlebar-height);
   grid-area: titlebar;
   display: flex;
   align-items: center;
@@ -66,7 +97,6 @@
 .windowControls {
   display: flex;
   align-items: center;
-  margin-left: auto;
 }
 
 .windowButton {
@@ -365,6 +395,8 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .content {
