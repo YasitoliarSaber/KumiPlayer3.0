@@ -276,7 +276,7 @@ export function WorkDetailPage() {
 
   const isRecentEpisode = Boolean(resume && work.progress && resume.id === work.progress.episodeId);
   const resumePosition = isRecentEpisode ? work.progress!.position : resume?.position ?? 0;
-  const resumeDuration = isRecentEpisode ? work.progress!.duration : resume?.durationSec ?? 0;
+  const resumeDuration = isRecentEpisode && work.progress!.duration > 0 ? work.progress!.duration : resume?.durationSec ?? 0;
   const resumePercent = resumeDuration > 0 ? Math.min(100, Math.max(0, Math.round(resumePosition / resumeDuration * 100))) : 0;
 
   return (
@@ -284,7 +284,7 @@ export function WorkDetailPage() {
       <div className={styles.backdrop} aria-hidden="true">
         <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt="" loading="eager" className={styles.heroBackdrop} />
       </div>
-      <WorkHero key={work.id} work={work} resume={resume} resumePosition={resumePosition} resumePercent={resumePercent}
+      <WorkHero key={work.id} work={work} resume={resume} resumePosition={resumePosition} resumeDuration={resumeDuration} resumePercent={resumePercent}
         busy={busy} favoriteBusy={togglingFavorite} preferredSource={preferredSource} notice={notice}
         onBack={() => navigate(-1)} onSourceChange={setPreferredSource} onPlay={() => resume && void play(resume)}
         onFavorite={() => {

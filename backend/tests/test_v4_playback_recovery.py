@@ -350,6 +350,28 @@ def test_stop_checkpoints_cached_progress_before_sending_mpv_quit(tmp_path, monk
     assert events[:2] == ["checkpoint", "quit"]
 
 
+def test_replaying_current_episode_reads_resume_after_stop_checkpoint(tmp_path, monkeypatch):
+    """降低兜底频率后，重新点击当前集仍须使用刚结算的新位置。"""
+
+    from app.media_v4.playback import session as playback
+    from app.media_v4.playback.store import V4PlaybackStore
+
+    database = _confirmed_three_episode_work(tmp_path)
+    with database.connect() as conn:
+        binding = conn.execute("SELECT work_id,episode_id,asset_id FROM revision_bindings LIMIT 1").fetchone()
+    manager = playback.V4PlaybackManager(database, session_dir=tmp_path / "sessions")
+    store = V4PlaybackStore(database)
+    ids = (binding["work_id"], binding["episode_id"], binding["asset_id"])
+    store.save_progress(*ids, 10.0, 1000.0, False)
+    monkeypatch.setattr(manager, "stop", lambda: store.save_progress(*ids, 420.0, 1000.0, False))
+    monkeypatch.setattr(playback, "validate_playback_locator", lambda _path: (True, ""))
+    launches = []
+    monkeypatch.setattr(playback, "start_mpv", lambda *args, **kwargs: (launches.append(kwargs) or SimpleNamespace(pid=123)))
+    monkeypatch.setattr(playback.threading.Thread, "start", lambda self: None)
+    manager.play(*ids)
+    assert launches[0]["start_position"] == 420.0
+
+
 def test_progress_event_path_must_match_a_unique_v4_playlist_asset():
     """MPV 事件不能只凭 playlist-pos 写入另一集的播放记录。"""
 
@@ -543,7 +565,7 @@ class _MonitorProcess:
         return 0
 
 
-def _run_monitor(events, *, step=0.0, checkpoint_results=()):
+def _run_monitor(events, *, step=0.0, checkpoint_results=(), forced=()):
     """用真实 _monitor 跑一串进度事件；时钟、持久化与同步均为替身。"""
 
     import threading
@@ -583,8 +605,9 @@ def _run_monitor(events, *, step=0.0, checkpoint_results=()):
         return clock["t"]
 
     def generator(_server, *, should_stop=None):
-        for position, duration in events:
-            yield MpvProgressEvent(position=position, duration=duration, playlist_position=0)
+        for index, (position, duration) in enumerate(events):
+            yield MpvProgressEvent(position=position, duration=duration, playlist_position=0,
+                                   force_checkpoint=index in forced)
             clock["t"] += step
         process.ended = True
 
@@ -608,17 +631,30 @@ def test_completion_threshold_does_not_amplify_writes_at_same_clock():
 
 
 def test_completion_is_not_retriggered_when_position_falls_below_threshold():
-    """回到 89% 再进 91% 不得重复触发完成写入；只有 5 秒节流采样可以再写。"""
+    """回到 89% 再进 91% 不得重复触发完成写入；只有低频兜底可以再写。"""
 
     events = [(91.0, 100.0), (89.0, 100.0)] + [(91.0, 100.0)] * 2
-    writes, syncs = _run_monitor(events, step=2.0)
+    writes, syncs = _run_monitor(events, step=30.0)
     completed_writes = [item for item in writes if item[3]]
-    # 第二条 completed 写入来自 5 秒节流（t=106，距上次保存恰好 5 秒）——
+    # 第二条 completed 写入来自 60 秒兜底（t=160）——
     # 它只是位置采样，不得再触发完成同步。
     assert len(completed_writes) == 2, writes
     assert len(syncs) == 1, f"完成同步只应有 1 次，实际 {len(syncs)}"
-    # 89%（t=102）与第二次 91%（t=104）都不该写：既不是完成边沿，也未到 5 秒。
+    # 89%（t=130）未到窗口；第三次 91%（t=190）不重复触发完成边沿。
     assert [item[2] for item in writes] == [91.0, 91.0], writes
+
+
+def test_continuous_playback_only_saves_a_minute_safety_checkpoint():
+    """五分钟每秒内存事件只产生五次普通保存，且不制造完成同步。"""
+
+    writes, syncs = _run_monitor([(float(i + 1), 1000.0) for i in range(300)], step=1.0)
+    assert [item[2] for item in writes] == [1.0, 61.0, 121.0, 181.0, 241.0]
+    assert syncs == []
+
+
+def test_pause_or_seek_checkpoint_does_not_wait_for_minute_safety_window():
+    writes, _ = _run_monitor([(float(i + 10), 1000.0) for i in range(4)], step=1.0, forced=(1, 3))
+    assert [item[2] for item in writes] == [10.0, 11.0, 13.0]
 
 
 def test_completion_failure_is_retried_and_not_marked_saved():

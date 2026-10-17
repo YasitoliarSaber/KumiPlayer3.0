@@ -14,6 +14,7 @@ import { RecoveryBoundary } from './recovery-boundary';
 import { appRouter } from './router';
 import { applyMaterialToDocument, applyThemeToDocument, resolveTheme } from './theme';
 import { AppearanceController } from './appearance-controller';
+import { PlaybackRefresh } from '@/features/playback/PlaybackRefresh';
 
 export function AppRoot() {
   const [queryClient] = useState(createAppQueryClient);
@@ -42,6 +43,7 @@ export function AppRoot() {
     <QueryClientProvider client={queryClient}>
       <AppearanceController />
       <ServiceProvider>
+        <PlaybackRefresh />
         <RecoveryBoundary>
           <RouterProvider router={appRouter} />
         </RecoveryBoundary>

@@ -15,6 +15,7 @@ interface WorkHeroProps {
   readonly work: WorkDetail;
   readonly resume: EpisodeEntry | null;
   readonly resumePosition: number;
+  readonly resumeDuration: number;
   readonly resumePercent: number;
   readonly busy: boolean;
   readonly favoriteBusy: boolean;
@@ -29,7 +30,7 @@ interface WorkHeroProps {
 
 const sourceLabel = (source: string) => SOURCE_LABELS.find((entry) => entry.value === source)?.label ?? source;
 
-export function WorkHero({ work, resume, resumePosition, resumePercent, busy, favoriteBusy,
+export function WorkHero({ work, resume, resumePosition, resumeDuration, resumePercent, busy, favoriteBusy,
   preferredSource, notice, onBack, onSourceChange, onPlay, onFavorite, children }: WorkHeroProps) {
   const [plotExpanded, setPlotExpanded] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
@@ -37,6 +38,10 @@ export function WorkHero({ work, resume, resumePosition, resumePercent, busy, fa
   const hasLogo = Boolean(work.artwork.clearlogo && !logoFailed);
   const source = preferredSource || work.sources[0] || '';
   const episodeLabel = resume ? [resume.code, resume.title].filter(Boolean).join(' · ') : '';
+  const timeSummary = resumeDuration > 0
+    ? `剩余 ${formatPlaybackTime(Math.max(0, resumeDuration - resumePosition))} · 总长 ${formatPlaybackTime(resumeDuration)}`
+    : '时长待获取';
+  const progressLabel = resumeDuration > 0 ? `${resumePercent}%` : '进度待获取';
 
   return <header className={styles.hero}>
     <Button variant="ghost" size="sm" className={styles.heroBack} onClick={onBack}>
@@ -85,7 +90,7 @@ export function WorkHero({ work, resume, resumePosition, resumePercent, busy, fa
           onClick={() => setPlotExpanded((expanded) => !expanded)}>{work.plot}</button> : null}
         <div className={styles.heroActions}>
           <Button variant="outline" className={styles.continueButton} onClick={onPlay} disabled={!resume} loading={busy}
-            title={resume ? `${episodeLabel}${resumePercent > 0 ? `，已观看 ${resumePercent}%` : ''}` : undefined}>
+            aria-label={resume ? `${resumePosition > 0 ? '继续观看' : '播放'} ${episodeLabel}，${progressLabel}，${timeSummary}` : '暂无可播放剧集'}>
             {resumePosition > 0 ? <span className={styles.continueFill} style={{ width: `${resumePercent}%` }}
               role="progressbar" aria-label="观看进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={resumePercent} /> : null}
             {!busy ? <Play className={styles.continueIcon} size={20} fill="currentColor" /> : null}
@@ -95,7 +100,10 @@ export function WorkHero({ work, resume, resumePosition, resumePercent, busy, fa
             </span>
             <span className={styles.continueHover} aria-hidden="true">
               <span>{episodeLabel}</span>
-              {resumePercent > 0 ? <b className={styles.continuePercent}>{resumePercent}%</b> : null}
+              <span className={styles.continueStats}>
+                <b className={styles.continuePercent}>{progressLabel}</b>
+                <span>{timeSummary}</span>
+              </span>
             </span>
           </Button>
           <Button variant="outline" size="icon" className={styles.onArtworkButton} loading={favoriteBusy}
@@ -109,4 +117,12 @@ export function WorkHero({ work, resume, resumePosition, resumePercent, busy, fa
       </div>
     </section>
   </header>;
+}
+
+function formatPlaybackTime(seconds: number): string {
+  const value = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor(value / 60) % 60;
+  const rest = String(value % 60).padStart(2, '0');
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${String(minutes).padStart(2, '0')}:${rest}`;
 }

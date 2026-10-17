@@ -880,17 +880,35 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
       const dto = await detailDto(workId);
       const relatedIds = [...new Set((dto.related_works ?? []).map((entry) => str(asRecord(entry).work_id)))]
         .filter((id) => id !== '' && id !== workId).slice(0, 6);
-      const [history, related] = await Promise.all([
+      const [history, related, live] = await Promise.all([
         transport.call<unknown>('playback.history', { query: { work_id: workId, limit: 1 } }),
         relatedIds.length > 0
           ? transport.call<unknown>('library.cards', { query: { work_ids: relatedIds.join(',') } })
           : Promise.resolve(null),
+        // 只读后端内存快照，不发 MPV IPC 命令，也不触发进度写入。
+        transport.call<unknown>('playback.status', {}),
       ]);
       let progress: ProgressSnapshot | null = null;
       if (history.ok) {
         const items = asRecord(history.data).items;
         if (Array.isArray(items) && items.length > 0) {
           progress = toProgressSnapshot(asRecord(items[0]));
+        }
+      }
+      const state = live.ok ? asRecord(live.data) : {};
+      const active = asRecord(state.session);
+      if (state.status === 'playing' && active.work_id === workId && str(active.episode_id)) {
+        const episode = (dto.episodes ?? []).map(asRecord).find((entry) => entry.episode_id === active.episode_id);
+        if (episode || active.episode_id === `movie:${workId}`) {
+          progress = toProgressSnapshot({
+            ...active,
+            duration: num(active.duration) > 0 ? num(active.duration)
+              : progress && progress.episodeId === active.episode_id ? progress.duration : num(episode?.runtime) * 60,
+            episode_number: episode?.episode_number,
+            episode_title: episode?.title,
+            // 播放中始终展示当前集；退出后再按已保存的完成状态选择下一集。
+            completed: false,
+          });
         }
       }
       const cached = new Map<string, WorkSummary>();

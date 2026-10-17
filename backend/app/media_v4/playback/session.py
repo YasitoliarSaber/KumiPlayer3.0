@@ -33,6 +33,10 @@ from app.playback.mpv_ipc import (
 
 LOGGER = logging.getLogger(__name__)
 
+# 关闭、切集、暂停、seek 与完成边沿即时保存；持续播放只低频兜底，
+# 防止进程异常退出丢掉整场进度，不再每五秒写 SQLite。
+PROGRESS_CHECKPOINT_INTERVAL_SECONDS = 60.0
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
@@ -117,6 +121,10 @@ class V4PlaybackManager:
         playlist_locators = [item["playback_locator"] for item in playlist]
         session_id = f"sess_{uuid.uuid4().hex[:16]}"
         ipc_server = make_ipc_server_name(session_id)
+        title = self._display_title(asset)
+        # 新请求通过路径和身份检查后才结束旧会话，坏映射不能打断正在播放的媒体。
+        # 先结算旧会话再读取续播位置，不能读取一分钟兜底之前的旧检查点。
+        self.stop()
         try:
             progress = V4PlaybackStore(self.database).get_progress(episode_id, asset["asset_id"])
         except KeyError:
@@ -124,9 +132,6 @@ class V4PlaybackManager:
         start_position = 0.0
         if progress and not progress.get("completed"):
             start_position = float(progress.get("position") or 0)
-        title = self._display_title(asset)
-        # 新请求通过路径和身份检查后才结束旧会话，坏映射不能打断正在播放的媒体。
-        self.stop()
         process = start_mpv(
             locator,
             playlist_paths=playlist_locators,
@@ -728,7 +733,7 @@ class V4PlaybackManager:
         next_checkpoint_retry_at = 0.0
         # 已完成边沿按当前 episode_id+asset_id 记账：只表示“这一次完成已经成功
         # 落盘过”。历史缺陷是把“已经完成”的持续状态当作“刚刚完成”的事件，于是
-        # 达到完成阈值（默认 90%，可配置）后每条进度事件都会绕过 5 秒节流写库（末尾写放大）。
+        # 达到完成阈值后每条事件都绕过普通节流写库（末尾写放大）。
         completed_assets: dict[tuple[str, str], bool] = {}
         reconnect_delay = 0.25
         quitting = False
@@ -771,7 +776,7 @@ class V4PlaybackManager:
                             session["position"] = 0.0
                             session["duration"] = 0.0
                             # 跨集后重置节流时钟：新集的第一个采样应立即落盘，
-                            # 不能因为上一集刚写过而被 5 秒窗口吃掉。
+                            # 不能因为上一集刚写过而被普通保存窗口吃掉。
                             last_checkpoint_at = 0.0
                             next_checkpoint_retry_at = 0.0
                             set_mpv_playback_title(
@@ -785,7 +790,7 @@ class V4PlaybackManager:
                         active_episode_id = str(active_asset.get("episode_id") or session["episode_id"])
                         asset_key = (active_episode_id, str(active_asset["asset_id"]))
                         # 完成边沿：只在“本资产还没成功完成过”时算一次事件；
-                        # 之后回到 89% 再进 91% 不再触发完成写入，但普通 5 秒
+                        # 之后回到 89% 再进 91% 不再触发完成写入，但普通低频
                         # 采样照常保存位置。
                         completion_crossing = completed and not completed_assets.get(asset_key, False)
                         current_time = time.monotonic()
@@ -793,7 +798,7 @@ class V4PlaybackManager:
                             active_episode_id != last_checkpoint_episode
                             or event.force_checkpoint
                             or completion_crossing
-                            or current_time - last_checkpoint_at >= 5.0
+                            or current_time - last_checkpoint_at >= PROGRESS_CHECKPOINT_INTERVAL_SECONDS
                         ) and current_time >= next_checkpoint_retry_at:
                             saved = self._checkpoint_progress(
                                 session,
@@ -809,7 +814,7 @@ class V4PlaybackManager:
                                 next_checkpoint_retry_at = 0.0
                                 if completion_crossing:
                                     # 只有“刚刚完成”的边沿才记帐并投递同步：
-                                    # 达到完成阈值之后的 5 秒普通采样不再重复投递。
+                                    # 达到完成阈值之后的普通采样不再重复投递。
                                     # 持久化失败时不会走到这里，由 1 秒有界重试继续。
                                     completed_assets[asset_key] = True
                                     self._schedule_completion_sync(session, active_asset)

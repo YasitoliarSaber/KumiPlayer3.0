@@ -67,6 +67,8 @@ export function useWorkDetail(workId: string): UseQueryResult<WorkDetail, Error>
     queryKey: demoQueryKeys.detail(workId),
     enabled: workId.length > 0,
     queryFn: ({ signal }) => service.getWorkDetail(workId, signal),
+    // 切回作品时取一次最新进度；不在详情页启动周期轮询。
+    refetchOnMount: 'always',
   });
 }
 
