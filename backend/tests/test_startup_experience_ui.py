@@ -4,10 +4,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_startup_uses_non_blocking_brand_motion_without_visible_config_copy():
-    document = (ROOT / "index.html").read_text(encoding="utf-8")
-    app = (ROOT / "src/App.tsx").read_text(encoding="utf-8")
-    component = (ROOT / "src/components/shell/StartupSplash.tsx").read_text(encoding="utf-8")
-    css = (ROOT / "src/index.css").read_text(encoding="utf-8")
+    document = (ROOT / "旧前端" / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "旧前端" / "src/App.tsx").read_text(encoding="utf-8")
+    component = (ROOT / "旧前端" / "src/components/shell/StartupSplash.tsx").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src/index.css").read_text(encoding="utf-8")
 
     assert "正在读取本机配置" not in app
     assert document.index('id="kumi-boot-splash"') < document.index('id="root"')
@@ -29,8 +29,8 @@ def test_startup_uses_non_blocking_brand_motion_without_visible_config_copy():
 
 
 def test_startup_motion_respects_reduced_motion_preferences():
-    document = (ROOT / "index.html").read_text(encoding="utf-8")
-    css = (ROOT / "src/index.css").read_text(encoding="utf-8")
+    document = (ROOT / "旧前端" / "index.html").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src/index.css").read_text(encoding="utf-8")
 
     assert "@media (prefers-reduced-motion: reduce)" in document
     assert "html[data-motion='reduced']" in document
@@ -39,7 +39,7 @@ def test_startup_motion_respects_reduced_motion_preferences():
 
 
 def test_startup_first_frame_matches_all_three_appearance_presets():
-    document = (ROOT / "index.html").read_text(encoding="utf-8")
+    document = (ROOT / "旧前端" / "index.html").read_text(encoding="utf-8")
 
     assert "html[data-theme='fluent']" in document
     assert "html[data-theme='cinema']" in document

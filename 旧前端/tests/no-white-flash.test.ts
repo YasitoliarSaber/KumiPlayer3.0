@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 test('桌面 WebView 和 HTML 启动层使用同一非白色首帧背景', () => {
-  const config = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
+  const config = JSON.parse(readFileSync(new URL('../../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
   assert.equal(config.app.windows[0].backgroundColor, '#eef3f9');

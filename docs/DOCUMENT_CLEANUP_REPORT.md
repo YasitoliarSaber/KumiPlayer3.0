@@ -4,7 +4,7 @@
 
 - 分支 `codex/backend-v4`，清理前 HEAD `fc4b7ed2ee004e15d8ff404b0f3b82e7b01983a1`。
 - 初始 `git status --short` 只有 `?? App.jsx`。先保守暂留，完整核对正文后确认它是废弃蓝图的评估页，与本任务直接相关，追加清单后按用户授权删除；无其他用户改动。
-- 当前入口为 `index.html` 的 `/src/main.tsx`，后者导入 `src/App.tsx`；tsconfig 仅包含 src。旧蓝图声明未实施，Git 历史没有新前端工程落地提交。所有受跟踪测试、源码、脚本和本地 CI 均无对 frontend-design、design-input、DESIGN.md 的运行依赖。
+- 当前入口为 `index.html` 的 `/旧前端/src/main.tsx`，后者导入 `旧前端/src/App.tsx`；tsconfig 仅包含 src。旧蓝图声明未实施，Git 历史没有新前端工程落地提交。所有受跟踪测试、源码、脚本和本地 CI 均无对 frontend-design、design-input、DESIGN.md 的运行依赖。
 - 仅清理无用的前端规划和开发约束。不修改 Python、SQLite schema、识别、MPV、数据、配置、凭据、缓存及依赖，不执行 Electron 迁移。
 
 ## A 类删除清单（删除前登记）
@@ -64,7 +64,7 @@
 
 | 文件 | 引用与疑点 | 处置 |
 |---|---|---|
-| `src/api/errorLog.ts` | 未在当前 UI 导入，但对接真实 `/api/error-log` 后端，后端有 `test_error_log_api.py` | 不能确认属于旧前端重构，保留，不需要阻塞本次清理 |
+| `旧前端/src/api/errorLog.ts` | 未在当前 UI 导入，但对接真实 `/api/error-log` 后端，后端有 `test_error_log_api.py` | 不能确认属于旧前端重构，保留，不需要阻塞本次清理 |
 | `.context/` 其他预览、性能实验、后端基线及 output/generated-images | 主要服务已投入使用的页面修复或其他任务，不能证明来自本次废弃规划 | 不作泛化清空；含旧指令的交接文档标注已退役 |
 
 ## 开发指导更新

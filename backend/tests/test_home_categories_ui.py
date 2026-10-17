@@ -4,7 +4,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_home_hides_empty_category_bands():
-    source = (ROOT / "src" / "pages" / "HomePage.tsx").read_text(encoding="utf-8")
+    source = (ROOT / "旧前端" / "src" / "pages" / "HomePage.tsx").read_text(encoding="utf-8")
 
     assert "if (categoryWorks.length === 0) return null" in source
     assert 'className="home-category-section"' in source
@@ -14,8 +14,8 @@ def test_home_hides_empty_category_bands():
 
 
 def test_home_library_empty_state_remains_accessible_and_theme_driven():
-    source = (ROOT / "src" / "pages" / "HomePage.tsx").read_text(encoding="utf-8")
-    styles = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
+    source = (ROOT / "旧前端" / "src" / "pages" / "HomePage.tsx").read_text(encoding="utf-8")
+    styles = (ROOT / "旧前端" / "src" / "index.css").read_text(encoding="utf-8")
 
     assert '<button type="button" className="home-library-empty-action" onClick={goManage}>' in source
     assert "还没有作品" in source
@@ -28,8 +28,8 @@ def test_home_library_empty_state_remains_accessible_and_theme_driven():
 
 
 def test_home_keeps_usable_library_content_after_a_partial_refresh_failure():
-    store = (ROOT / "src" / "stores" / "library.ts").read_text(encoding="utf-8")
-    home = (ROOT / "src" / "pages" / "HomePage.tsx").read_text(encoding="utf-8")
+    store = (ROOT / "旧前端" / "src" / "stores" / "library.ts").read_text(encoding="utf-8")
+    home = (ROOT / "旧前端" / "src" / "pages" / "HomePage.tsx").read_text(encoding="utf-8")
 
     assert "const libraryRequest = libraryApi.getLibrary" in store
     assert "const historyRequest = playbackApi.getHistory" in store
@@ -43,10 +43,10 @@ def test_home_keeps_usable_library_content_after_a_partial_refresh_failure():
 
 def test_library_pages_keep_cached_content_during_refresh_failures():
     pages = [
-        ROOT / "src" / "pages" / "CategoryPage.tsx",
-        ROOT / "src" / "pages" / "FavoritesPage.tsx",
-        ROOT / "src" / "pages" / "RecentPage.tsx",
-        ROOT / "src" / "pages" / "SearchPage.tsx",
+        ROOT / "旧前端" / "src" / "pages" / "CategoryPage.tsx",
+        ROOT / "旧前端" / "src" / "pages" / "FavoritesPage.tsx",
+        ROOT / "旧前端" / "src" / "pages" / "RecentPage.tsx",
+        ROOT / "旧前端" / "src" / "pages" / "SearchPage.tsx",
     ]
 
     for page in pages:

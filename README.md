@@ -13,7 +13,7 @@ KumiPlayer 是一款面向 Windows 的本地 / 网盘媒体库与 MPV 播放应�
 - **网页优先**：双击「KumiPlayer 网页开发版」或运行 `npm run dev`（等价 `dev:web`），启动真实 Python 后端并打开同一网页应用，默认 `http://localhost:5273/`。后续 UI 优化只维护这个 Renderer；下载的原型不再作为另一套演示产品维护。`?demo=1` / `dev:web:mock` 仅用于隔离测试，不访问真实库，不作为日常开发入口。
 - **UI 唯一基准**：[前端 UI 基准](docs/01_项目基准/前端UI基准.md) 保存精修原型的有效 token、组件、公共布局和用户最新修订；后续增减功能先核对并维护这一个文件。
 - **组件库**：新前端使用 shadcn/ui + Radix UI + Tailwind CSS（`@mantine/*` 已从依赖中移除）；影视专用组件（海报卡、背景橱窗、剧集缩略图、季集与版本）由项目自有实现。样式唯一入口为 `src/renderer/styles/tailwind.css`；全局基础样式只能经 `layer(base)` 导入，控件使用共享组件，页面布局使用 CSS Modules，禁止从脚本入口另行导入无层级 reset。主题变量在同一入口定义，构建与测试通过仍需补真实浏览器的外观和布局检查。
-- **旧前端已归档**：本地 Git 标签 `legacy-tauri-frontend`（指向 `e98ad0b`）是旧 Tauri/Fluent 活动入口的最后状态，可 `git switch --detach legacy-tauri-frontend` 或从该标签取出文件；旧前端源码仍在 `src/` 中，但默认入口已让位给网页版，仅保留 `npm run dev:legacy`（Vite 1420）用于对照。迁移期两者共用同一份后端与数据边界。
+- **旧前端已归档（2026-10-17）**：旧 Tauri/Fluent 前端的 `src/` 源码、入口 `index.html` 与其测试已按原结构移入根目录 `旧前端/`，不再参与新前端构建；本地 Git 标签 `legacy-tauri-frontend`（指向 `e98ad0b`）仍可取出该活动入口的最后状态。旧前端依旧是既有可运行 Tauri 应用的界面实现，因此 `npm run build`（以 `旧前端/` 为 Vite root，产物仍写根 `dist/`）、`npm test` 与 `dev:legacy`（Vite 1420）继续指向它；新前端使用 `npm run dev`、`build:web`、`build:desktop`、`test:desktop`、`typecheck:desktop`。三者共用同一份后端与数据边界，入口互不覆盖。
 - Electron 承载仍属"已验证候选、未正式锁定"：启动/鉴权就绪/退出回收、具名桥接、严格 CSP 已有隔离验证证据；Windows 打包、性能预算、正式切换与安装矩阵仍待后续关卡（本轮不做 EXE/安装包）。
 - Python、SQLite V4、识别、刮削、来源与 MPV 能力及数据保护规则继续有效；源码与真实业务契约优先。事实入口为 README、docs/PROJECT.md 和 docs/current/README.md。
 
@@ -204,8 +204,8 @@ build_installer.bat    :: 完整安装包 → release\KumiPlayer-Setup.exe
 
 ```bash
 npm ci                 # 构建后 node_modules 会被清理，运行前端命令前先恢复依赖
-npm test               # 契约测试（node --test）+ 组件测试（vitest）
-npm run build          # tsc -b && vite build
+npm test               # 已归档旧前端的契约测试（node --test 旧前端/tests）+ 组件测试（vitest）
+npm run build          # 已归档旧前端构建（tsc -b && vite build → dist/，供 src-tauri 打包）
 npm run check:versions # 各层版本一致性
 
 # 新前端（网页优先；与上面的旧前端构建互不影响）
@@ -246,7 +246,8 @@ cargo clippy --locked --all-targets -- -D warnings
 - [`README.md`](README.md)：入口文档（本文件）
 - [`mpv/README.md`](mpv/README.md)：内置 MPV 的分层、注入契约、源码↔安装包映射与许可证材料现状（MPV 相关唯一事实来源）
 - [`scripts/README.md`](scripts/README.md)：构建、验证、只读审计与修复脚本说明
-- [`src/components/ui/README.md`](src/components/ui/README.md)：当前前端共享组件说明（不作为 3.0 设计规范）
+- [`旧前端/src/components/ui/README.md`](旧前端/src/components/ui/README.md)：已归档旧前端的共享组件说明（不作为 3.0 设计规范）
+- [`旧前端/`](旧前端/)：已归档的旧 Tauri/Fluent 前端（源码、入口 HTML 与测试保持原结构）
 - [`项目经验教训/项目建设与性能优化规范.md`](项目经验教训/项目建设与性能优化规范.md)：开发与性能优化的实施规范
 - [`docs/review/`](docs/review/)：对外审阅用的根因与合规分析文档
 - [`docs/current/README.md`](docs/current/README.md)：现有系统事实快照，不约束新前端设计

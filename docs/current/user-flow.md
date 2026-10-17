@@ -3,7 +3,7 @@
 > 适用范围：现有系统的事实快照；不作为 3.0 的页面、组件、视觉或架构约束。源码及用户最新指令优先。
 
 > 记录日期：2026-10-14
-> 事实来源：`src/App.tsx`、`src/pages/`、`src/api/`、`backend/app/api/`、`backend/app/media_v4/`、`docs/PROJECT.md`、`docs/USER_GUIDE.md`
+> 事实来源：`旧前端/src/App.tsx`、`旧前端/src/pages/`、`旧前端/src/api/`、`backend/app/api/`、`backend/app/media_v4/`、`docs/PROJECT.md`、`docs/USER_GUIDE.md`
 > 定位：回答「用户会按什么顺序做事、每步等待什么、失败后回到哪里」。用于新前端的流程完整性与状态覆盖面设计，不描述具体界面形态。
 
 ## 1. 新用户流程：从安装到第一次播放
@@ -29,7 +29,7 @@
 | 步骤 | 用户需要知道什么 | 现状依据 |
 |---|---|---|
 | 启动等待 | 冷启动最多重试 30 秒；失败进入恢复页，可选择重新加载 / 重启后端 / 打开日志 / 导出脱敏诊断 | `docs/PROJECT.md` 第 10 节 |
-| 首次引导可跳过 | 点击任意导航或开始搜索即视为「稍后设置」；跳过会异步通知后端，保存失败时提示下次启动可能再次显示 | `src/App.tsx:52-75` |
+| 首次引导可跳过 | 点击任意导航或开始搜索即视为「稍后设置」；跳过会异步通知后端，保存失败时提示下次启动可能再次显示 | `旧前端/src/App.tsx:52-75` |
 | 首次引导内容 | 不要求镜像目录；本地来源、MPV、凭据均可后补 | `docs/PROJECT.md` 第 8 节 |
 | 空库状态 | 空库与「首次未发布」「后台更新中」是三种不同状态，需要区分 | `docs/PROJECT.md` 第 7 节（`generation_id` 与 `updating`） |
 
@@ -47,7 +47,7 @@
 
 | 环节 | 行为细节 | 依据 |
 |---|---|---|
-| 自动增量 | 只刷新受影响卡片与当前详情；失败不推进游标，下轮重试 | `src/App.tsx:126-176` |
+| 自动增量 | 只刷新受影响卡片与当前详情；失败不推进游标，下轮重试 | `旧前端/src/App.tsx:126-176` |
 | 继续播放 | 从最近观看条目或详情页继续；进度按原 Episode / Asset 身份保存 | `docs/PROJECT.md` 第 7 节 |
 | 播放等待 | 只做路径与语法检查；自动连播不对后续成员逐集访问挂载盘 | `docs/current/playback-flow.md` |
 | 幂等 | 不移动、不重命名、不删除用户的真实媒体文件 | `docs/PROJECT.md` 第 1 节 |
@@ -103,13 +103,13 @@
 
 | 场景 | 用户体验要求 | 依据 |
 |---|---|---|
-| 扫描中 | 显示进度与日志；可离开页面，来源卡在扫描开始时就出现 | `src/pages/MediaManagementPage.tsx:822` 注释 |
+| 扫描中 | 显示进度与日志；可离开页面，来源卡在扫描开始时就出现 | `旧前端/src/pages/MediaManagementPage.tsx:822` 注释 |
 | 长时间作业 | 长任务属于后端 TaskRecord，关闭弹窗或切换页面不取消任务 | `docs/PROJECT.md` 第 8 节 |
-| 离开后回来 | 可从来源卡或「查看进度 / 上次导入」恢复进入 execute 阶段 | `src/pages/MediaManagementPage.tsx:520` |
+| 离开后回来 | 可从来源卡或「查看进度 / 上次导入」恢复进入 execute 阶段 | `旧前端/src/pages/MediaManagementPage.tsx:520` |
 | 待处理项 | 低置信度、多解、路径不可达必须先处理，不能直接确认为已确认媒体 | `docs/PROJECT.md` 第 1、5 节 |
 | 范围冲突 | 返回明确的 409，并保持事务回滚，不发布孤立检查点 | `docs/PROJECT.md` 第 6 节 |
 | 发布前 | 显示「图片准备中 / 等待发布」，不发缺图占位卡 | `docs/PROJECT.md` 第 7 节 |
-| 失败 | 显示可读文案，可重试；技术细节不直接暴露 | `src/pages/MediaManagementPage.tsx:114` |
+| 失败 | 显示可读文案，可重试；技术细节不直接暴露 | `旧前端/src/pages/MediaManagementPage.tsx:114` |
 
 ## 4. 管理与维护流程
 
@@ -161,14 +161,14 @@
 | 打开文件夹 | 按作品 / 剧集及可选 Asset 身份读取已保存本地路径（ID-only 接口），镜像文件夹入口已退役 |
 | 追加剧集 | 当前不可用，界面不显示入口 |
 
-依据：`docs/PROJECT.md` 第 6 节表格、`src/api/workDetailV4Compatibility.ts:5-9`。
+依据：`docs/PROJECT.md` 第 6 节表格、`旧前端/src/api/workDetailV4Compatibility.ts:5-9`。
 
 ## 7. 故障与恢复流程
 
 | 故障 | 用户可见路径 | 依据 |
 |---|---|---|
-| 后端启动失败 / React 崩溃 | 统一恢复页：重新加载 / 重启后端 / 打开日志 / 导出脱敏诊断 | `docs/PROJECT.md` 第 10 节、`src/components/errors/` |
-| 桌面壳与后端失联 | WebSocket 心跳兜底 + 健康轮询 + 重连后刷新 | `src/stores/connection.ts`、`src/api/heartbeat.ts` |
+| 后端启动失败 / React 崩溃 | 统一恢复页：重新加载 / 重启后端 / 打开日志 / 导出脱敏诊断 | `docs/PROJECT.md` 第 10 节、`旧前端/src/components/errors/` |
+| 桌面壳与后端失联 | WebSocket 心跳兜底 + 健康轮询 + 重连后刷新 | `旧前端/src/stores/connection.ts`、`旧前端/src/api/heartbeat.ts` |
 | TMDB 图片下载失败 | 设置与首次引导提供图片检测与一键修复；作品进度显示实际失败信息；下载复检成功后重排失败资源 | `docs/PROJECT.md` 第 12 节 |
 | 数据库版本高于程序 | 拒绝打开并报错，不做静默降级 | `docs/PROJECT.md` 第 9 节 |
 | 网络不可用 | 导入与刮削失败如实报错，离线、超时、无样本不得冒充验证成功 | `docs/PROJECT.md` 第 5 节 |
@@ -177,6 +177,6 @@
 
 1. **每个长流程都必须可离开、可恢复**：扫描、作业、图片准备都在后端，页面只消费状态。
 2. **必须区分「未发布」与「空」**：首次未发布、已发布空库、后台更新中是三种状态。
-3. **必须区分「来源」「内容来源」「导入方式」**：本地 / 115 / 百度 / 夸克是内容来源，本地目录 / 目录树 TXT / OpenList / 混合是导入方式，两者不得混为一谈（`src/pages/MediaManagementPage.tsx:1354-1355` 注释）。
+3. **必须区分「来源」「内容来源」「导入方式」**：本地 / 115 / 百度 / 夸克是内容来源，本地目录 / 目录树 TXT / OpenList / 混合是导入方式，两者不得混为一谈（`旧前端/src/pages/MediaManagementPage.tsx:1354-1355` 注释）。
 4. **错误必须可读且可操作**：不把 SQLite / traceback / HTTP 状态码直接呈现给用户。
 5. **不得引导用户做后端不支持的事**：以 `docs/current/api-reference.md` 和当前 OpenAPI 的实际能力为准。

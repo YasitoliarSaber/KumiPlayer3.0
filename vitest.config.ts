@@ -16,12 +16,13 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: [
-      'tests/components/**/*.test.tsx',
-      'tests/lib/**/*.test.ts',
+      // 已归档的旧前端测试（源码在 旧前端/）与新前端测试（tests/desktop）共用同一套配置。
+      '旧前端/tests/components/**/*.test.tsx',
+      '旧前端/tests/lib/**/*.test.ts',
       'tests/desktop/**/*.test.ts',
       'tests/desktop/**/*.test.tsx',
     ],
-    setupFiles: ['./tests/components/setup.ts'],
+    setupFiles: ['./旧前端/tests/components/setup.ts'],
     restoreMocks: true,
   },
 });

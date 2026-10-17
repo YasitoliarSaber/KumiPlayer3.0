@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import path from "node:path";
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 
@@ -33,6 +34,11 @@ function readGitProvenance() {
 const provenance = readGitProvenance();
 
 export default defineConfig({
+  // 已归档的旧 Tauri/Fluent 前端（源码在 旧前端/）的唯一活动入口。
+  // 产物仍写根 dist/ 供 src-tauri 打包使用；新网页前端见 vite.web.config.ts，
+  // 新桌面候选见 electron.vite.config.ts。三者互不覆盖。
+  root: path.resolve(import.meta.dirname, "旧前端"),
+  publicDir: path.resolve(import.meta.dirname, "public"),
   plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
@@ -59,4 +65,8 @@ export default defineConfig({
     },
   },
   clearScreen: false,
+  build: {
+    outDir: path.resolve(import.meta.dirname, "dist"),
+    emptyOutDir: true,
+  },
 });

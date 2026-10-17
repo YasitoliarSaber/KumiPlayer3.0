@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-CSS_PATH = Path(__file__).resolve().parents[2] / "src" / "index.css"
+CSS_PATH = Path(__file__).resolve().parents[2] / "旧前端" / "src" / "index.css"
 
 
 VISUAL_LOCK_MARKER = "/* Detail page visual lock - user-approved continuous backdrop."

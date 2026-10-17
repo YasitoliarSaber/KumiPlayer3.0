@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def test_settings_outline_uses_the_current_sticky_desktop_and_horizontal_mobile_layout():
-    styles = Path(__file__).resolve().parents[2] / "src" / "styles" / "settings-navigation.css"
+    styles = Path(__file__).resolve().parents[2] / "旧前端" / "src" / "styles" / "settings-navigation.css"
     css = styles.read_text(encoding="utf-8")
 
     assert ".settings-focused {" in css

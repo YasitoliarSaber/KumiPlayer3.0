@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { JSDOM, VirtualConsole } from 'jsdom';
-import { clean, parse, safeJson, worksForPage } from '../../scripts/prototypes/html.mjs';
-import { pages } from '../../scripts/prototypes/pages.mjs';
+import { clean, parse, safeJson, worksForPage } from '../../../scripts/prototypes/html.mjs';
+import { pages } from '../../../scripts/prototypes/pages.mjs';
 
-const output = path.resolve(process.env.KUMI_PROTOTYPE_OUTPUT ?? 'output/OpenDesign-HTML-2026-10-16');
+// 默认输出目录相对仓库根定位，避免依赖调用者的当前工作目录。
+const output = path.resolve(
+  process.env.KUMI_PROTOTYPE_OUTPUT ?? fileURLToPath(new URL('../../../output/OpenDesign-HTML-2026-10-16', import.meta.url)),
+);
 const manifest = JSON.parse(await fs.readFile(path.join(output, 'manifest.json'), 'utf8'));
 const load = async (key, execute = false) => {
   const page = pages.find((item) => item.key === key);

@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_ui_store_owns_real_back_and_forward_navigation_history():
-    store = (ROOT / "src" / "stores" / "ui.ts").read_text(encoding="utf-8")
+    store = (ROOT / "旧前端" / "src" / "stores" / "ui.ts").read_text(encoding="utf-8")
 
     assert "navigationHistory:" in store
     assert "forwardHistory:" in store
@@ -22,7 +22,7 @@ def test_ui_store_owns_real_back_and_forward_navigation_history():
 
 
 def test_titlebar_contains_back_forward_and_single_brand_lockup():
-    titlebar = (ROOT / "src" / "components" / "shell" / "DesktopTitleBar.tsx").read_text(encoding="utf-8")
+    titlebar = (ROOT / "旧前端" / "src" / "components" / "shell" / "DesktopTitleBar.tsx").read_text(encoding="utf-8")
 
     assert "ArrowLeft" in titlebar
     assert "ArrowRight" in titlebar
@@ -40,7 +40,7 @@ def test_titlebar_contains_back_forward_and_single_brand_lockup():
 
 
 def test_compact_titlebar_keeps_brand_visible_and_moves_it_left():
-    css = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src" / "index.css").read_text(encoding="utf-8")
 
     assert ".desktop-titlebar .desktop-titlebar-brand" in css
     assert "padding-left: 2px !important;" in css
@@ -48,7 +48,7 @@ def test_compact_titlebar_keeps_brand_visible_and_moves_it_left():
 
 
 def test_sidebar_has_secondary_toggle_counts_and_no_duplicate_brand():
-    sidebar = (ROOT / "src" / "components" / "shell" / "Sidebar.tsx").read_text(encoding="utf-8")
+    sidebar = (ROOT / "旧前端" / "src" / "components" / "shell" / "Sidebar.tsx").read_text(encoding="utf-8")
 
     assert "sidebar-library-heading-slot" in sidebar
     assert "sidebar-library-heading" in sidebar
@@ -65,7 +65,7 @@ def test_sidebar_has_secondary_toggle_counts_and_no_duplicate_brand():
 
 
 def test_expanded_and_collapsed_sidebar_share_row_geometry():
-    css = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src" / "index.css").read_text(encoding="utf-8")
 
     assert "--sidebar-row-height: 54px" in css
     assert "--sidebar-heading-height: 64px" in css
@@ -83,7 +83,7 @@ def test_expanded_and_collapsed_sidebar_share_row_geometry():
 
 
 def test_cinema_titlebar_brand_has_no_transparent_outer_ring():
-    css = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src" / "index.css").read_text(encoding="utf-8")
 
     assert ":root[data-theme='cinema'] .desktop-titlebar-mark" in css
     assert "background: #121b2d !important;" in css
@@ -92,8 +92,8 @@ def test_cinema_titlebar_brand_has_no_transparent_outer_ring():
 
 def test_titlebar_owns_full_sidebar_visibility_and_sidebar_only_owns_width():
     """完全显隐由标题栏负责，侧栏内部只切换完整栏与图标栏。"""
-    titlebar = (ROOT / "src" / "components" / "shell" / "DesktopTitleBar.tsx").read_text(encoding="utf-8")
-    sidebar = (ROOT / "src" / "components" / "shell" / "Sidebar.tsx").read_text(encoding="utf-8")
+    titlebar = (ROOT / "旧前端" / "src" / "components" / "shell" / "DesktopTitleBar.tsx").read_text(encoding="utf-8")
+    sidebar = (ROOT / "旧前端" / "src" / "components" / "shell" / "Sidebar.tsx").read_text(encoding="utf-8")
 
     assert "toggleSidebarVisibility" in titlebar
     assert "PanelLeft" in titlebar
@@ -110,7 +110,7 @@ def test_titlebar_owns_full_sidebar_visibility_and_sidebar_only_owns_width():
 
 
 def test_sidebar_visibility_store_restores_last_visible_mode():
-    store = (ROOT / "src" / "stores" / "ui.ts").read_text(encoding="utf-8")
+    store = (ROOT / "旧前端" / "src" / "stores" / "ui.ts").read_text(encoding="utf-8")
 
     assert "lastVisibleSidebarMode" in store
     assert "state.lastVisibleSidebarMode" in store
@@ -119,7 +119,7 @@ def test_sidebar_visibility_store_restores_last_visible_mode():
 
 
 def test_old_sidebar_rail_styles_are_removed():
-    css = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src" / "index.css").read_text(encoding="utf-8")
 
     assert ".titlebar-sidebar-visibility-button[aria-expanded='true']" in css
     assert "sidebar-rail-toggle" not in css

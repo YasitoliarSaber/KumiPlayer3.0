@@ -18,8 +18,8 @@ def test_brand_assets_share_the_approved_navy_coral_geometry():
 
 
 def test_shell_uses_the_brand_once_in_the_titlebar():
-    titlebar = (ROOT / "src" / "components" / "shell" / "DesktopTitleBar.tsx").read_text(encoding="utf-8")
-    sidebar = (ROOT / "src" / "components" / "shell" / "Sidebar.tsx").read_text(encoding="utf-8")
+    titlebar = (ROOT / "旧前端" / "src" / "components" / "shell" / "DesktopTitleBar.tsx").read_text(encoding="utf-8")
+    sidebar = (ROOT / "旧前端" / "src" / "components" / "shell" / "Sidebar.tsx").read_text(encoding="utf-8")
 
     assert "/brand/kumiplayer-app-icon.svg" in titlebar
     assert "desktop-titlebar-wordmark" in titlebar

@@ -3,14 +3,14 @@
 > 适用范围：现有系统的事实快照；不作为 3.0 的页面、组件、视觉或架构约束。源码及用户最新指令优先。
 
 > 记录日期：2026-10-14
-> 事实来源：`backend/app/api/*.py`（路由定义与行号）、`backend/app/main.py`（路由器注册）、`src/api/*.ts`（前端调用位置与期望形状）
+> 事实来源：`backend/app/api/*.py`（路由定义与行号）、`backend/app/main.py`（路由器注册）、`旧前端/src/api/*.ts`（前端调用位置与期望形状）
 > 定位：回答「后端一共有哪些接口、每个接口做什么、谁在调用、前端拿到什么字段」。用于新前端的请求层与数据契约设计。**不回答界面如何呈现**。
 
 ## 1. 覆盖率声明（先读）
 
 - 全部端点由脚本从 `backend/app/api/*.py` 提取：**131 个路由装饰器**（`grep -c '@router\.\(get\|post\|put\|patch\|delete\)'` 实测）。
 - 第 4 节给出**全部 131 个端点的清单**（方法、路径、定义位置、前端调用位置）。
-- 第 5 节给出**前端实际消费的核心端点契约**（请求 / 响应字段），字段依据 `src/api/*.ts` 的实际类型声明与调用代码。
+- 第 5 节给出**前端实际消费的核心端点契约**（请求 / 响应字段），字段依据 `旧前端/src/api/*.ts` 的实际类型声明与调用代码。
 - 第 6 节列出**前端未消费或仅内部使用的端点**。
 - 没有为全部 131 个端点逐一展开响应字段：涉及大量内部 / 维护端点，展开会显著增加篇幅而设计价值有限。未展开的端点以清单 + 定义位置为准，需要时可直接读对应函数。
 
@@ -18,31 +18,31 @@
 
 | 项 | 内容 | 依据 |
 |---|---|---|
-| Base URL | 开发模式走 Vite proxy（相对路径）；Tauri 生产页面直连 `http://127.0.0.1:37821` | `src/api/client.ts:6-9` |
-| 鉴权 | 每个业务请求带 `X-KumiPlayer-Token`（桌面壳生成的 256-bit 随机会话 Token） | `src/api/client.ts:18-31`、`src/api/sessionToken.ts` |
+| Base URL | 开发模式走 Vite proxy（相对路径）；Tauri 生产页面直连 `http://127.0.0.1:37821` | `旧前端/src/api/client.ts:6-9` |
+| 鉴权 | 每个业务请求带 `X-KumiPlayer-Token`（桌面壳生成的 256-bit 随机会话 Token） | `旧前端/src/api/client.ts:18-31`、`旧前端/src/api/sessionToken.ts` |
 | 例外鉴权方式 | 浏览器无法设置 Header 的场景（图片 GET、WebSocket）使用受限查询参数 | `docs/current/system-overview.md` 第 6 节 |
-| 请求封装 | `authorizedFetch` 统一注入会话头；`requestJson` 带 `AbortController` 超时（默认 30000 ms，响应体读取期间保持超时） | `src/api/client.ts:18-60` |
-| 内容类型 | 非 FormData 请求默认 `Content-Type: application/json` | `src/api/client.ts:49` |
-| 错误形状 | 非 2xx 时先读 `body.detail` 作为消息，失败则回退 `HTTP <status>`；抛出 `ApiError`（含 `status`） | `src/api/client.ts:10-16`、`:55-60` |
+| 请求封装 | `authorizedFetch` 统一注入会话头；`requestJson` 带 `AbortController` 超时（默认 30000 ms，响应体读取期间保持超时） | `旧前端/src/api/client.ts:18-60` |
+| 内容类型 | 非 FormData 请求默认 `Content-Type: application/json` | `旧前端/src/api/client.ts:49` |
+| 错误形状 | 非 2xx 时先读 `body.detail` 作为消息，失败则回退 `HTTP <status>`；抛出 `ApiError`（含 `status`） | `旧前端/src/api/client.ts:10-16`、`:55-60` |
 | 范围冲突 | 来源范围冲突返回 **409**，且保持事务回滚 | `docs/PROJECT.md` 第 6 节 |
-| 展示门槛 | 后台尚未发布时列表可能返回暂时空列表；`generation_id` / `updating` / `background_active` 用于区分「首次未发布 / 已发布空库 / 后台更新中」 | `docs/PROJECT.md` 第 7 节、`src/api/library.ts:11-20` |
+| 展示门槛 | 后台尚未发布时列表可能返回暂时空列表；`generation_id` / `updating` / `background_active` 用于区分「首次未发布 / 已发布空库 / 后台更新中」 | `docs/PROJECT.md` 第 7 节、`旧前端/src/api/library.ts:11-20` |
 | bundled 模式 | 关闭 `/docs`、`/redoc`、`/openapi.json`，因此**不能依赖运行时 OpenAPI 文档** | `docs/PROJECT.md` 第 4.3 节 |
 
 ## 3. 路由器总览
 
 | 前缀 | 定义文件 | 端点数 | 主要消费方 |
 |---|---|---|---|
-| `/api/v4` | `backend/app/api/media_v4.py`（`main.py:181`） | 48 | 媒体管理页、详情页、`src/api/mediaV4.ts` |
-| `/api/config` | `backend/app/api/config.py`（`main.py:177`） | 18 | 首次引导、设置页、`src/api/config.ts` |
-| `/api/integrations/bangumi` | `backend/app/api/bangumi.py`（`main.py:178`） | 16 | 设置页 Bangumi 分类、详情页、`src/api/bangumi.ts` |
-| `/api/openlist` | `backend/app/api/openlist_v4.py`（`main.py:186`） | 10 | 设置页 OpenList 分类、`src/api/openlist.ts` |
-| `/api/library` | `backend/app/api/library_v4.py`（`main.py:175`） | 9 | 首页 / 分类 / 搜索 / 收藏 / 最近 / 详情、`src/api/library.ts` |
-| `/api/playback` | `backend/app/api/playback_v4.py`（`main.py:183`） | 8 | 详情页播放、最近观看、`src/api/playback.ts` |
-| `/api/error-log` | `backend/app/api/error_log.py`（`main.py:179`） | 7 | **前端无消费者**（`src/api/errorLog.ts` 无导入方） |
-| `/api/v4/tracking` | `backend/app/api/tracking_v4.py`（`main.py:184`） | 5 | 分类页新番、`src/api/mediaV4.ts:704-714` |
-| `/api/tasks` | `backend/app/api/tasks_v4.py`（`main.py:185`） | 4 | 导入与任务面板、`src/api/tasks.ts` |
-| `/api/v4/work-customization` | `backend/app/api/work_customization_v4.py`（`main.py:182`） | 3 | 详情页自定义标签、`src/api/workCustomization.ts` |
-| `/api/system` | `backend/app/api/system.py`（`main.py:187`） | 2 | 详情页「打开文件夹」、`src/api/system.ts` |
+| `/api/v4` | `backend/app/api/media_v4.py`（`main.py:181`） | 48 | 媒体管理页、详情页、`旧前端/src/api/mediaV4.ts` |
+| `/api/config` | `backend/app/api/config.py`（`main.py:177`） | 18 | 首次引导、设置页、`旧前端/src/api/config.ts` |
+| `/api/integrations/bangumi` | `backend/app/api/bangumi.py`（`main.py:178`） | 16 | 设置页 Bangumi 分类、详情页、`旧前端/src/api/bangumi.ts` |
+| `/api/openlist` | `backend/app/api/openlist_v4.py`（`main.py:186`） | 10 | 设置页 OpenList 分类、`旧前端/src/api/openlist.ts` |
+| `/api/library` | `backend/app/api/library_v4.py`（`main.py:175`） | 9 | 首页 / 分类 / 搜索 / 收藏 / 最近 / 详情、`旧前端/src/api/library.ts` |
+| `/api/playback` | `backend/app/api/playback_v4.py`（`main.py:183`） | 8 | 详情页播放、最近观看、`旧前端/src/api/playback.ts` |
+| `/api/error-log` | `backend/app/api/error_log.py`（`main.py:179`） | 7 | **前端无消费者**（`旧前端/src/api/errorLog.ts` 无导入方） |
+| `/api/v4/tracking` | `backend/app/api/tracking_v4.py`（`main.py:184`） | 5 | 分类页新番、`旧前端/src/api/mediaV4.ts:704-714` |
+| `/api/tasks` | `backend/app/api/tasks_v4.py`（`main.py:185`） | 4 | 导入与任务面板、`旧前端/src/api/tasks.ts` |
+| `/api/v4/work-customization` | `backend/app/api/work_customization_v4.py`（`main.py:182`） | 3 | 详情页自定义标签、`旧前端/src/api/workCustomization.ts` |
+| `/api/system` | `backend/app/api/system.py`（`main.py:187`） | 2 | 详情页「打开文件夹」、`旧前端/src/api/system.ts` |
 | `/api/assets` | `backend/app/api/assets.py`（`main.py:180`） | 1 | 所有图片展示 |
 | `/api/health`、`/api/heartbeat`、`/ws/heartbeat` | `backend/app/api/heartbeat.py` | 3 | 启动就绪、连接状态 |
 
@@ -56,34 +56,34 @@
 
 | 方法 | 路径 | 行 | 前端调用位置 |
 |---|---|---|---|
-| GET | `/` | 175 | `src/api/library.ts:40`（列表） |
-| GET | `/changes` | 238 | `src/api/library.ts:33` |
-| GET | `/cards` | 254 | `src/api/library.ts:34` |
-| GET | `/works/{work_id}` | 259 | `src/api/library.ts:44`（详情） |
-| GET | `/diagnostics` | 304 | `src/api/library.ts:48`（**当前无调用方**） |
+| GET | `/` | 175 | `旧前端/src/api/library.ts:40`（列表） |
+| GET | `/changes` | 238 | `旧前端/src/api/library.ts:33` |
+| GET | `/cards` | 254 | `旧前端/src/api/library.ts:34` |
+| GET | `/works/{work_id}` | 259 | `旧前端/src/api/library.ts:44`（详情） |
+| GET | `/diagnostics` | 304 | `旧前端/src/api/library.ts:48`（**当前无调用方**） |
 | GET | `/watch-status` | 311 | 未确认（前端未见调用） |
-| GET | `/watch-status/{work_id}` | 318 | `src/api/library.ts:51` |
-| PATCH | `/watch-status/{work_id}` | 328 | `src/api/library.ts:53` |
-| POST | `/rescan` | 370 | `src/api/library.ts:46`、`src/api/tasks.ts:32`（**当前无调用方**） |
+| GET | `/watch-status/{work_id}` | 318 | `旧前端/src/api/library.ts:51` |
+| PATCH | `/watch-status/{work_id}` | 328 | `旧前端/src/api/library.ts:53` |
+| POST | `/rescan` | 370 | `旧前端/src/api/library.ts:46`、`旧前端/src/api/tasks.ts:32`（**当前无调用方**） |
 
 ### 4.2 `/api/playback`（`playback_v4.py`）
 
 | 方法 | 路径 | 行 | 前端调用位置 |
 |---|---|---|---|
-| POST | `/play` | 61 | `src/api/playback.ts:29` |
-| POST | `/stop` | 78 | `src/api/playback.ts:33` |
-| GET | `/status` | 83 | `src/api/playback.ts:37` |
-| POST | `/progress` | 88 | `src/api/playback.ts:60` |
-| POST | `/progress/mark` | 105 | `src/api/playback.ts:63` |
-| POST | `/progress/mark-through` | 114 | `src/api/playback.ts:66` |
-| GET | `/progress` | 125 | `src/api/playback.ts:56` |
-| GET | `/history` | 143 | `src/api/playback.ts:50` |
+| POST | `/play` | 61 | `旧前端/src/api/playback.ts:29` |
+| POST | `/stop` | 78 | `旧前端/src/api/playback.ts:33` |
+| GET | `/status` | 83 | `旧前端/src/api/playback.ts:37` |
+| POST | `/progress` | 88 | `旧前端/src/api/playback.ts:60` |
+| POST | `/progress/mark` | 105 | `旧前端/src/api/playback.ts:63` |
+| POST | `/progress/mark-through` | 114 | `旧前端/src/api/playback.ts:66` |
+| GET | `/progress` | 125 | `旧前端/src/api/playback.ts:56` |
+| GET | `/history` | 143 | `旧前端/src/api/playback.ts:50` |
 
 ### 4.3 `/api/assets`（`assets.py`）
 
 | 方法 | 路径 | 行 | 前端调用位置 |
 |---|---|---|---|
-| GET | `/artwork/{resource_id}/{content_version}/{width}` | 12 | `src/api/assets.ts:13`（约束到四档宽度） |
+| GET | `/artwork/{resource_id}/{content_version}/{width}` | 12 | `旧前端/src/api/assets.ts:13`（约束到四档宽度） |
 
 ### 4.4 `/api/v4`（`media_v4.py`，48 个）
 
@@ -138,80 +138,80 @@
 | POST | `/identity-repair/resume` | 2809 |
 | POST | `/metadata/confirm` | 2823 |
 
-前端调用位置（动态路径由 `src/api/mediaV4.ts` 拼接）：`/sources/libraries` `:617`、`/sources/libraries/{id}` `:626`/`:662`、`/sources/libraries/{id}/diagnostics` `:620`、`/sources/libraries/{id}/deletion-preview` `:651`、`/sources/libraries/{id}/deletion` `:656`、`/sources/scans`（durable 扫描入口，`mediaV4.ts:758`）、`/sources/scans/{id}`（`:761`）、`/sources/scans/{id}` `:761`、`/sources/scans/{id}/cancel` `:764`、`/sources/scans/{id}/directory-check` `:623`、`/sources/openlist/status` `:738`、`/sources/drafts` `:666`、`/imports/preview` `:599`、`/imports/{id}` `:611`、`/imports/{id}/confirm` `:602`、`/imports/{id}/cancel` `:605`、`/imports/{id}/evidence` `:735`、`/imports/{id}/evidence/{eid}` `:608`、`/imports/{id}/scrape` `:767`、`/revisions/{id}/works/{wid}/execution-detail` `:614`、`/library` `:769`、`/library-maintenance/delete-preview` `:669`、`/library-maintenance/delete-confirm` `:672`、`/library-maintenance/delete-resume` `:675`、`/works/{id}/title` `:687`/`:690`、`/works/{id}/artwork` `:693`、`/works/{id}/artwork/{kind}` `:696`、`/works/{id}/folder` `:699`、`/works/{id}/scrape` `:702`、`/works/{id}/delete-preview` `:729`、`/works/{id}/delete-confirm` `:732`、`/works/{id}/identity-repair-preview` `:678`、`/identity-repair/apply` `:681`、`/identity-repair/resume` `:684`、`/metadata/search` `:717`、`/metadata/confirm` `:726`、`/metadata/retry` `:720`、`/metadata/artifacts/retry` `:723`、`/playback/progress` `:778`。
+前端调用位置（动态路径由 `旧前端/src/api/mediaV4.ts` 拼接）：`/sources/libraries` `:617`、`/sources/libraries/{id}` `:626`/`:662`、`/sources/libraries/{id}/diagnostics` `:620`、`/sources/libraries/{id}/deletion-preview` `:651`、`/sources/libraries/{id}/deletion` `:656`、`/sources/scans`（durable 扫描入口，`mediaV4.ts:758`）、`/sources/scans/{id}`（`:761`）、`/sources/scans/{id}` `:761`、`/sources/scans/{id}/cancel` `:764`、`/sources/scans/{id}/directory-check` `:623`、`/sources/openlist/status` `:738`、`/sources/drafts` `:666`、`/imports/preview` `:599`、`/imports/{id}` `:611`、`/imports/{id}/confirm` `:602`、`/imports/{id}/cancel` `:605`、`/imports/{id}/evidence` `:735`、`/imports/{id}/evidence/{eid}` `:608`、`/imports/{id}/scrape` `:767`、`/revisions/{id}/works/{wid}/execution-detail` `:614`、`/library` `:769`、`/library-maintenance/delete-preview` `:669`、`/library-maintenance/delete-confirm` `:672`、`/library-maintenance/delete-resume` `:675`、`/works/{id}/title` `:687`/`:690`、`/works/{id}/artwork` `:693`、`/works/{id}/artwork/{kind}` `:696`、`/works/{id}/folder` `:699`、`/works/{id}/scrape` `:702`、`/works/{id}/delete-preview` `:729`、`/works/{id}/delete-confirm` `:732`、`/works/{id}/identity-repair-preview` `:678`、`/identity-repair/apply` `:681`、`/identity-repair/resume` `:684`、`/metadata/search` `:717`、`/metadata/confirm` `:726`、`/metadata/retry` `:720`、`/metadata/artifacts/retry` `:723`、`/playback/progress` `:778`。
 
-**未被前端消费的 `/api/v4` 端点**：`/artwork-cache/preview`、`/artwork-cache/confirm`、`/sources/scan`（`src/api/mediaV4.ts:586` 有封装但页面走 durable 扫描入口）、`/jobs`、`/jobs/{job_id}/run`、`/playback/progress/{episode_id}/{asset_id}`、`/tracking/state`、`/tracking/state/{work_id}/{provider}`。
+**未被前端消费的 `/api/v4` 端点**：`/artwork-cache/preview`、`/artwork-cache/confirm`、`/sources/scan`（`旧前端/src/api/mediaV4.ts:586` 有封装但页面走 durable 扫描入口）、`/jobs`、`/jobs/{job_id}/run`、`/playback/progress/{episode_id}/{asset_id}`、`/tracking/state`、`/tracking/state/{work_id}/{provider}`。
 
 ### 4.5 `/api/v4/tracking`（`tracking_v4.py`）
 
 | 方法 | 路径 | 行 | 前端调用位置 |
 |---|---|---|---|
-| GET | `/works` | 51 | `src/api/mediaV4.ts:704`（**无消费组件**） |
-| GET | `/sources` | 78 | `src/api/mediaV4.ts:706` |
-| POST | `/scan-all` | 152 | `src/api/mediaV4.ts:708` |
-| POST | `/{work_id}/scan` | 158 | `src/api/mediaV4.ts:711` |
-| POST | `/scans/{scan_id}/cancel` | 167 | `src/api/mediaV4.ts:714` |
+| GET | `/works` | 51 | `旧前端/src/api/mediaV4.ts:704`（**无消费组件**） |
+| GET | `/sources` | 78 | `旧前端/src/api/mediaV4.ts:706` |
+| POST | `/scan-all` | 152 | `旧前端/src/api/mediaV4.ts:708` |
+| POST | `/{work_id}/scan` | 158 | `旧前端/src/api/mediaV4.ts:711` |
+| POST | `/scans/{scan_id}/cancel` | 167 | `旧前端/src/api/mediaV4.ts:714` |
 
 ### 4.6 `/api/v4/work-customization`（`work_customization_v4.py`）
 
 | 方法 | 路径 | 行 | 前端调用位置 |
 |---|---|---|---|
-| GET | `/{work_id}` | 40 | `src/api/workCustomization.ts:30` |
-| PUT | `/{work_id}` | 62 | `src/api/workCustomization.ts:30` |
+| GET | `/{work_id}` | 40 | `旧前端/src/api/workCustomization.ts:30` |
+| PUT | `/{work_id}` | 62 | `旧前端/src/api/workCustomization.ts:30` |
 | GET | `/{work_id}/extra-videos` | 93 | 未确认（前端未见调用） |
 
 ### 4.7 `/api/tasks`（`tasks_v4.py`）
 
 | 方法 | 路径 | 行 | 前端调用位置 |
 |---|---|---|---|
-| GET | `/` | 66 | `src/api/tasks.ts:20` |
-| GET | `/{task_id}` | 81 | `src/api/tasks.ts:24` |
-| POST | `/{task_id}/cancel` | 99 | `src/api/tasks.ts:27` |
-| POST | `/{task_id}/retry` | 134 | `src/api/tasks.ts:30` |
+| GET | `/` | 66 | `旧前端/src/api/tasks.ts:20` |
+| GET | `/{task_id}` | 81 | `旧前端/src/api/tasks.ts:24` |
+| POST | `/{task_id}/cancel` | 99 | `旧前端/src/api/tasks.ts:27` |
+| POST | `/{task_id}/retry` | 134 | `旧前端/src/api/tasks.ts:30` |
 
 ### 4.8 `/api/config`（`config.py`）
 
 | 方法 | 路径 | 行 | 前端调用位置 |
 |---|---|---|---|
-| GET | `/` | 165 | `src/api/config.ts:165` |
-| PATCH | `/` | 173 | `src/api/config.ts:166` |
+| GET | `/` | 165 | `旧前端/src/api/config.ts:165` |
+| PATCH | `/` | 173 | `旧前端/src/api/config.ts:166` |
 | GET | `/setup/status` | 334 | 未确认（首次引导走 GET `/` 的 `setup_*` 字段） |
-| POST | `/test/mpv-path` | 351 | `src/api/config.ts:170`/`:172` |
-| POST | `/setup/defer` | 359 | `src/api/config.ts:173` |
-| POST | `/setup/player` | 431 | `src/api/config.ts:174` |
-| POST | `/setup/sources` | 440 | `src/api/config.ts:175` |
-| POST | `/setup/credentials/tmdb` | 447 | `src/api/config.ts:176` |
-| POST | `/setup/complete` | 455 | `src/api/config.ts:177` |
-| POST | `/test/tmdb-images` | 499 | `src/api/config.ts:179` |
-| POST | `/tmdb-images/repair` | 504 | `src/api/config.ts:181` |
-| GET | `/tmdb-images/repair/{job_id}` | 512 | `src/api/config.ts:183` |
-| GET | `/mpv-runtime` | 520 | `src/api/config.ts:167` |
-| POST | `/mpv-runtime/open-config` | 532 | `src/api/config.ts:168` |
-| POST | `/test/mpv` | 563 | `src/api/config.ts:171` |
-| POST | `/test/tmdb` | 569 | `src/api/config.ts:178` |
-| POST | `/test/deepseek` | 586 | `src/api/config.ts:184` |
-| POST | `/test/media-paths` | 618 | `src/api/config.ts:185` |
+| POST | `/test/mpv-path` | 351 | `旧前端/src/api/config.ts:170`/`:172` |
+| POST | `/setup/defer` | 359 | `旧前端/src/api/config.ts:173` |
+| POST | `/setup/player` | 431 | `旧前端/src/api/config.ts:174` |
+| POST | `/setup/sources` | 440 | `旧前端/src/api/config.ts:175` |
+| POST | `/setup/credentials/tmdb` | 447 | `旧前端/src/api/config.ts:176` |
+| POST | `/setup/complete` | 455 | `旧前端/src/api/config.ts:177` |
+| POST | `/test/tmdb-images` | 499 | `旧前端/src/api/config.ts:179` |
+| POST | `/tmdb-images/repair` | 504 | `旧前端/src/api/config.ts:181` |
+| GET | `/tmdb-images/repair/{job_id}` | 512 | `旧前端/src/api/config.ts:183` |
+| GET | `/mpv-runtime` | 520 | `旧前端/src/api/config.ts:167` |
+| POST | `/mpv-runtime/open-config` | 532 | `旧前端/src/api/config.ts:168` |
+| POST | `/test/mpv` | 563 | `旧前端/src/api/config.ts:171` |
+| POST | `/test/tmdb` | 569 | `旧前端/src/api/config.ts:178` |
+| POST | `/test/deepseek` | 586 | `旧前端/src/api/config.ts:184` |
+| POST | `/test/media-paths` | 618 | `旧前端/src/api/config.ts:185` |
 
 ### 4.9 `/api/openlist`（`openlist_v4.py`）
 
 | 方法 | 路径 | 行 | 前端调用位置 |
 |---|---|---|---|
-| GET | `/connections` | 123 | `src/api/openlist.ts:125` |
-| POST | `/connections` | 128 | `src/api/openlist.ts:125` |
-| POST | `/test-connection` | 299 | `src/api/openlist.ts:127` |
-| POST | `/config` | 347 | `src/api/openlist.ts:129` |
-| GET | `/browse` | 443 | `src/api/openlist.ts:132` |
-| POST | `/prefetch` | 537 | `src/api/openlist.ts:135` |
-| GET | `/routes` | 582 | `src/api/openlist.ts:139`、`:136` |
-| POST | `/routes/discover` | 588 | `src/api/openlist.ts:137` |
-| PUT | `/routes` | 630 | `src/api/openlist.ts:139` |
-| GET | `/telemetry/today` | 677 | `src/api/openlist.ts:142` |
+| GET | `/connections` | 123 | `旧前端/src/api/openlist.ts:125` |
+| POST | `/connections` | 128 | `旧前端/src/api/openlist.ts:125` |
+| POST | `/test-connection` | 299 | `旧前端/src/api/openlist.ts:127` |
+| POST | `/config` | 347 | `旧前端/src/api/openlist.ts:129` |
+| GET | `/browse` | 443 | `旧前端/src/api/openlist.ts:132` |
+| POST | `/prefetch` | 537 | `旧前端/src/api/openlist.ts:135` |
+| GET | `/routes` | 582 | `旧前端/src/api/openlist.ts:139`、`:136` |
+| POST | `/routes/discover` | 588 | `旧前端/src/api/openlist.ts:137` |
+| PUT | `/routes` | 630 | `旧前端/src/api/openlist.ts:139` |
+| GET | `/telemetry/today` | 677 | `旧前端/src/api/openlist.ts:142` |
 
 ### 4.10 `/api/integrations/bangumi`（`bangumi.py`）
 
 | 方法 | 路径 | 行 | 前端调用位置 |
 |---|---|---|---|
-| POST | `/token` | 167 | `src/api/bangumi.ts`（会话写入） |
+| POST | `/token` | 167 | `旧前端/src/api/bangumi.ts`（会话写入） |
 | DELETE | `/token` | 199 | 退出登录 |
 | GET | `/me` | 211 | 用户信息 |
 | GET | `/session` | 220 | 本地会话恢复（启动时零远程请求） |
@@ -232,15 +232,15 @@
 
 | 方法 | 路径 | 行 | 前端调用位置 |
 |---|---|---|---|
-| POST | `/api/system/shutdown` | `system.py:20` | `src/api/system.ts:19` 封装，**界面未接入** |
-| POST | `/api/system/open-folder` | `system.py:40` | `src/api/system.ts:15`，详情页使用 |
+| POST | `/api/system/shutdown` | `system.py:20` | `旧前端/src/api/system.ts:19` 封装，**界面未接入** |
+| POST | `/api/system/open-folder` | `system.py:40` | `旧前端/src/api/system.ts:15`，详情页使用 |
 | GET | `/api/error-log/` | `error_log.py:28` | **无消费者** |
-| GET | `/api/error-log/stats` | `error_log.py:35` | `src/api/errorLog.ts:28`（无导入方） |
-| GET | `/api/error-log/export` | `error_log.py:41` | `src/api/errorLog.ts:51` 附近（无导入方） |
-| POST | `/api/error-log/resolve` | `error_log.py:75` | `src/api/errorLog.ts:32`（无导入方） |
-| POST | `/api/error-log/resolve-all` | `error_log.py:82` | `src/api/errorLog.ts:39`（无导入方） |
-| DELETE | `/api/error-log/{error_id}` | `error_log.py:89` | `src/api/errorLog.ts:43`（无导入方） |
-| POST | `/api/error-log/purge` | `error_log.py:96` | `src/api/errorLog.ts:51`（无导入方） |
+| GET | `/api/error-log/stats` | `error_log.py:35` | `旧前端/src/api/errorLog.ts:28`（无导入方） |
+| GET | `/api/error-log/export` | `error_log.py:41` | `旧前端/src/api/errorLog.ts:51` 附近（无导入方） |
+| POST | `/api/error-log/resolve` | `error_log.py:75` | `旧前端/src/api/errorLog.ts:32`（无导入方） |
+| POST | `/api/error-log/resolve-all` | `error_log.py:82` | `旧前端/src/api/errorLog.ts:39`（无导入方） |
+| DELETE | `/api/error-log/{error_id}` | `error_log.py:89` | `旧前端/src/api/errorLog.ts:43`（无导入方） |
+| POST | `/api/error-log/purge` | `error_log.py:96` | `旧前端/src/api/errorLog.ts:51`（无导入方） |
 
 ## 5. 核心端点契约（前端重建必需）
 
@@ -248,7 +248,7 @@
 
 **`GET /api/library`**（`library_v4.py:175`，可选 `?source=`）
 
-响应（`src/api/library.ts:11-20`）：
+响应（`旧前端/src/api/library.ts:11-20`）：
 
 | 字段 | 类型 | 用途 |
 |---|---|---|
@@ -275,7 +275,7 @@
 
 **`GET /api/library/cards?work_ids=a,b,c`** → `{ works: LibraryCard[] }`（`library_v4.py:254`）
 
-#### 5.1.1 `LibraryCard` / `WorkIndex` 字段（`src/api/types.ts:44-113`）
+#### 5.1.1 `LibraryCard` / `WorkIndex` 字段（`旧前端/src/api/types.ts:44-113`）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -307,12 +307,12 @@
 | `last_played` | string \| null | 最近播放 |
 | `source_locations` | `Record<string, string[]>` | 来源位置 |
 
-- `ArtworkResource`：`{ resource_id, content_version, state: 'ready', variants: Record<string, string> }`（`src/api/types.ts:120-125`）。
-- 详情端点 `GET /api/library/works/{work_id}` 返回 `WorkDetail = WorkIndex & { studios: string[]; tags: string[] }`；**列表卡片不承诺 `cast` / 完整资料字段**（`src/api/types.ts:114-115` 注释）。
+- `ArtworkResource`：`{ resource_id, content_version, state: 'ready', variants: Record<string, string> }`（`旧前端/src/api/types.ts:120-125`）。
+- 详情端点 `GET /api/library/works/{work_id}` 返回 `WorkDetail = WorkIndex & { studios: string[]; tags: string[] }`；**列表卡片不承诺 `cast` / 完整资料字段**（`旧前端/src/api/types.ts:114-115` 注释）。
 
 #### 5.1.2 观看状态
 
-- `GET /api/library/watch-status/{work_id}`、`PATCH /api/library/watch-status/{work_id}`（body：`{ status, note, favorite }`）→ `LocalWatchStatus`：`{ work_id, status: ''|'watching'|'watched'|'on_hold'|'dropped', note, favorite, updated_at }`（`src/api/library.ts:22-34`）。
+- `GET /api/library/watch-status/{work_id}`、`PATCH /api/library/watch-status/{work_id}`（body：`{ status, note, favorite }`）→ `LocalWatchStatus`：`{ work_id, status: ''|'watching'|'watched'|'on_hold'|'dropped', note, favorite, updated_at }`（`旧前端/src/api/library.ts:22-34`）。
 - 后端 `/watch-status` 列表会过滤 `provider='local'`，不把 Bangumi 状态当本地观看状态（`docs/项目现状与改进清单.md` DEF-05）。
 
 ### 5.2 图片
@@ -320,7 +320,7 @@
 **`GET /api/assets/artwork/{resource_id}/{content_version}/{width}`**（`assets.py:12`）
 
 - 只读取**已发布的本地派生资源**；旧镜像、remote、thumbnail/prepare 路由已退役。
-- 前端只接受固定宽度档，非该形式路径一律返回空字符串（`src/api/assets.ts:10-16`）。
+- 前端只接受固定宽度档，非该形式路径一律返回空字符串（`旧前端/src/api/assets.ts:10-16`）。
 - 前端 artwork 正则与后端 `RECIPE_VERSION` / `ROLE_WIDTHS` 必须保持一致（OPT-11）。
 - 鉴权：图片 GET 走受限查询参数（浏览器无法设置 Header）。
 
@@ -328,7 +328,7 @@
 
 | 端点 | 请求 | 响应 | 前端 |
 |---|---|---|---|
-| `POST /api/playback/play` | `{ work_id, episode_id, asset_id? }` | `{ session_id, status, work_id, episode_id, asset_id, playback_locator }` | `src/api/playback.ts:29` |
+| `POST /api/playback/play` | `{ work_id, episode_id, asset_id? }` | `{ session_id, status, work_id, episode_id, asset_id, playback_locator }` | `旧前端/src/api/playback.ts:29` |
 | `POST /api/playback/stop` | — | `{ status, session_id? }` | `:33` |
 | `GET /api/playback/status` | — | `{ status, session: PlaybackSession \| null }`；`PlaybackSession = { session_id, work_id, episode_id, asset_id, playback_locator, status }` | `:37` |
 | `POST /api/playback/progress` | `{ work_id, episode_id, asset_id?, position, duration, completed? }` | `PlaybackHistoryItem` | `:60` |
@@ -337,21 +337,21 @@
 | `GET /api/playback/progress?work_id=` | — | `{ items: PlaybackHistoryItem[] }` | `:56` |
 | `GET /api/playback/history?limit=&work_id=` | — | `{ items: PlaybackHistoryItem[] }` | `:50` |
 
-`PlaybackHistoryItem`（`src/api/types.ts:157-172`）：`work_id`、`episode_id`、`asset_id`、`position`、`duration`、`completed`、`updated_at`；历史读模型额外补充 `episode_title`、`season_number`、`episode_number`、`thumb_path`、`played_at`、`season_snapshot`、`episode_snapshot`、`title_snapshot`。
+`PlaybackHistoryItem`（`旧前端/src/api/types.ts:157-172`）：`work_id`、`episode_id`、`asset_id`、`position`、`duration`、`completed`、`updated_at`；历史读模型额外补充 `episode_title`、`season_number`、`episode_number`、`thumb_path`、`played_at`、`season_snapshot`、`episode_snapshot`、`title_snapshot`。
 
-注意：V4 另有一组 `/api/v4/playback/progress*`（`media_v4.py:2493`、`:2511`）与 `/api/library` 同库；前端 `src/api/mediaV4.ts:778` 与 `src/api/playback.ts:60` 两个进度写入端点并存，属已知技术债（见 `frontend-analysis.md` 第 9 节）。
+注意：V4 另有一组 `/api/v4/playback/progress*`（`media_v4.py:2493`、`:2511`）与 `/api/library` 同库；前端 `旧前端/src/api/mediaV4.ts:778` 与 `旧前端/src/api/playback.ts:60` 两个进度写入端点并存，属已知技术债（见 `frontend-analysis.md` 第 9 节）。
 
 ### 5.4 导入与扫描（`/api/v4`）
 
 | 端点 | 请求（关键） | 响应（关键字段） |
 |---|---|---|
-| `POST /imports/preview` `:1142` | `src/api/mediaV4.ts:588-599` 的扫描/来源参数 | `V4Preview`：`status`（`draft`/`confirmed`）、`works: V4ResolvedWork[]`、`episodes: V4ResolvedEpisode[]`、`issues: V4ReviewIssue[]` |
+| `POST /imports/preview` `:1142` | `旧前端/src/api/mediaV4.ts:588-599` 的扫描/来源参数 | `V4Preview`：`status`（`draft`/`confirmed`）、`works: V4ResolvedWork[]`、`episodes: V4ResolvedEpisode[]`、`issues: V4ReviewIssue[]` |
 | `POST /imports/{revision_id}/confirm` `:1268` | — | `{ revision_id, status, jobs: V4Job[] }` |
 | `POST /imports/{revision_id}/cancel` `:1316` | — | `{ revision_id, running, cancelled }` |
 | `PATCH /imports/{revision_id}/evidence/{evidence_id}` `:1416` | `{ changes: Record<string, unknown> }` | `V4Preview`（人工覆盖，不修改 ParsedFacts） |
 | `GET /imports/{revision_id}` `:1432` | — | `{ revision_id, status, jobs, progress: V4ExecutionProgress }` |
 | `GET /revisions/{revision_id}/works/{work_id}/execution-detail?episode_offset=` `:1448` | — | `V4WorkExecutionDetail`（作品级作业明细） |
-| `POST /sources/scans` `:1954` / `GET /sources/scans/{scan_id}?include_entries=` `:2071` / `POST .../cancel` `:2103` | POST 请求为扫描参数；POST 响应 `{ scan_id, root_id, scan_mode, source_mode?, status, evidence_count?, effective_playback_root?, path_validation? }`（`src/api/mediaV4.ts:758`）；GET 响应含 `status`、`stage`、`stage_label`、`processed_count`、`total_count`、`discovered_count?`、`current_directory?`、`directories_completed?`、`directories_pending?`、`resumable?`、`progress?`、`heartbeat_at?`、`cancel_requested?`、`entries: V4SourceEvidence[]`（`src/api/mediaV4.ts:761`） | 扫描状态与目录条目 |
+| `POST /sources/scans` `:1954` / `GET /sources/scans/{scan_id}?include_entries=` `:2071` / `POST .../cancel` `:2103` | POST 请求为扫描参数；POST 响应 `{ scan_id, root_id, scan_mode, source_mode?, status, evidence_count?, effective_playback_root?, path_validation? }`（`旧前端/src/api/mediaV4.ts:758`）；GET 响应含 `status`、`stage`、`stage_label`、`processed_count`、`total_count`、`discovered_count?`、`current_directory?`、`directories_completed?`、`directories_pending?`、`resumable?`、`progress?`、`heartbeat_at?`、`cancel_requested?`、`entries: V4SourceEvidence[]`（`旧前端/src/api/mediaV4.ts:761`） | 扫描状态与目录条目 |
 | `GET /sources/libraries` `:1576` | — | `{ cards: V4SourceLibraryCard[] }`（来源卡） |
 | `GET /sources/libraries/{root_id}/diagnostics` `:1590` | — | `V4SourceDiagnosticsReport` |
 | `GET /sources/scans/{scan_id}/directory-check` `:1601` | — | `V4SourceDirectoryCheck` |
@@ -362,7 +362,7 @@
 | `GET /sources/openlist/status?remote_root=&connection_id=` `:2348` | — | 映射可用状态 |
 | `POST /sources/scan` `:881` | 同步入口 | **页面未使用**（页面走 durable 入口） |
 
-`V4ExecutionProgress`（`src/api/mediaV4.ts:514-521`）：`status: 'idle'|'running'|'failed'|'cancelled'|'queued'|'succeeded'|'needs_attention'`、`total`、`queued`、`running`、`succeeded`、`failed`、`cancelled`。
+`V4ExecutionProgress`（`旧前端/src/api/mediaV4.ts:514-521`）：`status: 'idle'|'running'|'failed'|'cancelled'|'queued'|'succeeded'|'needs_attention'`、`total`、`queued`、`running`、`succeeded`、`failed`、`cancelled`。
 
 ### 5.5 元数据与刮削
 
@@ -393,13 +393,13 @@
 
 ### 5.7 任务（`/api/tasks`）
 
-- `GET /api/tasks?` → 任务列表；`GET /api/tasks/{task_id}`；`POST /{task_id}/cancel`；`POST /{task_id}/retry`（`src/api/tasks.ts:20-30`）。
-- `TaskRecord`（`src/api/types.ts:196-208`）：`task_id`、`task_type`、`source`、`status: 'pending'|'running'|'succeeded'|'failed'|'cancelled'`、`progress`、`message`、`created_at`、`started_at`、`finished_at`、`error`、`result`。
+- `GET /api/tasks?` → 任务列表；`GET /api/tasks/{task_id}`；`POST /{task_id}/cancel`；`POST /{task_id}/retry`（`旧前端/src/api/tasks.ts:20-30`）。
+- `TaskRecord`（`旧前端/src/api/types.ts:196-208`）：`task_id`、`task_type`、`source`、`status: 'pending'|'running'|'succeeded'|'failed'|'cancelled'`、`progress`、`message`、`created_at`、`started_at`、`finished_at`、`error`、`result`。
 - 长任务属于后端 TaskRecord；关闭弹窗或切换页面不取消任务（`docs/PROJECT.md` 第 8 节）。
 
 ### 5.8 设置、OpenList、Bangumi
 
-- `/api/config`：`GET /` 返回 `PublicConfig`（含 `setup_completed`、`setup_deferred`、`series_card_image_mode`、`poster_size`、来源列表、播放与 OpenList 配置等，见 `src/api/config.ts` 与 `src/App.tsx:170-184` 的实际消费字段）；`PATCH /` 保存；`/setup/*` 首次引导分步写入；`/test/*` 连接测试；`/tmdb-images/repair` 图片修复作业。
+- `/api/config`：`GET /` 返回 `PublicConfig`（含 `setup_completed`、`setup_deferred`、`series_card_image_mode`、`poster_size`、来源列表、播放与 OpenList 配置等，见 `旧前端/src/api/config.ts` 与 `旧前端/src/App.tsx:170-184` 的实际消费字段）；`PATCH /` 保存；`/setup/*` 首次引导分步写入；`/test/*` 连接测试；`/tmdb-images/repair` 图片修复作业。
 - `/api/openlist`：连接（`GET/POST /connections`）、测试（`POST /test-connection`）、写入配置（`POST /config`）、浏览（`GET /browse`）、预取（`POST /prefetch`）、路由（`GET/PUT /routes`、`POST /routes/discover`）、遥测（`GET /telemetry/today`）。
 - `/api/integrations/bangumi`：账号（`token`/`me`/`session`/`session/verify`）、图片（`avatar`/`subject-image`，受限查询参数鉴权）、搜索与匹配（`search`/`matches/*`）、收藏（`collections/*`）、分集已看与进度同步（`episodes/*`、`progress/{work_id}/sync`）。
 - 凭据（TMDB / Bangumi / OpenList 密码）存 Windows Credential Manager，不进 `config.json`，接口不得回显明文。
@@ -423,8 +423,8 @@
 | `/api/v4/sources/scan` | 有封装无页面调用 | 同步扫描入口；与 durable 扫描入口并存（TBC-04） |
 | `/api/v4/playback/progress*` | 与 `/api/playback/progress` 并存 | 进度写入端点重复（技术债） |
 | `/api/v4/tracking/state*` | 前端零引用 | 追更状态读写 |
-| `/api/v4/tracking/works` | 有封装无消费组件 | `src/api/mediaV4.ts:704` |
-| `/api/library/diagnostics`、`/api/library/rescan` | 有封装无调用方 | `src/api/library.ts:46`、`:48` |
+| `/api/v4/tracking/works` | 有封装无消费组件 | `旧前端/src/api/mediaV4.ts:704` |
+| `/api/library/diagnostics`、`/api/library/rescan` | 有封装无调用方 | `旧前端/src/api/library.ts:46`、`:48` |
 | `/api/library/watch-status`（列表） | 前端未见调用 | 单作品版本在用 |
 | `/api/v4/work-customization/{work_id}/extra-videos` | 前端未见调用 | 附加视频清单 |
 | `/api/config/setup/status` | 前端未见调用 | 首次引导用 `GET /api/config` 的 `setup_*` 字段 |

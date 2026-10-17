@@ -6,10 +6,10 @@ const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const splash = readFileSync(new URL('../src/components/shell/StartupSplash.tsx', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-const tauri = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8')) as {
+const tauri = JSON.parse(readFileSync(new URL('../../src-tauri/tauri.conf.json', import.meta.url), 'utf8')) as {
   app: { windows: Array<{ transparent?: boolean; windowEffects?: { effects?: string[] }; backgroundColor?: string }> };
 };
-const icon = readFileSync(new URL('../public/brand/kumiplayer-app-icon.svg', import.meta.url), 'utf8');
+const icon = readFileSync(new URL('../../public/brand/kumiplayer-app-icon.svg', import.meta.url), 'utf8');
 
 test('启动首帧与 React 兜底均不再包含旋转进度环', () => {
   assert.doesNotMatch(html, /kumi-boot-track/);

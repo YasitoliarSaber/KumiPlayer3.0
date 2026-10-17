@@ -1,11 +1,14 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { FluentProvider, webDarkTheme } from '@fluentui/react-components';
 import { describe, expect, test, vi } from 'vitest';
 import DetailSeasonPicker from '../../src/components/media/DetailSeasonPicker';
 
-const componentPath = join(process.cwd(), 'src', 'components', 'media', 'DetailSeasonPicker.tsx');
+// 归档后测试位于 旧前端/tests/：相对本文件定位旧源码，不依赖进程工作目录。
+const legacyRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const componentPath = join(legacyRoot, 'src', 'components', 'media', 'DetailSeasonPicker.tsx');
 
 const seasons = [
   { key: 'season:1', label: '第 1 季' },
@@ -162,7 +165,7 @@ describe('详情页季度选择器', () => {
 });
 
 describe('详情季选择器与 Portal 浮层的样式作用域（F-007）', () => {
-  const css = readFileSync(join(process.cwd(), 'src', 'index.css'), 'utf-8');
+  const css = readFileSync(join(legacyRoot, 'src', 'index.css'), 'utf-8');
 
   test('不再存在按 [role=listbox] 全局覆盖背景的兜底规则', () => {
     // 历史回归：全局 [role='listbox'] !important 背景把详情深色浮层改成白底，

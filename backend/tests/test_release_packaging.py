@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_production_api_client_targets_the_desktop_backend():
     """Tauri 生产页面不是 FastAPI 同源页面，不能把 API_BASE 留空。"""
-    client = (ROOT / "src" / "api" / "client.ts").read_text(encoding="utf-8")
+    client = (ROOT / "旧前端" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
 
     assert "http://127.0.0.1:37821" in client
     assert "http://127.0.0.1:8520" not in client
@@ -94,7 +94,7 @@ def test_desktop_launcher_reports_missing_runtime_instead_of_silently_exiting():
 def test_backend_default_port_matches_desktop_port():
     """后端默认配置必须和桌面壳、前端固定地址保持一致。"""
     config = (ROOT / "backend" / "app" / "core" / "config.py").read_text(encoding="utf-8")
-    client = (ROOT / "src" / "api" / "client.ts").read_text(encoding="utf-8")
+    client = (ROOT / "旧前端" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
 
     assert "server_port: int = 37821" in config
     assert "http://127.0.0.1:37821" in client
@@ -262,7 +262,7 @@ def test_mpv_staging_refuses_development_only_runtime(tmp_path):
 
 
 def test_first_run_supports_builtin_and_optional_external_player():
-    page = (ROOT / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
 
     assert "内置播放器" in page
     assert "安装包不包含 mpv.exe" not in page

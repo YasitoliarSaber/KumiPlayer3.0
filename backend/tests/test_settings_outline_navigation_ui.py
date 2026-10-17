@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_settings_navigation_switches_panels_without_scroll_observers():
-    page = (ROOT / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
 
     assert "hidden={activeSection !== tab.key}" in page
     assert "aria-controls={sectionId(tab.key)}" in page
@@ -21,7 +21,7 @@ def test_connection_essentials_are_visible_and_misleading_options_are_hidden():
     - 代理不再与 TMDB 混排（移到 support 的网络区块）；
     - 可选联网名称核对独立于 TMDB 常用连接配置；旧“连接高级设置”不回流。
     """
-    page = (ROOT / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
 
     essentials_start = page.index('title="常用连接配置"')
     recovery_start = page.index('title="联网名称核对（可选）" collapsible')
@@ -53,7 +53,7 @@ def test_connection_essentials_are_visible_and_misleading_options_are_hidden():
 
 def test_proxy_lives_in_its_own_network_section():
     """OL-4：网络代理不与 TMDB 连接配置混排，位于独立的「网络访问」区块。"""
-    page = (ROOT / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
 
     network_start = page.index('title="网络访问"')
     assert 'label="网络代理"' in page
@@ -61,7 +61,7 @@ def test_proxy_lives_in_its_own_network_section():
     assert network_start < proxy_pos
 
 def test_secret_config_inputs_do_not_reuse_masked_values_as_new_credentials():
-    page = (ROOT / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
 
     assert "const initialDraft = secret ? '' : value" in page
     assert "已配置；粘贴新凭据可替换" in page
@@ -76,7 +76,7 @@ def test_settings_page_keeps_only_actionable_cards_and_readme_lists_environment_
     到设置页、环境细节仍在 README"。
     """
 
-    page = (ROOT / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src/pages/SettingsPage.tsx").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert 'title="运行环境"' not in page

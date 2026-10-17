@@ -3,14 +3,14 @@
 > 适用范围：现有系统的事实快照；不作为 3.0 的页面、组件、视觉或架构约束。源码及用户最新指令优先。
 
 > 记录日期：2026-10-14
-> 事实来源：`backend/app/api/playback_v4.py`、`backend/app/media_v4/playback/`、`backend/app/playback/`、`src/api/playback.ts`、`mpv/README.md`、`docs/PROJECT.md`
+> 事实来源：`backend/app/api/playback_v4.py`、`backend/app/media_v4/playback/`、`backend/app/playback/`、`旧前端/src/api/playback.ts`、`mpv/README.md`、`docs/PROJECT.md`
 > 定位：回答「从用户点击到 MPV 播放、再到进度与历史落库的完整链路」。用于新前端设计播放类交互时确认边界。不评估播放器实现是否需要重构。
 
 ## 1. 端到端链路
 
 ```text
 详情页选择作品 / 剧集
-  → src/api/playback.ts:29  POST /api/playback/play { work_id, episode_id, asset_id? }
+  → 旧前端/src/api/playback.ts:29  POST /api/playback/play { work_id, episode_id, asset_id? }
   → backend/app/api/playback_v4.py:61  play()
   → V4PlaybackManager.play（media_v4/playback/session.py:76）
   → _resolve_asset（session.py:214）读取 Asset 身份与 playback_locator
@@ -32,7 +32,7 @@
 |---|---|---|
 | `POST /api/playback/play`（`playback_v4.py:61`） | `{ work_id: str, episode_id: str, asset_id: str = "" }`（Pydantic `PlayRequest`，`work_id`/`episode_id` 最小长度 1） | `asset_id` 为空时按最近确认的 revision 绑定回退解析 |
 
-响应字段：`session_id`、`status`、`work_id`、`episode_id`、`asset_id`、`playback_locator`（`src/api/playback.ts:22-29`）。
+响应字段：`session_id`、`status`、`work_id`、`episode_id`、`asset_id`、`playback_locator`（`旧前端/src/api/playback.ts:22-29`）。
 
 失败语义：`KeyError` → **404**「剧集或 Asset 不存在」（`playback_v4.py:65-68`）。
 
@@ -129,11 +129,11 @@
 
 | 端点 | 响应 | 前端 |
 |---|---|---|
-| `GET /api/playback/progress?work_id=`（`playback_v4.py:125`） | `{ items: PlaybackHistoryItem[] }` | `src/api/playback.ts:56` |
-| `GET /api/playback/history?limit=&work_id=`（`:143`） | `{ items: PlaybackHistoryItem[] }` | `src/api/playback.ts:50` |
+| `GET /api/playback/progress?work_id=`（`playback_v4.py:125`） | `{ items: PlaybackHistoryItem[] }` | `旧前端/src/api/playback.ts:56` |
+| `GET /api/playback/history?limit=&work_id=`（`:143`） | `{ items: PlaybackHistoryItem[] }` | `旧前端/src/api/playback.ts:50` |
 | `GET /api/v4/playback/progress/{episode_id}/{asset_id}`（`media_v4.py:2511`） | 单集进度 | 前端零引用 |
 
-`PlaybackHistoryItem` 字段：`work_id`、`episode_id`、`asset_id`、`position`、`duration`、`completed`、`updated_at`，另含历史读模型的 `episode_title`、`season_number`、`episode_number`、`thumb_path`、`played_at`、`season_snapshot`、`episode_snapshot`、`title_snapshot`（`src/api/types.ts:157-172`）。
+`PlaybackHistoryItem` 字段：`work_id`、`episode_id`、`asset_id`、`position`、`duration`、`completed`、`updated_at`，另含历史读模型的 `episode_title`、`season_number`、`episode_number`、`thumb_path`、`played_at`、`season_snapshot`、`episode_snapshot`、`title_snapshot`（`旧前端/src/api/types.ts:157-172`）。
 
 另外 `/api/v4/playback/progress`（`media_v4.py:2493`）与 `/api/playback/progress` 并存，属已知重复端点（`frontend-analysis.md` 第 9 节）。
 

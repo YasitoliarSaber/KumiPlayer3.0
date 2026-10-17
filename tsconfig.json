@@ -17,7 +17,6 @@
     "noUncheckedSideEffectImports": true,
     "ignoreDeprecations": "6.0"
   },
-  "include": ["src"],
-  "exclude": ["src/main", "src/preload", "src/renderer", "src/shared"],
+  "include": ["旧前端/src"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

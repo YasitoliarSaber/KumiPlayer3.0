@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { V4RecognitionSummary } from '../../src/components/media/V4RecognitionSummary'
 import type { V4Preview } from '../../src/api/mediaV4'
 
@@ -48,7 +50,8 @@ test('普通识别修正保持正常表单，弹窗有独立遮罩和实体居�
   expect(within(dialog).getByText('集号')).toBeVisible()
   expect(dialog.querySelector('.fui-FluentProvider')).not.toBeNull()
   expect(document.querySelector('.media-v4-recognition-backdrop')).not.toBeNull()
-  const css = readFileSync('src/index.css', 'utf8')
+  // 归档后测试位于 旧前端/tests/：相对本文件定位旧源码，不依赖进程工作目录。
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'index.css'), 'utf8')
   expect(css).toMatch(/\.media-v4-recognition-dialog\s*\{[^}]*position: fixed[^}]*background:/s)
   expect(css).toMatch(/\.media-v4-recognition-dialog\s*\{[^}]*background: var\(--surface-solid\)/s)
 })

@@ -15,9 +15,9 @@ def test_tauri_window_has_a_workable_desktop_minimum_size():
 
 
 def test_poster_grid_uses_measured_columns_and_preserves_vertical_artwork():
-    component = (ROOT / "src/components/library/VirtualizedPosterGrid.tsx").read_text(encoding="utf-8")
-    metrics = (ROOT / "src/components/library/posterGridMetrics.ts").read_text(encoding="utf-8")
-    css = (ROOT / "src/index.css").read_text(encoding="utf-8")
+    component = (ROOT / "旧前端" / "src/components/library/VirtualizedPosterGrid.tsx").read_text(encoding="utf-8")
+    metrics = (ROOT / "旧前端" / "src/components/library/posterGridMetrics.ts").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src/index.css").read_text(encoding="utf-8")
 
     assert "effectiveColumns" in component
     assert "ResizeObserver" in component
@@ -36,7 +36,7 @@ def test_poster_grid_uses_measured_columns_and_preserves_vertical_artwork():
 
 
 def test_responsive_css_does_not_override_virtual_poster_grid_columns():
-    css = (ROOT / "src/index.css").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src/index.css").read_text(encoding="utf-8")
 
     assert "grid-template-columns: repeat(var(--category-columns, 5), minmax(0, 1fr));" in css
     assert ".category-grid {\n    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));" not in css
@@ -44,7 +44,7 @@ def test_responsive_css_does_not_override_virtual_poster_grid_columns():
 
 
 def test_first_run_setup_explains_current_runtime_requirements():
-    page = (ROOT / "src/pages/FirstRunSetup.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src/pages/FirstRunSetup.tsx").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     # 系统/分发要求保留在说明文档；引导页用实际检测决定能否继续，
@@ -61,8 +61,8 @@ def test_first_run_setup_explains_current_runtime_requirements():
 
 
 def test_media_management_collapses_before_controls_can_overlap():
-    css = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
-    page = (ROOT / "src" / "pages" / "MediaManagementPage.tsx").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src" / "index.css").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src" / "pages" / "MediaManagementPage.tsx").read_text(encoding="utf-8")
 
     assert "Media management responsive workbench layout" in css
     assert "container-type: inline-size" in css

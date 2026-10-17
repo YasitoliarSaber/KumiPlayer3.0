@@ -4,7 +4,8 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc -b && vite build",
+    "build": "npm run build:legacy",
+    "build:legacy": "tsc -b && vite build",
     "build:helper": "cargo build --release --manifest-path src/desktop-helper/Cargo.toml",
     "stage:helper": "node scripts/desktop/stage-helper.cjs",
     "build:desktop": "electron-vite build && npm run build:helper && npm run stage:helper",
@@ -27,7 +28,7 @@
     "dev:legacy": "vite --host 127.0.0.1 --port 1420 --strictPort",
     "test": "npm run test:contracts && npm run test:components",
     "test:components": "vitest run",
-    "test:contracts": "node --test tests/*.test.ts",
+    "test:contracts": "node --test \"旧前端/tests/*.test.ts\"",
     "tauri": "tauri"
   },
   "dependencies": {

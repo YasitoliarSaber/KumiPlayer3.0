@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_main_scrollbar_uses_themed_fluent_overlay_style():
-    css = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src" / "index.css").read_text(encoding="utf-8")
 
     assert "Desktop overlay scrollbar - Fluent / Mica" in css
     assert ".app-main::-webkit-scrollbar" in css

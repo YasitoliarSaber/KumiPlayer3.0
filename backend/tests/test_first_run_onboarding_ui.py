@@ -4,13 +4,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_app_gates_normal_shell_behind_first_run_setup():
-    app = (ROOT / "src" / "App.tsx").read_text(encoding="utf-8")
+    app = (ROOT / "旧前端" / "src" / "App.tsx").read_text(encoding="utf-8")
     assert "FirstRunSetup" in app
     assert "setup_completed" in app
 
 
 def test_first_run_page_contains_required_zero_start_steps():
-    page = (ROOT / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
     for text in ["内置播放器", "本地挂载播放", "媒体来源", "验证并完成", "不会移动或改名你的原始文件"]:
         assert text in page
     assert "mirror_dir" not in page
@@ -23,7 +23,7 @@ def test_first_run_page_contains_required_zero_start_steps():
 
 
 def test_first_run_no_longer_asks_user_to_pick_external_mpv():
-    page = (ROOT / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
     assert "选择 MPV" not in page
     assert "安装包不包含 mpv.exe" not in page
     assert "请选择 mpv.exe" not in page
@@ -31,8 +31,8 @@ def test_first_run_no_longer_asks_user_to_pick_external_mpv():
 
 
 def test_first_run_explains_and_links_official_credential_types():
-    page = (ROOT / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
-    credentials = (ROOT / "src" / "config" / "credentials.ts").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
+    credentials = (ROOT / "旧前端" / "src" / "config" / "credentials.ts").read_text(encoding="utf-8")
 
     assert "TMDB API 读取访问令牌" in page
     assert "不是下方的 API 密钥" in page
@@ -43,7 +43,7 @@ def test_first_run_explains_and_links_official_credential_types():
 
 
 def test_first_run_reflects_v4_source_flow_without_runtime_metadata():
-    page = (ROOT / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "旧前端" / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
 
     assert "OpenList 可在完成后添加" in page
     assert ("并不替代首次配置的可访问媒体根目录" in page
@@ -54,9 +54,9 @@ def test_first_run_reflects_v4_source_flow_without_runtime_metadata():
 
 
 def test_settings_can_reenter_setup_without_resetting_first_run_state():
-    app = (ROOT / "src" / "App.tsx").read_text(encoding="utf-8")
-    settings = (ROOT / "src" / "pages" / "SettingsPage.tsx").read_text(encoding="utf-8")
-    setup = (ROOT / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
+    app = (ROOT / "旧前端" / "src" / "App.tsx").read_text(encoding="utf-8")
+    settings = (ROOT / "旧前端" / "src" / "pages" / "SettingsPage.tsx").read_text(encoding="utf-8")
+    setup = (ROOT / "旧前端" / "src" / "pages" / "FirstRunSetup.tsx").read_text(encoding="utf-8")
 
     assert "setupOverride" in app
     assert "onOpenSetup" in app
@@ -68,7 +68,7 @@ def test_settings_can_reenter_setup_without_resetting_first_run_state():
 
 
 def test_settings_omits_support_and_build_metadata_from_regular_preferences():
-    settings = (ROOT / "src" / "pages" / "SettingsPage.tsx").read_text(encoding="utf-8")
+    settings = (ROOT / "旧前端" / "src" / "pages" / "SettingsPage.tsx").read_text(encoding="utf-8")
 
     assert "应用与支持" not in settings
     assert "支持与赞助" not in settings
@@ -77,7 +77,7 @@ def test_settings_omits_support_and_build_metadata_from_regular_preferences():
 
 
 def test_settings_uses_local_artwork_and_saved_playback_paths():
-    settings = (ROOT / "src" / "pages" / "SettingsPage.tsx").read_text(encoding="utf-8")
+    settings = (ROOT / "旧前端" / "src" / "pages" / "SettingsPage.tsx").read_text(encoding="utf-8")
     assert "config.mirror_dir" not in settings
     assert "config.artwork_storage_mode" not in settings
     assert 'title="图片策略"' not in settings

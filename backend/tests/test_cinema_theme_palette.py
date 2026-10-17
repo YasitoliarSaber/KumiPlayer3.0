@@ -28,7 +28,7 @@ def _contrast_ratio(foreground: str, background: str) -> float:
 
 
 def test_cinema_core_palette_uses_fluent_cool_neutrals_and_blue_accent():
-    css = (ROOT / "src/index.css").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src/index.css").read_text(encoding="utf-8")
     block = _css_block_after(
         css,
         "Final Fluent/Mica visual calibration - 2026-07-08",
@@ -58,7 +58,7 @@ def test_cinema_core_palette_uses_fluent_cool_neutrals_and_blue_accent():
 
 
 def test_cinema_shell_controls_share_the_same_cool_surface_hierarchy():
-    css = (ROOT / "src/index.css").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src/index.css").read_text(encoding="utf-8")
     command_block = _css_block_after(
         css,
         "Fluent command surface polish for category pages",
@@ -79,7 +79,7 @@ def test_cinema_shell_controls_share_the_same_cool_surface_hierarchy():
 
 
 def test_cinema_detail_material_uses_neutral_glass_and_blue_chroma_without_changing_layout():
-    css = (ROOT / "src/index.css").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src/index.css").read_text(encoding="utf-8")
     detail_block = _css_block_after(
         css,
         "Immersive Fluent detail layout - theme-aware rebuild from references",
@@ -95,7 +95,7 @@ def test_cinema_detail_material_uses_neutral_glass_and_blue_chroma_without_chang
 
 
 def test_cinema_supporting_materials_do_not_reintroduce_amber_tints():
-    css = (ROOT / "src/index.css").read_text(encoding="utf-8")
+    css = (ROOT / "旧前端" / "src/index.css").read_text(encoding="utf-8")
     fallback_block = _css_block_after(
         css,
         "Theme fallback used only behind missing/transparent artwork",
@@ -114,8 +114,8 @@ def test_cinema_supporting_materials_do_not_reintroduce_amber_tints():
 
 
 def test_cinema_fluent_controls_and_boot_frame_use_the_project_palette():
-    theme = (ROOT / "src/design/fluentTheme.ts").read_text(encoding="utf-8")
-    document = (ROOT / "index.html").read_text(encoding="utf-8")
+    theme = (ROOT / "旧前端" / "src/design/fluentTheme.ts").read_text(encoding="utf-8")
+    document = (ROOT / "旧前端" / "index.html").read_text(encoding="utf-8")
 
     assert "const cinemaTheme: Theme" in theme
     assert "colorNeutralBackground1: '#292929'" in theme
