@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ArtworkImage, WorkArtwork, WorkCard } from '@shared/contracts/dto';
-import { parseWorkCard } from '@shared/contracts/dto';
+import { parseWorkCard, parseWorkDetail } from '@shared/contracts/dto';
 import { pickArtwork, toWorkDetail, type BackendWorkDetailDto } from '@/services/real/adapters';
 
 const RESOURCE_ID = 'a'.repeat(64);
@@ -175,4 +175,37 @@ describe('作品卡片图片契约', () => {
     const reported = legacyFlatIssues({ clearlogo: ARTWORK.clearlogo });
     expect(reported).toContain('artwork.clearlogo.variants 期望字符串');
   });
+});
+
+describe('作品详情观看状态契约', () => {
+  it('没有观看记录时接受后端的 null，并能转换为未观看、未收藏的详情', () => {
+    // projection/details.py 无 tracking_states 记录时明确返回 null。
+    const parsed = parseWorkDetail({
+      ...card(), watch_status: null, seasons: [], episodes: [], cast: [], related_works: [],
+    });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.watch_status).toBeNull();
+    expect(toWorkDetail(parsed.value, null, () => null).watch).toEqual({
+      status: '', favorite: false, note: '',
+    });
+  });
+
+  it('已有观看状态和收藏信息保持原值', () => {
+    const parsed = parseWorkDetail({
+      ...card(),
+      watch_status: { work_id: 'w01', status: 'watching', favorite: true, note: '追番', updated_at: null },
+    });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(toWorkDetail(parsed.value, null, () => null).watch).toEqual({
+      status: 'watching', favorite: true, note: '追番',
+    });
+  });
+
+  it.each(['watching', [], { work_id: 'w01', favorite: 'true' }])(
+    '仍然拒绝非空但不符合契约的观看状态 %j', (watchStatus) => {
+      expect(parseWorkDetail({ ...card(), watch_status: watchStatus }).ok).toBe(false);
+    },
+  );
 });

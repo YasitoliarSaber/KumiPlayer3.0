@@ -135,7 +135,8 @@ export interface WorkCard {
   readonly fanart_path: string;
   readonly clearlogo_path: string;
   readonly content_scope: string;
-  readonly watch_status: WatchStatus;
+  /** 详情投影在没有本地观看记录时返回 null；不能把未观看当成响应损坏。 */
+  readonly watch_status: WatchStatus | null;
   readonly artwork: WorkArtwork;
 }
 
@@ -163,7 +164,7 @@ const WORK_CARD_SCHEMA = {
   fanart_path: field(string(), true),
   clearlogo_path: field(string(), true),
   content_scope: field(string(), true),
-  watch_status: field(parseWatchStatus, true),
+  watch_status: field(nullable(parseWatchStatus), true),
   artwork: field(parseWorkArtwork, true),
 } as const;
 
