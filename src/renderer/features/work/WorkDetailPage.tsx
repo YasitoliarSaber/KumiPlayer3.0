@@ -1,16 +1,10 @@
 /**
- * 作品详情：背景与海报/标志、简介与元信息、季集切换、缩略图、版本选择、
- * 收藏与更多菜单。布局以最终原型为准，管理操作使用同一套 Radix 抽屉。
+ * 作品详情：沿用旧版的单列概要与选集结构；控件和管理操作使用当前组件库。
  */
 
 import {
-  ArrowLeft,
   Check,
-  CirclePlay,
-  ChevronDown,
-  Database,
   FolderOpen,
-  Heart,
   MoreHorizontal,
   RefreshCw,
   RotateCcw,
@@ -37,17 +31,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/shared/ui/dropdown-menu';
 import { Input } from '@/shared/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/shared/ui/tabs';
-import { SOURCE_LABELS } from '@/app/ui-store';
 import { WorkManagementSheet } from './WorkManagementSheet';
 import { EpisodeStrip } from './EpisodeStrip';
+import { WorkHero } from './WorkHero';
 import styles from './WorkDetailPage.module.css';
 
 export function WorkDetailPage() {
@@ -118,9 +109,9 @@ export function WorkDetailPage() {
           episode.assets[0]?.id ??
           '';
         const session = await service.play(work.id, episode.id, target);
-        setNotice(`演示播放已开始：${session.episodeCode} · ${session.episodeTitle}`);
+        setNotice(`${service.serviceMode === 'real' ? '播放已开始' : '演示播放已开始'}：${session.episodeCode} · ${session.episodeTitle}`);
       } catch (error) {
-        setNotice(error instanceof Error ? error.message : '演示播放未能开始');
+        setNotice(error instanceof Error ? error.message : '播放未能开始');
       } finally {
         setBusy(false);
       }
@@ -142,13 +133,13 @@ export function WorkDetailPage() {
   }, [work]);
 
   if (detail.isPending) {
-    return <LoadingSurface label="正在打开作品" detail="正在读取演示详情数据" />;
+    return <LoadingSurface label="正在打开作品" detail="正在读取作品详情" />;
   }
   if (detail.isError || !work) {
     return (
       <ErrorSurface
         title="无法打开这个作品"
-        detail={detail.error?.message ?? '演示数据中没有这个作品'}
+        detail={detail.error?.message ?? '媒体库中没有这个作品'}
         onRetry={() => void detail.refetch()}
       />
     );
@@ -292,140 +283,50 @@ export function WorkDetailPage() {
       <div className={styles.backdrop} aria-hidden="true">
         <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt="" loading="eager" className={styles.heroBackdrop} />
       </div>
-      <div className={styles.hero}>
-        <button type="button" className={styles.heroBack} onClick={() => navigate(-1)}>
-          <ArrowLeft aria-hidden="true" />
-          <span>返回</span>
-        </button>
-        <div className={styles.heroBody}>
-          <div className={styles.heroPoster}>
-            <Artwork artwork={work.artwork.poster} alt={work.title} fallbackLabel={work.title} loading="eager" />
-          </div>
-          <div className={styles.heroCopy}>
-            <h1 className={work.artwork.clearlogo ? styles.logoTitle : styles.heroTitle}>
-              {work.artwork.clearlogo ? <>
-                <span className="sr-only">{work.title}</span>
-                <Artwork artwork={work.artwork.clearlogo} alt="" fallbackLabel={work.title} kind="logo" loading="eager" className={styles.heroLogo} />
-              </> : work.title}
-            </h1>
-            {work.originalTitle && work.originalTitle !== work.title ? (
-              <p className={styles.heroOriginal}>{work.originalTitle}</p>
-            ) : null}
-            <div className={styles.heroMeta}>
-              {work.rating > 0 ? <span className={styles.metaItem}>★ {work.rating.toFixed(1)}</span> : null}
-              <span className={styles.metaItem}>{work.year}</span>
-              <span className={styles.metaItem}>
-                {work.mediaType === 'movie' ? '剧场版' : `共 ${work.seasonCount} 季`}
-              </span>
-              <span className={styles.metaItem}>{work.episodeCount} 集</span>
-            </div>
-            <div className={styles.heroTags}>
-              {/* 作品来源：单一选择器（原型已把多枚来源胶囊收敛为互斥菜单）。 */}
-              {work.sources.length > 0 ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="xs" className={styles.sourcePicker}>
-                      <Database className="size-4" />
-                      {sourceLabel(preferredSource || work.sources[0]!)}
-                      <ChevronDown aria-hidden="true" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="min-w-[13rem]">
-                    <DropdownMenuLabel>作品来源</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={preferredSource || work.sources[0]}
-                      onValueChange={setPreferredSource}
-                    >
-                      {work.sources.map((source) => (
-                        <DropdownMenuRadioItem key={source} value={source}>
-                          {sourceLabel(source)}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : null}
-              <span className={styles.genreList}>
-                {work.genres.slice(0, 3).map((genre) => <span key={genre}>{genre}</span>)}
-              </span>
-            </div>
-            <p className={styles.heroPlot}>{work.plot}</p>
-            <div className={styles.heroActions}>
-              <Button className={styles.continueButton} onClick={() => resume && void play(resume)} disabled={!resume || busy}
-                title={resume ? `${resume.code} ${resume.title}${resumePercent > 0 ? `，已观看 ${resumePercent}%` : ''}` : undefined}>
-                {resumePercent > 0 ? <span className={styles.continueFill} style={{ width: `${resumePercent}%` }} aria-hidden="true" /> : null}
-                <CirclePlay className="relative size-4" />
-                <span className={styles.continueCopy}>
-                  <strong>{resumePosition > 0 ? '继续观看' : '播放'}</strong>
-                  {resume ? <small>{resume.code}{resumePercent > 0 ? ` · 已看 ${resumePercent}%` : ''}</small> : null}
-                </span>
-              </Button>
-              <span title={work.watch.favorite ? '取消收藏' : '加入收藏'} className="inline-flex">
-                <Button
-                  variant={work.watch.favorite ? 'subtle' : 'outline'}
-                  className={styles.onArtworkButton}
-                  loading={togglingFavorite}
-                  aria-busy={togglingFavorite}
-                  onClick={() => {
-                    // 双击保护：写入期间不再接受第二次点击，避免重复提交。
-                    if (togglingFavorite) {
-                      return;
-                    }
-                    setTogglingFavorite(true);
-                    void service
-                      .setFavorite(work.id, !work.watch.favorite)
-                      .then(refreshLibrary)
-                      .catch((error: unknown) => setNotice(error instanceof Error ? error.message : '收藏状态未保存'))
-                      .finally(() => setTogglingFavorite(false));
-                  }}
-                >
-                  <Heart className="size-4" />
-                  {work.watch.favorite ? '已收藏' : '收藏'}
-                </Button>
-              </span>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button ref={moreButtonRef} variant="outline" className={styles.onArtworkButton}>
-                    <MoreHorizontal className="size-4" />
-                    更多操作
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => setManagementOpen(true)}>资料与管理</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem disabled={actionBusy} onClick={() => void rescrape()}>
-                    <RefreshCw className="size-3.5" />
-                    重新刮削资料
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setPendingTitle(work.title);
-                      setRenameError('');
-                      setRenameOpen(true);
-                    }}
-                  >
-                    编辑标题
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled={actionBusy} onClick={() => void openFolder()}>
-                    <FolderOpen className="size-3.5" />
-                    打开所在位置
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={() => void openDelete()}>
-                    <Trash2 className="size-3.5" />
-                    从媒体库移除
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            {notice ? (
-              <p className={styles.notice} role="status">
-                {notice}
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </div>
+      <WorkHero key={work.id} work={work} resume={resume} resumePosition={resumePosition} resumePercent={resumePercent}
+        busy={busy} favoriteBusy={togglingFavorite} preferredSource={preferredSource} notice={notice}
+        onBack={() => navigate(-1)} onSourceChange={setPreferredSource} onPlay={() => resume && void play(resume)}
+        onFavorite={() => {
+          if (togglingFavorite) return;
+          setTogglingFavorite(true);
+          void service.setFavorite(work.id, !work.watch.favorite).then(refreshLibrary)
+            .catch((error: unknown) => setNotice(error instanceof Error ? error.message : '收藏状态未保存'))
+            .finally(() => setTogglingFavorite(false));
+        }}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button ref={moreButtonRef} variant="outline" size="icon" className={styles.onArtworkButton} aria-label="更多操作" title="更多操作">
+            <MoreHorizontal className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => setManagementOpen(true)}>资料与管理</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={actionBusy} onClick={() => void rescrape()}>
+            <RefreshCw className="size-3.5" />
+            重新刮削资料
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              setPendingTitle(work.title);
+              setRenameError('');
+              setRenameOpen(true);
+            }}
+          >
+            编辑标题
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={actionBusy} onClick={() => void openFolder()}>
+            <FolderOpen className="size-3.5" />
+            打开所在位置
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onClick={() => void openDelete()}>
+            <Trash2 className="size-3.5" />
+            从媒体库移除
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      </WorkHero>
 
       <div className={styles.body}>
         <section className={styles.main} aria-label="季集">
@@ -591,10 +492,6 @@ export function WorkDetailPage() {
       </Dialog>
     </article>
   );
-}
-
-function sourceLabel(source: string): string {
-  return SOURCE_LABELS.find((entry) => entry.value === source)?.label ?? source;
 }
 
 /**

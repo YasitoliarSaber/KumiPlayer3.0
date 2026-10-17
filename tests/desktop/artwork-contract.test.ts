@@ -178,6 +178,24 @@ describe('作品卡片图片契约', () => {
 });
 
 describe('作品详情观看状态契约', () => {
+  it.each([
+    { episodes: [{ episode_id: 'e1', season_id: 's1', episode_number: 1 }] },
+    { episodes: [] },
+  ])('详情没有 season_count 时按真实季度计数，空季同样保留顺序：%j', ({ episodes }) => {
+    const payload: Record<string, unknown> = {
+      ...card(),
+      seasons: [{ season_id: 's2', season_number: 2 }, { season_id: 's1', season_number: 1 }],
+      episodes,
+    };
+    delete payload.season_count;
+    const parsed = parseWorkDetail(payload);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const detail = toWorkDetail(parsed.value, null, () => null);
+    expect(detail.seasonCount).toBe(2);
+    expect(detail.seasons.map((season) => season.id)).toEqual(['s2', 's1']);
+  });
+
   it('没有观看记录时接受后端的 null，并能转换为未观看、未收藏的详情', () => {
     // projection/details.py 无 tracking_states 记录时明确返回 null。
     const parsed = parseWorkDetail({

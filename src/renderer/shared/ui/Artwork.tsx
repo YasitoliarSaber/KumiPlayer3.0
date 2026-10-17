@@ -1,5 +1,5 @@
 /**
- * 图片读取组件：只接受演示素材 URL，失败时给出稳定回退，不访问外部网络。
+ * 图片读取组件：消费服务层给出的图片引用，失败时提供稳定回退。
  */
 
 import { useEffect, useState } from 'react';
@@ -16,6 +16,7 @@ interface ArtworkProps {
   readonly fallbackLabel?: string;
   readonly className?: string;
   readonly loading?: 'lazy' | 'eager';
+  readonly onError?: () => void;
 }
 
 export function Artwork({
@@ -25,6 +26,7 @@ export function Artwork({
   fallbackLabel = '暂无图片',
   className,
   loading = 'lazy',
+  onError,
 }: ArtworkProps) {
   const [failed, setFailed] = useState(false);
 
@@ -49,7 +51,7 @@ export function Artwork({
       loading={loading}
       decoding="async"
       draggable={false}
-      onError={() => setFailed(true)}
+      onError={() => { setFailed(true); onError?.(); }}
     />
   );
 }

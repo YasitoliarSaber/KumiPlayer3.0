@@ -1,4 +1,7 @@
 .page {
+  --detail-gutter: clamp(24px, 4vw, 72px);
+  --episode-width: clamp(224px, 18.5vw, 335px);
+  --detail-text-shadow: 0 1px 4px rgba(0, 0, 0, 0.98), 0 2px 12px rgba(0, 0, 0, 0.85);
   position: relative;
   isolation: isolate;
   display: flex;
@@ -19,8 +22,8 @@
 .hero {
   position: relative;
   display: flex;
-  align-items: flex-end;
-  min-height: calc(100dvh - var(--titlebar-offset, var(--titlebar-height)));
+  align-items: center;
+  min-height: clamp(400px, 62svh, 650px);
 }
 
 .heroBackdrop {
@@ -29,6 +32,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
 }
 
 .heroBack {
@@ -36,12 +40,8 @@
   top: 14px;
   left: 14px;
   z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
   border-radius: var(--radius-pill);
-  background: rgba(12, 16, 22, 0.46);
+  background: rgba(12, 16, 22, 0.32);
   color: #fff;
   font-size: 13px;
 }
@@ -54,25 +54,8 @@
 .heroBody {
   position: relative;
   z-index: 2;
-  display: grid;
-  grid-template-columns: 188px minmax(0, 1fr);
-  gap: 24px;
   width: 100%;
-  padding: 92px var(--page-gutter) 32px;
-  align-items: end;
-}
-
-.heroPoster {
-  overflow: hidden;
-  aspect-ratio: 2 / 3;
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-flyout);
-}
-
-.heroPoster img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  padding: clamp(80px, 12svh, 132px) var(--detail-gutter) 40px;
 }
 
 .heroCopy {
@@ -80,37 +63,39 @@
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  max-width: 660px;
   color: #fff;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  text-shadow: var(--detail-text-shadow);
 }
 
 .heroLogo {
-  width: min(340px, 100%);
-  height: 84px;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(360px, 100%);
+  max-height: 110px;
   object-fit: contain;
   object-position: left center;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.65));
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.96));
 }
 
 .heroTitle {
   margin: 0;
-  font-size: 32px;
+  font-size: clamp(32px, 3vw, 46px);
   font-weight: 700;
   line-height: 1.15;
 }
 
 .logoTitle {
-  display: flex;
-  align-items: center;
   min-width: 0;
-  min-height: 56px;
+  max-width: 100%;
   margin: 0;
 }
 
 .heroOriginal {
   margin: 0;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .heroMeta,
@@ -121,9 +106,9 @@
   gap: 8px 14px;
 }
 
-.metaItem {
+.heroMeta {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.86);
+  color: rgba(255, 255, 255, 0.96);
   font-variant-numeric: tabular-nums;
 }
 
@@ -132,15 +117,21 @@
   flex-wrap: wrap;
   gap: 6px 12px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.74);
+  color: rgba(255, 255, 255, 0.92);
 }
+
+.sourceLabel { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.sourceLabel svg { width: 14px; height: 14px; }
 
 .sourcePicker,
 .onArtworkButton {
   border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(12, 16, 22, 0.38);
+  background: rgba(12, 16, 22, 0.32);
   color: #fff;
+  text-shadow: none;
 }
+
+.onArtworkButton { width: 44px; height: 44px; padding: 0; border-radius: 50%; }
 
 .sourcePicker:hover,
 .onArtworkButton:hover {
@@ -149,26 +140,40 @@
 }
 
 .heroPlot {
-  max-width: 760px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  width: 100%;
+  max-width: 650px;
   margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
   font-size: var(--text-base);
-  line-height: var(--line-body);
-  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.8;
+  color: #fff;
+  text-align: left;
+  text-shadow: inherit;
 }
+.heroPlot[aria-expanded='true'] { display: block; overflow: visible; -webkit-line-clamp: unset; }
+.heroPlot:focus-visible { outline: 2px solid #fff; outline-offset: 4px; border-radius: 2px; }
 
 .heroActions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: 12px;
 }
 
 .continueButton {
   position: relative;
   overflow: hidden;
   height: 52px;
-  min-width: 186px;
+  width: 260px;
+  max-width: 100%;
   gap: 12px;
   justify-content: flex-start;
   text-shadow: none;
@@ -186,10 +191,13 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
+  flex: 1;
+  min-width: 0;
   line-height: 1.3;
 }
 .continueCopy strong { font-weight: 600; }
-.continueCopy small { font-size: 11px; opacity: 0.85; }
+.continueCopy small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; opacity: 0.9; }
+.continuePercent { position: relative; font-size: 12px; font-variant-numeric: tabular-nums; }
 
 .notice {
   margin: 0;
@@ -205,7 +213,7 @@
   display: flex;
   flex-direction: column;
   gap: 22px;
-  padding: 24px var(--page-gutter) 40px;
+  padding: 0 var(--detail-gutter) 40px;
   background: transparent;
 }
 
@@ -225,6 +233,7 @@
   color: #fff;
   border-color: #fff;
 }
+.body :global([role='tab'] span) { color: inherit; opacity: 0.8; }
 
 .main {
   display: flex;
@@ -233,28 +242,34 @@
   min-width: 0;
 }
 
-.episodeRail { position: relative; min-width: 0; padding-inline: 20px; }
+.episodeRail { position: relative; min-width: 0; }
 .episodeScroll { width: 100%; }
+.episodeScroll :global([data-orientation='horizontal']) { height: 4px; }
+.episodeScroll :global([data-orientation='horizontal'] > div) { background: rgba(255, 255, 255, 0.55); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
 .episodeViewport { cursor: grab; }
 .episodeViewport[data-dragging='true'] { cursor: grabbing; user-select: none; }
 .episodeArrow {
   position: absolute;
-  top: 40%;
+  top: calc(var(--episode-width) * 9 / 32 + 4px);
   transform: translateY(-50%);
   z-index: 2;
   border-radius: 50%;
+  background: rgba(12, 16, 22, 0.82);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #fff;
   box-shadow: var(--shadow-flyout);
 }
-.episodePrevious { left: 0; }
-.episodeNext { right: 0; }
+.episodePrevious { left: -14px; }
+.episodeNext { right: -14px; }
+.episodeArrow:hover { background: rgba(12, 16, 22, 0.96); color: #fff; }
 .episodes {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: clamp(210px, 26vw, 268px);
-  gap: 14px;
+  grid-auto-columns: var(--episode-width);
+  gap: 16px;
   margin: 0;
   width: max-content;
-  padding: 4px 4px 16px;
+  padding: 4px 0 18px;
   list-style: none;
 }
 
@@ -321,7 +336,7 @@
   gap: 2px;
   min-width: 0;
   padding: 0 2px;
-  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.85);
+  text-shadow: var(--detail-text-shadow);
 }
 
 .episodeCode {
@@ -465,19 +480,11 @@
   margin-top: 14px;
 }
 
-@media (max-width: 1080px) {
-  .heroBody {
-    grid-template-columns: 140px minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 760px) {
-  .heroBody {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 72px 18px 24px;
-  }
-
-  .heroPoster {
-    width: 140px;
-  }
+  .page { --detail-gutter: 24px; }
+  .hero { min-height: 380px; }
+  .heroBody { padding-top: 76px; padding-bottom: 32px; }
+  .heroLogo { max-width: min(300px, 100%); max-height: 88px; }
+  .heroCopy { gap: 9px; }
+  .continueButton { width: min(240px, 100%); }
 }

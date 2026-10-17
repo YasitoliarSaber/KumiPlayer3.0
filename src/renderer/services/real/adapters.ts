@@ -149,7 +149,7 @@ export function toWorkSummary(card: WorkCard, progress: ProgressSnapshot | null)
     showType: toShowType(card.show_type, card.media_type),
     source: toSourceId(card.source),
     sources: sources.length > 0 ? sources : [toSourceId(card.source)],
-    seasonCount: card.season_count,
+    seasonCount: num(card.season_count),
     episodeCount: card.episode_count,
     assetCount: card.asset_count,
     updatedAt: '',
@@ -233,11 +233,10 @@ export function toWorkDetail(
   });
   // 只有后端返回了季标识时才分组；没有季数据时按“全部剧集”单季展示，
   // 不虚构季号，也不把 unknown 折成第 0 季。
+  const seasonDtos = (dto.seasons ?? []).map(asRecord).filter((entry) => str(entry.season_id) !== '');
   const seasons =
-    bySeason.size > 0
-      ? (dto.seasons ?? [])
-          .map(asRecord)
-          .filter((entry) => str(entry.season_id) !== '')
+    seasonDtos.length > 0
+      ? seasonDtos
           .map((entry) => toSeason(entry, bySeason.get(str(entry.season_id)) ?? []))
       : [{ id: 'all', number: 0, label: '全部剧集', episodes }];
 
@@ -249,6 +248,8 @@ export function toWorkDetail(
 
   return {
     ...summary,
+    // 详情响应不含卡片的 season_count；真实季数组才是详情季数的依据。
+    seasonCount: seasonDtos.length,
     tags: strArray(dto.tags),
     seasons,
     cast: (dto.cast ?? []).map(asRecord).map(toCast),
