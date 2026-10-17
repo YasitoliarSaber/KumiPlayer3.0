@@ -14,7 +14,13 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.core.config import load_config, resolve_openlist_credentials
+from app.core.config import (
+    ConfigChangedError,
+    load_config,
+    resolve_openlist_credentials,
+    update_config,
+    validate_source_scan_schedules,
+)
 from app.core.paths import get_data_dir
 from app.integrations.openlist.client import normalize_remote_path
 from app.integrations.openlist.models import OpenListError
@@ -2123,6 +2129,69 @@ def cancel_durable_scan(scan_id: str):
     return {"scan_id": scan_id, "status": "cancelling"}
 
 
+class SourceScanScheduleRequest(BaseModel):
+    """按稳定来源标识的扫描调度写入。"""
+
+    enabled: bool = True
+    interval_minutes: int = Field(ge=15, le=10080)
+
+
+@router.get("/sources/scan-schedules")
+def list_source_scan_schedules():
+    """来源身份 / 扫描 / revision / jobs / 调度的只读分离聚合。"""
+
+    from app.media_v4.sources.scan_schedule import list_scan_schedules
+
+    return {"sources": list_scan_schedules(get_database())}
+
+
+@router.put("/sources/{root_id}/scan-schedule")
+def set_source_scan_schedule(root_id: str, request: SourceScanScheduleRequest):
+    """写入一个来源的定时扫描调度；只登记既有来源，不创建新来源。"""
+
+    from app.media_v4.sources.scan_schedule import scan_schedule_item
+
+    database = get_database()
+    with database.connect() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM source_roots WHERE root_id = ? AND enabled = 1 AND retired_at = ''",
+            (root_id,),
+        ).fetchone()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="来源不存在")
+    records = [
+        record
+        for record in validate_source_scan_schedules(load_config().source_scan_schedules)
+        if record["root_id"] != root_id
+    ]
+    records.append({
+        "root_id": root_id,
+        "enabled": bool(request.enabled),
+        "interval_minutes": int(request.interval_minutes),
+    })
+    try:
+        update_config({"source_scan_schedules": validate_source_scan_schedules(records)})
+    except ConfigChangedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    item = scan_schedule_item(database, root_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="来源不存在")
+    return item
+
+
+def _require_existing_work(conn, work_id: str) -> None:
+    """标题覆盖层只服务真实作品；未知身份必须 404，不能静默写出一条永不展示的覆盖。
+
+    与 watch-status / work-customization / artwork 上传一样，写入前先确认作品事实
+    存在，避免前端把"保存成功"显示给一个后端并未真正写入的身份。
+    """
+
+    if conn.execute("SELECT 1 FROM works WHERE work_id = ?", (work_id,)).fetchone() is None:
+        raise HTTPException(status_code=404, detail="作品不存在")
+
+
 @router.patch("/works/{work_id}/title")
 def set_work_title(work_id: str, request: WorkTitleRequest):
     """作品标题用户覆盖层：写入 work_overrides，不覆盖抓取事实。"""
@@ -2131,6 +2200,7 @@ def set_work_title(work_id: str, request: WorkTitleRequest):
 
     now = _now_iso()
     with get_database().connect() as conn:
+        _require_existing_work(conn, work_id)
         existing = conn.execute(
             "SELECT override_json FROM work_overrides WHERE work_id = ?",
             (work_id,),
@@ -2156,6 +2226,7 @@ def restore_work_title(work_id: str):
     """恢复默认标题：清除用户覆盖。"""
 
     with get_database().connect() as conn:
+        _require_existing_work(conn, work_id)
         conn.execute(
             "UPDATE work_overrides SET override_json=json_remove(override_json,'$.title'),updated_at=? "
             "WHERE work_id=? AND json_valid(override_json)", (_now_iso(), work_id),
@@ -2248,6 +2319,8 @@ def restore_work_artwork(work_id: str, kind: str):
     if kind not in {'poster', 'fanart', 'clearlogo'}:
         raise HTTPException(status_code=400, detail='不支持的图片类型')
     with get_database().connect() as conn:
+        # 与同组的手工图片上传一致：未知作品不能返回"已恢复"的假成功。
+        _require_existing_work(conn, work_id)
         existing = conn.execute('SELECT override_json FROM work_overrides WHERE work_id=?', (work_id,)).fetchone()
         if existing:
             payload = json.loads(existing['override_json'])
@@ -2383,13 +2456,34 @@ def openlist_status(remote_root: str = "", connection_id: str = ""):
 
 
 @router.get("/jobs")
-def list_jobs(status: str | None = None):
-    query = "SELECT * FROM jobs"
-    params: tuple[str, ...] = ()
+def list_jobs(
+    status: str | None = None,
+    revision_id: str | None = None,
+    limit: int | None = None,
+):
+    """原始 jobs 行读取。可选的 ``revision_id`` 让调用方按 revision 取下游链，
+    ``limit`` 只在调用方明确给出时截断；两者都不改变既有"读取全部 jobs"行为。
+
+    具名操作登记（``src/shared/contracts/operations.ts`` 的 ``jobs.list``）声明了
+    ``revision_id``/``limit``；未实现时请求会被静默忽略并返回别的 revision 的行，
+    因此这里补上真实的过滤与界限。
+    """
+
+    conditions: list[str] = []
+    params: list = []
     if status:
-        query += " WHERE status = ?"
-        params = (status,)
+        conditions.append("status = ?")
+        params.append(status)
+    if revision_id:
+        conditions.append("revision_id = ?")
+        params.append(revision_id)
+    query = "SELECT * FROM jobs"
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY created_at, job_id"
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(max(1, min(int(limit), 1000)))
     with get_database().connect() as conn:
         rows = conn.execute(query, params).fetchall()
     return {"jobs": [dict(row) for row in rows]}

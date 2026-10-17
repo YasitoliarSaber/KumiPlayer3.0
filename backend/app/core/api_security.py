@@ -1,16 +1,23 @@
 """桌面本地 API 的会话身份校验。"""
 
+import logging
 import os
 import re
 import secrets
 from collections.abc import Awaitable, Callable
+from urllib.parse import urlparse
 
 from starlette.datastructures import Headers, QueryParams
 from starlette.responses import JSONResponse
 from starlette.types import Receive, Scope, Send
 
+LOGGER = logging.getLogger(__name__)
+
 API_TOKEN_HEADER = "X-KumiPlayer-Token"
 API_TOKEN_QUERY = "api_token"
+# 浏览器联调用的显式开发来源开关（默认关闭，只接受本机回环 http 来源）。
+DEV_ORIGINS_ENV = "KUMIPLAYER_DEV_ORIGINS"
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _PUBLIC_HTTP_PATHS = frozenset({"/api/health"})
 _QUERY_TOKEN_PATHS = frozenset(
     {
@@ -26,6 +33,29 @@ _ARTWORK_GET_PATH = re.compile(
 def get_expected_api_token() -> str:
     """返回桌面壳为当前进程注入的短期令牌。"""
     return os.environ.get("KUMIPLAYER_API_TOKEN", "").strip()
+
+
+def dev_browser_origins() -> list[str]:
+    """解析 ``KUMIPLAYER_DEV_ORIGINS``；只保留本机回环 http 来源。
+
+    默认返回空列表（不开放任意 CORS）。非回环或非 http 来源被忽略并记录日志，
+    因此该开关既不能指向公网来源，也不能放宽为通配来源。
+    """
+
+    raw = os.environ.get(DEV_ORIGINS_ENV, "")
+    origins: list[str] = []
+    for candidate in str(raw or "").split(","):
+        text = candidate.strip().rstrip("/")
+        if not text:
+            continue
+        parsed = urlparse(text)
+        if parsed.scheme != "http" or parsed.hostname not in _LOOPBACK_HOSTS:
+            LOGGER.warning("忽略非本机回环的开发来源: %s", text)
+            continue
+        origin = f"http://{parsed.netloc.lower()}"
+        if origin not in origins:
+            origins.append(origin)
+    return origins
 
 
 def token_matches(candidate: str | None) -> bool:

@@ -13,7 +13,12 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from app.core.config import load_config
+from app.core.config import (
+    COMPLETED_THRESHOLD_MAX_PERCENT,
+    COMPLETED_THRESHOLD_MIN_PERCENT,
+    DEFAULT_COMPLETED_THRESHOLD_PERCENT,
+    load_config,
+)
 from app.core.paths import get_data_dir
 from app.media_v4.path_validation import validate_playback_locator, validate_playback_locator_syntax
 from app.media_v4.persistence.database import V4Database
@@ -31,6 +36,20 @@ LOGGER = logging.getLogger(__name__)
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _completed_threshold() -> float:
+    """完成判定阈值比例：由配置百分比（50..100，默认 90）单点换算。
+
+    普通采样、退出结算与切集结算共用同一函数；前端不得再维护第二套判定或计时。
+    """
+
+    try:
+        percent = int(getattr(load_config(), "completed_threshold_percent", DEFAULT_COMPLETED_THRESHOLD_PERCENT))
+    except (TypeError, ValueError):
+        percent = DEFAULT_COMPLETED_THRESHOLD_PERCENT
+    percent = max(COMPLETED_THRESHOLD_MIN_PERCENT, min(COMPLETED_THRESHOLD_MAX_PERCENT, percent))
+    return percent / 100.0
 
 
 def _normalize_playback_locator(value: object) -> str:
@@ -690,7 +709,7 @@ class V4PlaybackManager:
         duration = float(session.get("duration") or 0.0)
         if duration <= 0:
             return
-        completed = elapsed / duration >= 0.9
+        completed = elapsed / duration >= _completed_threshold()
         saved = self._checkpoint_progress(
             session,
             str(asset.get("episode_id") or session["episode_id"]),
@@ -709,7 +728,7 @@ class V4PlaybackManager:
         next_checkpoint_retry_at = 0.0
         # 已完成边沿按当前 episode_id+asset_id 记账：只表示“这一次完成已经成功
         # 落盘过”。历史缺陷是把“已经完成”的持续状态当作“刚刚完成”的事件，于是
-        # 达到 90% 后每条进度事件都会绕过 5 秒节流写库（末尾写放大）。
+        # 达到完成阈值（默认 90%，可配置）后每条进度事件都会绕过 5 秒节流写库（末尾写放大）。
         completed_assets: dict[tuple[str, str], bool] = {}
         reconnect_delay = 0.25
         quitting = False
@@ -762,7 +781,7 @@ class V4PlaybackManager:
                                 session["work_id"], session["episode_id"], session["asset_id"]
                             )
                             last_checkpoint_episode = ""
-                        completed = event.duration > 0 and event.position / event.duration >= 0.9
+                        completed = event.duration > 0 and event.position / event.duration >= _completed_threshold()
                         active_episode_id = str(active_asset.get("episode_id") or session["episode_id"])
                         asset_key = (active_episode_id, str(active_asset["asset_id"]))
                         # 完成边沿：只在“本资产还没成功完成过”时算一次事件；
@@ -790,7 +809,7 @@ class V4PlaybackManager:
                                 next_checkpoint_retry_at = 0.0
                                 if completion_crossing:
                                     # 只有“刚刚完成”的边沿才记帐并投递同步：
-                                    # 90% 之后的 5 秒普通采样不再重复投递。
+                                    # 达到完成阈值之后的 5 秒普通采样不再重复投递。
                                     # 持久化失败时不会走到这里，由 1 秒有界重试继续。
                                     completed_assets[asset_key] = True
                                     self._schedule_completion_sync(session, active_asset)

@@ -37,7 +37,10 @@ def anilist_names(target: dict) -> list[AliasEvidence]:
 def bangumi_names(target: dict) -> list[AliasEvidence]:
     from app.integrations.bangumi import BangumiClient
 
-    if target.get("show_type") not in {"anime_series", "anime_movie", "anime"}:
+    # Bangumi 只是别名检索辅助（独立开关）；作品身份仍由 TMDB 裁决，
+    # 关闭开关不改变识别规则，也不影响 Bangumi 账号会话与看完同步。
+    if (not getattr(load_config(), "bangumi_alias_enabled", True)
+            or target.get("show_type") not in {"anime_series", "anime_movie", "anime"}):
         return []
     client = BangumiClient(public_only=True)
     evidence = []

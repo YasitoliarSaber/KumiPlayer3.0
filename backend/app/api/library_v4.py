@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.api.media_v4 import get_database
@@ -254,6 +254,135 @@ def get_changes(after: int = 0, limit: int = 128):
 @router.get('/cards')
 def get_cards(work_ids: str):
     return {'works': get_library(work_ids=work_ids)['works']}
+
+
+# 全局搜索：只读有界轻量字段（标题/原名/别名/标签/制作公司），不逐作品读详情。
+_SEARCH_FIELD_LIMITS = {"aliases": 8, "tags": 12, "studios": 8}
+_SEARCH_TEXT_LIMIT = 120
+_SEARCH_METADATA_FIELD = (
+    "CASE WHEN json_valid(c.metadata_json) THEN lower(COALESCE(json_extract(c.metadata_json,'$.{key}'),'')) ELSE '' END"
+)
+_SEARCH_SQL = f"""
+    SELECT c.work_id, c.title, c.year, c.media_type, c.metadata_json,
+           COALESCE(w.original_title, '') AS original_title
+    FROM library_cards c
+    LEFT JOIN works w ON w.work_id = c.work_id
+    WHERE c.generation_id = ?
+      AND NOT EXISTS (
+          SELECT 1 FROM work_overrides o
+          WHERE o.work_id = c.work_id AND json_valid(o.override_json)
+            AND json_extract(o.override_json,'$.hidden') = 1
+      )
+      AND (
+          lower(c.title) LIKE ? ESCAPE '!'
+          OR lower(COALESCE(w.original_title,'')) LIKE ? ESCAPE '!'
+          OR {_SEARCH_METADATA_FIELD.format(key='original_title')} LIKE ? ESCAPE '!'
+          OR {_SEARCH_METADATA_FIELD.format(key='tags')} LIKE ? ESCAPE '!'
+          OR {_SEARCH_METADATA_FIELD.format(key='studios')} LIKE ? ESCAPE '!'
+          OR EXISTS (
+              SELECT 1 FROM work_aliases wa
+              WHERE wa.work_id = c.work_id AND lower(wa.normalized_title) LIKE ? ESCAPE '!'
+          )
+      )
+    ORDER BY c.work_id
+    LIMIT ?
+"""
+
+
+def _bounded_texts(values, limit: int) -> list[str]:
+    """有界文本列表：去重、裁剪单条长度并限制条数。"""
+
+    result: list[str] = []
+    for value in values if isinstance(values, list) else []:
+        text = str(value or "").strip()[:_SEARCH_TEXT_LIMIT]
+        if text and text not in result:
+            result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _like_pattern(needle: str) -> str:
+    """把用户关键词转为 LIKE 模式，转义通配符避免 `%`/`_` 变成任意匹配。"""
+
+    escaped = needle.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+    return f"%{escaped}%"
+
+
+@router.get('/search')
+def search_library(q: str = Query(default=''), limit: int = 30):
+    """全局搜索：单次有界 SQL 读取轻量字段，不读取作品详情、不建第二索引。"""
+
+    query = " ".join(str(q or "").split())
+    if not query:
+        raise HTTPException(status_code=400, detail='请输入搜索关键词')
+    if len(query) > 64:
+        raise HTTPException(status_code=400, detail='搜索关键词过长')
+    safe_limit = max(1, min(int(limit or 30), 100))
+    needle = query.casefold()
+    like = _like_pattern(needle)
+    database = get_database()
+    with database.connect() as conn:
+        generation_row = conn.execute(
+            "SELECT value FROM v4_meta WHERE key = 'current_library_generation'"
+        ).fetchone()
+        generation = str(generation_row["value"]) if generation_row else ""
+        rows = []
+        if generation:
+            rows = conn.execute(
+                _SEARCH_SQL,
+                (generation, like, like, like, like, like, like, safe_limit + 1),
+            ).fetchall()
+        truncated = len(rows) > safe_limit
+        rows = rows[:safe_limit]
+        work_ids = [str(row["work_id"]) for row in rows]
+        alias_map: dict[str, list[str]] = {}
+        if work_ids:
+            placeholders = ",".join("?" for _ in work_ids)
+            for alias_row in conn.execute(
+                "SELECT work_id, normalized_title FROM work_aliases "
+                f"WHERE work_id IN ({placeholders}) ORDER BY work_id, normalized_title",
+                work_ids,
+            ).fetchall():
+                alias_map.setdefault(str(alias_row["work_id"]), []).append(
+                    str(alias_row["normalized_title"])
+                )
+    items = []
+    for row in rows:
+        try:
+            metadata = json.loads(row["metadata_json"] or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        title = str(row["title"] or "")
+        original_title = str(metadata.get("original_title") or row["original_title"] or "")
+        aliases = _bounded_texts(alias_map.get(str(row["work_id"]), []), _SEARCH_FIELD_LIMITS['aliases'])
+        tags = _bounded_texts(metadata.get("tags"), _SEARCH_FIELD_LIMITS['tags'])
+        studios = _bounded_texts(metadata.get("studios"), _SEARCH_FIELD_LIMITS['studios'])
+        matched_fields = [
+            field
+            for field, values in (
+                ("title", [title]),
+                ("original_title", [original_title]),
+                ("aliases", aliases),
+                ("tags", tags),
+                ("studios", studios),
+            )
+            if any(needle in value.casefold() for value in values if value)
+        ]
+        items.append({
+            "work_id": str(row["work_id"]),
+            "title": title,
+            "original_title": original_title,
+            "year": row["year"],
+            "media_type": row["media_type"],
+            "matched_fields": matched_fields,
+            "aliases": aliases,
+            "tags": tags,
+            "studios": studios,
+        })
+    return {"query": query, "limit": safe_limit, "truncated": truncated, "items": items}
 
 
 @router.get("/works/{work_id}")

@@ -34,6 +34,16 @@ DEFAULT_BANGUMI_USER_AGENT = "KumiPlayer/2.0 (+https://github.com/kumiplayer/kum
 _SENSITIVE_FIELDS = {"tmdb_bearer_token", "deepseek_api_key", "websearch_api_key", "bangumi_access_token", "openlist_password"}
 # 需要存入 Windows Credential Manager 的字段（含不脱敏但同样不落配置文件的用户名）
 _CREDENTIAL_FIELDS = _SENSITIVE_FIELDS | {"openlist_username"}
+# 公开别名：备份/恢复等模块需要知道哪些字段永不入包、也不从包中恢复。
+CREDENTIAL_FIELD_NAMES = frozenset(_CREDENTIAL_FIELDS)
+
+# 播放完成判定阈值的单点常量：播放会话统一按百分比换算为比例。
+COMPLETED_THRESHOLD_MIN_PERCENT = 50
+COMPLETED_THRESHOLD_MAX_PERCENT = 100
+DEFAULT_COMPLETED_THRESHOLD_PERCENT = 90
+# 按来源扫描调度的间隔边界（分钟）。
+SOURCE_SCAN_INTERVAL_MIN_MINUTES = 15
+SOURCE_SCAN_INTERVAL_MAX_MINUTES = 10080
 
 
 def _mask_username(username: str) -> str:
@@ -43,6 +53,75 @@ def _mask_username(username: str) -> str:
     if len(username) <= 2:
         return username[0] + "*" * (len(username) - 1)
     return username[0] + "*" * (len(username) - 2) + username[-1]
+
+
+def normalize_completed_threshold(value: object) -> int:
+    """把任意历史值夹取到 50..100；非法值回落默认 90。"""
+
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_COMPLETED_THRESHOLD_PERCENT
+    return max(COMPLETED_THRESHOLD_MIN_PERCENT, min(COMPLETED_THRESHOLD_MAX_PERCENT, number))
+
+
+def normalize_backup_time(value: object) -> str:
+    """备份时钟字段：只接受 HH:MM，非法值回落默认。"""
+
+    text = str(value or "").strip()
+    try:
+        hour, minute = text.split(":")
+        if 0 <= int(hour) <= 23 and 0 <= int(minute) <= 59 and len(hour) == 2 and len(minute) == 2:
+            return f"{int(hour):02d}:{int(minute):02d}"
+    except (TypeError, ValueError):
+        pass
+    return "03:00"
+
+
+def validate_source_scan_schedules(records: object) -> list[dict]:
+    """严格校验按来源扫描调度记录；非法输入抛 ``ValueError``（写入路径用）。"""
+
+    if records is None:
+        return []
+    if not isinstance(records, list):
+        raise ValueError("source_scan_schedules 必须是列表")
+    normalized: dict[str, dict] = {}
+    for item in records:
+        if not isinstance(item, dict):
+            raise ValueError("source_scan_schedules 记录必须是对象")
+        root_id = str(item.get("root_id") or "").strip()
+        if not root_id or len(root_id) > 128:
+            raise ValueError("调度记录缺少有效的来源标识")
+        try:
+            interval = int(item.get("interval_minutes"))
+        except (TypeError, ValueError):
+            raise ValueError("调度间隔必须是整数分钟") from None
+        if not SOURCE_SCAN_INTERVAL_MIN_MINUTES <= interval <= SOURCE_SCAN_INTERVAL_MAX_MINUTES:
+            raise ValueError(
+                f"调度间隔必须在 {SOURCE_SCAN_INTERVAL_MIN_MINUTES}–{SOURCE_SCAN_INTERVAL_MAX_MINUTES} 分钟之间"
+            )
+        normalized[root_id] = {
+            "root_id": root_id,
+            "enabled": bool(item.get("enabled", True)),
+            "interval_minutes": interval,
+        }
+    return [normalized[key] for key in sorted(normalized)]
+
+
+def normalize_source_scan_schedules(records: object) -> list[dict]:
+    """读取路径的容错版本：丢弃非法记录，保留可用调度。"""
+
+    try:
+        return validate_source_scan_schedules(records)
+    except ValueError:
+        filtered: list[dict] = []
+        for item in records if isinstance(records, list) else []:
+            try:
+                filtered.extend(validate_source_scan_schedules([item]))
+            except ValueError:
+                continue
+        deduped = {record["root_id"]: record for record in filtered}
+        return [deduped[key] for key in sorted(deduped)]
 
 
 @dataclass
@@ -123,9 +202,15 @@ class AppConfig:
     # Bangumi
     bangumi_access_token: str = ""
     bangumi_user_agent: str = DEFAULT_BANGUMI_USER_AGENT
+    # Bangumi 名称辅助：只在 TMDB 无安全候选时做别名检索辅助，
+    # 不参与作品身份裁决，也不改变识别规则。
+    bangumi_alias_enabled: bool = True
 
     # 播放
     auto_play_next_episode: bool = True
+    # 看完判定阈值（百分比 50..100，默认 90）。所有完成判定（普通采样、
+    # 退出结算、切集结算）共用该值，前端不再维护第二套计时。
+    completed_threshold_percent: int = DEFAULT_COMPLETED_THRESHOLD_PERCENT
 
     # MPV 播放器调节（Anime4K 永久默认值）
     # mode: off|a|b|c|a+a|b+b|c+a ; quality: fast|light|balanced|high
@@ -144,6 +229,13 @@ class AppConfig:
     ongoing_update_schedule_mode: str = "interval"
     ongoing_update_time: str = "09:00"
     ongoing_update_weekday: int = 0
+    # 按稳定来源标识（source_roots.root_id）的定时扫描：记录形状
+    # {"root_id": str, "enabled": bool, "interval_minutes": int}。
+    source_scan_schedules: list = field(default_factory=list)
+
+    # 备份：每日自动备份（默认关闭，仅在应用后台运行时调度）与保留份数。
+    backup_auto_daily_enabled: bool = False
+    backup_auto_daily_time: str = "03:00"
 
     # 心跳
     heartbeat_enabled: bool = True
@@ -482,6 +574,18 @@ def _load_config(force_reload: bool = False) -> AppConfig:
                 if isinstance(local_roots_raw, list)
                 else []
             )
+            if "source_scan_schedules" in filtered:
+                filtered["source_scan_schedules"] = normalize_source_scan_schedules(
+                    filtered["source_scan_schedules"]
+                )
+            if "completed_threshold_percent" in filtered:
+                filtered["completed_threshold_percent"] = normalize_completed_threshold(
+                    filtered["completed_threshold_percent"]
+                )
+            if "backup_auto_daily_time" in filtered:
+                filtered["backup_auto_daily_time"] = normalize_backup_time(
+                    filtered["backup_auto_daily_time"]
+                )
             config = AppConfig(**filtered)
             try:
                 migrated_credentials = _hydrate_secure_credentials(config, data)

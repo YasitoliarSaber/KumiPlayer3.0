@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+from typing import Literal
 
 from fastapi import HTTPException
 
@@ -12,19 +13,40 @@ from app.media_v4.persistence.database import V4Database
 _refresh_lock = threading.RLock()
 
 
-def list_refresh_sources(database: V4Database, *, work_id: str | None = None) -> list[dict]:
-    """Read only source/revision/task summaries; never resolve credentials or files."""
+def list_refresh_sources(
+    database: V4Database,
+    *,
+    work_id: str | None = None,
+    content_scopes: tuple[str, ...] = ("ongoing",),
+    root_ids: tuple[str, ...] | None = None,
+) -> list[dict]:
+    """Read only source/revision/task summaries; never resolve credentials or files.
+
+    ``content_scopes`` 默认只含新番（``ongoing``），保持既有追更语义；
+    ``root_ids`` 用于按稳定来源标识收窄，供按来源调度复用同一状态判定。
+    """
+
+    scopes = tuple(dict.fromkeys(str(scope) for scope in content_scopes)) or ("ongoing",)
+    scope_placeholders = ",".join("?" for _ in scopes)
+    selected_roots = tuple(dict.fromkeys(str(root) for root in (root_ids or ()) if root))
+    root_clause = ""
+    params: list[str | None] = [*scopes]
+    if selected_roots:
+        root_clause = f" AND sr.root_id IN ({','.join('?' for _ in selected_roots)})"
+        params.extend(selected_roots)
+    params.extend([work_id, work_id])
     with database.connect() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT sr.* FROM source_roots sr
-            WHERE sr.content_scope = 'ongoing' AND sr.enabled = 1 AND sr.retired_at = ''
+            WHERE sr.content_scope IN ({scope_placeholders}) AND sr.enabled = 1 AND sr.retired_at = ''
               AND EXISTS (SELECT 1 FROM import_revisions ir WHERE ir.root_id = sr.root_id AND ir.status = 'confirmed')
+              {root_clause}
               AND (? IS NULL OR EXISTS (
                   SELECT 1 FROM import_revisions ir JOIN revision_bindings rb ON rb.revision_id = ir.revision_id
                   WHERE ir.root_id = sr.root_id AND ir.status = 'confirmed' AND rb.work_id = ?))
             ORDER BY sr.root_id
-            """, (work_id, work_id),
+            """, tuple(params),
         ).fetchall()
         items = []
         for row in rows:
@@ -79,12 +101,24 @@ def list_refresh_sources(database: V4Database, *, work_id: str | None = None) ->
     return items
 
 
-def refresh_all_sources(database: V4Database, *, include_scrape: bool = True, work_id: str | None = None) -> list[dict]:
-    """Serialize manual/startup/timer triggers and retain existing scans and previews."""
+def refresh_all_sources(
+    database: V4Database,
+    *,
+    include_scrape: bool = True,
+    work_id: str | None = None,
+    content_scopes: tuple[str, ...] = ("ongoing",),
+    root_ids: tuple[str, ...] | None = None,
+) -> list[dict]:
+    """Serialize manual/startup/timer triggers and retain existing scans and previews.
+
+    普通来源（``completed``）被显式纳入时只产生草稿 revision，新结果仍需用户确认；
+    只有 ``ongoing`` 且已有已确认基线的来源按既有追更规则决定是否自动处理。
+    """
     from app.api import media_v4, tracking_v4
 
     with _refresh_lock:
-        sources = list_refresh_sources(database, work_id=work_id)
+        sources = list_refresh_sources(database, work_id=work_id, content_scopes=content_scopes,
+                                       root_ids=root_ids)
         results = []
         for source in sources:
             if source["status"] in {"queued", "running", "blocked", "needs_confirmation", "needs_new_txt"}:
@@ -98,11 +132,16 @@ def refresh_all_sources(database: V4Database, *, include_scrape: bool = True, wo
                 root = conn.execute("SELECT source_locator, playback_locator FROM source_roots WHERE root_id = ?",
                                     (source["root_id"],)).fetchone()
             revision_id = "rev_" + uuid.uuid4().hex
+            raw_scope = str(source.get("content_scope") or "ongoing")
+            source_scope: Literal["completed", "ongoing"] = (
+                "ongoing" if raw_scope == "ongoing" else "completed"
+            )
             try:
                 if source["source_mode"] == "local":
                     result = media_v4._start_durable_local_scan(media_v4.SourceScanRequest(
                         source="local", root_path=root["source_locator"] or root["playback_locator"],
-                        target_root_id=source["root_id"], content_scope="ongoing", auto_update=include_scrape,
+                        target_root_id=source["root_id"], content_scope=source_scope,
+                        auto_update=source_scope == "ongoing" and include_scrape,
                         revision_id=revision_id, source_display_name=source["display_name"],
                     ))
                     task_id = result["scan_id"]

@@ -96,7 +96,9 @@ class ConfigPatch(BaseModel):
     tmdb_timeout: int | None = None
     bangumi_access_token: str | None = None
     bangumi_user_agent: str | None = None
+    bangumi_alias_enabled: bool | None = None
     auto_play_next_episode: bool | None = None
+    completed_threshold_percent: Annotated[int, Field(ge=50, le=100)] | None = None
     mpv_anime4k_mode: str | None = None
     mpv_anime4k_quality: str | None = None
     series_card_image_mode: str | None = None
@@ -106,6 +108,9 @@ class ConfigPatch(BaseModel):
     ongoing_update_schedule_mode: Literal["off", "interval", "daily", "weekly"] | None = None
     ongoing_update_time: Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")] | None = None
     ongoing_update_weekday: Annotated[int, Field(ge=0, le=6)] | None = None
+    source_scan_schedules: list[dict] | None = None
+    backup_auto_daily_enabled: bool | None = None
+    backup_auto_daily_time: Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")] | None = None
     heartbeat_enabled: bool | None = None
     heartbeat_timeout: int | None = None
     proxy_url: str | None = None
@@ -201,6 +206,18 @@ def _patch_config(req: ConfigPatch):
         raise HTTPException(status_code=400, detail="mpv_anime4k_quality 只能是 fast|light|balanced|high")
     if "player_mode" in patch_dict and patch_dict["player_mode"] not in {"internal", "external"}:
         raise HTTPException(status_code=400, detail="player_mode 只能是 internal|external")
+
+    # 按来源扫描调度：写入期严格校验来源标识与间隔边界，
+    # 规范化后只保留 root_id 去重的记录（未知键忽略）。
+    if "source_scan_schedules" in patch_dict:
+        from app.core.config import validate_source_scan_schedules
+
+        try:
+            patch_dict["source_scan_schedules"] = validate_source_scan_schedules(
+                patch_dict["source_scan_schedules"]
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # 本地来源登记条目：写入期校验绝对路径、重复路径与名称长度，
     # root_id 由路径推导，忽略客户端传入值。

@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.assets import router as assets_router
+from app.api.backup import router as backup_router
 from app.api.bangumi import router as bangumi_router
 from app.api.config import router as config_router
 from app.api.error_log import router as error_log_router
@@ -25,7 +26,7 @@ from app.api.system import router as system_router
 from app.api.tasks_v4 import router as tasks_router
 from app.api.tracking_v4 import router as tracking_router
 from app.api.work_customization_v4 import router as work_customization_router
-from app.core.api_security import ApiSessionMiddleware
+from app.core.api_security import ApiSessionMiddleware, dev_browser_origins
 from app.core.config import ConfigReadError
 from app.media_v4.assets.service import ArtworkService
 from app.media_v4.jobs.runner import V4JobRunner
@@ -121,6 +122,36 @@ async def lifespan(app: FastAPI):
                 continue
 
     ongoing_worker = asyncio.create_task(run_ongoing_updates())
+
+    async def run_scan_schedules() -> None:
+        from app.media_v4.sources.scan_schedule import run_due_scan_schedules
+
+        while not stop_jobs.is_set():
+            try:
+                await asyncio.to_thread(run_due_scan_schedules, database)
+            except Exception:
+                logging.getLogger(__name__).warning("按来源扫描调度未成功，将自动重试", exc_info=True)
+            try:
+                await asyncio.wait_for(stop_jobs.wait(), timeout=60)
+            except TimeoutError:
+                continue
+
+    scan_schedule_worker = asyncio.create_task(run_scan_schedules())
+
+    async def run_backup_schedules() -> None:
+        from app.core.backup import run_due_auto_backup
+
+        while not stop_jobs.is_set():
+            try:
+                await asyncio.to_thread(run_due_auto_backup)
+            except Exception:
+                logging.getLogger(__name__).warning("自动备份调度未成功，将自动重试", exc_info=True)
+            try:
+                await asyncio.wait_for(stop_jobs.wait(), timeout=60)
+            except TimeoutError:
+                continue
+
+    backup_worker = asyncio.create_task(run_backup_schedules())
     manager = get_heartbeat_manager()
     manager.start_monitor()
     try:
@@ -136,7 +167,10 @@ async def lifespan(app: FastAPI):
             2.5,
             timeout=2.25,
         )
-        await _stop_background_tasks((job_worker, projection_worker, ongoing_worker))
+        await _stop_background_tasks((
+            job_worker, projection_worker, ongoing_worker,
+            scan_schedule_worker, backup_worker,
+        ))
         await _bounded_thread_call(artwork_service.stop, 0.35)
         await _bounded_thread_call(source_scan_worker.stop, 0.35, timeout=0.25)
         await _bounded_thread_call(manager.stop_monitor, 0.25)
@@ -160,6 +194,9 @@ app.add_middleware(
         "tauri://localhost",
         "http://127.0.0.1:1420",
         "http://localhost:1420",
+        # 浏览器联调的显式开发来源（KUMIPLAYER_DEV_ORIGINS，默认关闭，
+        # 只接受本机回环 http 来源；不放开为任意 CORS）。
+        *dev_browser_origins(),
     ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -173,6 +210,7 @@ app.add_middleware(
 
 # V4 是媒体导入、执行和投影的唯一运行时入口。
 app.include_router(library_router)
+app.include_router(backup_router)
 app.include_router(heartbeat_router)
 app.include_router(config_router)
 app.include_router(bangumi_router)
