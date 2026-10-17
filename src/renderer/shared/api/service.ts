@@ -26,6 +26,8 @@ export interface ArtworkRef {
   readonly url: string;
   readonly width: number;
   readonly height: number;
+  /** 同一内容版本的已发布变体；不推导未发布的 URL。 */
+  readonly variants?: readonly { readonly url: string; readonly width: number }[];
 }
 
 export interface ArtworkSet {

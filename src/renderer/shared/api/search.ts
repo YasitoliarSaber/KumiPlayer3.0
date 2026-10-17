@@ -87,22 +87,3 @@ export function searchWorks(
     .slice(0, limit);
 }
 
-/** 常用导航项：与侧栏保持同一组目的地，避免两套入口漂移。 */
-export const QUICK_NAV: ReadonlyArray<{ readonly label: string; readonly to: string }> = [
-  { label: '首页', to: '/' },
-  { label: '我的收藏', to: '/favorites' },
-  { label: '最近观看', to: '/recent' },
-  { label: '番剧', to: '/library/anime_series' },
-  { label: '动画电影', to: '/library/anime_movie' },
-  { label: '媒体管理', to: '/manage' },
-  { label: '任务中心', to: '/tasks' },
-  { label: '设置', to: '/settings' },
-];
-
-export function searchNav(query: string): readonly { readonly label: string; readonly to: string }[] {
-  const needle = normalize(query);
-  if (needle.length === 0) {
-    return QUICK_NAV.slice(0, 6);
-  }
-  return QUICK_NAV.filter((item) => normalize(item.label).includes(needle));
-}

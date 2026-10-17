@@ -84,13 +84,15 @@ export function pickArtwork(
   }
   const usable = Object.entries(roleVariants)
     .map(([width, url]) => ({ width: Number(width), url }))
-    .filter((entry) => Number.isFinite(entry.width) && entry.width > 0 && PUBLISHED_ARTWORK.test(entry.url))
+    .filter((entry) => (role === 'fanart' ? [512, 768, 1280] : [256, 384, 512]).includes(entry.width)
+      && PUBLISHED_ARTWORK.test(entry.url) && entry.url.endsWith(`/${entry.width}`)
+      && entry.url.startsWith(`/api/assets/artwork/${artwork![role]!.resource_id}/${artwork![role]!.content_version}/`))
     .sort((left, right) => left.width - right.width);
   if (usable.length === 0) {
     return null;
   }
   const selected = usable.find((entry) => entry.width >= targetWidth) ?? usable[usable.length - 1]!;
-  return { url: selected.url, width: selected.width, height: 0 };
+  return { url: selected.url, width: selected.width, height: 0, variants: usable };
 }
 
 export function toArtworkSet(card: WorkCard): ArtworkSet {

@@ -1,24 +1,23 @@
 /**
  * 快捷搜索面板（Ctrl/Cmd+K）。
  *
- * 组合键盘导航与作品分组结果；查询是同步的本地演示搜索，
- * 通过"当前查询标记"丢弃迟到结果，避免旧输入覆盖新结果。
- * 面板本身不持有媒体事实，只消费传入的索引与导航表。
+ * 版式对齐「KumiPlayer-原型精修」的顶部搜索浮层：单行搜索头、
+ * 作品分组、海报缩略图与底部键盘提示。只搜索作品，不把页面名称
+ * 混入结果。面板本身不持有媒体事实，只消费传入的作品索引。
  */
 
-import { CornerDownLeft, Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
 
-import type { LibrarySearchHit, WorkSummary } from '@/shared/api/service';
-import { searchNav, searchWorks } from '@/shared/api/search';
+import type { ArtworkRef, LibrarySearchHit, WorkSummary } from '@/shared/api/service';
+import { searchWorks } from '@/shared/api/search';
 import { useMediaService } from '@/shared/api/service-context';
+import { Artwork } from '@/shared/ui/Artwork';
 import { Input } from '@/shared/ui/input';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from '@/shared/ui/dialog';
 import { cn } from '@/shared/lib/utils';
@@ -30,12 +29,16 @@ export interface CommandPaletteProps {
   readonly onOpenWork: (workId: string) => void;
 }
 
-type Row =
-  | { readonly kind: 'work'; readonly key: string; readonly label: string; readonly hint: string; readonly workId: string }
-  | { readonly kind: 'nav'; readonly key: string; readonly label: string; readonly hint: string; readonly to: string };
+interface Row {
+  readonly key: string;
+  readonly label: string;
+  /** 行尾的简要资料，对应原型的 `small`（类型 / 季数 / 评分）。 */
+  readonly meta: string;
+  readonly workId: string;
+  readonly poster: ArtworkRef | null;
+}
 
 export function CommandPalette({ open, onOpenChange, works, onOpenWork }: CommandPaletteProps) {
-  const navigate = useNavigate();
   const service = useMediaService();
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -46,6 +49,7 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
   const [remoteTruncated, setRemoteTruncated] = useState(false);
   const [remotePending, setRemotePending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
   // 面板由快捷键唤起，没有触发元素；关闭时把焦点还给打开前的元素。
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const listId = useId();
@@ -67,6 +71,9 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
       return undefined;
     }
     let cancelled = false;
+    // 新查询先清空旧命中，避免把上一条查询的结果当成当前结果。
+    setRemoteHits([]);
+    setRemoteTruncated(false);
     setRemotePending(true);
     const timer = window.setTimeout(() => {
       void service
@@ -95,36 +102,47 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
     };
   }, [canRemoteSearch, composing, open, service, trimmedQuery]);
 
+  // 空查询时展示最近观看/库内作品，与原型打开即见作品一致；不混入导航项。
+  const recentWorks = useMemo(() => {
+    const watching = works.filter((work) => work.progress);
+    const rest = works.filter((work) => !work.progress);
+    return [...watching, ...rest].slice(0, 8);
+  }, [works]);
+
   const rows = useMemo<readonly Row[]>(() => {
     const byId = new Map(works.map((work) => [work.id, work]));
-    const hits = (canRemoteSearch ? remoteHits : searchWorks(works, query)).map<Row>((hit) => {
-      const isRemote = 'workId' in hit;
-      const work = isRemote ? byId.get(hit.workId) : hit.work;
-      const label = work?.title ?? (isRemote ? hit.title : '');
-      const hint = isRemote
-        ? remoteHint(hit)
-        : hit.reason;
+    if (trimmedQuery.length === 0) {
+      return recentWorks.map(rowFromWork);
+    }
+    if (!canRemoteSearch) {
+      return searchWorks(works, trimmedQuery, { limit: 8 }).map((hit) => rowFromWork(hit.work));
+    }
+    return remoteHits.map((hit) => {
+      const work = byId.get(hit.workId);
       return {
-        kind: 'work',
-        key: `work-${(isRemote ? hit.workId : hit.work.id)}`,
-        label,
-        hint,
-        workId: isRemote ? hit.workId : hit.work.id,
+        key: `work-${hit.workId}`,
+        label: work?.title || hit.title,
+        meta: work ? workMeta(work) : hitMeta(hit),
+        workId: hit.workId,
+        poster: work?.artwork.poster ?? null,
       };
     });
-    const nav = searchNav(query).map<Row>((item) => ({
-      kind: 'nav',
-      key: `nav-${item.to}`,
-      label: item.label,
-      hint: '前往',
-      to: item.to,
-    }));
-    return [...hits, ...nav];
-  }, [canRemoteSearch, query, remoteHits, works]);
+  }, [canRemoteSearch, recentWorks, remoteHits, trimmedQuery, works]);
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [query]);
+  }, [trimmedQuery]);
+
+  useEffect(() => {
+    if (activeIndex >= rows.length) {
+      setActiveIndex(0);
+    }
+  }, [activeIndex, rows.length]);
+
+  useEffect(() => {
+    // jsdom 不实现 scrollIntoView；真实浏览器里保证键盘高亮项可见。
+    activeRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [activeIndex, open]);
 
   useEffect(() => {
     if (!open) {
@@ -147,29 +165,30 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
       return;
     }
     onOpenChange(false);
-    if (row.kind === 'work') {
-      onOpenWork(row.workId);
-      return;
-    }
-    navigate(row.to);
+    onOpenWork(row.workId);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="top-[12%] translate-y-0 gap-3 p-4" aria-describedby={undefined}>
-        <DialogHeader>
-          <DialogTitle className="sr-only">快捷搜索</DialogTitle>
-          <DialogDescription className="sr-only">搜索作品或前往页面</DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        showClose={false}
+        aria-label="搜索作品"
+        className="top-[12vh] flex max-h-none w-[min(620px,calc(100vw-2rem))] max-w-none translate-y-0 flex-col gap-0 overflow-hidden rounded-[calc(var(--radius-card)+2px)] border-border bg-popover p-0 shadow-[var(--shadow-flyout)]"
+      >
+        <DialogTitle className="sr-only">搜索作品</DialogTitle>
+        <DialogDescription className="sr-only">检索标题、别名、标签或制作公司</DialogDescription>
 
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="flex items-center gap-2.5 border-b border-border px-3.5 py-3">
+          <Search className="size-[17px] shrink-0 text-muted-foreground" aria-hidden="true" />
           <Input
             ref={inputRef}
+            type="text"
             value={query}
-            className="h-9 pl-8"
-            placeholder="搜索作品，或输入页面名称"
+            className="h-auto flex-1 rounded-none border-0 bg-transparent p-0 text-[15px] shadow-none focus-visible:border-0 focus-visible:ring-0"
+            placeholder="搜索作品、标签、制作公司"
             aria-label="快捷搜索"
+            aria-autocomplete="list"
+            autoComplete="off"
             aria-controls={listId}
             aria-activedescendant={rows[activeIndex] ? `${listId}-${activeIndex}` : undefined}
             onChange={(event) => setQuery(event.currentTarget.value)}
@@ -179,6 +198,9 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
               setQuery(event.currentTarget.value);
             }}
             onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing) {
+                return;
+              }
               if (event.key === 'ArrowDown') {
                 event.preventDefault();
                 setActiveIndex((index) => Math.min(index + 1, Math.max(rows.length - 1, 0)));
@@ -191,69 +213,113 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
               }
             }}
           />
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            aria-label="关闭搜索"
+            className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-[var(--surface-hover)] hover:text-foreground focus-visible:bg-[var(--surface-hover)] focus-visible:text-foreground focus-visible:outline-none"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
         </div>
 
-        <ul id={listId} role="listbox" aria-label="搜索结果" className="flex max-h-[46vh] flex-col gap-0.5 overflow-y-auto">
+        <div className="max-h-[min(52vh,420px)] overflow-y-auto p-2">
+          <p className="px-2.5 pt-2 pb-1 text-[11.5px] tracking-[0.08em] text-muted-foreground uppercase">
+            作品 · {rows.length} 项
+          </p>
           {rows.length === 0 ? (
-            <li className="px-2 py-6 text-center text-[13px] text-muted-foreground">
+            <p className="px-2.5 py-6 text-center text-[13px] text-muted-foreground">
               {trimmedQuery.length === 0
                 ? '输入标题、别名、标签或制作公司开始搜索'
                 : remotePending
                   ? `正在检索「${trimmedQuery}」…`
                   : `没有匹配「${trimmedQuery}」的结果`}
-            </li>
+            </p>
           ) : (
-            rows.map((row, index) => (
-              <li key={row.key}>
-                <button
-                  type="button"
-                  id={`${listId}-${index}`}
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  className={cn(
-                    'flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-[13.5px]',
-                    index === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60',
-                  )}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => activate(row)}
-                >
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate font-medium">{row.label}</span>
-                    <span className="truncate text-[12px] text-muted-foreground">{row.hint}</span>
-                  </span>
-                  {row.kind === 'nav' ? <CornerDownLeft className="size-3.5 opacity-60" aria-hidden="true" /> : null}
-                </button>
-              </li>
-            ))
+            <ul id={listId} role="listbox" aria-label="搜索结果" className="flex flex-col">
+              {rows.map((row, index) => (
+                <li key={row.key}>
+                  <button
+                    ref={index === activeIndex ? activeRef : undefined}
+                    type="button"
+                    id={`${listId}-${index}`}
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    className={cn(
+                      'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13.5px] outline-none',
+                      index === activeIndex ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-hover)]',
+                    )}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => activate(row)}
+                  >
+                    <Artwork
+                      artwork={row.poster}
+                      alt=""
+                      kind="poster"
+                      fallbackLabel={row.label.slice(0, 1)}
+                      className="h-9 w-[26px] shrink-0 rounded-[5px] object-cover"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-foreground">{row.label}</span>
+                    <small className="shrink-0 text-[12px] text-muted-foreground">{row.meta}</small>
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
-        </ul>
+          {remoteTruncated ? (
+            // 后端有界查询：命中多于上限时如实说明，不假装已经全部列出。
+            <p className="px-2.5 py-2 text-[11.5px] text-muted-foreground" role="status">
+              命中过多，仅显示前 {remoteHits.length} 条，请补充关键词缩小范围。
+            </p>
+          ) : null}
+        </div>
 
-        <p className="text-[11.5px] text-muted-foreground">
-          ↑ ↓ 选择 · Enter 打开 · Esc 关闭
-          {canRemoteSearch ? ' · 检索标题 / 别名 / 标签 / 制作公司' : ' · 检索标题 / 原名 / 类型 / 制作公司'}
-        </p>
-        {remoteTruncated ? (
-          // 后端有界查询：命中多于上限时如实说明，不假装已经全部列出。
-          <p className="text-[11.5px] text-muted-foreground" role="status">
-            命中过多，仅显示前 {remoteHits.length} 条，请补充关键词缩小范围。
-          </p>
-        ) : null}
+        <div className="flex items-center gap-3 border-t border-border px-3.5 py-[9px] text-[12px] text-muted-foreground">
+          <span>↑↓ 选择</span>
+          <span>Enter 打开</span>
+          <span className="ml-auto">Esc 关闭</span>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-/** 命中原因来自后端返回的 matched_fields，界面据实说明为什么匹配。 */
-function remoteHint(hit: LibrarySearchHit): string {
-  const fields: Record<string, string> = {
-    title: '标题',
-    original_title: '原名',
-    aliases: '别名',
-    tags: '标签',
-    studios: '制作公司',
-    year: '年份',
+const SHOW_TYPE_LABELS: Record<WorkSummary['showType'], string> = {
+  anime_series: '番剧',
+  anime_movie: '动画电影',
+  live_series: '剧集',
+  live_movie: '电影',
+};
+
+function rowFromWork(work: WorkSummary): Row {
+  return {
+    key: `work-${work.id}`,
+    label: work.title,
+    meta: workMeta(work),
+    workId: work.id,
+    poster: work.artwork.poster,
   };
-  const matched = hit.matchedFields.map((field) => fields[field] ?? field).join('/');
-  const extra = hit.aliases.length > 0 ? ` · ${hit.aliases.slice(0, 2).join('、')}` : '';
-  return `${matched || '索引命中'}${hit.year ? ` · ${hit.year}` : ''}${extra}`;
+}
+
+/** 行尾只保留原型同类的简要资料，不铺开后端命中字段。 */
+function workMeta(work: WorkSummary): string {
+  const parts = [SHOW_TYPE_LABELS[work.showType]];
+  if (work.mediaType !== 'movie' && work.seasonCount > 0) {
+    parts.push(`${work.seasonCount} 季`);
+  }
+  if (work.rating > 0) {
+    parts.push(work.rating.toFixed(1));
+  } else if (work.year > 0 && parts.length === 1) {
+    parts.push(String(work.year));
+  }
+  return parts.join(' · ');
+}
+
+/** 搜索索引命中但本地卡片索引尚未加载时，仍给出可读的类型与年份。 */
+function hitMeta(hit: LibrarySearchHit): string {
+  const parts = [hit.mediaType === 'movie' ? '电影' : '番剧'];
+  if (hit.year) {
+    parts.push(String(hit.year));
+  }
+  return parts.join(' · ');
 }

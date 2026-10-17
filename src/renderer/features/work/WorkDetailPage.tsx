@@ -278,6 +278,9 @@ export function WorkDetailPage() {
   const resumePosition = isRecentEpisode ? work.progress!.position : resume?.position ?? 0;
   const resumeDuration = isRecentEpisode && work.progress!.duration > 0 ? work.progress!.duration : resume?.durationSec ?? 0;
   const resumePercent = resumeDuration > 0 ? Math.min(100, Math.max(0, Math.round(resumePosition / resumeDuration * 100))) : 0;
+  // 电影只有本体一个播放项：季集轨道只会渲染一张没有分集图片的占位卡。
+  // 电影改为只在概要里播放，不再展示季集列表。
+  const hasEpisodeRail = work.mediaType !== 'movie';
 
   return (
     <article className={styles.page} data-route="work-detail">
@@ -330,28 +333,30 @@ export function WorkDetailPage() {
       </WorkHero>
 
       <div className={styles.body}>
-        <section className={styles.main} aria-label="季集">
-          <Tabs
-            value={season?.id ?? ''}
-            onValueChange={(value) => {
-              const index = work.seasons.findIndex((entry) => entry.id === value);
-              setSeasonIndex(index >= 0 ? index : 0);
-            }}
-          >
-            <TabsList>
-              {work.seasons.map((entry) => (
-                <TabsTrigger key={entry.id} value={entry.id}>
-                  {entry.label}
-                  <span className="ml-1.5 text-[11.5px] text-muted-foreground">
-                    {entry.episodes.length}
-                  </span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+        <section className={styles.main} aria-label={hasEpisodeRail ? '季集' : '作品'}>
+          {hasEpisodeRail ? <>
+            <Tabs
+              value={season?.id ?? ''}
+              onValueChange={(value) => {
+                const index = work.seasons.findIndex((entry) => entry.id === value);
+                setSeasonIndex(index >= 0 ? index : 0);
+              }}
+            >
+              <TabsList>
+                {work.seasons.map((entry) => (
+                  <TabsTrigger key={entry.id} value={entry.id}>
+                    {entry.label}
+                    <span className="ml-1.5 text-[11.5px] text-muted-foreground">
+                      {entry.episodes.length}
+                    </span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
-          <EpisodeStrip episodes={season?.episodes ?? []} seasonId={season?.id ?? ''}
-            label={season?.label ?? '全部剧集'} onPlay={(episode) => void play(episode)} />
+            <EpisodeStrip episodes={season?.episodes ?? []} seasonId={season?.id ?? ''}
+              label={season?.label ?? '全部剧集'} onPlay={(episode) => void play(episode)} />
+          </> : null}
 
           <WorkSuggestions work={work} onOpen={(id) => navigate(`/work/${id}`)} />
         </section>

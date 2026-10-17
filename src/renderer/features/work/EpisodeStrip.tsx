@@ -62,13 +62,13 @@ export function EpisodeStrip({ episodes, seasonId, label, onPlay }: {
             aria-label={`播放 ${episode.code} ${episode.title}`}>
             <span className={styles.episodeThumb}>
               <Artwork artwork={episode.thumb} alt="" kind="episode" fallbackLabel="暂无分集图片" className={styles.episodeImage} />
-              {episode.position > 0 && episode.durationSec > 0 ? <span className={styles.episodeProgress}>
-                <ProgressBar value={episode.position / Math.max(episode.durationSec, 1) * 100} label={`${episode.code}观看进度`} />
-              </span> : null}
             </span>
             <span className={styles.episodeCopy}>
               <span className={styles.episodeCode}>{episode.code}</span>
               <span className={styles.episodeTitle} title={episode.title}>{episode.title}</span>
+              {episode.position > 0 && episode.durationSec > 0 ? <span className={styles.episodeProgress}>
+                <ProgressBar value={episode.position / Math.max(episode.durationSec, 1) * 100} label={`${episode.code}观看进度`} />
+              </span> : null}
             </span>
           </Button>
         </li>)}

@@ -1,5 +1,7 @@
 /**
- * 海报卡（影视领域组件）：图片、观看进度、标题与副标题，不叠加评分或收藏徽标。
+ * 海报卡（影视领域组件）：图片、标题与副标题。
+ * 图片面保持干净，不叠加进度、评分、徽标、滤镜或渐变文字；
+ * 大量海报同时渲染时，避免逐卡叠加层与悬停重绘造成卡顿。
  * 只展示已给定的展示数据，不推导作品事实。
  */
 
@@ -8,6 +10,7 @@ import { memo } from 'react';
 import type { WorkSummary } from '@/shared/api/service';
 import { cn } from '@/shared/lib/utils';
 import { Artwork } from '@/shared/ui/Artwork';
+import type { ArtworkPriority } from '@/shared/ui/artwork-lifecycle';
 import { ProgressBar } from '@/shared/ui/Surface';
 
 export interface PosterCardProps {
@@ -16,9 +19,22 @@ export interface PosterCardProps {
   readonly onOpen: (workId: string) => void;
   readonly eager?: boolean;
   readonly imageMode?: 'poster' | 'fanart';
+  readonly displayWidth?: number;
+  readonly priority?: ArtworkPriority | null;
+  /** 分类墙可关闭副标题；继续观看仍保留进度文字与进度条。 */
+  readonly showSubtitle?: boolean;
 }
 
-function PosterCardComponent({ work, variant = 'poster', onOpen, eager = false, imageMode = 'poster' }: PosterCardProps) {
+function PosterCardComponent({
+  work,
+  variant = 'poster',
+  onOpen,
+  eager = false,
+  imageMode = 'poster',
+  displayWidth,
+  priority,
+  showSubtitle = true,
+}: PosterCardProps) {
   const wide = variant === 'wide';
   const landscape = wide || imageMode === 'fanart';
   const image = landscape ? work.artwork.fanart ?? work.artwork.poster : work.artwork.poster;
@@ -26,20 +42,20 @@ function PosterCardComponent({ work, variant = 'poster', onOpen, eager = false, 
     work.progress?.completed
       ? 100
       : work.progress && work.progress.duration > 0
-      ? (work.progress.position / work.progress.duration) * 100
-      : null;
+        ? (work.progress.position / work.progress.duration) * 100
+        : null;
 
   return (
     <button
       type="button"
+      data-work-id={work.id}
       onClick={() => onOpen(work.id)}
       aria-label={`打开${work.title}详情`}
-      className="group flex min-w-0 flex-col gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+      className="flex min-w-0 flex-col gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
     >
       <span
         className={cn(
-          'relative block overflow-hidden rounded-lg bg-[var(--surface-soft)] ring-1 ring-inset ring-[var(--border)]',
-          'transition-shadow duration-150 group-hover:ring-[var(--border-strong)]',
+          'relative block overflow-hidden rounded-lg',
           landscape ? 'aspect-video' : 'aspect-[2/3]',
         )}
       >
@@ -49,22 +65,26 @@ function PosterCardComponent({ work, variant = 'poster', onOpen, eager = false, 
           fallbackLabel={work.title}
           className="size-full object-cover"
           loading={eager ? 'eager' : 'lazy'}
+          displayWidth={displayWidth}
+          priority={priority}
         />
-        {/* 原型已移除海报上的评分徽章与收藏心形：评分在详情页展示，收藏用详情页按钮。 */}
-        {percent !== null && percent > 0 ? (
-          <span className="absolute inset-x-0 bottom-0">
-            <ProgressBar value={percent} label={`${work.title}观看进度`} />
-          </span>
-        ) : null}
       </span>
-      <span className={cn('flex w-full min-w-0 flex-col gap-1', landscape ? 'h-11' : 'h-16')}>
+      <span className={cn(
+        'flex w-full min-w-0 flex-col gap-1',
+        showSubtitle ? (wide ? 'h-14' : landscape ? 'h-11' : 'h-16') : 'h-[2.7em]',
+      )}>
         <span className={cn(
-          'text-[14px] leading-[1.35] font-semibold text-foreground group-hover:text-[var(--accent-strong)]',
+          'text-[14px] leading-[1.35] font-semibold text-foreground',
           landscape ? 'line-clamp-1 h-[1.35em]' : 'line-clamp-2 h-[2.7em]',
         )} title={work.title}>
           {work.title}
         </span>
-        <span className="truncate text-[12px] text-muted-foreground">{subtitle(work, wide)}</span>
+        {showSubtitle ? (
+          <span className="truncate text-[12px] text-muted-foreground">{subtitle(work, wide)}</span>
+        ) : null}
+        {wide && percent !== null && percent > 0 ? (
+          <ProgressBar value={percent} label={`${work.title}观看进度`} size={3} className="mt-auto" />
+        ) : null}
       </span>
     </button>
   );

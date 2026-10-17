@@ -1,13 +1,13 @@
 /**
- * 首页：媒体展示橱窗 + 继续观看 + 分类分区。
- * 结构、比例、分区留白遵循精修原型，领域数据继续来自统一服务。
+ * 首页：单幅完整横幅轮播 + 继续观看 + 分类海报墙。
+ * 横幅只展示一张作品图，文字放在图片下方；领域数据继续来自统一服务。
  */
 
 import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import type { WorkSummary } from '../../shared/api/service';
+import type { ShowType, WorkSummary } from '../../shared/api/service';
 import { useLibrary } from '../../shared/api/service-context';
 import { Artwork } from '../../shared/ui/Artwork';
 import { Button } from '@/shared/ui/button';
@@ -24,6 +24,13 @@ const SECTIONS: ReadonlyArray<{ view: 'anime_series' | 'anime_movie' | 'live_ser
   { view: 'live_series', label: '剧集' },
   { view: 'live_movie', label: '电影' },
 ];
+
+const SHOW_TYPE_LABELS: Record<ShowType, string> = {
+  anime_series: '番剧',
+  anime_movie: '动画电影',
+  live_series: '剧集',
+  live_movie: '电影',
+};
 
 export function HomePage() {
   const library = useLibrary();
@@ -44,7 +51,6 @@ export function HomePage() {
   // 橱窗按作品名去重：同一个基作的几十个演示条目不应全部占满首屏。
   const showcasePool = useMemo(() => dedupeByTitle(works), [works]);
   const featured = useMemo(() => showcasePool.slice(0, 6), [showcasePool]);
-  const sideFeatured = useMemo(() => showcasePool.slice(6, 9), [showcasePool]);
   const continueWatching = useMemo(
     () =>
       works
@@ -116,7 +122,7 @@ export function HomePage() {
           </button>
         </p>
       ) : null}
-      <section className={styles.showcase} aria-label="媒体展示" data-has-side={sideFeatured.length > 0}>
+      <section className={styles.showcase} aria-label="媒体展示">
         <div
           className={styles.feature}
           onMouseEnter={() => setHovered(true)}
@@ -130,24 +136,37 @@ export function HomePage() {
             onClick={() => open(current.id)}
             aria-label={`打开${current.title}详情`}
           >
-            <Artwork artwork={current.artwork.fanart ?? current.artwork.poster} alt="" className={styles.featureBackdrop} />
-            <span className={styles.featureShade} aria-hidden="true" />
-            <span className={styles.featureCopy}>
-              <span className={styles.featureChips}>
-                {current.rating > 0 ? <span className={styles.featureChip}>★ {current.rating.toFixed(1)}</span> : null}
-                <span className={styles.featureChip}>{metaLine(current)}</span>
-                <span className={styles.featureChip}>{current.genres.slice(0, 2).join(' / ')}</span>
+            <span className={styles.featureMedia}>
+              <span className={styles.featureGlow} aria-hidden="true">
+                <Artwork
+                  artwork={current.artwork.fanart ?? current.artwork.poster}
+                  alt=""
+                  loading="eager"
+                  className={styles.featureGlowImage}
+                  priority="visible"
+                />
               </span>
+              <span className={styles.featurePicture}>
+                <Artwork
+                  artwork={current.artwork.fanart ?? current.artwork.poster}
+                  alt=""
+                  loading="eager"
+                  className={styles.featureImage}
+                  priority="visible"
+                />
+              </span>
+            </span>
+            <span className={styles.featureCopy}>
               <span className={styles.featureTitle}>{current.title}</span>
-              <span className={styles.featurePlot}>{current.plot}</span>
+              <span className={styles.featureMeta}>{heroMeta(current)}</span>
             </span>
           </button>
 
           {featured.length > 1 ? (
-            <>
+            <div className={styles.featureControls}>
               <button
                 type="button"
-                className={`${styles.featureNav} ${styles.featureNavLeft}`}
+                className={styles.featureNav}
                 aria-label="上一部"
                 onClick={() => setIndex((value) => (value - 1 + featured.length) % featured.length)}
               >
@@ -155,47 +174,26 @@ export function HomePage() {
               </button>
               <button
                 type="button"
-                className={`${styles.featureNav} ${styles.featureNavRight}`}
+                className={styles.featureNav}
                 aria-label="下一部"
                 onClick={() => setIndex((value) => (value + 1) % featured.length)}
               >
                 <ChevronRight aria-hidden="true" />
               </button>
-              <div className={styles.featureDots} aria-label="随机推荐切换">
+              <div className={styles.featureDots} aria-label="推荐轮播切换">
                 {featured.map((work, dotIndex) => (
                   <button
                     key={work.id}
                     type="button"
                     className={dotIndex === index % featured.length ? styles.dotActive : styles.dot}
                     aria-label={`显示${work.title}`}
+                    aria-current={dotIndex === index % featured.length ? 'true' : undefined}
                     onClick={() => setIndex(dotIndex)}
                   />
                 ))}
               </div>
-            </>
+            </div>
           ) : null}
-        </div>
-
-        <div className={styles.sideList}>
-          {sideFeatured.map((work) => (
-            <button
-              key={work.id}
-              type="button"
-              className={styles.tile}
-              onClick={() => open(work.id)}
-              aria-label={`打开${work.title}详情`}
-            >
-              <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt={work.title} className={styles.tileImage} />
-              <span className={styles.tileShade} aria-hidden="true" />
-              <span className={styles.tileMeta}>
-                <strong>{work.title}</strong>
-                <small>
-                  {metaLine(work)}
-                  {work.rating > 0 ? ` · ★ ${work.rating.toFixed(1)}` : ''}
-                </small>
-              </span>
-            </button>
-          ))}
         </div>
       </section>
 
@@ -203,7 +201,6 @@ export function HomePage() {
         <section className={styles.section}>
           <SectionHeading
             title="继续观看"
-            meta={`${continueWatching.length} 个项目`}
             action={
               <button type="button" className={styles.sectionLink} onClick={() => navigate('/recent')}>
                 <span>查看全部</span>
@@ -228,7 +225,6 @@ export function HomePage() {
           <section className={styles.section} key={section.view}>
             <SectionHeading
               title={section.label}
-              meta={`共 ${sectionWorks.length} 部`}
               action={
                 <button
                   type="button"
@@ -242,7 +238,13 @@ export function HomePage() {
             />
             <div className={styles.grid}>
               {sectionWorks.slice(0, 8).map((work) => (
-                <PosterCard key={work.id} work={work} onOpen={open} imageMode={appearance.cardImageMode} />
+                <PosterCard
+                  key={work.id}
+                  work={work}
+                  onOpen={open}
+                  imageMode={appearance.cardImageMode}
+                  showSubtitle={false}
+                />
               ))}
             </div>
           </section>
@@ -252,11 +254,12 @@ export function HomePage() {
   );
 }
 
-function metaLine(work: WorkSummary): string {
-  if (work.mediaType === 'movie') {
-    return work.year ? String(work.year) : '剧场版';
-  }
-  return `共 ${work.seasonCount} 季`;
+function heroMeta(work: WorkSummary): string {
+  return [
+    work.year > 0 ? String(work.year) : '',
+    work.rating > 0 ? `★ ${work.rating.toFixed(1)}` : '',
+    SHOW_TYPE_LABELS[work.showType],
+  ].filter(Boolean).join(' · ');
 }
 
 /** 每个作品名只保留第一个条目，用作文档橱窗的代表。 */

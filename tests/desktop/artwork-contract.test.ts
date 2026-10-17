@@ -18,7 +18,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { ArtworkImage, WorkArtwork, WorkCard } from '@shared/contracts/dto';
 import { parseWorkCard, parseWorkDetail } from '@shared/contracts/dto';
-import { pickArtwork, toWorkDetail, type BackendWorkDetailDto } from '@/services/real/adapters';
+import { pickArtwork, toArtworkSet, toWorkDetail, type BackendWorkDetailDto } from '@/services/real/adapters';
+import { artworkAtWidth } from '@/shared/ui/artwork-size';
 
 const RESOURCE_ID = 'a'.repeat(64);
 const POSTER_DIGEST = 'b'.repeat(64);
@@ -97,6 +98,15 @@ describe('作品卡片图片契约', () => {
     expect(pickArtwork(ARTWORK, 'poster', 300)?.url).toBe(ARTWORK.poster!.variants['384']);
     expect(pickArtwork(ARTWORK, 'clearlogo', 2048)?.url).toBe(ARTWORK.clearlogo!.variants['512']);
     expect(pickArtwork(ARTWORK, 'clearlogo', 128)?.url).toBe(ARTWORK.clearlogo!.variants['256']);
+  });
+
+  it('适配后保留全部已发布变体，卡片按宽度和 DPR 选图，不串用内容版本', () => {
+    const set = toArtworkSet(card());
+    expect(set.poster?.variants?.map((entry) => entry.width)).toEqual([256, 384, 512]);
+    expect(artworkAtWidth(set.poster, 203, 1.25)?.url).toBe(ARTWORK.poster!.variants['256']);
+    expect(artworkAtWidth(set.fanart, 203, 1.25)?.url).toBe(ARTWORK.fanart!.variants['512']);
+    expect(pickArtwork({ poster: { ...ARTWORK.poster!, variants: { '256': ARTWORK.fanart!.variants['512']! } } }, 'poster', 100)).toBeNull();
+    expect(pickArtwork({ poster: artworkImage(POSTER_DIGEST, [768]) }, 'poster', 100)).toBeNull();
   });
 
   it('详情剧集 thumb_path 通过发布校验才产出缩略图，否则保持 null', () => {

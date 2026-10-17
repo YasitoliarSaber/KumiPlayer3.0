@@ -5,8 +5,8 @@
  * 挂载卡片数只与可见行数和列数有关，不随作品总数线性增长。
  */
 
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import type { WorkSummary } from '@/shared/api/service';
 import { PosterCard } from '@/shared/ui/PosterCard';
@@ -37,6 +37,8 @@ export function PosterGrid({
 }: PosterGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [{ width, scrollMargin }, setGeometry] = useState({ width: 0, scrollMargin: 0 });
+  const [focusedWork, setFocusedWork] = useState<string | null>(null);
+  const hasWorks = works.length > 0;
 
   useLayoutEffect(() => {
     const element = containerRef.current;
@@ -58,10 +60,16 @@ export function PosterGrid({
     if (scrollRef.current) observer.observe(scrollRef.current);
     measure();
     return () => observer.disconnect();
-  }, [scrollRef]);
+  }, [scrollRef, hasWorks]);
 
   const columns = resolveColumns(width, desiredColumns);
   const rowCount = Math.ceil(works.length / columns);
+  const focusedIndex = useMemo(() => focusedWork ? works.findIndex((work) => work.id === focusedWork) : -1, [works, focusedWork]);
+  const focusedRow = focusedIndex >= 0 ? Math.floor(focusedIndex / columns) : -1;
+  const rangeExtractor = useCallback((range: Range) => {
+    const rows = defaultRangeExtractor(range);
+    return focusedRow >= 0 && !rows.includes(focusedRow) ? [...rows, focusedRow].sort((a, b) => a - b) : rows;
+  }, [focusedRow]);
   const cardWidth = width > 0 ? (width - COLUMN_GAP * (columns - 1)) / columns : MIN_CARD_WIDTH;
   const rowHeight = Math.ceil(cardWidth * (imageMode === 'fanart' ? 9 / 16 : 3 / 2))
     + (imageMode === 'fanart' ? 52 : META_HEIGHT) + ROW_GAP;
@@ -72,20 +80,31 @@ export function PosterGrid({
     estimateSize: () => rowHeight,
     scrollMargin,
     overscan: OVERSCAN,
+    rangeExtractor,
   });
 
   useLayoutEffect(() => {
     virtualizer.measure();
   }, [rowHeight, columns, virtualizer]);
+  useLayoutEffect(() => {
+    // 改列导致卡片跨行重挂载时恢复同一作品的焦点，不移动滚动位置。
+    if (!focusedWork || document.activeElement !== document.body) return;
+    const button = [...(containerRef.current?.querySelectorAll<HTMLButtonElement>('[data-work-id]') ?? [])]
+      .find((element) => element.dataset.workId === focusedWork);
+    button?.focus({ preventScroll: true });
+  }, [columns, focusedWork]);
 
   if (works.length === 0) {
     return <p className="my-12 text-center text-[13px] text-muted-foreground">{emptyLabel}</p>;
   }
 
   const rows = virtualizer.getVirtualItems();
+  const range = virtualizer.range;
 
   return (
-    <div ref={containerRef} className="relative w-full" data-virtual-rows={rows.length} data-poster-columns={columns}>
+    <div ref={containerRef} className="relative w-full" data-virtual-rows={rows.length} data-poster-columns={columns} data-poster-total={works.length}
+      onFocusCapture={(event) => setFocusedWork((event.target as HTMLElement).closest<HTMLElement>('[data-work-id]')?.dataset.workId ?? null)}
+      onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusedWork(null); }}>
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {rows.map((row) => {
           const start = row.index * columns;
@@ -100,7 +119,12 @@ export function PosterGrid({
               }}
             >
               {rowWorks.map((work) => (
-                <PosterCard key={work.id} work={work} onOpen={onOpen} eager={row.index <= 1} imageMode={imageMode} />
+                <PosterCard key={work.id} work={work} onOpen={onOpen} imageMode={imageMode} displayWidth={width > 0 ? cardWidth : 0}
+                  priority={range && row.index >= range.startIndex && row.index <= range.endIndex ? 'visible'
+                    : range && (virtualizer.scrollDirection === 'backward'
+                      ? row.index < range.startIndex && row.index >= range.startIndex - OVERSCAN
+                      : row.index > range.endIndex && row.index <= range.endIndex + OVERSCAN)
+                      ? 'prefetch' : null} />
               ))}
             </div>
           );

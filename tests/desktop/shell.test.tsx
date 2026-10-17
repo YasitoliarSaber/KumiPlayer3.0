@@ -271,7 +271,9 @@ describe('首页', () => {
 
   it('渲染橱窗、继续观看与分类分区', async () => {
     renderPage(<HomePage />);
-    await waitFor(() => expect(screen.getByLabelText('媒体展示')).toBeTruthy());
+    const showcase = await waitFor(() => screen.getByLabelText('媒体展示'));
+    // 横幅只保留当前作品，右侧不再渲染三张辅助推荐卡片。
+    expect(within(showcase).getAllByRole('button', { name: /^打开.+详情$/ })).toHaveLength(1);
     expect(screen.getAllByText('继续观看').length).toBeGreaterThan(0);
     expect(screen.getAllByText('番剧').length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: /^打开.+详情$/ }).length).toBeGreaterThan(3);
@@ -334,8 +336,10 @@ describe('作品详情', () => {
     await waitFor(() => expect(getDemoState().playback?.workId).toBe(target.id));
 
     expect(screen.queryByRole('button', { name: '选择版本' })).toBeNull();
-    expect(screen.getByRole('button', { name: '上一组剧集' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '下一组剧集' })).toBeTruthy();
+    // 用户已取消两侧翻页按钮：分集只保留可键盘聚焦的原生滚动轨道。
+    expect(screen.queryByRole('button', { name: '上一组剧集' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '下一组剧集' })).toBeNull();
+    expect(screen.getByLabelText(/分集列表，可左右滚动/)).toBeTruthy();
     expect(screen.queryByText('资料状态')).toBeNull();
   });
 
@@ -348,25 +352,36 @@ describe('作品详情', () => {
         position: 600, duration: 1200, completed: false, updatedAt: '2026-10-17T10:00:00' },
     }) };
     renderPage(<WorkDetailPage />, '/work/:workId', `/work/${target.id}`, createAppQueryClient(), customService);
-    const resume = await screen.findByRole('button', { name: /继续观看.*已看 50%/ });
+    const resume = await screen.findByRole('button', { name: /继续观看.*50%/ });
     fireEvent.click(resume);
     await waitFor(() => expect(getDemoState().playback?.episodeId).toBe(latest.id));
-    expect(screen.queryByRole('progressbar', { name: '演示观看进度' })).toBeNull();
+    // 进度条就在继续观看按钮内部，不再有独立的播放进度区域。
+    expect(within(resume).getByRole('progressbar', { name: '观看进度' })).toBeTruthy();
   });
 
-  it('分集两侧箭头滚动原生视口', async () => {
+  it('分集轨道只保留原生滚动视口，没有翻页按钮', async () => {
     const target = catalog.works[0]!;
     renderPage(<WorkDetailPage />, '/work/:workId', `/work/${target.id}`);
     const viewport = await screen.findByLabelText(/分集列表，可左右滚动/);
-    Object.defineProperty(viewport, 'scrollWidth', { value: 4000, configurable: true });
-    const scrollBy = vi.fn();
-    viewport.scrollBy = scrollBy;
-    fireEvent.scroll(viewport);
-    const next = screen.getByRole('button', { name: '下一组剧集' });
-    await waitFor(() => expect(next).toHaveProperty('disabled', false));
-    fireEvent.click(next);
-    expect(scrollBy).toHaveBeenCalledWith(expect.objectContaining({ left: expect.any(Number) }));
-    expect(scrollBy.mock.calls[0]![0].left).toBeGreaterThan(0);
+    expect(viewport.getAttribute('tabindex')).toBe('0');
+    expect(screen.queryByRole('button', { name: /上一组剧集|下一组剧集/ })).toBeNull();
+  });
+
+  it('电影详情不展示季集列表，播放仍在概要按钮中', async () => {
+    const movie = catalog.works.find((work) => work.mediaType === 'movie')!;
+    renderPage(<WorkDetailPage />, '/work/:workId', `/work/${movie.id}`);
+    await waitFor(
+      () => expect(screen.getByRole('heading', { level: 1, name: movie.title })).toBeTruthy(),
+      { timeout: 4000 },
+    );
+
+    expect(screen.queryAllByRole('tab')).toHaveLength(0);
+    expect(screen.queryByLabelText(/分集列表，可左右滚动/)).toBeNull();
+    expect(screen.queryByText('暂无分集图片')).toBeNull();
+
+    const play = screen.getByRole('button', { name: /^播放/ });
+    fireEvent.click(play);
+    await waitFor(() => expect(getDemoState().playback?.workId).toBe(movie.id));
   });
 
   it('管理抽屉保留资料、观看状态与匹配入口', async () => {
@@ -389,7 +404,7 @@ describe('作品详情', () => {
     const favorite = await screen.findByRole('button', { name: /收藏/ });
     fireEvent.click(favorite);
     await waitFor(() => expect(getDemoState().favorite[target.id]).toBe(true));
-    await waitFor(() => expect(screen.getByRole('button', { name: '已收藏', exact: true })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: '取消收藏', exact: true })).toBeTruthy());
   });
 
   it('季切换 Tabs 支持键盘方向键（Radix 原语，无需自写实现）', async () => {

@@ -8,10 +8,16 @@ import { resolveColumns } from '../../src/renderer/shared/ui/PosterGrid';
 const work = buildMockCatalog().works.find((entry) => entry.progress && entry.artwork.fanart)!;
 
 describe('海报展示契约', () => {
-  it('已看完优先于旧位置，进度条显示完整状态', () => {
+  it('海报图片不叠加观看进度，已看完也保持纯图片', () => {
     const completed = { ...work, progress: { ...work.progress!, completed: true, position: 0 } };
     render(<PosterCard work={completed} onOpen={vi.fn()} />);
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
+    expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+
+  it('播放中的作品同样不在海报上叠加速度或进度', () => {
+    render(<PosterCard work={work} onOpen={vi.fn()} />);
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.queryByText(/^\d+%$/)).toBeNull();
   });
 
   it('背景图偏好保留媒体库说明，不变成继续观看卡片', () => {
@@ -20,6 +26,20 @@ describe('海报展示契约', () => {
     expect(screen.queryByText(/还剩/)).toBeNull();
     // 原型已把海报卡副标题收敛为季数；年份不再出现在卡片上。
     expect(screen.getByText(new RegExp(`共 ${work.seasonCount} 季`))).toBeTruthy();
+  });
+
+  it('分类模式只显示作品名，不显示季数等副标题', () => {
+    render(<PosterCard work={work} onOpen={vi.fn()} showSubtitle={false} />);
+    expect(screen.getByText(work.title)).toBeTruthy();
+    expect(screen.queryByText(new RegExp(`共 ${work.seasonCount} 季`))).toBeNull();
+    expect(screen.queryByText(/还剩/)).toBeNull();
+  });
+
+  it('继续观看模式保留进度文字与图片下方进度条', () => {
+    const inProgress = { ...work, progress: { ...work.progress!, completed: false, position: 600, duration: 1200 } };
+    render(<PosterCard work={inProgress} variant="wide" onOpen={vi.fn()} />);
+    expect(screen.getByText(new RegExp(`${inProgress.progress.episodeCode}.*还剩`))).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: `${work.title}观看进度` })).toHaveAttribute('aria-valuenow', '50');
   });
 
   it('无效、过大与小数列数不能破坏虚拟网格', () => {

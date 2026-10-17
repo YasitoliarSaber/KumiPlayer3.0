@@ -1,4 +1,6 @@
 /** 开发期采样：回调间隔不等于屏幕呈现帧率；不进入生产包。 */
+import { artworkLifecycle } from '@/shared/ui/artwork-lifecycle';
+
 export function installScrollProfile() {
   const host = document.createElement('aside');
   host.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:1000;padding:10px;background:#fff;color:#111;border:1px solid #aaa;border-radius:8px;font:12px monospace;max-width:480px';
@@ -35,6 +37,7 @@ export function installScrollProfile() {
       return [observer];
     });
     const began = performance.now();
+    const artworkBefore = artworkLifecycle.snapshot();
     let previous = 0;
     const tick = (now: number) => {
       if (previous) intervals.push(now - previous);
@@ -57,6 +60,19 @@ export function installScrollProfile() {
         longTasks: longTasks.length, maxLongTask: Math.round(Math.max(0, ...longTasks)),
         longFrames: longFrames.length, maxLongFrame: Math.round(Math.max(0, ...longFrames)),
         mainFilters: filters.length,
+        artwork: artworkLifecycle.snapshot(),
+        artworkDelta: Object.fromEntries(Object.entries(artworkLifecycle.snapshot()).map(([key, value]) =>
+          [key, value - artworkBefore[key as keyof typeof artworkBefore]])),
+        grids: [...document.querySelectorAll<HTMLElement>('[data-virtual-rows]')].map((grid) => ({
+          rows: Number(grid.dataset.virtualRows), columns: Number(grid.dataset.posterColumns),
+          rendered: grid.querySelectorAll('[data-work-id]').length, total: Number(grid.dataset.posterTotal),
+        })),
+        imageResources: performance.getEntriesByType('resource').filter((entry) => entry.name.includes('/api/assets/artwork/'))
+          .filter((entry) => entry.startTime >= began).map((entry) => {
+            const resource = entry as PerformanceResourceTiming;
+            // transferSize=0 只能说明无可见传输字节，不能单独证明命中缓存。
+            return { duration: Math.round(resource.duration), transferSize: resource.transferSize, encodedBodySize: resource.encodedBodySize };
+          }),
       });
       running = false;
       start.disabled = false;

@@ -317,7 +317,6 @@
   overflow: hidden;
   aspect-ratio: 16 / 9;
   border-radius: var(--radius-card);
-  background: var(--surface-soft);
 }
 
 .episodeImage {
@@ -328,10 +327,8 @@
 }
 
 .episodeProgress {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  display: block;
+  width: 100%;
 }
 
 .episodeCopy {
@@ -406,7 +403,6 @@
   overflow: hidden;
   aspect-ratio: 2 / 3;
   border-radius: var(--radius-card);
-  background: var(--surface-soft);
 }
 
 .relatedImage {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildMockCatalog } from '../../src/renderer/mock/catalog';
-import { searchNav, searchWorks } from '../../src/renderer/shared/api/search';
+import { searchWorks } from '../../src/renderer/shared/api/search';
 
 const catalog = buildMockCatalog({ count: 60 });
 
@@ -42,13 +42,5 @@ describe('演示库本地搜索', () => {
 
   it('无匹配时返回空数组，不抛错', () => {
     expect(searchWorks(catalog.works, 'zzz-不存在-zzz')).toEqual([]);
-  });
-
-  it('导航项与侧栏目的地保持同一组入口', () => {
-    // 空查询给出前几个常用入口；具体目的地按名称检索（含设置）。
-    expect(searchNav('').length).toBeGreaterThan(0);
-    expect(searchNav('设置').map((item) => item.to)).toContain('/settings');
-    expect(searchNav('媒体')).toHaveLength(1);
-    expect(searchNav('zzz')).toHaveLength(0);
   });
 });

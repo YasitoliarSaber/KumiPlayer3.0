@@ -10,7 +10,7 @@ import type { WorkSummary } from '../../shared/api/service';
 import { useLibrary } from '../../shared/api/service-context';
 import { Artwork } from '../../shared/ui/Artwork';
 import { remainingLabel } from '../../shared/ui/PosterCard';
-import { EmptySurface, ErrorSurface, LoadingSurface, ProgressBar } from '../../shared/ui/Surface';
+import { EmptySurface, ErrorSurface, LoadingSurface } from '../../shared/ui/Surface';
 import { useUiStore } from '../../app/ui-store';
 import styles from './RecentPage.module.css';
 
@@ -65,13 +65,6 @@ export function RecentPage() {
 
 function RecentCard({ work, onOpen }: { readonly work: WorkSummary; readonly onOpen: (workId: string) => void }) {
   const progress = work.progress;
-  const percent = progress
-    ? progress.completed
-      ? 100
-      : progress.duration > 0
-        ? Math.min(100, Math.max(0, (progress.position / progress.duration) * 100))
-        : 0
-    : 0;
   const code = work.mediaType === 'movie' ? '电影' : (progress?.episodeCode ?? '集号待定');
   const status = progress ? remainingLabel(work) : '继续观看';
 
@@ -90,11 +83,6 @@ function RecentCard({ work, onOpen }: { readonly work: WorkSummary; readonly onO
           fallbackLabel="暂无分集图片"
           className={styles.image}
         />
-        {percent > 0 ? (
-          <span className={styles.progress}>
-            <ProgressBar value={percent} label={`${work.title}播放进度`} />
-          </span>
-        ) : null}
       </span>
       <span className={styles.copy}>
         <span className={styles.cardTitle} title={work.title}>
