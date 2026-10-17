@@ -122,7 +122,22 @@ export interface WorkDetail extends WorkSummary {
   readonly collections: readonly string[];
 }
 
-export type TaskStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'cancelling';
+/**
+ * 任务状态：`pending` 是后端等待执行的**未开始**状态（`backend/app/api/tasks_v4.py:21`），
+ * 不是终态；`unknown` 表示后端返回了本前端尚未登记的状态，界面必须如实展示，
+ * 不得当成 succeeded，也不得静默丢弃。
+ */
+export type TaskStatus =
+  | 'pending'
+  /** durable scan 达到请求预算后的可继续状态（`backend/app/media_v4/sources/durable_scan.py:385`）。 */
+  | 'paused'
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+  | 'cancelling'
+  | 'unknown';
 
 export interface TaskEntry {
   readonly id: string;
@@ -131,6 +146,8 @@ export interface TaskEntry {
   readonly sourceId: string;
   readonly sourceName: string;
   readonly status: TaskStatus;
+  /** 后端原始状态字符串；枚举外的值时界面用它如实展示，不猜测语义。 */
+  readonly rawStatus?: string;
   /** 后端只提供 0/1，不代表连续百分比。 */
   readonly progress: 0 | 1;
   readonly message: string;
@@ -309,6 +326,12 @@ export interface WorkOverride {
 
 /** 演示/真实实现共用的业务服务面。 */
 export interface MediaService {
+  /**
+   * 实现来源标识：真实后端 = `real`，本机演示存储 = `demo`。
+   * 页面只用它选择"读哪份本机偏好/引导状态"，不据此改变业务语义，
+   * 真实模式也不会因为失败而变成演示模式。
+   */
+  readonly serviceMode: 'real' | 'demo';
   listLibrary(signal?: AbortSignal): Promise<LibrarySnapshot>;
   getWorkDetail(workId: string, signal?: AbortSignal): Promise<WorkDetail>;
   listSources(signal?: AbortSignal): Promise<readonly SourceCard[]>;
@@ -342,8 +365,17 @@ export interface MediaService {
 
   /* ---------------- 可选能力：只有真实后端实现，界面按能力存在与否决定是否可操作 ---------------- */
 
+  /**
+   * 首次引导：完成与"稍后设置"是两条独立通道——
+   * 完成后端会校验播放器与至少一个可访问来源，稍后设置只记录推迟。
+   * 失败必须抛出可读错误（界面保留输入并显示原因），不得当作已完成。
+   */
+  completeSetup?(input: SetupCompletionInput): Promise<SettingsSnapshot>;
+  deferSetup?(): Promise<SettingsSnapshot>;
+  /** TMDB 令牌经后端验证后才写入；验证失败不保存，也不落本地存储。 */
+  saveTmdbCredential?(token: string): Promise<SettingsSnapshot>;
   /** 后端轻量搜索索引：标题 / 原名 / 别名 / 标签 / 制作公司，一次有界查询。 */
-  searchLibrary?(query: string, limit?: number): Promise<readonly LibrarySearchHit[]>;
+  searchLibrary?(query: string, limit?: number): Promise<LibrarySearchResult>;
   listScanSchedules?(): Promise<readonly SourceScanSchedule[]>;
   setScanSchedule?(
     rootId: string,
@@ -388,6 +420,16 @@ export interface LibrarySearchHit {
   readonly studios: readonly string[];
 }
 
+/**
+ * `/api/library/search` 的完整结果。
+ * `truncated` 由后端给出（命中数超过 limit 时为 true）：界面必须如实提示
+ * "结果过多、只显示前 N 条"，不能把截断当成"没有更多命中"。
+ */
+export interface LibrarySearchResult {
+  readonly hits: readonly LibrarySearchHit[];
+  readonly truncated: boolean;
+}
+
 /** durable SourceScan 的读状态；不提供连续百分比时不伪造进度。 */
 export interface ScanProgress {
   readonly scanId: string;
@@ -419,6 +461,20 @@ export interface SourceScanRequest {
   readonly sourceDisplayName?: string;
   readonly resumeScanId?: string;
   readonly connectionId?: string;
+}
+
+/**
+ * 首次引导「完成设置」的输入：只提交用户这次真正给出的值。
+ * 未提供的字段由后端保留已保存的配置，传空字符串不会当成"清空"。
+ */
+export interface SetupCompletionInput {
+  readonly localRoot?: string;
+  readonly pan115Root?: string;
+  readonly baiduRoot?: string;
+  readonly directoryTreeDir?: string;
+  readonly playerMode?: 'internal' | 'external';
+  readonly externalMpvPath?: string;
+  readonly mpvPath?: string;
 }
 
 export interface ImportPreviewSummary {
@@ -518,6 +574,8 @@ export interface RestorePreview {
   };
   readonly config: {
     readonly changedFields: readonly string[];
+    /** 备份里存在、但当前版本不恢复的字段（后端 `ignored_fields`）；只展示，不假装已恢复。 */
+    readonly ignoredFields: readonly string[];
     readonly sourceChanges: readonly { readonly field: string; readonly action: string }[];
   };
   readonly watchRecords: {

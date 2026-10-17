@@ -181,6 +181,7 @@ export const OPERATION_SPECS = {
       'tmdb_rate_limit',
       'tmdb_max_retries',
       'tmdb_timeout',
+      'bangumi_access_token',
       'bangumi_user_agent',
       'auto_play_next_episode',
       'mpv_anime4k_mode',
@@ -199,7 +200,49 @@ export const OPERATION_SPECS = {
       'source_scan_schedules',
       'backup_auto_daily_enabled',
       'backup_auto_daily_time',
+      'heartbeat_enabled',
     ],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+
+  /**
+   * 首次引导不是普通配置字段：后端用独立端点分别记录"稍后设置"与"验证后完成"，
+   * 避免把未验证的播放器/来源写成已完成。这里只登记既有端点，不改后端校验。
+   */
+  'config.setupDefer': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'POST',
+    path: '/api/config/setup/defer',
+    query: [],
+    body: [],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+  'config.setupComplete': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'POST',
+    path: '/api/config/setup/complete',
+    query: [],
+    body: [
+      'local_root',
+      'pan115_root',
+      'baidu_root',
+      'directory_tree_dir',
+      'player_mode',
+      'external_mpv_path',
+      'mpv_path',
+    ],
+    timeoutMs: MUTATION_TIMEOUT_MS,
+  },
+  /** TMDB 凭据走验证端点：验证失败不写入，凭据值只经此请求体，不落本地配置。 */
+  'config.setupTmdbCredential': {
+    transport: 'http',
+    kind: 'mutation',
+    method: 'POST',
+    path: '/api/config/setup/credentials/tmdb',
+    query: [],
+    body: ['tmdb_bearer_token'],
     timeoutMs: MUTATION_TIMEOUT_MS,
   },
 

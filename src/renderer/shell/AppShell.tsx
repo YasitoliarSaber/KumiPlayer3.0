@@ -36,7 +36,7 @@ import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-rout
 import { SOURCE_LABELS, useUiStore, type SourceFilter } from '@/app/ui-store';
 import { useNavHistoryState, useRecordLocation } from '@/app/nav-history';
 import { detectHost } from '@/app/platform';
-import { demoQueryKeys, useLibrary } from '@/shared/api/service-context';
+import { demoQueryKeys, useLibrary, useMediaService, useSettings } from '@/shared/api/service-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDemoState } from '@/mock/demo-store';
 import type { LibraryView, WorkSummary } from '@/shared/api/service';
@@ -107,7 +107,14 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   const setupOpen = useUiStore((state) => state.setupOpen);
   const openSetup = useUiStore((state) => state.openSetup);
   const closeSetup = useUiStore((state) => state.closeSetup);
-  const application = useDemoState().settings.application;
+  const service = useMediaService();
+  const demoApplication = useDemoState().settings.application;
+  // 引导状态的事实来源按实现分开：真实后端读 settings 查询，演示读本机演示存储。
+  const settings = useSettings();
+  const demoMode = service.serviceMode === 'demo';
+  const setupKnown = demoMode || settings.isSuccess;
+  const setupCompleted = demoMode ? demoApplication.setupCompleted : settings.data?.application.setupCompleted === true;
+  const setupDeferred = demoMode ? demoApplication.setupDeferred : settings.data?.application.setupDeferred === true;
   const sidebarMode = useUiStore((state) => state.sidebarMode);
   const mainRef = useCallback((node: HTMLElement | null) => setMain(node), []);
 
@@ -117,15 +124,16 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
     if (main) main.scrollTop = 0;
   }, [main, location.pathname]);
 
-  // 首次使用引导只在"未完成且未推迟"时自动打开一次；关掉后不会反复弹出。
+  // 首次使用引导只在"确认未完成且未推迟"时自动打开一次；关掉后不会反复弹出。
+  // 读取中或读取失败都不弹：既不假装已完成，也不用演示状态顶替真实事实。
   const autoOpened = useRef(false);
   useEffect(() => {
-    if (autoOpened.current || setupOpen || application.setupCompleted || application.setupDeferred) {
+    if (autoOpened.current || setupOpen || !setupKnown || setupCompleted || setupDeferred) {
       return;
     }
     autoOpened.current = true;
     openSetup();
-  }, [application.setupCompleted, application.setupDeferred, openSetup, setupOpen]);
+  }, [openSetup, setupCompleted, setupDeferred, setupKnown, setupOpen]);
 
   // Ctrl/Cmd+K 唤起快捷搜索；只拦截组合键，不影响普通输入与输入法组合。
   useEffect(() => {
@@ -174,7 +182,7 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
       <FirstRunSetup
         open={setupOpen}
         onClose={closeSetup}
-        mode={application.setupCompleted ? 'reconfigure' : 'first-run'}
+        mode={setupCompleted ? 'reconfigure' : 'first-run'}
       />
     </div>
   );

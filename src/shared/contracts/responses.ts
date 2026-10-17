@@ -33,6 +33,10 @@ import type { Reader } from './validate';
 export interface ResponseShapes {
   readonly 'health.get': HealthResponse;
   readonly 'config.get': PublicConfig;
+  /** 首次引导的三个写端点都返回同一份脱敏配置。 */
+  readonly 'config.setupDefer': PublicConfig;
+  readonly 'config.setupComplete': PublicConfig;
+  readonly 'config.setupTmdbCredential': PublicConfig;
   readonly 'library.list': LibrarySnapshot;
   readonly 'library.changes': LibraryChanges;
   readonly 'library.cards': { readonly works: readonly unknown[] };
@@ -59,6 +63,9 @@ export const OPERATION_RESPONSE_PARSERS: {
 } = {
   'health.get': parseHealth,
   'config.get': parsePublicConfig,
+  'config.setupDefer': parsePublicConfig,
+  'config.setupComplete': parsePublicConfig,
+  'config.setupTmdbCredential': parsePublicConfig,
   'library.list': parseLibrarySnapshot,
   'library.changes': parseLibraryChanges,
   'library.cards': cardsReader,

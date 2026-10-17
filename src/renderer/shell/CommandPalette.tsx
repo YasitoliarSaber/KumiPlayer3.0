@@ -42,6 +42,8 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
   const [composing, setComposing] = useState(false);
   /** 后端轻量搜索索引的结果；只有真实服务提供该能力时才使用。 */
   const [remoteHits, setRemoteHits] = useState<readonly LibrarySearchHit[]>([]);
+  /** 后端在命中数超过 limit 时给出的截断标记：界面如实提示，不假装结果完整。 */
+  const [remoteTruncated, setRemoteTruncated] = useState(false);
   const [remotePending, setRemotePending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   // 面板由快捷键唤起，没有触发元素；关闭时把焦点还给打开前的元素。
@@ -60,6 +62,7 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
     }
     if (trimmedQuery.length === 0) {
       setRemoteHits([]);
+      setRemoteTruncated(false);
       setRemotePending(false);
       return undefined;
     }
@@ -68,14 +71,16 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
     const timer = window.setTimeout(() => {
       void service
         .searchLibrary!(trimmedQuery, 30)
-        .then((hits) => {
+        .then((result) => {
           if (!cancelled) {
-            setRemoteHits(hits);
+            setRemoteHits(result.hits);
+            setRemoteTruncated(result.truncated);
           }
         })
         .catch(() => {
           if (!cancelled) {
             setRemoteHits([]);
+            setRemoteTruncated(false);
           }
         })
         .finally(() => {
@@ -227,6 +232,12 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
           ↑ ↓ 选择 · Enter 打开 · Esc 关闭
           {canRemoteSearch ? ' · 检索标题 / 别名 / 标签 / 制作公司' : ' · 检索标题 / 原名 / 类型 / 制作公司'}
         </p>
+        {remoteTruncated ? (
+          // 后端有界查询：命中多于上限时如实说明，不假装已经全部列出。
+          <p className="text-[11.5px] text-muted-foreground" role="status">
+            命中过多，仅显示前 {remoteHits.length} 条，请补充关键词缩小范围。
+          </p>
+        ) : null}
       </DialogContent>
     </Dialog>
   );

@@ -19,6 +19,7 @@ import type {
   MediaService,
   PlaybackSession,
   ReviewIssue,
+  SetupCompletionInput,
   SettingsSection,
   SettingsSnapshot,
   SourceCard,
@@ -125,6 +126,33 @@ const REVIEW_ISSUES: readonly ReviewIssue[] = [
     candidates: [],
   },
 ];
+
+/**
+ * 演示等价于后端单值 `local_root` 的语义：已登记则提前，未登记则新增为第一条，
+ * 不丢弃其它已登记目录（真实写入由后端 `apply_primary_change` 保证）。
+ */
+function promoteLocalRoot(
+  records: SettingsSnapshot['sources']['localRoots'],
+  path: string,
+): SettingsSnapshot['sources']['localRoots'] {
+  const text = path.trim();
+  if (text.length === 0) {
+    return records;
+  }
+  const key = normalizePathKey(text);
+  const existing = records.find((record) => normalizePathKey(record.path) === key);
+  const rest = records.filter((record) => normalizePathKey(record.path) !== key);
+  const primary = existing ?? {
+    id: 'setup-local',
+    path: text,
+    name: text.split(/[\\/]/).filter(Boolean).pop() ?? '本地媒体库',
+  };
+  return [primary, ...rest].slice(0, 24);
+}
+
+function normalizePathKey(path: string): string {
+  return path.trim().replace(/\//g, '\\').toLowerCase();
+}
 
 export function createMockMediaService(options: MockServiceOptions = {}): MediaService {
   // 目录按演示库规模缓存：压力模式复用同一小批图片，只放大元数据条目。
@@ -431,6 +459,9 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
   };
 
   const service: MediaService = {
+    // 演示实现标识：页面据此读取本机演示设置而不是后端事实。
+    serviceMode: 'demo',
+
     async listLibrary(signal) {
       await wait(signal);
       const state = getDemoState();
@@ -603,6 +634,61 @@ export function createMockMediaService(options: MockServiceOptions = {}): MediaS
         ...settings,
         [section]: { ...settings[section], ...patch },
       } as SettingsSnapshot;
+      updateDemoState(() => ({ settings: updated }));
+      return updated;
+    },
+
+    /* ------------------------- 首次使用引导（与真实服务同语义的演示实现） ------------------------- */
+
+    /** 完成引导：演示只写本机演示存储，成功与失败语义与真实服务一致。 */
+    async completeSetup(input: SetupCompletionInput) {
+      await wait(undefined, 30);
+      const settings = getDemoState().settings;
+      const updated: SettingsSnapshot = {
+        ...settings,
+        application: { ...settings.application, setupCompleted: true, setupDeferred: false },
+        sources: {
+          ...settings.sources,
+          localRoots: input.localRoot
+            ? promoteLocalRoot(settings.sources.localRoots, input.localRoot)
+            : settings.sources.localRoots,
+        },
+        player: {
+          ...settings.player,
+          ...(input.playerMode ? { mode: input.playerMode } : {}),
+          ...(input.externalMpvPath ? { externalPath: input.externalMpvPath } : {}),
+        },
+      };
+      updateDemoState(() => ({ settings: updated }));
+      return updated;
+    },
+
+    /** 「稍后设置」只记录推迟，不把未完成的配置标成已完成。 */
+    async deferSetup() {
+      await wait(undefined, 30);
+      const settings = getDemoState().settings;
+      const updated: SettingsSnapshot = {
+        ...settings,
+        application: { ...settings.application, setupDeferred: true },
+      };
+      updateDemoState(() => ({ settings: updated }));
+      return updated;
+    },
+
+    /**
+     * 演示等价实现：只记录"已填写"这一状态。
+     * 令牌内容既不写入演示存储，也不进入日志。
+     */
+    async saveTmdbCredential(token: string) {
+      await wait(undefined, 30);
+      if (token.trim().length === 0) {
+        throw new DemoServiceError('请填写 TMDB API 读取访问令牌；演示模式不会记录空值。');
+      }
+      const settings = getDemoState().settings;
+      const updated: SettingsSnapshot = {
+        ...settings,
+        scrape: { ...settings.scrape, tmdbConfigured: true },
+      };
       updateDemoState(() => ({ settings: updated }));
       return updated;
     },

@@ -24,8 +24,8 @@ import type {
   BackupList,
   ImportConfirmResult,
   ImportPreviewSummary,
+  LibrarySearchResult,
   LibrarySnapshot,
-  LibrarySearchHit,
   MediaService,
   MetadataCandidate,
   PlaybackSession,
@@ -34,6 +34,7 @@ import type {
   RestoreApplied,
   RestorePreview,
   ScanProgress,
+  SetupCompletionInput,
   SettingsSection,
   SettingsSnapshot,
   SourceCard,
@@ -66,6 +67,41 @@ export interface RealServiceOptions {
 function describe(error: GatewayError): string {
   return error.message;
 }
+
+/**
+ * `GET /api/playback/history` 的后端上界（`backend/app/api/playback_v4.py:147` 夹在 1..200）。
+ * 传更大的值只会被静默截断，这里按最大页读取进度快照；后端没有按作品批量读进度的端点。
+ */
+const PLAYBACK_HISTORY_LIMIT = 200;
+
+/** 后端可能返回的任务状态（`backend/app/api/tasks_v4.py:12-21`）。 */
+const KNOWN_TASK_STATUSES: ReadonlySet<string> = new Set<string>([
+  'pending',
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'cancelled',
+  'cancelling',
+]);
+
+/** 识别问题的中文标签；键是后端真实 issue 代码。 */
+const ISSUE_LABELS: Readonly<Record<string, string>> = {
+  sidecar_nfo_ambiguous: '目录级 NFO 归属不明确',
+  candidate_ambiguous: '线上候选不确定',
+  parsed_facts_review_hint: '解析结果需要核对',
+  parsed_facts_need_review: '解析结果需要人工复核',
+  generic_container_title: '目录名过于笼统',
+  work_identity_missing: '缺少作品身份线索',
+  episode_number_unresolved: '集号无法确定',
+  absolute_episode_conflict: '绝对集号冲突',
+  ambiguous_work_identity: '作品身份存在歧义',
+  independent_title_candidate: '异名无编号文件',
+  media_type_unresolved: '类型无法确定',
+  manual_override_continuity_conflict: '人工修正与文件连续性冲突',
+  work_owner_ambiguous: '既有作品归属不明确',
+  cross_source_identity_ambiguous: '跨来源身份不明确',
+};
 
 function unwrapOrThrow<T>(outcome: { readonly ok: true; readonly data: T } | { readonly ok: false; readonly error: GatewayError }): T {
   if (outcome.ok) {
@@ -130,18 +166,19 @@ function toScanProgress(payload: unknown): ScanProgress {
 }
 
 function scanToTaskEntry(scan: ScanProgress): TaskEntry {
-  const running = scan.status === 'running' || scan.status === 'queued';
-  const failed = scan.status === 'failed';
-  const cancelled = scan.status === 'cancelled';
-  const status: TaskStatus = running
-    ? scan.status === 'queued'
-      ? 'queued'
-      : 'running'
-    : failed
-      ? 'failed'
-      : cancelled
-        ? 'cancelled'
-        : 'succeeded';
+  // durable scan 的真实状态集合（queued/running/cancelling/paused/completed/failed/cancelled）；
+  // 未登记的值按 unknown 如实展示，绝不默认成"已完成"。
+  const statusByScan: Readonly<Record<string, TaskStatus>> = {
+    queued: 'queued',
+    running: 'running',
+    cancelling: 'cancelling',
+    paused: 'paused',
+    completed: 'succeeded',
+    failed: 'failed',
+    cancelled: 'cancelled',
+  };
+  const status: TaskStatus = statusByScan[scan.status] ?? 'unknown';
+  const active = status === 'queued' || status === 'running' || status === 'cancelling' || status === 'paused';
   return {
     id: scan.scanId,
     type: 'source_scan',
@@ -149,15 +186,16 @@ function scanToTaskEntry(scan: ScanProgress): TaskEntry {
     sourceId: scan.rootId,
     sourceName: scan.rootId,
     status,
+    rawStatus: scan.status,
     // 后端只给出已处理/总数量级，没有连续百分比时保持 0/1，不拟合曲线。
-    progress: running ? 0 : 1,
+    progress: status === 'succeeded' ? 1 : 0,
     message: scan.error || scan.stageLabel,
     createdAt: '',
     startedAt: '',
     finishedAt: '',
     error: scan.error,
     scope: scan.rootId,
-    cancellable: running,
+    cancellable: active,
   };
 }
 
@@ -225,7 +263,13 @@ function toTaskEntry(payload: unknown): TaskEntry {
     throw new Error(`任务响应结构不符合契约：${parsed.issues.join('; ')}`);
   }
   const record = parsed.value;
-  const status = record.status as TaskStatus;
+  // 后端状态：pending（等待执行）/ running / succeeded / failed / cancelled（tasks_v4.py:21）。
+  // 未登记的值归到 unknown 并保留原文，既不当作成功，也不隐藏。
+  const rawStatus = record.status;
+  const status: TaskStatus = KNOWN_TASK_STATUSES.has(rawStatus)
+    ? (rawStatus as TaskStatus)
+    : 'unknown';
+  const active = status === 'pending' || status === 'running' || status === 'cancelling';
   return {
     id: record.task_id,
     type: record.task_type,
@@ -233,6 +277,7 @@ function toTaskEntry(payload: unknown): TaskEntry {
     sourceId: record.source,
     sourceName: record.source,
     status,
+    rawStatus,
     progress: record.progress > 0 ? 1 : 0,
     message: record.message,
     createdAt: record.created_at,
@@ -240,7 +285,7 @@ function toTaskEntry(payload: unknown): TaskEntry {
     finishedAt: record.finished_at,
     error: record.error,
     scope: record.result?.revision_id ?? '',
-    cancellable: status === 'running' || status === 'queued',
+    cancellable: active && !record.cancel_requested && status !== 'cancelling',
   };
 }
 
@@ -334,12 +379,17 @@ function toImportPreview(payload: Record<string, unknown>): ImportPreviewSummary
     blockingIssueCount: num(payload.blocking_issue_count),
     issues: issues.map((entry) => {
       const record = asRecord(entry);
+      // 后端 ResolutionIssue 的公开字段是 code / evidence_id / message / severity
+      // （`backend/app/media_v4/domain/models.py:146-152`）；severity 现行取值是 warning，
+      // 阻断与否只按后端真实值判定，不做自定义映射。
+      const code = str(record.code);
       const blocking = str(record.severity) === 'blocking';
+      const location = str(record.relative_path) || str(record.file_name);
       return {
-        id: str(record.issue_id) || str(record.id),
+        id: str(record.evidence_id) || code,
         severity: blocking ? 'blocking' : 'notice',
-        title: str(record.title) || str(record.kind),
-        detail: str(record.detail) || str(record.message),
+        title: ISSUE_LABELS[code] ?? code,
+        detail: [str(record.message), location].filter((part) => part.length > 0).join(' · '),
         candidates: Array.isArray(record.candidates)
           ? record.candidates.map((candidate) => {
               const option = asRecord(candidate);
@@ -449,6 +499,8 @@ function toRestorePreview(payload: Record<string, unknown>): RestorePreview {
     },
     config: {
       changedFields: toStrArray(config.changed_fields),
+      // 备份里存在、但当前版本不恢复的字段：如实展示，不假装恢复成功。
+      ignoredFields: toStrArray(config.ignored_fields),
       sourceChanges: Array.isArray(config.source_changes)
         ? config.source_changes.map((entry) => {
             const record = asRecord(entry);
@@ -496,6 +548,109 @@ function toRestoreApplied(payload: Record<string, unknown>): RestoreApplied {
   };
 }
 
+/**
+ * 公开配置字典 → 设置视图模型。
+ * `/api/config` 与 `/api/config/setup/*` 返回同一份 `to_public_dict()`，
+ * 这里只读取后端真实存在的字段：读不到的键保持默认，不假装"已配置"。
+ */
+function toSettingsSnapshot(record: Record<string, unknown>): SettingsSnapshot {
+  const localRoots = Array.isArray(record.local_roots)
+    ? record.local_roots.map((entry, index) => {
+        const root = asRecord(entry);
+        return {
+          id: str(root.root_id) || `local-${index}`,
+          path: str(root.path),
+          name: str(root.name) || str(root.path),
+        };
+      })
+    : [];
+  return {
+    application: {
+      // 浏览器运行期没有托盘与自启能力：这些值只读展示真实配置，不提供假开关。
+      minimizeToTray: record.minimize_to_tray === true,
+      closeToTray: record.close_to_tray === true,
+      connectionMonitor: record.heartbeat_enabled !== false,
+      setupCompleted: record.setup_completed === true,
+      setupDeferred: record.setup_deferred === true,
+    },
+    appearance: {
+      theme: record.theme === 'cinema' ? 'cinema' : record.theme === 'system' ? 'system' : 'mica',
+      material:
+        record.material === 'solid' || record.material === 'acrylic' ? record.material : 'mica',
+      motion: record.reduce_motion === true ? 'reduced' : 'full',
+      posterSize: num(record.poster_size, 6),
+      cardImageMode: record.series_card_image_mode === 'fanart' ? 'fanart' : 'poster',
+    },
+    sources: {
+      localRoots,
+      ongoingOnStartup: record.ongoing_update_on_startup === true,
+      ongoingIntervalMinutes: num(record.ongoing_update_interval_minutes, 0),
+    },
+    openlist: {
+      connections: toOpenListConnections(record.openlist_connections),
+      routes: toOpenListRoutes(record.openlist_routes),
+    },
+    scrape: {
+      tmdbLanguage: str(record.tmdb_language, 'zh-CN'),
+      // 后端只公开脱敏后的"是否已配置"布尔值，不返回令牌本身。
+      tmdbConfigured: record.tmdb_configured === true,
+      bangumiAliasEnabled: record.bangumi_alias_enabled !== false,
+      anilistEnabled: record.anilist_enabled !== false,
+      imageStorageMode: str(record.artwork_storage_mode, 'auto'),
+    },
+    player: {
+      mode: record.player_mode === 'external' ? 'external' : 'internal',
+      externalPath: str(record.external_mpv_path),
+      autoPlayNext: record.auto_play_next_episode !== false,
+      anime4kMode: str(record.mpv_anime4k_mode, 'off'),
+      anime4kQuality: str(record.mpv_anime4k_quality, 'balanced'),
+      completedThresholdPercent: num(record.completed_threshold_percent, 90),
+    },
+    bangumi: {
+      configured: record.bangumi_configured === true,
+      username: str(record.bangumi_username),
+      nickname: str(record.bangumi_nickname),
+      syncEnabled: false,
+    },
+    backup: {
+      autoDailyEnabled: record.backup_auto_daily_enabled === true,
+      autoDailyTime: str(record.backup_auto_daily_time, '03:00'),
+    },
+  };
+}
+
+/** 视图字段 → `/api/config/setup/complete` 的请求字段（后端 `SetupCompleteRequest`）。 */
+const SETUP_COMPLETE_FIELDS: ReadonlyArray<readonly [keyof SetupCompletionInput, string]> = [
+  ['localRoot', 'local_root'],
+  ['pan115Root', 'pan115_root'],
+  ['baiduRoot', 'baidu_root'],
+  ['directoryTreeDir', 'directory_tree_dir'],
+  ['playerMode', 'player_mode'],
+  ['externalMpvPath', 'external_mpv_path'],
+  ['mpvPath', 'mpv_path'],
+];
+
+/**
+ * 完成引导的请求体：后端用 `exclude_unset` 合并已保存配置，
+ * 因此未填写的目录必须整键省略——传空字符串会被当成"清空该来源"。
+ */
+function setupCompleteBody(input: SetupCompletionInput): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  for (const [viewKey, configKey] of SETUP_COMPLETE_FIELDS) {
+    const value = input[viewKey];
+    if (viewKey === 'playerMode') {
+      if (value === 'internal' || value === 'external') {
+        body[configKey] = value;
+      }
+      continue;
+    }
+    if (typeof value === 'string' && value.trim().length > 0) {
+      body[configKey] = value.trim();
+    }
+  }
+  return body;
+}
+
 export function createHttpMediaService(options: RealServiceOptions = {}): MediaService {
   const transport = options.transport ?? createBrowserTransport();
 
@@ -510,8 +665,10 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
     );
     const works = parseCards(payload);
     const progress = new Map<string, ProgressSnapshot>();
+    // 后端把 limit 夹在 1..200（`backend/app/api/playback_v4.py:147`）：
+    // 传更大的值只会被静默截断，这里按后端上界取最大页，避免大库缺进度。
     const history = await transport.call<unknown>('playback.history', {
-      query: { limit: 500 },
+      query: { limit: PLAYBACK_HISTORY_LIMIT },
       ...(signal ? { signal } : {}),
     });
     if (history.ok) {
@@ -542,69 +699,15 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
     if (settingsCache) {
       return settingsCache;
     }
-    const record = asRecord(unwrapOrThrow(await transport.call<unknown>('config.get', {})));
-    const localRoots = Array.isArray(record.local_roots)
-      ? record.local_roots.map((entry, index) => {
-          const root = asRecord(entry);
-          return {
-            id: str(root.root_id) || `local-${index}`,
-            path: str(root.path),
-            name: str(root.name) || str(root.path),
-          };
-        })
-      : [];
-    settingsCache = {
-      application: {
-        // 浏览器运行期没有托盘与自启能力：这些值只读展示真实配置，不提供假开关。
-        minimizeToTray: record.minimize_to_tray === true,
-        closeToTray: record.close_to_tray === true,
-        connectionMonitor: record.heartbeat_enabled !== false,
-        setupCompleted: record.setup_completed === true,
-        setupDeferred: record.setup_deferred === true,
-      },
-      appearance: {
-        theme: record.theme === 'cinema' ? 'cinema' : record.theme === 'system' ? 'system' : 'mica',
-        material:
-          record.material === 'solid' || record.material === 'acrylic' ? record.material : 'mica',
-        motion: record.reduce_motion === true ? 'reduced' : 'full',
-        posterSize: num(record.poster_size, 6),
-        cardImageMode: record.series_card_image_mode === 'fanart' ? 'fanart' : 'poster',
-      },
-      sources: {
-        localRoots,
-        ongoingOnStartup: record.ongoing_update_on_startup === true,
-        ongoingIntervalMinutes: num(record.ongoing_update_interval_minutes, 0),
-      },
-      openlist: {
-        connections: toOpenListConnections(record.openlist_connections),
-        routes: toOpenListRoutes(record.openlist_routes),
-      },
-      scrape: {
-        tmdbLanguage: str(record.tmdb_language, 'zh-CN'),
-        tmdbConfigured: record.tmdb_token_configured === true,
-        bangumiAliasEnabled: record.bangumi_alias_enabled !== false,
-        anilistEnabled: record.anilist_enabled !== false,
-        imageStorageMode: str(record.artwork_storage_mode, 'auto'),
-      },
-      player: {
-        mode: record.player_mode === 'external' ? 'external' : 'internal',
-        externalPath: str(record.external_mpv_path),
-        autoPlayNext: record.auto_play_next_episode !== false,
-        anime4kMode: str(record.mpv_anime4k_mode, 'off'),
-        anime4kQuality: str(record.mpv_anime4k_quality, 'balanced'),
-        completedThresholdPercent: num(record.completed_threshold_percent, 90),
-      },
-      bangumi: {
-        configured: record.bangumi_token_configured === true,
-        username: str(record.bangumi_username),
-        nickname: str(record.bangumi_nickname),
-        syncEnabled: false,
-      },
-      backup: {
-        autoDailyEnabled: record.backup_auto_daily_enabled === true,
-        autoDailyTime: str(record.backup_auto_daily_time, '03:00'),
-      },
-    };
+    // `/api/config` 与 `/api/config/setup/*` 返回同一份 `to_public_dict()`，
+    // 因此完成引导后可以直接用响应更新视图模型，不需要再发一次读取。
+    settingsCache = toSettingsSnapshot(asRecord(unwrapOrThrow(await transport.call<unknown>('config.get', {}))));
+    return settingsCache;
+  }
+
+  /** 保存完成/推迟引导的响应状态，同时也让后续读取命中最新事实。 */
+  function applySettingsPayload(payload: unknown): SettingsSnapshot {
+    settingsCache = toSettingsSnapshot(asRecord(payload));
     return settingsCache;
   }
 
@@ -613,6 +716,8 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
   }
 
   return {
+    serviceMode: 'real',
+
     async listLibrary(signal): Promise<LibrarySnapshot> {
       const { works, progress } = await withSignal(signal, () => library(signal));
       const sources = await withSignal(signal, async () => {
@@ -688,18 +793,25 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
     },
 
     async setFavorite(workId, favorite): Promise<WorkSummary> {
-      await transport.call<unknown>('library.watchStatus', {
+      // 写失败必须如实抛出：未检查结果的实现会把失败当成"已收藏"。
+      const outcome = await transport.call<unknown>('library.watchStatus', {
         params: { workId },
         body: { favorite },
       });
+      if (!outcome.ok) {
+        throw new Error(describe(outcome.error));
+      }
       return refreshWork(workId);
     },
 
     async setWatchStatus(workId, status): Promise<WorkSummary> {
-      await transport.call<unknown>('library.watchStatus', {
+      const outcome = await transport.call<unknown>('library.watchStatus', {
         params: { workId },
         body: { status },
       });
+      if (!outcome.ok) {
+        throw new Error(describe(outcome.error));
+      }
       return refreshWork(workId);
     },
 
@@ -724,6 +836,47 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
       invalidateSettings();
       settingsCache = null;
       return loadSettings();
+    },
+
+    /* ------------------------- 首次使用引导（独立于普通配置写入） ------------------------- */
+
+    /**
+     * 完成引导：由后端校验播放器与至少一个可访问来源后才写入 `setup_completed`。
+     * 校验失败（例如没有可访问来源、内置 MPV 未就绪）如实抛出后端原因，
+     * 界面保留输入并显示错误，不把失败当成已完成。
+     */
+    async completeSetup(input: SetupCompletionInput): Promise<SettingsSnapshot> {
+      const outcome = await transport.call<unknown>('config.setupComplete', {
+        body: setupCompleteBody(input),
+      });
+      if (!outcome.ok) {
+        throw new Error(describe(outcome.error));
+      }
+      return applySettingsPayload(outcome.data);
+    },
+
+    /** 「稍后设置」只记录推迟，不校验也不标记完成。 */
+    async deferSetup(): Promise<SettingsSnapshot> {
+      const outcome = await transport.call<unknown>('config.setupDefer', {});
+      if (!outcome.ok) {
+        throw new Error(describe(outcome.error));
+      }
+      return applySettingsPayload(outcome.data);
+    },
+
+    /** TMDB 令牌先经后端验证再写入；失败抛出真实原因，输入不落任何本地存储。 */
+    async saveTmdbCredential(token: string): Promise<SettingsSnapshot> {
+      const value = token.trim();
+      if (value.length === 0) {
+        throw new ServiceCapabilityError('请填写 TMDB API 读取访问令牌；空值不会保存。');
+      }
+      const outcome = await transport.call<unknown>('config.setupTmdbCredential', {
+        body: { tmdb_bearer_token: value },
+      });
+      if (!outcome.ok) {
+        throw new Error(describe(outcome.error));
+      }
+      return applySettingsPayload(outcome.data);
     },
 
     async play(workId, episodeId, assetId): Promise<PlaybackSession> {
@@ -881,10 +1034,10 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
 
     /* ------------------------- 搜索轻量索引 ------------------------- */
 
-    async searchLibrary(query, limit = 30): Promise<readonly LibrarySearchHit[]> {
+    async searchLibrary(query, limit = 30): Promise<LibrarySearchResult> {
       const trimmed = query.trim();
       if (trimmed.length === 0) {
-        return [];
+        return { hits: [], truncated: false };
       }
       const payload = asRecord(
         unwrapOrThrow(
@@ -894,20 +1047,24 @@ export function createHttpMediaService(options: RealServiceOptions = {}): MediaS
         ),
       );
       const items = Array.isArray(payload.items) ? payload.items : [];
-      return items.map((entry) => {
-        const record = asRecord(entry);
-        return {
-          workId: str(record.work_id),
-          title: str(record.title),
-          originalTitle: str(record.original_title),
-          year: typeof record.year === 'number' ? record.year : null,
-          mediaType: str(record.media_type),
-          matchedFields: toStrArray(record.matched_fields),
-          aliases: toStrArray(record.aliases),
-          tags: toStrArray(record.tags),
-          studios: toStrArray(record.studios),
-        };
-      });
+      return {
+        hits: items.map((entry) => {
+          const record = asRecord(entry);
+          return {
+            workId: str(record.work_id),
+            title: str(record.title),
+            originalTitle: str(record.original_title),
+            year: typeof record.year === 'number' ? record.year : null,
+            mediaType: str(record.media_type),
+            matchedFields: toStrArray(record.matched_fields),
+            aliases: toStrArray(record.aliases),
+            tags: toStrArray(record.tags),
+            studios: toStrArray(record.studios),
+          };
+        }),
+        // 后端命中数超过 limit 时为 true（`backend/app/api/library_v4.py:336,385`）。
+        truncated: payload.truncated === true,
+      };
     },
 
     /* ------------------------- 来源扫描（持久、可恢复） ------------------------- */

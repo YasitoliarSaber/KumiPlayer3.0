@@ -1054,6 +1054,13 @@ function AccountGroup({
                 {preview.config.changedFields.length > 0 ? `（${preview.config.changedFields.join('、')}）` : ''}；
                 来源配置改动 {preview.config.sourceChanges.length} 项。
               </p>
+              {preview.config.ignoredFields.length > 0 ? (
+                // 备份里存在但当前版本不恢复的字段：如实列出，不假装已经恢复。
+                <p className="text-muted-foreground">
+                  以下字段本次不会恢复（备份里存在，当前版本已忽略）：
+                  {preview.config.ignoredFields.join('、')}
+                </p>
+              ) : null}
               <p>
                 观看记录：进度 {preview.watchRecords.progress} 条、历史 {preview.watchRecords.history} 条、
                 观看状态 {preview.watchRecords.watchStatus} 条、集级人工选择 {preview.watchRecords.overrides} 条；

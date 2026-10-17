@@ -15,22 +15,35 @@ import { SegmentedControl } from '@/shared/ui/segmented';
 import styles from './TaskCenter.module.css';
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
+  pending: '等待执行',
+  paused: '已暂停（可继续）',
   queued: '等待中',
   running: '进行中',
   succeeded: '已完成',
   failed: '已失败',
   cancelled: '已取消',
   cancelling: '正在终止',
+  unknown: '状态未知',
 };
 
 const STATUS_TONE: Record<TaskStatus, 'neutral' | 'info' | 'success' | 'warning' | 'danger'> = {
+  pending: 'neutral',
+  paused: 'warning',
   queued: 'neutral',
   running: 'info',
   succeeded: 'success',
   failed: 'danger',
   cancelled: 'warning',
   cancelling: 'warning',
+  unknown: 'warning',
 };
+
+/**
+ * 未开始的任务（后端 `pending`，见 `backend/app/api/tasks_v4.py:21`）属于"当前任务"，
+ * 不是历史记录；状态未知时同样不当作终态，避免把仍在排队/运行的任务归入历史。
+ */
+const ACTIVE_STATUSES: readonly TaskStatus[] = ['pending', 'paused', 'queued', 'running', 'cancelling', 'unknown'];
+const HISTORY_STATUSES: readonly TaskStatus[] = ['succeeded', 'failed', 'cancelled'];
 
 export function TaskCenter() {
   const tasks = useTasks();
@@ -48,12 +61,15 @@ export function TaskCenter() {
 
   const counts = useMemo(() => {
     const base: Record<TaskStatus, number> = {
+      pending: 0,
+      paused: 0,
       queued: 0,
       running: 0,
       succeeded: 0,
       failed: 0,
       cancelled: 0,
       cancelling: 0,
+      unknown: 0,
     };
     for (const task of tasks.data ?? []) {
       base[task.status] += 1;
@@ -69,9 +85,9 @@ export function TaskCenter() {
   }
 
   const all = tasks.data ?? [];
-  const items = all.filter((task) => view === 'active'
-    ? ['queued', 'running', 'cancelling'].includes(task.status)
-    : !['queued', 'running', 'cancelling'].includes(task.status));
+  const items = all.filter((task) => (view === 'active'
+    ? ACTIVE_STATUSES.includes(task.status)
+    : !ACTIVE_STATUSES.includes(task.status)));
   const run = async (action: () => Promise<unknown>) => {
     try { await action(); await refresh(); setNotice(''); }
     catch (error) { setNotice(error instanceof Error ? error.message : '操作未完成'); }
@@ -96,7 +112,7 @@ export function TaskCenter() {
       {notice ? <p role="alert">{notice}</p> : null}
 
       <div className={styles.summary}>
-        {((view === 'active' ? ['queued', 'running', 'cancelling'] : ['succeeded', 'failed', 'cancelled']) as TaskStatus[]).map((status) => (
+        {(view === 'active' ? ACTIVE_STATUSES : HISTORY_STATUSES).map((status) => (
           <span key={status} className={styles.summaryItem}>
             <StatusChip tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</StatusChip>
             <strong>{counts[status]}</strong>
@@ -136,13 +152,17 @@ function TaskRow({
   readonly onCancel: () => void;
   readonly onRetry: () => void;
 }) {
-  const active = task.status === 'queued' || task.status === 'running' || task.status === 'cancelling';
+  const active = ACTIVE_STATUSES.includes(task.status);
   return (
     <li className={styles.task}>
       <div className={styles.taskHead}>
         <span className={styles.taskTitle}>{task.title}</span>
         <StatusChip tone={STATUS_TONE[task.status]}>{STATUS_LABEL[task.status]}</StatusChip>
       </div>
+      {task.status === 'unknown' ? (
+        // 未登记的状态如实展示后端原文，不猜成"已完成"。
+        <p className={styles.taskMessage}>后端返回未知状态「{task.rawStatus || '未提供'}」，请在诊断信息中核对。</p>
+      ) : null}
       <div className={styles.taskMeta}>
         <span>来源：{task.sourceName}</span>
         <span>类型：{task.type}</span>

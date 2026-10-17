@@ -146,12 +146,14 @@ describe('真实服务的响应适配与能力边界', () => {
       ),
     });
 
-    expect(await service.searchLibrary!('   ', 30)).toEqual([]);
+    expect(await service.searchLibrary!('   ', 30)).toEqual({ hits: [], truncated: false });
     expect(recorded).toHaveLength(0);
 
-    const hits = await service.searchLibrary!('悠', 30);
-    expect(hits).toHaveLength(1);
-    expect(hits[0]).toMatchObject({
+    const result = await service.searchLibrary!('悠', 30);
+    expect(result.hits).toHaveLength(1);
+    // 后端命中超过 limit 时必须如实上报截断，不能静默少列。
+    expect(result.truncated).toBe(false);
+    expect(result.hits[0]).toMatchObject({
       workId: 'work_1',
       title: '悠哉日常大王',
       aliases: ['Non Non Biyori'],

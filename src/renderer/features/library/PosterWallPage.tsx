@@ -83,7 +83,7 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
     // 没有该能力时用本地索引做同一组字段的匹配，结果口径一致。
     const remoteIds =
       mode.kind === 'search' && query.length > 0 && remoteSearch.data
-        ? new Set(remoteSearch.data.map((hit) => hit.workId))
+        ? new Set(remoteSearch.data.hits.map((hit) => hit.workId))
         : null;
     return all
       .filter((work) => source === 'all' || work.sources.includes(source))
@@ -179,6 +179,12 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
         <div className={styles.titleBlock}>
           <h1 className={styles.title}>{title}</h1>
           <span className={styles.count}>共 {sorted.length} 部</span>
+          {remoteSearch.data?.truncated ? (
+            // 后端命中数超过 limit 时如实提示，不把截断当成"没有更多结果"。
+            <span className="text-[12px] text-muted-foreground" role="status">
+              命中过多，仅显示前 {remoteSearch.data.hits.length} 条，请补充关键词缩小范围。
+            </span>
+          ) : null}
         </div>
         <div className={styles.toolbar} role="toolbar" aria-label="媒体库视图工具">
           {/* 列数滑块：只在会话内生效（与原型一致），持久值在设置 → 外观。 */}
