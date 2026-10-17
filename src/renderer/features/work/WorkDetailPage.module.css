@@ -11,18 +11,30 @@
   background: var(--surface-soft);
 }
 
-.heroBackdrop {
+/* 两层背景：模糊铺满提供氛围，contain 清晰层保证画面完整（原型最新一轮）。 */
+.heroBackdropBlur {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: blur(34px) saturate(1.05) brightness(0.82);
+  opacity: 0.55;
 }
 
+.heroBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* 只压左侧文字区，不再整页压黑。 */
 .heroShade {
   position: absolute;
   inset: 0;
-  background: var(--hero-shade);
+  background: linear-gradient(90deg, rgba(6, 10, 16, 0.66) 0%, rgba(6, 10, 16, 0) 62%);
 }
 
 .heroBack {
@@ -158,21 +170,37 @@
 
 .episodes {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   margin: 0;
-  padding: 0;
+  padding: 2px 2px 12px;
   list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  cursor: grab;
+}
+
+.episodes[data-dragging='true'] {
+  cursor: grabbing;
+  scroll-snap-type: none;
+  user-select: none;
+}
+
+.episodes::-webkit-scrollbar {
+  height: 8px;
+}
+
+.episodes::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
 }
 
 .episode {
-  display: grid;
-  grid-template-columns: 168px minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  /* 列表行不重复使用卡片外观：层次由缩略图与文本层级表达。 */
-  padding: 10px 0;
-  border-bottom: var(--hairline);
+  display: flex;
+  flex: 0 0 208px;
+  flex-direction: column;
+  gap: 8px;
+  scroll-snap-align: start;
 }
 
 .episodeThumb {
@@ -401,7 +429,7 @@
 
 @media (max-width: 760px) {
   .episode {
-    grid-template-columns: 120px minmax(0, 1fr);
+    flex-basis: 176px;
   }
 
   .heroBody {

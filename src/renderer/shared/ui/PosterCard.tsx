@@ -50,20 +50,7 @@ function PosterCardComponent({ work, variant = 'poster', onOpen, eager = false, 
           className="size-full object-cover"
           loading={eager ? 'eager' : 'lazy'}
         />
-        {!wide && work.rating > 0 ? (
-          <span className="absolute top-2 right-2 rounded-full bg-black/65 px-2 py-0.5 text-[12px] font-semibold text-white">
-            {work.rating.toFixed(1)}
-          </span>
-        ) : null}
-        {work.watch.favorite ? (
-          <span
-            className="absolute top-2 left-2 grid size-6 place-items-center rounded-full bg-black/55 text-[13px] text-rose-400"
-            title="已收藏"
-            aria-hidden="true"
-          >
-            ♥
-          </span>
-        ) : null}
+        {/* 原型已移除海报上的评分徽章与收藏心形：评分在详情页展示，收藏用详情页按钮。 */}
         {percent !== null && percent > 0 ? (
           <span className="absolute inset-x-0 bottom-0">
             <ProgressBar value={percent} label={`${work.title}观看进度`} />
@@ -89,7 +76,7 @@ function subtitle(work: WorkSummary, wide: boolean): string {
     return [code, remainingLabel(work)].filter(Boolean).join(' · ') || '继续观看';
   }
   const seasonLabel = work.mediaType === 'movie' ? '' : work.seasonCount > 1 ? `共 ${work.seasonCount} 季` : '共 1 季';
-  return [seasonLabel, work.year ? String(work.year) : ''].filter(Boolean).join(' · ');
+  return seasonLabel;
 }
 
 /** 与当前产品一致的"还剩"文案：宁可高估，不多报。 */

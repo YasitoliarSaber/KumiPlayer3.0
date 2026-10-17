@@ -15,6 +15,7 @@ function DropdownMenuContent({
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
+        data-material-surface="floating"
         sideOffset={sideOffset}
         className={cn(
           'z-50 min-w-[10rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-[var(--shadow-flyout)]',
@@ -86,6 +87,35 @@ function DropdownMenuLabel({ className, inset, ...props }: React.ComponentProps<
   );
 }
 
+const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
+
+/**
+ * 互斥菜单项（原型控件规范：复杂互斥菜单用 Radix RadioItem，不用自绘勾选）。
+ */
+function DropdownMenuRadioItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+  return (
+    <DropdownMenuPrimitive.RadioItem
+      className={cn(
+        'relative flex cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-2 pl-7 text-[13px] outline-none select-none',
+        'focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+        className,
+      )}
+      {...props}
+    >
+      <span className="absolute left-2 flex size-3.5 items-center justify-center">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <Check className="size-3.5" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.RadioItem>
+  );
+}
+
 function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
   return <DropdownMenuPrimitive.Separator className={cn('-mx-1 my-1 h-px bg-border', className)} {...props} />;
 }
@@ -96,6 +126,8 @@ export {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuCheckboxItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuGroup,

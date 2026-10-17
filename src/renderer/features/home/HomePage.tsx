@@ -3,7 +3,7 @@
  * 结构、信息密度与分区顺序复刻当前应用首页，不做新的视觉设计。
  */
 
-import { ArrowRight, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -30,7 +30,8 @@ export function HomePage() {
   const navigate = useNavigate();
   const source = useUiStore((state) => state.source);
   const [index, setIndex] = useState(0);
-  const [autoPaused, setAutoPaused] = useState(false);
+  // 悬停暂停是原型的唯一暂停入口：不提供常驻播放/暂停按钮。
+  const [hovered, setHovered] = useState(false);
   const appearance = useDemoState().settings.appearance;
   const prefersReducedMotion = usePrefersReducedMotion();
   const reducedMotion = prefersReducedMotion || appearance.motion === 'reduced';
@@ -54,14 +55,14 @@ export function HomePage() {
   );
 
   useEffect(() => {
-    if (featured.length <= 1 || reducedMotion || autoPaused) {
+    if (featured.length <= 1 || reducedMotion || hovered) {
       return undefined;
     }
     const timer = window.setInterval(() => {
       setIndex((value) => (value + 1) % featured.length);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [autoPaused, featured.length, reducedMotion]);
+  }, [hovered, featured.length, reducedMotion]);
 
   useEffect(() => {
     setIndex(0);
@@ -70,7 +71,7 @@ export function HomePage() {
   const open = useCallback((workId: string) => navigate(`/work/${workId}`), [navigate]);
 
   if (library.isPending) {
-    return <LoadingSurface label="正在载入媒体库" detail="正在整理演示作品" />;
+    return <LoadingSurface label="正在载入媒体库" detail="正在从本机后端读取作品索引" />;
   }
   // 失败但已有快照时保留最后有效视图，只提示"可能不是最新"。
   if (library.isError && !library.data) {
@@ -116,7 +117,13 @@ export function HomePage() {
         </p>
       ) : null}
       <section className={styles.showcase} aria-label="媒体展示" data-has-side={sideFeatured.length > 0}>
-        <div className={styles.feature}>
+        <div
+          className={styles.feature}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          onFocusCapture={() => setHovered(true)}
+          onBlurCapture={() => setHovered(false)}
+        >
           <button
             type="button"
             className={styles.featureSurface}
@@ -165,17 +172,6 @@ export function HomePage() {
                   />
                 ))}
               </div>
-              {!reducedMotion ? (
-                <button
-                  type="button"
-                  className={styles.autoPlay}
-                  aria-label={autoPaused ? '恢复自动推荐' : '暂停自动推荐'}
-                  aria-pressed={autoPaused}
-                  onClick={() => setAutoPaused((value) => !value)}
-                >
-                  {autoPaused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
-                </button>
-              ) : null}
             </>
           ) : null}
         </div>

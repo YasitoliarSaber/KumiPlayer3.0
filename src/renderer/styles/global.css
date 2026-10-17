@@ -12,13 +12,17 @@ body,
 }
 
 body {
-  font-family: var(--font-sans);
+  /* 桌面式框架只保留各内容区的滚动条，防止子页面撑出窗口级滚动条。 */
+  overflow: hidden;
+  font-family: var(--font-sans-stack);
   font-size: var(--text-base);
   line-height: 1.6;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   color: var(--foreground);
-  background: var(--background);
+  /* 材质底纹画在最底层；纯色材质下 --wallpaper 为 none。 */
+  background: var(--wallpaper, none), var(--background);
+  background-attachment: fixed;
 }
 
 /* 键盘焦点下限：可见、不被裁切，且不依赖颜色单独表达。 */

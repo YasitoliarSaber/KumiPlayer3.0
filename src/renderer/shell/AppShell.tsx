@@ -16,17 +16,16 @@ import {
   Heart,
   Home,
   ListFilter,
-  Loader2,
   Menu as MenuIcon,
   MonitorPlay,
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
+  RefreshCw,
   Search,
   Settings,
   SlidersHorizontal,
   Tv,
-  X,
   type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -35,7 +34,9 @@ import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-rout
 import { SOURCE_LABELS, useUiStore, type SourceFilter } from '@/app/ui-store';
 import { useNavHistoryState, useRecordLocation } from '@/app/nav-history';
 import { detectHost } from '@/app/platform';
-import { useLibrary } from '@/shared/api/service-context';
+import { resolveServiceMode } from '@/app/service-mode';
+import { demoQueryKeys, useLibrary } from '@/shared/api/service-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDemoState } from '@/mock/demo-store';
 import type { LibraryView, WorkSummary } from '@/shared/api/service';
 import { Badge } from '@/shared/ui/badge';
@@ -47,7 +48,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/shared/ui/dropdown-menu';
-import { Input } from '@/shared/ui/input';
+import { LiquidSurface } from '@/shared/ui/LiquidSurface';
 import { Separator } from '@/shared/ui/separator';
 import { Dialog, DialogContent, DialogTitle } from '@/shared/ui/dialog';
 import { CommandPalette } from './CommandPalette';
@@ -125,7 +126,7 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   return (
     <div className={styles.shell} data-sidebar={sidebarMode}>
       <TitleBar onOpenDrawer={() => setDrawerOpen(true)} />
-      <Sidebar />
+      <Sidebar onOpenSearch={() => setPaletteOpen(true)} />
       <main className={styles.main} ref={mainRef} data-testid="main-scroll">
         <div className={styles.content}>
           <MainScrollContext.Provider value={{ current: main }}>{children}</MainScrollContext.Provider>
@@ -134,6 +135,9 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
       <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
         <DialogContent className={styles.drawer} showClose={false} aria-describedby={undefined}>
           <DialogTitle className="sr-only">导航</DialogTitle>
+          <Button variant="ghost" onClick={() => { setDrawerOpen(false); setPaletteOpen(true); }}>
+            <Search aria-hidden="true" /> 搜索作品
+          </Button>
           <NavList expanded onNavigate={() => setDrawerOpen(false)} />
         </DialogContent>
       </Dialog>
@@ -154,41 +158,13 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
 
 function TitleBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
   const navigate = useNavigate();
-  const location = useLocation();
   const host = detectHost();
+  const queryClient = useQueryClient();
   const { back, forward } = useNavHistoryState();
-  const { source, setSource, sidebarMode, toggleSidebarVisibility } = useUiStore();
-  const library = useLibrary();
-  const [search, setSearch] = useState(() => searchValue(location.search));
-  const [composing, setComposing] = useState(false);
-  const lastNonSearch = useRef('/');
-
-  useEffect(() => {
-    if (!location.pathname.startsWith('/search')) {
-      lastNonSearch.current = `${location.pathname}${location.search}`;
-    }
-    setSearch(searchValue(location.search));
-  }, [location.pathname, location.search]);
-
-  const applySearch = useCallback(
-    (value: string) => {
-      const trimmed = value.trim();
-      if (trimmed.length === 0) {
-        navigate(lastNonSearch.current, { replace: true });
-        return;
-      }
-      navigate(`/search?q=${encodeURIComponent(trimmed)}`, {
-        replace: location.pathname.startsWith('/search'),
-      });
-    },
-    [location.pathname, navigate],
-  );
-
-  const activeTasks = library.data?.sources.filter((card) => card.activeTaskId !== null).length ?? 0;
-  const sourceLabel = SOURCE_LABELS.find((item) => item.value === source)?.label ?? '全部来源';
+  const { sidebarMode, toggleSidebarVisibility } = useUiStore();
 
   return (
-    <header className={styles.titlebar} data-drag={host.canDragWindow ? 'true' : undefined}>
+    <header data-material-surface="chrome" className={styles.titlebar} data-drag={host.canDragWindow ? 'true' : undefined}>
       <div className={styles.titlebarGroup} data-no-drag="true">
         <Button
           variant="ghost"
@@ -230,93 +206,22 @@ function TitleBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
         >
           <ArrowRight />
         </Button>
-
-        <div className={styles.brand}>
-          <span className={styles.brandMark} aria-hidden="true">
-            K
-          </span>
-          <span className={styles.brandName}>KumiPlayer</span>
-          <Badge variant="soft" className="hidden sm:inline-flex">
-            演示模式
-          </Badge>
-        </div>
-      </div>
-
-      <div className={styles.titlebarTools} data-no-drag="true">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant={source === 'all' ? 'ghost' : 'subtle'}
-              size="icon-sm"
-              aria-label={`来源筛选，当前${sourceLabel}`}
-              title={`来源：${sourceLabel}`}
-            >
-              <ListFilter />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuLabel>来源筛选</DropdownMenuLabel>
-            {SOURCE_LABELS.map((option) => (
-              <DropdownMenuCheckboxItem
-                key={option.value}
-                checked={source === option.value}
-                onCheckedChange={() => setSource(option.value as SourceFilter)}
-              >
-                {option.label}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
+        {/* 原型顺序：完全隐藏 → 返回 → 前进 → 刷新 → 品牌 → 当前上下文。 */}
         <Button
           variant="ghost"
           size="icon-sm"
-          className="relative"
-          aria-label={`任务中心${activeTasks > 0 ? `，${activeTasks} 个进行中` : ''}`}
-          title="任务中心"
-          onClick={() => navigate('/tasks')}
+          aria-label="刷新媒体库"
+          title="刷新媒体库"
+          onClick={() => void queryClient.invalidateQueries({ queryKey: demoQueryKeys.library })}
         >
-          {activeTasks > 0 ? <Loader2 className="animate-spin" /> : <SlidersHorizontal />}
-          {activeTasks > 0 ? (
-            <span className="absolute top-1 right-1 size-2 rounded-full bg-primary" aria-hidden="true" />
-          ) : null}
+          <RefreshCw />
         </Button>
 
-        <div className="relative w-[min(300px,32vw)]">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            className="h-8 pl-8"
-            value={search}
-            placeholder="搜索作品  (Ctrl+K)"
-            aria-label="搜索作品"
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setSearch(value);
-              if (!composing) {
-                applySearch(value);
-              }
-            }}
-            onCompositionStart={() => setComposing(true)}
-            onCompositionEnd={(event) => {
-              setComposing(false);
-              applySearch(event.currentTarget.value);
-            }}
-          />
-          {search.length > 0 ? (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="absolute top-0.5 right-0.5 size-7"
-              aria-label="清空搜索"
-              onClick={() => {
-                setSearch('');
-                applySearch('');
-              }}
-            >
-              <X />
-            </Button>
-          ) : null}
+        <div className={styles.brand}>
+          <span className={styles.brandName}>KumiPlayer</span>
+          <Badge variant="soft" className="hidden sm:inline-flex">
+            {resolveServiceMode().mode === 'demo' ? '演示模式' : '本机后端'}
+          </Badge>
         </div>
       </div>
 
@@ -358,18 +263,18 @@ function TitleBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
   );
 }
 
-function searchValue(search: string): string {
-  return new URLSearchParams(search).get('q') ?? '';
-}
-
-function Sidebar() {
+function Sidebar({ onOpenSearch }: { readonly onOpenSearch: () => void }) {
   const sidebarMode = useUiStore((state) => state.sidebarMode);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const source = useUiStore((state) => state.source);
+  const setSource = useUiStore((state) => state.setSource);
   const expanded = sidebarMode === 'expanded';
+  const sourceLabel = SOURCE_LABELS.find((item) => item.value === source)?.label ?? '全部来源';
 
   return (
     <aside
       className={styles.sidebar}
+      data-material-surface="chrome"
       data-expanded={expanded ? 'true' : 'false'}
       aria-hidden={sidebarMode === 'hidden'}
     >
@@ -387,6 +292,40 @@ function Sidebar() {
           </span>
         </button>
       </div>
+      {/* 搜索入口与来源筛选只在展开态出现（原型契约）；收起后使用 Ctrl+K 唤起搜索。 */}
+        <div className={styles.sidebarTools}>
+          <button type="button" data-material-surface="lens" className={styles.sidebarSearch} onClick={onOpenSearch} aria-label="搜索作品（Ctrl+K）">
+            <LiquidSurface />
+            <Search aria-hidden="true" />
+            <span className={styles.sidebarSearchText}>搜索作品</span>
+            <kbd className={styles.sidebarSearchKbd}>Ctrl K</kbd>
+          </button>
+          {expanded ? <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={styles.sidebarToolButton}
+                data-active={source === 'all' ? 'false' : 'true'}
+                aria-label={`来源筛选，当前${sourceLabel}`}
+                title={`来源：${sourceLabel}`}
+              >
+                <ListFilter aria-hidden="true" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-44">
+              <DropdownMenuLabel>来源筛选</DropdownMenuLabel>
+              {SOURCE_LABELS.map((option) => (
+                <DropdownMenuCheckboxItem
+                  key={option.value}
+                  checked={source === option.value}
+                  onCheckedChange={() => setSource(option.value as SourceFilter)}
+                >
+                  {option.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu> : null}
+        </div>
       <NavList expanded={expanded} />
     </aside>
   );
@@ -426,6 +365,16 @@ function NavList({
         {BOTTOM.map((item) => (
           <SidebarLink key={item.key} item={item} expanded={expanded} onNavigate={onNavigate} />
         ))}
+        {/* 本地账户入口：浏览器版本没有登录能力，只显示本机身份，不造假登录态。 */}
+        <div className={styles.sidebarUser} aria-label="本机账户">
+          <span className={styles.sidebarUserAvatar} aria-hidden="true">
+            K
+          </span>
+          <span className={styles.sidebarUserText}>
+            <span className={styles.sidebarUserName}>Kumi</span>
+            <span className={styles.sidebarUserSub}>本地账户</span>
+          </span>
+        </div>
       </div>
     </>
   );

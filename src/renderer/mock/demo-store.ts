@@ -69,8 +69,9 @@ export const DEFAULT_SETTINGS: SettingsSnapshot = {
     setupDeferred: false,
   },
   appearance: {
-    theme: 'fluent',
-    motion: 'standard',
+    theme: 'mica',
+    material: 'mica',
+    motion: 'full',
     posterSize: 8,
     cardImageMode: 'poster',
   },
@@ -109,6 +110,7 @@ export const DEFAULT_SETTINGS: SettingsSnapshot = {
   scrape: {
     tmdbLanguage: 'zh-CN',
     tmdbConfigured: true,
+    bangumiAliasEnabled: true,
     anilistEnabled: true,
     imageStorageMode: 'auto',
   },
@@ -118,12 +120,17 @@ export const DEFAULT_SETTINGS: SettingsSnapshot = {
     autoPlayNext: true,
     anime4kMode: 'off',
     anime4kQuality: 'balanced',
+    completedThresholdPercent: 90,
   },
   bangumi: {
     configured: false,
     username: '',
     nickname: '',
     syncEnabled: false,
+  },
+  backup: {
+    autoDailyEnabled: false,
+    autoDailyTime: '03:00',
   },
 };
 

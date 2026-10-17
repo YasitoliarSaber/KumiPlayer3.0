@@ -18,7 +18,8 @@ describe('海报展示契约', () => {
     render(<PosterCard work={work} onOpen={vi.fn()} imageMode="fanart" />);
     expect(screen.getByRole('img')).toHaveAttribute('src', work.artwork.fanart!.url);
     expect(screen.queryByText(/还剩/)).toBeNull();
-    expect(screen.getByText(new RegExp(String(work.year)))).toBeTruthy();
+    // 原型已把海报卡副标题收敛为季数；年份不再出现在卡片上。
+    expect(screen.getByText(new RegExp(`共 ${work.seasonCount} 季`))).toBeTruthy();
   });
 
   it('无效、过大与小数列数不能破坏虚拟网格', () => {

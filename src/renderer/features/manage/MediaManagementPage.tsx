@@ -36,6 +36,7 @@ import {
 } from '../../shared/api/service-context';
 import { EmptySurface, ErrorSurface, LoadingSurface, ProgressBar, StatusChip } from '../../shared/ui/Surface';
 import styles from './MediaManagementPage.module.css';
+import { RealSourceImportView } from './RealSourceImportView';
 
 type ManageMode = 'overview' | 'import' | 'maintenance';
 
@@ -46,10 +47,17 @@ const MODE_TITLE: Record<ManageMode, string> = {
 };
 
 export function MediaManagementPage() {
+  const service = useMediaService();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const mode = (searchParams.get('view') as ManageMode | null) ?? 'overview';
   const [importSourceId, setImportSourceId] = useState('src-openlist');
+
+  // 真实后端（浏览器 HTTP）提供持久扫描与 revision 能力时走真实导入链；
+  // 演示服务没有这些能力，继续使用下方的演示流程，两条链互不遮蔽。
+  if (typeof service.startSourceScan === 'function') {
+    return <RealSourceImportView />;
+  }
 
   const goMode = useCallback(
     (next: ManageMode) => {

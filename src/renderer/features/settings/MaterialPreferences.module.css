@@ -1,0 +1,49 @@
+.materials {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.choice {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
+  text-align: left;
+}
+
+.choice:hover { border-color: var(--border-strong); }
+.choice[data-state='checked'] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.choiceLabel { display: flex; justify-content: space-between; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; }
+.hint, .note { font-size: 12px; line-height: 1.65; color: var(--text-muted); }
+.note { margin: 0; }
+.preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 74px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-soft);
+}
+/* 预览全部是静态色块，不为四个缩略图各创建滤镜或引擎。 */
+.preview[data-preview='mica'] { background: linear-gradient(135deg, var(--muted), var(--card) 65%, var(--secondary)); }
+.preview[data-preview='acrylic'] { background: radial-gradient(ellipse at 20% 80%, var(--primary), transparent 80%), var(--secondary); }
+.preview[data-preview='liquid'] { background: linear-gradient(130deg, var(--secondary), var(--primary) 50%, var(--card)); }
+.previewSidebar { position: absolute; inset: 0 70% 0 0; background: color-mix(in srgb, var(--card) 60%, transparent); border-right: 1px solid var(--border); }
+.previewWindow { position: absolute; inset: 14px 10px 14px 42%; display: flex; align-items: center; gap: 5px; padding: 5px; border-radius: 6px; background: var(--card); border: 1px solid var(--border); }
+.previewWindow i { height: 22px; flex: 1; background: var(--muted); border-radius: 2px; }
+[data-preview='acrylic'] .previewWindow { background: color-mix(in srgb, var(--card) 65%, transparent); }
+[data-preview='liquid'] .previewWindow { background: color-mix(in srgb, var(--card) 30%, transparent); box-shadow: inset 0 1px 2px #ffffffa0, 0 3px 8px #00000015; border-color: #ffffff80; }
+.fontOptions { align-self: flex-start; flex-wrap: wrap; }
+.fontPreview { display: flex; flex-direction: column; gap: 6px; padding: 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-soft); }
+.fontPreview strong { font-size: 17px; font-weight: 500; }
+.fontPreview span { font-size: 13px; color: var(--text-muted); }
+.licenses { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--text-muted); }
+.licenses a { text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 1120px) { .materials { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

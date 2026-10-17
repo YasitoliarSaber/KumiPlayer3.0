@@ -44,13 +44,6 @@
   gap: 4px;
 }
 
-.titlebarTools {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-
 .titlebar [data-no-drag='true'] {
   -webkit-app-region: no-drag;
 }
@@ -62,27 +55,17 @@
   margin-left: 6px;
 }
 
-.brandMark {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .brandName {
+  font-family: var(--font-brand);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 750;
+  letter-spacing: -0.035em;
 }
 
 .windowControls {
   display: flex;
   align-items: center;
-  margin-left: 4px;
+  margin-left: auto;
 }
 
 .windowButton {
@@ -152,11 +135,95 @@
   height: 16px;
 }
 
+/* 收起时保留搜索图标；来源筛选只在展开时出现。 */
+.sidebarTools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 4px;
+}
+
+.sidebarSearch {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  min-width: 0;
+  padding: 0 8px;
+  border: var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.sidebarSearch > svg,
+.sidebarSearchText,
+.sidebarSearchKbd {
+  position: relative;
+  z-index: 10;
+}
+
+.sidebarSearch:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.sidebarSearch svg {
+  width: 15px;
+  height: 15px;
+}
+
+.sidebarSearchText {
+  flex: 1;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebarSearchKbd {
+  padding: 1px 5px;
+  border: var(--hairline);
+  border-radius: 5px;
+  background: var(--surface);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+}
+
+.sidebarToolButton {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+}
+
+.sidebarToolButton:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.sidebarToolButton[data-active='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.sidebarToolButton svg {
+  width: 16px;
+  height: 16px;
+}
+
 .sidebar[data-expanded='false'] .sidebarHeaderButton {
   justify-content: center;
 }
 
 .sidebar[data-expanded='false'] .sidebarHeaderLabel,
+.sidebar[data-expanded='false'] .sidebarSearchText,
+.sidebar[data-expanded='false'] .sidebarSearchKbd,
 .sidebar[data-expanded='false'] .navLabel,
 .sidebar[data-expanded='false'] .navCount {
   display: none;
@@ -212,15 +279,72 @@
 }
 
 .navCount {
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
   color: var(--text-muted);
 }
+
+.navItem:hover .navCount { background: var(--surface-hover); color: var(--text); }
+.navItemActive .navCount { background: var(--accent-strong); color: var(--primary-foreground); box-shadow: none; }
 
 .sidebarBottom {
   display: flex;
   flex-direction: column;
   gap: 1px;
   padding: 0 8px 12px;
+}
+
+.sidebarUser {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 9px;
+}
+
+.sidebarUserAvatar {
+  display: grid;
+  flex: 0 0 28px;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sidebarUserText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.sidebarUserName {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.sidebarUserSub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.sidebar[data-expanded='false'] .sidebarUserText {
+  display: none;
 }
 
 .main {
@@ -234,6 +358,16 @@
 .content {
   min-width: 0;
   padding: 24px var(--page-gutter) 48px;
+}
+
+/* 最终原型：设置页占满可用框架，只让右侧内容内部滚动。 */
+.main:has([data-route='settings']) {
+  overflow: hidden;
+}
+
+.content:has(> [data-route='settings']) {
+  height: 100%;
+  padding-bottom: 0;
 }
 
 .drawer {
@@ -257,7 +391,11 @@
 
   .sidebar .sidebarHeaderLabel,
   .sidebar .navLabel,
-  .sidebar .navCount {
+  .sidebar .navCount,
+  .sidebar .sidebarUserText,
+  .sidebar .sidebarSearchText,
+  .sidebar .sidebarSearchKbd,
+  .sidebar .sidebarToolButton {
     display: none;
   }
 

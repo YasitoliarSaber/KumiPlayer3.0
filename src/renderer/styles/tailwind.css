@@ -2,13 +2,14 @@
  * 新 Renderer 的 Tailwind 入口与语义主题。
  *
  * 只被 src/renderer 引用，旧前端与旧 index.css 不受影响。
- * 颜色值直接映射当前应用的三套主题（fluent / cinema / mica），
- * 不引入新品牌色；shadcn 组件消费这里的语义变量，CSS Modules 消费同一批值。
+ * 保留当前原型的纯白 / 深色基础配色；材质另由 materials.css 控制。
+ * shadcn 组件消费这里的语义变量，CSS Modules 消费同一批值。
  */
 
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './global.css' layer(base);
+@import './materials.css';
 
 /* 深色主题由 data-theme 驱动，而不是系统的 .dark 类。 */
 @custom-variant dark (&:where([data-theme='cinema'], [data-theme='cinema'] *));
@@ -33,6 +34,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
@@ -40,40 +43,45 @@
   --font-sans: var(--font-sans-stack);
 }
 
+/*
+ * 原型冻结的两个主题：纯白（mica）/ 深色（cinema）。
+ * 蓝色（fluent）主题已按用户指令删除；`system` 解析到浅色时同样使用纯白。
+ * 数值与原型 00-tokens.css 逐条一致，不回退到旧蓝。
+ */
 :root,
-:root[data-theme='fluent'] {
-  --background: #eef3f9;
+:root[data-theme='mica'] {
+  --background: #ffffff;
   --foreground: #1f2328;
   --card: #ffffff;
   --card-foreground: #1f2328;
   --popover: #ffffff;
   --popover-foreground: #1f2328;
-  --primary: #607da8;
+  --primary: #586570;
   --primary-foreground: #ffffff;
-  --secondary: #e6ecf4;
+  --secondary: #eef0f2;
   --secondary-foreground: #24303c;
-  --muted: #e8edf3;
+  --muted: #f1f2f4;
   --muted-foreground: #68717d;
-  --accent: #e2e9f3;
+  --accent: #e9ecef;
   --accent-foreground: #1f2328;
   --destructive: #c4362b;
   --destructive-foreground: #ffffff;
-  --border: rgba(78, 91, 108, 0.16);
-  --input: rgba(78, 91, 108, 0.22);
-  --ring: #607da8;
+  --border: rgba(43, 48, 53, 0.1);
+  --input: rgba(43, 48, 53, 0.16);
+  --ring: #586570;
 
   /* 与 CSS Modules 共用的语义别名。 */
   --app-bg: var(--background);
-  --surface: var(--card);
-  --surface-solid: var(--card);
-  --surface-soft: #f3f6fa;
-  --surface-hover: #eef2f8;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --surface-soft: #f5f6f8;
+  --surface-hover: #f0f2f5;
   --text: var(--foreground);
   --text-muted: var(--muted-foreground);
-  --accent-strong: #496b9c;
-  --accent-soft: rgba(96, 125, 168, 0.14);
+  --accent-strong: #3d4852;
+  --accent-soft: rgba(88, 101, 112, 0.14);
   --accent-contrast: #ffffff;
-  --border-strong: rgba(66, 79, 96, 0.25);
+  --border-strong: rgba(43, 48, 53, 0.18);
   --hairline: 1px solid var(--border);
   --radius: 8px;
   --radius-card: 8px;
@@ -83,11 +91,13 @@
   --shadow-flyout: 0 18px 48px rgba(31, 42, 55, 0.14), 0 2px 8px rgba(31, 42, 55, 0.06);
   --hero-shade: linear-gradient(180deg, rgba(6, 12, 22, 0.1) 0%, rgba(6, 12, 22, 0.72) 62%, rgba(6, 12, 22, 0.9) 100%);
   --titlebar-height: 48px;
+  --titlebar-compact: 32px;
   --sidebar-width-expanded: 248px;
   --sidebar-width-collapsed: 56px;
   --page-gutter: clamp(16px, 2vw, 28px);
-  --font-sans-stack: 'Microsoft YaHei UI', 'Segoe UI Variable Text', 'Segoe UI', -apple-system,
+  --font-system-stack: 'Microsoft YaHei UI', 'Segoe UI Variable Text', 'Segoe UI', -apple-system,
     BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --text-xs: 12px;
   --text-sm: 13px;
   --text-base: 14px;
@@ -99,49 +109,55 @@
   color-scheme: light;
 }
 
-:root[data-theme='mica'] {
-  --background: #ffffff;
-  --card: #ffffff;
-  --surface-soft: #f5f6f8;
-  --surface-hover: #f0f2f5;
-  --primary: #586570;
-  --accent-strong: #3d4852;
-  --accent-soft: rgba(88, 101, 112, 0.14);
-  --muted: #f1f2f4;
-  --border: rgba(43, 48, 53, 0.1);
-  --input: rgba(43, 48, 53, 0.16);
-  --border-strong: rgba(43, 48, 53, 0.18);
-}
-
 :root[data-theme='cinema'] {
-  --background: #0d1016;
+  --background: #05070b;
   --foreground: #f2f4f7;
-  --card: #181d26;
+  --card: #0d1117;
   --card-foreground: #f2f4f7;
-  --popover: #1b212b;
+  --popover: #12161d;
   --popover-foreground: #f2f4f7;
   --primary: #86a8e7;
-  --primary-foreground: #0d1016;
-  --secondary: #232b37;
+  --primary-foreground: #05070b;
+  --secondary: #161c25;
   --secondary-foreground: #e7ecf3;
-  --muted: #212834;
-  --muted-foreground: #a7b0bd;
-  --accent: #263040;
+  --muted: #141922;
+  --muted-foreground: #9aa5b4;
+  --accent: #1a2230;
   --accent-foreground: #f2f4f7;
   --destructive: #e0645a;
-  --destructive-foreground: #14181f;
-  --border: rgba(219, 228, 241, 0.13);
-  --input: rgba(219, 228, 241, 0.2);
+  --destructive-foreground: #05070b;
+  --border: rgba(219, 228, 241, 0.1);
+  --input: rgba(219, 228, 241, 0.16);
   --ring: #86a8e7;
 
-  --surface-soft: #1f2632;
-  --surface-hover: #232b38;
+  --surface: #0d1117;
+  --surface-soft: #10151d;
+  --surface-hover: #171e28;
   --accent-strong: #a9c2f2;
   --accent-soft: rgba(134, 168, 231, 0.18);
-  --accent-contrast: #0d1016;
-  --border-strong: rgba(219, 228, 241, 0.22);
+  --accent-contrast: #05070b;
+  --border-strong: rgba(219, 228, 241, 0.18);
   --shadow-card: none;
-  --shadow-flyout: 0 20px 54px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.24);
-  --hero-shade: linear-gradient(180deg, rgba(4, 6, 10, 0.24) 0%, rgba(4, 6, 10, 0.8) 62%, rgba(4, 6, 10, 0.94) 100%);
+  --shadow-flyout: 0 20px 54px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.34);
+  --hero-shade: linear-gradient(180deg, rgba(2, 3, 6, 0.3) 0%, rgba(2, 3, 6, 0.86) 62%, rgba(2, 3, 6, 0.97) 100%);
   color-scheme: dark;
+}
+
+/*
+ * 状态色不随材质改变；材质规则统一在 materials.css。
+ */
+:root {
+  /* 派生状态色：单一主色规则下不再使用固定色阶。 */
+  --success: #2f855a;
+  --success-soft: color-mix(in oklab, #2f855a 15%, transparent);
+  --warning: #92670c;
+  --warning-soft: color-mix(in oklab, #b7791f 18%, transparent);
+  --danger-soft: color-mix(in oklab, var(--destructive) 14%, transparent);
+  --danger-border: color-mix(in oklab, var(--destructive) 32%, transparent);
+}
+:root[data-theme='cinema'] {
+  --success: #6fd39a;
+  --success-soft: color-mix(in oklab, #6fd39a 18%, transparent);
+  --warning: #e0b464;
+  --warning-soft: color-mix(in oklab, #e0b464 18%, transparent);
 }

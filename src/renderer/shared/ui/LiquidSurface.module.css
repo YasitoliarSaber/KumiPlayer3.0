@@ -1,0 +1,8 @@
+.surface {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  /* 引擎层最高为 6，实际控件内容固定在 10；不启用永久合成提示。 */
+  z-index: 0;
+}

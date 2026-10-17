@@ -1,0 +1,66 @@
+/* 材质只覆盖 chrome / floating。禁止对海报、网格、每个设置面板应用滤镜。 */
+:root {
+  --wallpaper: none;
+  --chrome-tint: var(--card);
+  --floating-tint: var(--popover);
+  --material-filter: none;
+  --font-sans-stack: var(--font-system-stack);
+  --font-brand: 'Manrope Variable', var(--font-system-stack);
+}
+:root[data-font='modern'] { --font-sans-stack: 'Manrope Variable', var(--font-system-stack); }
+:root[data-font='wenkai'] { --font-sans-stack: 'LXGW WenKai Screen', var(--font-system-stack); }
+:root[data-font-fallback='true'] { --font-sans-stack: var(--font-system-stack); }
+
+:root[data-material='mica'] {
+  --wallpaper: linear-gradient(145deg, #e2e6eb, #f8f9fa 48%, #eaedef);
+  --app-bg: color-mix(in srgb, var(--background) 88%, transparent);
+  --chrome-tint: color-mix(in srgb, var(--card) 68%, transparent);
+}
+:root[data-material='acrylic'] {
+  --wallpaper: radial-gradient(ellipse at 0% 25%, #b7c6d1, transparent 65%), linear-gradient(140deg, #eff0f2, #dce0e6 70%, #c4cbd2);
+  --app-bg: color-mix(in srgb, var(--background) 74%, transparent);
+  --chrome-tint: color-mix(in srgb, var(--card) 64%, transparent);
+  --floating-tint: color-mix(in srgb, var(--popover) 90%, transparent);
+  --material-filter: blur(16px) saturate(1.15);
+}
+:root[data-material='liquid'] {
+  --wallpaper: radial-gradient(ellipse at 10% 10%, #c2d4df, transparent 60%), radial-gradient(ellipse at 95% 85%, #d9d0c4, transparent 58%), #ecedef;
+  --app-bg: color-mix(in srgb, var(--background) 76%, transparent);
+  --chrome-tint: color-mix(in srgb, var(--card) 45%, transparent);
+  --floating-tint: color-mix(in srgb, var(--popover) 90%, transparent);
+  --material-filter: blur(10px) saturate(1.1);
+}
+:root[data-theme='cinema'][data-material='mica'] { --wallpaper: linear-gradient(145deg, #0b0e14, #141924 52%, #0c1017); }
+:root[data-theme='cinema'][data-material='acrylic'] { --wallpaper: radial-gradient(ellipse at 0% 25%, #17263b, transparent 65%), linear-gradient(140deg, #06080d, #0d121b 70%, #080b11); }
+:root[data-theme='cinema'][data-material='liquid'] { --wallpaper: radial-gradient(ellipse at 0% 10%, #192c3d, transparent 70%), radial-gradient(ellipse at 95% 85%, #23212b, transparent 58%), #080c12; }
+
+:root [data-material-surface='chrome'] {
+  background: var(--chrome-tint);
+  backdrop-filter: var(--material-filter);
+  -webkit-backdrop-filter: var(--material-filter);
+}
+:root [data-material-surface='floating'] {
+  background: var(--floating-tint);
+  backdrop-filter: var(--material-filter);
+  -webkit-backdrop-filter: var(--material-filter);
+}
+:root[data-material='liquid'] [data-material-surface] {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+:root[data-material='liquid'] [data-material-surface='lens'] {
+  background: transparent;
+}
+
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  :root {
+    --app-bg: var(--background) !important;
+    --wallpaper: none !important;
+    --chrome-tint: var(--card) !important;
+    --floating-tint: var(--popover) !important;
+    --material-filter: none !important;
+  }
+  :root [data-material-surface='lens'] { background: var(--card) !important; }
+}
+@supports not (backdrop-filter: blur(1px)) {
+  :root[data-material] [data-material-surface] { background: var(--card); }
+}

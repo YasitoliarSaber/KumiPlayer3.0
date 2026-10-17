@@ -193,9 +193,13 @@ export interface SettingsSnapshot {
     readonly setupDeferred: boolean;
   };
   readonly appearance: {
-    /** fluent / mica 为浅色系，cinema 为深色系；system 表示跟随系统。 */
-    readonly theme: 'fluent' | 'cinema' | 'mica' | 'system';
-    readonly motion: 'standard' | 'expressive' | 'reduced';
+    /** 只保留纯白（mica）与深色（cinema）；system 表示跟随系统（浅色落到纯白）。 */
+    readonly theme: 'mica' | 'cinema' | 'system';
+    /** 材质独立于主题：纯色 / 云母 / 亚克力。 */
+    readonly material: 'solid' | 'mica' | 'acrylic' | 'liquid';
+    /** 仅本机界面偏好，不写入 Python 配置。 */
+    readonly font?: 'system' | 'modern' | 'wenkai';
+    readonly motion: 'full' | 'reduced';
     readonly posterSize: number;
     readonly cardImageMode: 'poster' | 'fanart';
   };
@@ -218,6 +222,8 @@ export interface SettingsSnapshot {
   readonly scrape: {
     readonly tmdbLanguage: string;
     readonly tmdbConfigured: boolean;
+    /** Bangumi 名称辅助开关：只影响别名检索，不参与作品身份。 */
+    readonly bangumiAliasEnabled: boolean;
     readonly anilistEnabled: boolean;
     readonly imageStorageMode: string;
   };
@@ -227,12 +233,19 @@ export interface SettingsSnapshot {
     readonly autoPlayNext: boolean;
     readonly anime4kMode: string;
     readonly anime4kQuality: string;
+    /** 看完判定阈值百分比（50–100）；由后端统一判定，前端不另算。 */
+    readonly completedThresholdPercent: number;
   };
   readonly bangumi: {
     readonly configured: boolean;
     readonly username: string;
     readonly nickname: string;
     readonly syncEnabled: boolean;
+  };
+  /** 备份偏好：每日自动备份默认关闭，保留最近 7 份（轮换由后端执行）。 */
+  readonly backup: {
+    readonly autoDailyEnabled: boolean;
+    readonly autoDailyTime: string;
   };
 }
 
@@ -321,4 +334,217 @@ export interface MediaService {
   bangumiUnbind(workId: string): Promise<WorkOverride>;
   bangumiSync(workId: string): Promise<TaskEntry>;
   resetDemoData(): Promise<void>;
+
+  /* ---------------- 可选能力：只有真实后端实现，界面按能力存在与否决定是否可操作 ---------------- */
+
+  /** 后端轻量搜索索引：标题 / 原名 / 别名 / 标签 / 制作公司，一次有界查询。 */
+  searchLibrary?(query: string, limit?: number): Promise<readonly LibrarySearchHit[]>;
+  listScanSchedules?(): Promise<readonly SourceScanSchedule[]>;
+  setScanSchedule?(
+    rootId: string,
+    input: { readonly enabled: boolean; readonly intervalMinutes: number },
+  ): Promise<SourceScanSchedule>;
+  startSourceScan?(request: SourceScanRequest): Promise<ScanProgress>;
+  getSourceScan?(scanId: string): Promise<ScanProgress>;
+  cancelSourceScan?(scanId: string): Promise<ScanProgress>;
+  previewImport?(scanId: string): Promise<ImportPreviewSummary>;
+  confirmImport?(revisionId: string): Promise<ImportConfirmResult>;
+  cancelImport?(revisionId: string): Promise<{ readonly cancelled: number; readonly running: number }>;
+  listBackups?(): Promise<BackupList>;
+  exportBackup?(): Promise<BackupFileEntry>;
+  downloadBackup?(fileId: string): Promise<{ readonly blob: Blob; readonly filename: string }>;
+  previewRestore?(file: File): Promise<RestorePreview>;
+  confirmRestore?(previewId: string, digest: string): Promise<RestoreApplied>;
+  previewArtworkCache?(retentionDays: number): Promise<ArtworkCachePreview>;
+  confirmArtworkCache?(
+    previewId: string,
+    digest: string,
+  ): Promise<{ readonly removedFiles: number; readonly freedBytes: number }>;
+  /** 连接测试只返回可达性与受控摘要；不返回、不记录任何凭据。 */
+  testOpenListConnection?(input: {
+    readonly connectionId?: string;
+    readonly serverUrl?: string;
+    readonly remoteRoot?: string;
+    readonly username?: string;
+    readonly password?: string;
+  }): Promise<{ readonly ok: boolean; readonly code: string; readonly message: string; readonly phase: string }>;
+}
+
+/** 后端 `/api/library/search` 的单条命中；不含图片，展示端与已加载索引按 work_id 关联。 */
+export interface LibrarySearchHit {
+  readonly workId: string;
+  readonly title: string;
+  readonly originalTitle: string;
+  readonly year: number | null;
+  readonly mediaType: string;
+  readonly matchedFields: readonly string[];
+  readonly aliases: readonly string[];
+  readonly tags: readonly string[];
+  readonly studios: readonly string[];
+}
+
+/** durable SourceScan 的读状态；不提供连续百分比时不伪造进度。 */
+export interface ScanProgress {
+  readonly scanId: string;
+  readonly rootId: string;
+  readonly status: string;
+  readonly stage: string;
+  readonly stageLabel: string;
+  readonly processedCount: number;
+  readonly totalCount: number;
+  readonly discoveredCount: number;
+  readonly currentDirectory: string;
+  readonly error: string;
+  readonly resumable: boolean;
+  readonly cancelRequested: boolean;
+  readonly canCancel: boolean;
+  readonly progress: number | null;
+}
+
+export interface SourceScanRequest {
+  readonly source?: 'local' | 'tree' | 'openlist' | 'hybrid';
+  readonly rootPath?: string;
+  readonly treeFile?: string;
+  readonly contentScope?: 'library' | 'ongoing';
+  readonly scanMode?: 'full' | 'incremental';
+  /** 已登记来源的重扫 / 更新目标（稳定 root_id）。 */
+  readonly targetRootId?: string;
+  readonly revisionId?: string;
+  readonly sourceDisplayName?: string;
+  readonly resumeScanId?: string;
+  readonly connectionId?: string;
+}
+
+export interface ImportPreviewSummary {
+  readonly revisionId: string;
+  readonly status: string;
+  readonly workCount: number;
+  readonly episodeCount: number;
+  readonly blockingIssueCount: number;
+  readonly issues: readonly ReviewIssue[];
+}
+
+export interface ImportConfirmResult {
+  readonly revisionId: string;
+  readonly status: string;
+  readonly jobCount: number;
+}
+
+/** 来源 + 扫描 + revision + jobs + 调度的分离读数（不合并成一个百分比）。 */
+export interface SourceScanSchedule {
+  readonly rootId: string;
+  readonly displayName: string;
+  readonly provider: string;
+  readonly ingestMethod: string;
+  readonly sourceMode: string;
+  readonly contentScope: string;
+  readonly enabled: boolean;
+  readonly schedule: {
+    readonly enabled: boolean;
+    readonly intervalMinutes: number;
+    readonly lastRunAt: string;
+    readonly nextRunAt: string;
+  };
+  readonly status: string;
+  readonly reason: string;
+  readonly taskId: string;
+  readonly activityKind: string;
+  readonly canCancel: boolean;
+  readonly scan: {
+    readonly scanId: string;
+    readonly status: string;
+    readonly startedAt: string;
+    readonly finishedAt: string;
+    readonly canResume: boolean;
+    readonly canCancel: boolean;
+    readonly message: string;
+  };
+  readonly revision: {
+    readonly latestRevisionId: string;
+    readonly draftRevisionId: string;
+    readonly status: string;
+    readonly reason: string;
+  };
+  readonly jobs: {
+    readonly queued: number;
+    readonly running: number;
+    readonly failed: number;
+    readonly cancelled: number;
+    readonly latestJobId: string;
+  };
+}
+
+export interface BackupFileEntry {
+  readonly fileId: string;
+  readonly fileName: string;
+  readonly kind: string;
+  readonly sizeBytes: number;
+  readonly createdAt: string;
+  readonly downloadUrl: string;
+}
+
+export interface BackupAutoStatus {
+  readonly enabled: boolean;
+  readonly time: string;
+  readonly keep: number;
+  readonly lastRunAt: string;
+  readonly nextRunAt: string;
+  readonly lastStatus: string;
+  readonly lastError: string;
+  readonly lastFileId: string;
+}
+
+export interface BackupList {
+  readonly files: readonly BackupFileEntry[];
+  readonly auto: BackupAutoStatus;
+  readonly scope: { readonly includes: readonly string[]; readonly excludes: readonly string[] };
+}
+
+export interface RestorePreview {
+  readonly previewId: string;
+  readonly digest: string;
+  readonly backup: {
+    readonly createdAt: string;
+    readonly appVersion: string;
+    readonly schemaVersion: number;
+    readonly formatVersion: number;
+    readonly scope: readonly string[];
+  };
+  readonly config: {
+    readonly changedFields: readonly string[];
+    readonly sourceChanges: readonly { readonly field: string; readonly action: string }[];
+  };
+  readonly watchRecords: {
+    readonly progress: number;
+    readonly history: number;
+    readonly watchStatus: number;
+    readonly overrides: number;
+    readonly matched: number;
+    readonly orphans: number;
+  };
+  readonly orphans: readonly { readonly kind: string; readonly workId: string; readonly episodeId: string }[];
+  readonly credentials: { readonly included: boolean; readonly note: string };
+  readonly expiresAt: string;
+}
+
+export interface RestoreApplied {
+  readonly configFields: readonly string[];
+  readonly watchRecords: {
+    readonly progress: number;
+    readonly history: number;
+    readonly watchStatus: number;
+    readonly overrides: number;
+  };
+  readonly orphans: readonly { readonly kind: string; readonly workId: string; readonly episodeId: string }[];
+  readonly message: string;
+}
+
+export interface ArtworkCachePreview {
+  readonly previewId: string;
+  readonly digest: string;
+  /** 服务端预览计划里可公开的计数与体积；字段缺失时按 0 展示，不推算。 */
+  readonly removableFiles: number;
+  readonly freedBytes: number;
+  readonly retentionDays: number;
+  readonly expiresAt: string;
 }

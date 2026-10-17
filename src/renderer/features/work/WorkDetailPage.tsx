@@ -7,13 +7,14 @@ import {
   ArrowLeft,
   Check,
   CirclePlay,
+  Database,
   FolderOpen,
   Heart,
   MoreHorizontal,
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -36,11 +37,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/shared/ui/dropdown-menu';
 import { Input } from '@/shared/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/shared/ui/tabs';
+import { SOURCE_LABELS } from '@/app/ui-store';
 import { BangumiPanel, ManualScrapePanel } from './WorkMetadataPanels';
 import styles from './WorkDetailPage.module.css';
 
@@ -58,6 +62,9 @@ export function WorkDetailPage() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [togglingFavorite, setTogglingFavorite] = useState(false);
+  // 作品来源选择：真实影响播放使用哪个 Asset，不只是改标签。
+  const [preferredSource, setPreferredSource] = useState<string>('');
+  const dragRef = useDragScroll();
 
   const work = detail.data;
   const season = work?.seasons[Math.min(seasonIndex, Math.max(0, work.seasons.length - 1))];
@@ -68,6 +75,7 @@ export function WorkDetailPage() {
     setNotice('');
     setBusy(false);
     setTogglingFavorite(false);
+    setPreferredSource('');
   }, [workId]);
 
   const refreshLibrary = useCallback(
@@ -82,7 +90,11 @@ export function WorkDetailPage() {
       }
       setBusy(true);
       try {
-        const target = assetId ?? episode.assets[0]?.id ?? '';
+        const target =
+          assetId ??
+          pickAssetForSource(episode, preferredSource)?.id ??
+          episode.assets[0]?.id ??
+          '';
         const session = await service.play(work.id, episode.id, target);
         setNotice(`演示播放已开始：${session.episodeCode} · ${session.episodeTitle}`);
       } catch (error) {
@@ -91,7 +103,7 @@ export function WorkDetailPage() {
         setBusy(false);
       }
     },
-    [service, work],
+    [preferredSource, service, work],
   );
 
   const resume = useMemo(() => {
@@ -118,6 +130,8 @@ export function WorkDetailPage() {
   return (
     <article className={styles.page} data-route="work-detail">
       <div className={styles.hero}>
+        {/* 模糊铺满 + contain 清晰两层背景；正文只叠左侧 scrim。 */}
+        <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt="" className={styles.heroBackdropBlur} />
         <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt="" className={styles.heroBackdrop} />
         <span className={styles.heroShade} aria-hidden="true" />
         <button type="button" className={styles.heroBack} onClick={() => navigate(-1)}>
@@ -196,6 +210,30 @@ export function WorkDetailPage() {
                   {work.watch.favorite ? '已收藏' : '收藏'}
                 </Button>
               </span>
+              {/* 作品来源：单一选择器（原型已把多枚来源胶囊收敛为互斥菜单）。 */}
+              {work.sources.length > 0 ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline">
+                      <Database className="size-4" />
+                      {sourceLabel(preferredSource || work.sources[0]!)}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-[13rem]">
+                    <DropdownMenuLabel>作品来源</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={preferredSource || work.sources[0]}
+                      onValueChange={setPreferredSource}
+                    >
+                      {work.sources.map((source) => (
+                        <DropdownMenuRadioItem key={source} value={source}>
+                          {sourceLabel(source)}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline">
@@ -252,12 +290,21 @@ export function WorkDetailPage() {
               {work.seasons.map((entry) => (
                 <TabsTrigger key={entry.id} value={entry.id}>
                   {entry.label}
+                  <span className="ml-1.5 text-[11.5px] text-muted-foreground">
+                    {entry.episodes.length}
+                  </span>
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
 
-          <ul className={styles.episodes}>
+          <ul
+            className={styles.episodes}
+            ref={dragRef}
+            data-dragging="false"
+            tabIndex={0}
+            aria-label={`${season?.label ?? '全部剧集'}分集列表，可左右拖动`}
+          >
             {(season?.episodes ?? []).map((episode) => (
               <li key={episode.id} className={styles.episode}>
                 <button
@@ -474,11 +521,94 @@ function DetailRow({ label, value }: { readonly label: string; readonly value: s
 }
 
 function formatDuration(seconds: number): string {
+  if (seconds <= 0) {
+    return '时长未知';
+  }
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) {
     return `${minutes} 分钟`;
   }
   return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
+}
+
+function sourceLabel(source: string): string {
+  return SOURCE_LABELS.find((entry) => entry.value === source)?.label ?? source;
+}
+
+/**
+ * 来源选择落到真正的 Asset 上：优先取该来源的版本，
+ * 没有匹配版本时交回调用方使用默认版本，不伪造"已切换来源"。
+ */
+function pickAssetForSource(
+  episode: EpisodeEntry,
+  source: string,
+): EpisodeEntry['assets'][number] | undefined {
+  if (source === '') {
+    return undefined;
+  }
+  return episode.assets.find((asset) => asset.source === source);
+}
+
+/**
+ * 分集横向拖动。
+ *
+ * 只对鼠标拖动做手动滚动（触控板/触屏用原生滚动，不拦截滚轮）；
+ * 拖动超过阈值时抑制随后的 click，避免把"拖到下一集"误当成"播放这一集"。
+ */
+function useDragScroll(): (node: HTMLUListElement | null) => void {
+  const state = useRef({ active: false, startX: 0, startLeft: 0, moved: 0 });
+
+  return useCallback((node: HTMLUListElement | null) => {
+    if (!node) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse' || event.button !== 0) {
+        return;
+      }
+      state.current = { active: true, startX: event.clientX, startLeft: node.scrollLeft, moved: 0 };
+      node.dataset.dragging = 'true';
+      node.setPointerCapture(event.pointerId);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!state.current.active) {
+        return;
+      }
+      const delta = event.clientX - state.current.startX;
+      state.current.moved = Math.max(state.current.moved, Math.abs(delta));
+      node.scrollLeft = state.current.startLeft - delta;
+    };
+    const finish = (event: PointerEvent) => {
+      if (!state.current.active) {
+        return;
+      }
+      state.current.active = false;
+      node.dataset.dragging = 'false';
+      if (node.hasPointerCapture(event.pointerId)) {
+        node.releasePointerCapture(event.pointerId);
+      }
+    };
+    const onClickCapture = (event: MouseEvent) => {
+      if (state.current.moved > 6) {
+        event.preventDefault();
+        event.stopPropagation();
+        state.current.moved = 0;
+      }
+    };
+
+    node.addEventListener('pointerdown', onPointerDown);
+    node.addEventListener('pointermove', onPointerMove);
+    node.addEventListener('pointerup', finish);
+    node.addEventListener('pointercancel', finish);
+    node.addEventListener('click', onClickCapture, true);
+    return () => {
+      node.removeEventListener('pointerdown', onPointerDown);
+      node.removeEventListener('pointermove', onPointerMove);
+      node.removeEventListener('pointerup', finish);
+      node.removeEventListener('pointercancel', finish);
+      node.removeEventListener('click', onClickCapture, true);
+    };
+  }, []);
 }
 
 export type { WorkDetail };

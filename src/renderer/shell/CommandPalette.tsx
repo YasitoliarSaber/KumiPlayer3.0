@@ -10,8 +10,9 @@ import { CornerDownLeft, Search } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import type { WorkSummary } from '@/shared/api/service';
+import type { LibrarySearchHit, WorkSummary } from '@/shared/api/service';
 import { searchNav, searchWorks } from '@/shared/api/search';
+import { useMediaService } from '@/shared/api/service-context';
 import { Input } from '@/shared/ui/input';
 import {
   Dialog,
@@ -35,22 +36,77 @@ type Row =
 
 export function CommandPalette({ open, onOpenChange, works, onOpenWork }: CommandPaletteProps) {
   const navigate = useNavigate();
+  const service = useMediaService();
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [composing, setComposing] = useState(false);
+  /** 后端轻量搜索索引的结果；只有真实服务提供该能力时才使用。 */
+  const [remoteHits, setRemoteHits] = useState<readonly LibrarySearchHit[]>([]);
+  const [remotePending, setRemotePending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   // 面板由快捷键唤起，没有触发元素；关闭时把焦点还给打开前的元素。
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const listId = useId();
 
   // 查询标记：切换查询时重置高亮；同步搜索也按同一规则丢弃旧结果。
+  const canRemoteSearch = typeof service.searchLibrary === 'function';
+  const trimmedQuery = query.trim();
+
+  // 真实后端搜索：输入法与组合期间不查询，组合结束后按最终文本查一次；
+  // 过期响应通过查询标记丢弃，避免旧结果覆盖新输入。
+  useEffect(() => {
+    if (!open || !canRemoteSearch || composing) {
+      return undefined;
+    }
+    if (trimmedQuery.length === 0) {
+      setRemoteHits([]);
+      setRemotePending(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setRemotePending(true);
+    const timer = window.setTimeout(() => {
+      void service
+        .searchLibrary!(trimmedQuery, 30)
+        .then((hits) => {
+          if (!cancelled) {
+            setRemoteHits(hits);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setRemoteHits([]);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setRemotePending(false);
+          }
+        });
+    }, 140);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [canRemoteSearch, composing, open, service, trimmedQuery]);
+
   const rows = useMemo<readonly Row[]>(() => {
-    const hits = searchWorks(works, query).map<Row>((hit) => ({
-      kind: 'work',
-      key: `work-${hit.work.id}`,
-      label: hit.work.title,
-      hint: `${hit.reason} · ${hit.work.year || '年份未知'}`,
-      workId: hit.work.id,
-    }));
+    const byId = new Map(works.map((work) => [work.id, work]));
+    const hits = (canRemoteSearch ? remoteHits : searchWorks(works, query)).map<Row>((hit) => {
+      const isRemote = 'workId' in hit;
+      const work = isRemote ? byId.get(hit.workId) : hit.work;
+      const label = work?.title ?? (isRemote ? hit.title : '');
+      const hint = isRemote
+        ? remoteHint(hit)
+        : hit.reason;
+      return {
+        kind: 'work',
+        key: `work-${(isRemote ? hit.workId : hit.work.id)}`,
+        label,
+        hint,
+        workId: isRemote ? hit.workId : hit.work.id,
+      };
+    });
     const nav = searchNav(query).map<Row>((item) => ({
       kind: 'nav',
       key: `nav-${item.to}`,
@@ -59,7 +115,7 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
       to: item.to,
     }));
     return [...hits, ...nav];
-  }, [query, works]);
+  }, [canRemoteSearch, query, remoteHits, works]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -112,6 +168,11 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
             aria-controls={listId}
             aria-activedescendant={rows[activeIndex] ? `${listId}-${activeIndex}` : undefined}
             onChange={(event) => setQuery(event.currentTarget.value)}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={(event) => {
+              setComposing(false);
+              setQuery(event.currentTarget.value);
+            }}
             onKeyDown={(event) => {
               if (event.key === 'ArrowDown') {
                 event.preventDefault();
@@ -130,7 +191,11 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
         <ul id={listId} role="listbox" aria-label="搜索结果" className="flex max-h-[46vh] flex-col gap-0.5 overflow-y-auto">
           {rows.length === 0 ? (
             <li className="px-2 py-6 text-center text-[13px] text-muted-foreground">
-              {query.trim().length === 0 ? '输入作品名或页面名开始搜索' : `没有匹配「${query.trim()}」的结果`}
+              {trimmedQuery.length === 0
+                ? '输入标题、别名、标签或制作公司开始搜索'
+                : remotePending
+                  ? `正在检索「${trimmedQuery}」…`
+                  : `没有匹配「${trimmedQuery}」的结果`}
             </li>
           ) : (
             rows.map((row, index) => (
@@ -158,8 +223,26 @@ export function CommandPalette({ open, onOpenChange, works, onOpenWork }: Comman
           )}
         </ul>
 
-        <p className="text-[11.5px] text-muted-foreground">↑ ↓ 选择 · Enter 打开 · Esc 关闭</p>
+        <p className="text-[11.5px] text-muted-foreground">
+          ↑ ↓ 选择 · Enter 打开 · Esc 关闭
+          {canRemoteSearch ? ' · 检索标题 / 别名 / 标签 / 制作公司' : ' · 检索标题 / 原名 / 类型 / 制作公司'}
+        </p>
       </DialogContent>
     </Dialog>
   );
+}
+
+/** 命中原因来自后端返回的 matched_fields，界面据实说明为什么匹配。 */
+function remoteHint(hit: LibrarySearchHit): string {
+  const fields: Record<string, string> = {
+    title: '标题',
+    original_title: '原名',
+    aliases: '别名',
+    tags: '标签',
+    studios: '制作公司',
+    year: '年份',
+  };
+  const matched = hit.matchedFields.map((field) => fields[field] ?? field).join('/');
+  const extra = hit.aliases.length > 0 ? ` · ${hit.aliases.slice(0, 2).join('、')}` : '';
+  return `${matched || '索引命中'}${hit.year ? ` · ${hit.year}` : ''}${extra}`;
 }

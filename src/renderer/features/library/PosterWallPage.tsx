@@ -5,12 +5,13 @@
  * 排序条件放在 URL 上，返回时由路由自然恢复；滚动位置按视图与筛选单独记录。
  */
 
-import { ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
+import { ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import type { SortId, WorkSummary } from '../../shared/api/service';
-import { useLibrary } from '../../shared/api/service-context';
+import { useLibrary, useMediaService } from '../../shared/api/service-context';
+import { useQuery } from '@tanstack/react-query';
 import { PosterGrid } from '../../shared/ui/PosterGrid';
 import { EmptySurface, ErrorSurface, LoadingSurface } from '../../shared/ui/Surface';
 import { useMainScroll } from '../../shell/AppShell';
@@ -18,6 +19,7 @@ import { useUiStore } from '../../app/ui-store';
 import { pushDemoPreference } from '../../mock/preferences';
 import { matchView } from '../../shell/AppShell';
 import { Button } from '@/shared/ui/button';
+import { Slider } from '@/shared/ui/slider';
 import { useDemoState } from '@/mock/demo-store';
 import {
   DropdownMenu,
@@ -29,11 +31,11 @@ import {
 import styles from './PosterWallPage.module.css';
 
 const SORT_OPTIONS: ReadonlyArray<{ id: SortId; label: string }> = [
+  { id: 'recent', label: '最近观看' },
   { id: 'title', label: '标题' },
   { id: 'year', label: '年份' },
   { id: 'rating', label: '评分' },
   { id: 'episodesDesc', label: '集数' },
-  { id: 'recent', label: '最近观看' },
 ];
 
 const VIEW_TITLES: Record<string, string> = {
@@ -53,11 +55,15 @@ const scrollPositions = new Map<string, number>();
 
 export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
   const library = useLibrary();
+  const service = useMediaService();
   const navigate = useNavigate();
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const source = useUiStore((state) => state.source);
+  const setSource = useUiStore((state) => state.setSource);
   const { posterSize, cardImageMode } = useDemoState().settings.appearance;
+  const posterColumns = useUiStore((state) => state.posterColumns);
+  const setPosterColumns = useUiStore((state) => state.setPosterColumns);
   const mainScroll = useMainScroll();
   const view = mode.kind === 'view' ? params.view ?? 'anime_series' : mode.kind;
   const query = mode.kind === 'search' ? (searchParams.get('q') ?? '').trim() : '';
@@ -65,14 +71,32 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
   const sort = (searchParams.get('sort') as SortId | null) ?? 'recent';
   const scrollKey = `${String(view)}|${source}|${sort}|${query}`;
 
+  const remoteSearch = useQuery({
+    queryKey: ['library-search', query, source],
+    enabled: mode.kind === 'search' && query.length > 0 && typeof service.searchLibrary === 'function',
+    queryFn: () => service.searchLibrary!(query, 100),
+  });
+
   const works = useMemo(() => {
     const all = library.data?.works ?? [];
+    // 真实后端提供轻量搜索索引（标题/原名/别名/标签/制作公司）时按命中集合过滤；
+    // 没有该能力时用本地索引做同一组字段的匹配，结果口径一致。
+    const remoteIds =
+      mode.kind === 'search' && query.length > 0 && remoteSearch.data
+        ? new Set(remoteSearch.data.map((hit) => hit.workId))
+        : null;
     return all
       .filter((work) => source === 'all' || work.sources.includes(source))
       .filter((work) => (mode.kind === 'favorites' ? work.watch.favorite : true))
       .filter((work) => (mode.kind === 'view' ? matchView(work, view as never) : true))
-      .filter((work) => (query.length > 0 ? matchesQuery(work, query) : true));
-  }, [library.data?.works, mode.kind, query, source, view]);
+      .filter((work) =>
+        query.length > 0
+          ? remoteIds
+            ? remoteIds.has(work.id)
+            : matchesQuery(work, query)
+          : true,
+      );
+  }, [library.data?.works, mode.kind, query, remoteSearch.data, source, view]);
 
   const sorted = useMemo(() => sortWorks(works, sort), [works, sort]);
 
@@ -95,6 +119,16 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
       scrollPositions.set(scrollKey, element.scrollTop);
     };
   }, [mainScroll, scrollKey]);
+
+  // 首次进入时用设置里的持久列数作为页面滑块的起点；之后页面内调整只在本次会话生效。
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current) {
+      return;
+    }
+    seeded.current = true;
+    setPosterColumns(posterSize);
+  }, [posterSize, setPosterColumns]);
 
   const setSort = useCallback(
     (next: SortId) => {
@@ -147,6 +181,22 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
           <span className={styles.count}>共 {sorted.length} 部</span>
         </div>
         <div className={styles.toolbar} role="toolbar" aria-label="媒体库视图工具">
+          {/* 列数滑块：只在会话内生效（与原型一致），持久值在设置 → 外观。 */}
+          <div className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1">
+            <SlidersHorizontal className="size-3.5 text-muted-foreground" aria-hidden="true" />
+            <Slider
+              className="w-24"
+              min={6}
+              max={9}
+              step={1}
+              value={[posterColumns]}
+              onValueChange={(values) => setPosterColumns(values[0] ?? posterColumns)}
+              aria-label="海报墙列数"
+            />
+            <span className="w-8 text-right text-[12px] tabular-nums text-muted-foreground" aria-live="polite">
+              {posterColumns} 列
+            </span>
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" aria-label="排序方式">
@@ -173,23 +223,33 @@ export function PosterWallPage({ mode }: { readonly mode: WallMode }) {
       {sorted.length === 0 ? (
         <EmptySurface
           kicker={mode.kind === 'search' ? '搜索' : '媒体库'}
-          title={emptyTitle(mode, query)}
+          title={
+            mode.kind === 'view' && source !== 'all' ? '没有符合该来源的作品' : emptyTitle(mode, query)
+          }
           detail={
             mode.kind === 'search'
               ? '换一个关键词，或清空搜索回到上一个界面。'
-              : '可以切换来源筛选，或前往媒体管理导入新的来源。'
+              : source !== 'all'
+                ? '当前分类下没有来自该来源的内容，换一个来源或切回「全部来源」。'
+                : '可以前往媒体管理导入新的来源。'
           }
           action={
-            <Button variant="outline" onClick={() => navigate('/manage')}>
-              前往媒体管理
-            </Button>
+            source !== 'all' ? (
+              <Button variant="outline" onClick={() => setSource('all')}>
+                切回全部来源
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => navigate('/manage')}>
+                前往媒体管理
+              </Button>
+            )
           }
         />
       ) : (
         <PosterGrid
           works={sorted}
           onOpen={open}
-          desiredColumns={posterSize}
+          desiredColumns={posterColumns}
           imageMode={cardImageMode}
           scrollRef={mainScroll}
           emptyLabel="这个筛选下还没有作品"

@@ -12,15 +12,20 @@ import { ServiceProvider } from '@/shared/api/service-context';
 import { createAppQueryClient } from './queryClient';
 import { RecoveryBoundary } from './recovery-boundary';
 import { appRouter } from './router';
-import { applyThemeToDocument, resolveTheme } from './theme';
+import { applyMaterialToDocument, applyThemeToDocument, resolveTheme } from './theme';
+import { AppearanceController } from './appearance-controller';
 
 export function AppRoot() {
   const [queryClient] = useState(createAppQueryClient);
-  const { theme: preference, motion } = useDemoState().settings.appearance;
+  const { theme: preference, motion, material } = useDemoState().settings.appearance;
 
   useEffect(() => {
     document.documentElement.dataset.motion = motion;
   }, [motion]);
+
+  useEffect(() => {
+    applyMaterialToDocument(material);
+  }, [material]);
 
   useEffect(() => {
     const media =
@@ -35,6 +40,7 @@ export function AppRoot() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <AppearanceController />
       <ServiceProvider>
         <RecoveryBoundary>
           <RouterProvider router={appRouter} />

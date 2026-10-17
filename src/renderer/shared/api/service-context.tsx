@@ -15,6 +15,8 @@ import type {
   WorkDetail,
 } from './service';
 import { createMockMediaService } from '../../mock/service';
+import { createHttpMediaService } from '../../services/real/service';
+import { resolveServiceMode } from '../../app/service-mode';
 
 const ServiceContext = createContext<MediaService | null>(null);
 
@@ -25,7 +27,11 @@ export function ServiceProvider({
   readonly children: ReactNode;
   readonly service?: MediaService;
 }) {
-  const value = useMemo(() => service ?? createMockMediaService(), [service]);
+  // 明确的二选一：真实模式失败就如实报错，不会在后台换成演示数据。
+  const value = useMemo(
+    () => service ?? (resolveServiceMode().mode === 'demo' ? createMockMediaService() : createHttpMediaService()),
+    [service],
+  );
   return <ServiceContext.Provider value={value}>{children}</ServiceContext.Provider>;
 }
 

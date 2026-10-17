@@ -19,6 +19,7 @@ import { TaskCenter } from '../../src/renderer/features/tasks/TaskCenter';
 import { SettingsPage } from '../../src/renderer/features/settings/SettingsPage';
 import { AppShell } from '../../src/renderer/shell/AppShell';
 import { ServiceProvider } from '../../src/renderer/shared/api/service-context';
+import { resolveServiceMode } from '../../src/renderer/app/service-mode';
 import { useUiStore } from '../../src/renderer/app/ui-store';
 import { buildMockCatalog } from '../../src/renderer/mock/catalog';
 import { DEFAULT_SETTINGS, getDemoState, resetDemoState, updateDemoState } from '../../src/renderer/mock/demo-store';
@@ -134,9 +135,15 @@ describe('公共框架', () => {
   it('标题栏、侧栏与主导航都在，且侧栏显示分类计数', async () => {
     renderPage(<HomePage />);
     expect(screen.getByText('KumiPlayer')).toBeTruthy();
-    expect(screen.getByText('演示模式')).toBeTruthy();
+    // 顶栏徽标反映当前服务实现（浏览器默认本机后端；显式演示入口才是演示模式）。
+    expect(
+      screen.getByText(resolveServiceMode().mode === 'demo' ? '演示模式' : '本机后端'),
+    ).toBeTruthy();
     expect(screen.getByRole('navigation', { name: '媒体库导航' })).toBeTruthy();
-    expect(screen.getByRole('searchbox', { name: '搜索作品' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '搜索作品（Ctrl+K）' })).toBeTruthy();
+    const titlebar = screen.getByRole('banner');
+    expect(within(titlebar).queryByRole('searchbox')).toBeNull();
+    expect(within(titlebar).queryByRole('button', { name: /任务中心/ })).toBeNull();
     await waitFor(() => expect(screen.getByRole('link', { name: /番剧/ })).toBeTruthy());
   });
 
@@ -393,25 +400,44 @@ describe('设置', () => {
     await waitFor(() => expect(getDemoState().settings.sources.localRoots.length).toBe(before));
     expect(getDemoState().settings.application.setupCompleted).toBe(true);
   });
-  it('七个分类可切换，外观主题写入演示设置', async () => {
+  it('八个分类可切换，外观主题默认纯白', async () => {
     renderPage(<SettingsPage />, '/settings');
     const outline = await screen.findByRole('navigation', { name: '设置分类' });
-    for (const label of ['应用', '外观', '媒体来源', 'WebDAV 目录', '元数据与图片', '播放', '账户与同步']) {
+    // 已批准的分组：关于是第八组，WebDAV 目录改名为 WebDAV 设置。
+    for (const label of ['应用', '外观', '媒体来源', 'WebDAV 设置', '元数据与图片', '播放', '账户与同步', '关于']) {
       expect(within(outline).getByRole('button', { name: label })).toBeTruthy();
     }
 
     fireEvent.click(within(outline).getByRole('button', { name: '外观' }));
-    // 外观分类渲染出主题/动效/海报密度等设置行，默认主题为浅色。
+    // 外观分类渲染主题/材质/列数/动效；蓝色主题已废止，默认是纯白。
     expect(await screen.findByText('主题')).toBeTruthy();
-    expect(getDemoState().settings.appearance.theme).toBe('fluent');
+    expect(screen.getByRole('radiogroup', { name: '界面材质' })).toBeTruthy();
+    expect(getDemoState().settings.appearance.theme).toBe('mica');
   });
 
-  it('凭据输入为禁用的演示值，不读取真实凭据', async () => {
+  it('凭据输入为空且不预填任何真实凭据', async () => {
     renderPage(<SettingsPage />, '/settings');
     const outline = await screen.findByRole('navigation', { name: '设置分类' });
+
     fireEvent.click(within(outline).getByRole('button', { name: '元数据与图片' }));
-    const token = await screen.findByLabelText('TMDB 令牌（演示）');
-    expect(token).toHaveProperty('disabled', true);
-    expect((token as HTMLInputElement).value).toContain('demo');
+    const tmdb = (await screen.findByLabelText('TMDB 读取令牌')) as HTMLInputElement;
+    expect(tmdb.type).toBe('password');
+    expect(tmdb.value).toBe('');
+
+    fireEvent.click(within(outline).getByRole('button', { name: '账户与同步' }));
+    const bangumi = (await screen.findByLabelText('Bangumi 访问令牌')) as HTMLInputElement;
+    expect(bangumi.type).toBe('password');
+    expect(bangumi.value).toBe('');
+  });
+
+  it('外观设置显示已保存列数，分类页的临时列数不冒充默认值', async () => {
+    useUiStore.setState({ posterColumns: 6 });
+    updateDemoState((current) => ({ settings: {
+      ...current.settings, appearance: { ...current.settings.appearance, posterSize: 8 },
+    } }));
+    renderPage(<SettingsPage />, '/settings');
+    const outline = await screen.findByRole('navigation', { name: '设置分类' });
+    fireEvent.click(within(outline).getByRole('button', { name: '外观' }));
+    expect(screen.getByRole('slider', { name: '海报墙列数' })).toHaveAttribute('aria-valuenow', '8');
   });
 });

@@ -9,6 +9,9 @@ export interface DemoPreferences {
   readonly source?: string;
   readonly sidebarMode?: string;
   readonly sort?: string;
+  /** 本机 UI 偏好：默认显示界面与默认侧栏状态（与后端配置无关）。 */
+  readonly startPage?: string;
+  readonly sidebarDefault?: string;
 }
 
 export function readDemoPreferences(): DemoPreferences {

@@ -156,16 +156,22 @@ describe('新旧前端模块边界', () => {
         }
       }
     }
-    const allowed = new Set(['clsx', 'tailwind-merge', 'class-variance-authority', 'radix-ui']);
+    // Quick Liquid 只负责局部装饰，不提供第二套交互控件；字体包仅提供本地字库。
+    const allowed = new Set(['clsx', 'tailwind-merge', 'class-variance-authority', 'radix-ui', 'quick-liquid', '@fontsource-variable/manrope']);
     const unexpected = [...uiImports].filter((name) => !allowed.has(name));
     expect(unexpected).toEqual([]);
   });
 
-  it('Renderer 不发起真实网络请求（无 fetch / XHR / WebSocket / EventSource）', () => {
+  it('Renderer 的网络访问只允许出现在唯一传输层', () => {
     const offenders: string[] = [];
     for (const file of listSourceFiles('src/renderer')) {
       const source = fs.readFileSync(file, 'utf8');
       const relative = path.relative(projectRoot, file);
+      // 浏览器直连后端由 src/renderer/transport/http.ts 唯一承担：
+      // 那里集中做白名单解析、期限、取消与错误包络。
+      if (relative.startsWith(path.join('src', 'renderer', 'transport'))) {
+        continue;
+      }
       if (/\bfetch\s*\(/.test(source)) {
         offenders.push(`${relative} -> fetch(`);
       }
@@ -174,6 +180,18 @@ describe('新旧前端模块边界', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('传输层不接受调用方提供的 URL、方法或 channel', () => {
+    const transport = fs.readFileSync(
+      path.join(projectRoot, 'src', 'renderer', 'transport', 'http.ts'),
+      'utf8',
+    );
+    // 目标 URL 只能由具名操作解析得出。
+    expect(transport).toMatch(/resolveHttpTarget\(/);
+    expect(transport).not.toMatch(/fetchImpl\(\s*url\s*,\s*\{\s*method:\s*(?:operation|options)/);
+    // 令牌只从内存持有者读取，不得来自 localStorage / URL / VITE_*。
+    expect(transport).not.toMatch(/localStorage|sessionStorage|import\.meta\.env\.VITE_.*TOKEN/);
   });
 
   it('跨进程纯契约不依赖 React、Electron 或 Node', () => {
