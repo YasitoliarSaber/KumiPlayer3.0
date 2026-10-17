@@ -14,9 +14,10 @@ const { portNumber, availablePort } = require('../scripts/desktop/start-web-dev.
 const root = path.resolve(__dirname, '..');
 const script = path.join(root, 'scripts/desktop/start-web-dev.cjs');
 
-function requestOnce(url) {
+function requestOnce(url, body) {
   return new Promise((resolve, reject) => {
-    const request = http.get(url, { agent: false }, (response) => {
+    const request = http.request(url, { agent: false, method: body ? 'POST' : 'GET',
+      ...(body ? { headers: { 'Content-Type': 'application/json' } } : {}) }, (response) => {
       let body = '';
       response.setEncoding('utf8');
       response.on('data', (data) => { body += data; });
@@ -25,22 +26,13 @@ function requestOnce(url) {
     });
     request.setTimeout(5000, () => request.destroy(new Error('request timeout')));
     request.on('error', reject);
+    request.end(body ? JSON.stringify(body) : undefined);
   });
 }
 
-// 当前测试机的纯 Node 回环服务器也会偶发 ECONNRESET，独立于 Vite/后端；
-// 重试连接错误及代理 502，不重试鉴权错误或应用响应，仍核对实际状态和内容。
+// 修复后不靠重试掩盖回环故障；每一次新连接都必须取得实际成功响应。
 async function get(url) {
-  let last;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    try {
-      const response = await requestOnce(url);
-      if (response.status !== 502) return response;
-      last = new Error('proxy 502');
-    } catch (error) { last = error; }
-    await delay(100);
-  }
-  throw last;
+  return requestOnce(url);
 }
 
 function launch(env, wrapper = false) {
@@ -76,19 +68,38 @@ test('真实源码后端隔离启动、同源鉴权、重复启动与退出回�
     const deadline = Date.now() + 60000;
     while (!first.output().includes('网页开发版已就绪') && first.child.exitCode === null && Date.now() < deadline) await delay(200);
     assert.ok(first.output().includes('网页开发版已就绪'), `隔离启动应在期限内就绪：${first.output()}`);
-    const base = `http://127.0.0.1:${webPort}`;
-    const unauthorized = await get(`http://127.0.0.1:${backendPort}/api/config`);
+    const base = `http://localhost:${webPort}`;
+    const unauthorized = await get(`http://localhost:${backendPort}/api/config`);
     assert.equal(unauthorized.status, 401);
     const statuses = [];
     try {
-      for (let index = 0; index < 10; index += 1) {
-        const response = await get(`${base}/api/config`);
+      for (let index = 0; index < 100; index += 1) {
+        const route = ['/api/config', '/api/v4/sources/libraries', '/api/v4/sources/scan-schedules', '/api/tasks'][index % 4];
+        const response = await get(`${base}${route}`);
         statuses.push(response.status);
+        assert.doesNotThrow(() => JSON.parse(response.body));
       }
     } catch (error) { throw new Error(`${statuses.join(',')} / ${error.cause?.code}: ${first.output()}`); }
-    assert.deepEqual(statuses, Array(10).fill(200), first.output());
+    assert.deepEqual(statuses, Array(100).fill(200), first.output());
     const html = (await get(base)).body;
-    assert.match(html, /"apiBase":""/);
+    assert.doesNotMatch(html, /__KUMIPLAYER_APP_CONFIG__/);
+    const mediaDir = path.join(dataDir, 'fixture-media');
+    fs.mkdirSync(mediaDir);
+    const started = await requestOnce(`${base}/api/v4/sources/scans`, {
+      source: 'local', root_path: mediaDir, content_scope: 'completed', scan_mode: 'full', source_display_name: '连接验收',
+    });
+    assert.equal(started.status, 200, started.body);
+    const scanId = JSON.parse(started.body).scan_id;
+    assert.ok(scanId);
+    let scan;
+    for (let index = 0; index < 40; index += 1) {
+      const response = await get(`${base}/api/v4/sources/scans/${scanId}`);
+      assert.equal(response.status, 200);
+      scan = JSON.parse(response.body);
+      if (['completed', 'validated', 'failed', 'cancelled'].includes(scan.status)) break;
+      await delay(150);
+    }
+    assert.equal(scan.status, 'completed', JSON.stringify(scan));
     const stateFile = path.join(root, '.context', `web-dev-${backendPort}.json`);
     const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
     assert.deepEqual(Object.keys(state).sort(), ['instanceId', 'pid', 'url']);
@@ -116,11 +127,45 @@ test('拒绝占用后端端口的其他服务并保留它', { timeout: 10000 }, 
     response.writeHead(200, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ app: 'OtherService' }));
   });
-  await new Promise((resolve) => blocker.listen(port, '127.0.0.1', resolve));
+  await new Promise((resolve) => blocker.listen(port, '::1', resolve));
   try {
     const run = launch({ ...process.env, KUMIPLAYER_PORT: String(port) });
     assert.equal((await run.finished)[0], 1);
     assert.match(run.output(), /其他服务占用/);
-    assert.equal((await get(`http://127.0.0.1:${port}/api/health`)).status, 200);
+    assert.equal((await get(`http://localhost:${port}/api/health`)).status, 200);
   } finally { await new Promise((resolve) => blocker.close(resolve)); }
+});
+
+test('旧 IPv4 后端尚未关闭时不另起后端访问同一库', { timeout: 10000 }, async () => {
+  const port = await availablePort(37990);
+  const blocker = http.createServer((_request, response) => response.end('{}'));
+  await new Promise((resolve) => blocker.listen(port, '127.0.0.1', resolve));
+  try {
+    const run = launch({ ...process.env, KUMIPLAYER_PORT: String(port) });
+    assert.equal((await run.finished)[0], 1);
+    assert.match(run.output(), /旧的 IPv4 后端仍在运行/);
+    assert.equal(blocker.listening, true);
+    assert.equal(await availablePort(port), port);
+  } finally { await new Promise((resolve) => blocker.close(resolve)); }
+});
+
+test('开发代理断连返回可读 JSON，写请求不隐式重放', { timeout: 20000 }, async () => {
+  const { createServer } = await import('vite');
+  const backendPort = await availablePort(37995);
+  const webPort = await availablePort(5295);
+  const previous = process.env.KUMIPLAYER_API_BASE;
+  process.env.KUMIPLAYER_API_BASE = `http://[::1]:${backendPort}`;
+  let server;
+  try {
+    server = await createServer({ configFile: path.join(root, 'vite.web.config.ts'),
+      logLevel: 'silent', server: { host: '::1', port: webPort, strictPort: true } });
+    await server.listen();
+    const response = await requestOnce(`http://localhost:${webPort}/api/v4/sources/scans`, { source: 'local' });
+    assert.equal(response.status, 502);
+    assert.match(JSON.parse(response.body).detail, /网页未接通本机后端/);
+  } finally {
+    await server?.close();
+    if (previous === undefined) delete process.env.KUMIPLAYER_API_BASE;
+    else process.env.KUMIPLAYER_API_BASE = previous;
+  }
 });

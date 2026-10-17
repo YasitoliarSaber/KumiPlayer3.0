@@ -22,11 +22,10 @@ import {
   SelectValue,
 } from '@/shared/ui/select';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, Database, FolderSearch, ListTodo, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, FolderSearch, ListTodo, ShieldCheck } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
-import type { SourceCard } from '../../shared/api/service';
 import {
   demoQueryKeys,
   useMediaService,
@@ -34,14 +33,15 @@ import {
   useSources,
   useTasks,
 } from '../../shared/api/service-context';
-import { EmptySurface, ErrorSurface, LoadingSurface, ProgressBar, StatusChip } from '../../shared/ui/Surface';
+import { ErrorSurface, LoadingSurface, ProgressBar, StatusChip } from '../../shared/ui/Surface';
 import styles from './MediaManagementPage.module.css';
 import { RealSourceImportView } from './RealSourceImportView';
+import { ManageOverview } from './ManageOverview';
 
 type ManageMode = 'overview' | 'import' | 'maintenance';
 
 const MODE_TITLE: Record<ManageMode, string> = {
-  overview: '媒体库',
+  overview: '媒体管理',
   import: '导入媒体',
   maintenance: '媒体库维护',
 };
@@ -50,14 +50,9 @@ export function MediaManagementPage() {
   const service = useMediaService();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const mode = (searchParams.get('view') as ManageMode | null) ?? 'overview';
+  const requestedMode = searchParams.get('view');
+  const mode: ManageMode = requestedMode === 'import' || requestedMode === 'maintenance' ? requestedMode : 'overview';
   const [importSourceId, setImportSourceId] = useState('src-openlist');
-
-  // 真实后端（浏览器 HTTP）提供持久扫描与 revision 能力时走真实导入链；
-  // 演示服务没有这些能力，继续使用下方的演示流程，两条链互不遮蔽。
-  if (typeof service.startSourceScan === 'function') {
-    return <RealSourceImportView />;
-  }
 
   const goMode = useCallback(
     (next: ManageMode) => {
@@ -67,7 +62,8 @@ export function MediaManagementPage() {
       } else {
         params.set('view', next);
       }
-      setSearchParams(params, { replace: true });
+      params.delete('root');
+      setSearchParams(params);
     },
     [searchParams, setSearchParams],
   );
@@ -79,10 +75,10 @@ export function MediaManagementPage() {
           <h1 className={styles.title}>{MODE_TITLE[mode]}</h1>
           <p className={styles.subtitle}>
             {mode === 'overview'
-              ? '管理已登记的媒体来源；扫描、确认与维护都只作用于演示数据。'
+              ? '查看已入库作品，继续或更新已有导入。'
               : mode === 'import'
-                ? '选择来源并扫描，审核识别结果后确认执行；离开本页可恢复批次状态。'
-                : '缓存预览、显式确认与状态重置；真实实现中源媒体永不被递归删除。'}
+                ? '选择目录或清单，扫描并核对识别结果后导入。'
+                : '查看维护入口；执行变更前先确认影响范围。'}
           </p>
         </div>
         <div className={styles.headerActions} role="group" aria-label="媒体管理操作">
@@ -100,165 +96,25 @@ export function MediaManagementPage() {
             </>
           ) : (
             <Button variant="outline" leftSection={<ArrowLeft size={15} />} onClick={() => goMode('overview')}>
-              返回媒体库
+              返回媒体管理
             </Button>
           )}
         </div>
       </header>
 
-      {mode === 'overview' ? <SourceOverview onOpenTasks={() => navigate('/tasks')} /> : null}
-      {mode === 'import' ? (
+      {mode === 'overview' ? <ManageOverview onOpenImport={(rootId) => {
+        setImportSourceId(rootId);
+        setSearchParams({ view: 'import', root: rootId });
+      }} /> : null}
+      {typeof service.startSourceScan === 'function' ? <RealSourceImportView view={mode}
+        rootId={searchParams.get('root') ?? ''} onOpenTasks={() => navigate('/tasks')} /> : mode === 'import' ? (
         <ImportFlow
           sourceId={importSourceId}
           onSelectSource={setImportSourceId}
           onOpenTasks={() => navigate('/tasks')}
         />
-      ) : null}
-      {mode === 'maintenance' ? <MaintenancePanel /> : null}
+      ) : mode === 'maintenance' ? <MaintenancePanel /> : null}
     </section>
-  );
-}
-
-function SourceOverview({
-  onOpenTasks,
-}: {
-  readonly onOpenTasks: () => void;
-}) {
-  const sources = useSources();
-  const tasks = useTasks();
-  const service = useMediaService();
-  const queryClient = useQueryClient();
-  const [notice, setNotice] = useState('');
-  const [pendingScanId, setPendingScanId] = useState('');
-
-  const refresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: demoQueryKeys.sources });
-    void queryClient.invalidateQueries({ queryKey: demoQueryKeys.tasks });
-  }, [queryClient]);
-
-  if (sources.isPending) {
-    return <LoadingSurface label="正在读取来源" detail="正在读取演示来源卡" />;
-  }
-  if (sources.isError) {
-    return <ErrorSurface detail={sources.error?.message ?? '来源读取失败'} onRetry={() => void sources.refetch()} />;
-  }
-
-  const cards = sources.data ?? [];
-
-  return (
-    <div className={styles.overview}>
-      <div className={styles.toolbar}>
-        <span className={styles.toolbarCount}>共 {cards.length} 个来源</span>
-      </div>
-
-      {notice ? (
-        <p className={styles.notice} role="status">
-          {notice}
-        </p>
-      ) : null}
-
-      {cards.length === 0 ? (
-        <EmptySurface
-          kicker="来源"
-          title="还没有登记来源"
-          detail="演示数据当前为空；可以在开发入口切回默认场景后重新查看。"
-        />
-      ) : (
-        <div className={styles.sourceGrid}>
-          {cards.map((card) => (
-            <SourceCardView
-              key={card.id}
-              card={card}
-              activeTaskTitle={
-                tasks.data?.find((task) => task.id === card.activeTaskId)?.title ?? ''
-              }
-              pendingScan={pendingScanId === card.id}
-              onScan={() => {
-                // 双击保护：同一来源在扫描发起期间只接受一次点击。
-                if (pendingScanId) {
-                  return;
-                }
-                setPendingScanId(card.id);
-                void service
-                  .startScan(card.id)
-                  .then((task) => {
-                    setNotice(`已发起扫描（演示）：${card.name} · 任务 ${task.id.slice(-6)}`);
-                    refresh();
-                  })
-                  .finally(() => setPendingScanId(''));
-              }}
-              onOpenTasks={onOpenTasks}
-              onReview={() => setNotice(`演示：打开来源「${card.name}」的识别结果（前往导入审核步骤）`)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SourceCardView({
-  card,
-  activeTaskTitle,
-  pendingScan,
-  onScan,
-  onReview,
-  onOpenTasks,
-}: {
-  readonly card: SourceCard;
-  readonly activeTaskTitle: string;
-  readonly pendingScan: boolean;
-  readonly onScan: () => void;
-  readonly onReview: () => void;
-  readonly onOpenTasks: () => void;
-}) {
-  const tone = card.status === 'scanning' ? 'info' : card.status === 'needs_attention' ? 'warning' : 'neutral';
-  return (
-    <article className={styles.sourceCard}>
-      <header className={styles.sourceHead}>
-        <div className={styles.sourceName}>
-          <Database size={16} aria-hidden="true" />
-          <span>{card.name}</span>
-        </div>
-        <StatusChip tone={tone}>{card.statusLabel}</StatusChip>
-      </header>
-      <div className={styles.sourceDetails}>
-      <div className={styles.sourceMeta}>
-        <span>{card.providerLabel}</span>
-        <span>{card.contentScope === 'ongoing' ? '新番来源' : '媒体库来源'}</span>
-        <span>{card.workCount} 部作品</span>
-      </div>
-      <p className={styles.sourceLocation} title={card.location}>
-        {card.location}
-      </p>
-      <p className={styles.sourceMessage}>
-        最近扫描：{card.lastScanAt.slice(0, 16).replace('T', ' ')}
-        {card.message ? ` · ${card.message}` : ''}
-      </p>
-      {activeTaskTitle ? (
-        <div className={styles.sourceTask}>
-          <ProgressBar value={null} label={`${card.name}任务进度`} />
-          <span>{activeTaskTitle}</span>
-        </div>
-      ) : null}
-      </div>
-      <div className={styles.sourceActions}>
-        {card.canResume ? (
-          <Button size="xs" onClick={onReview}>
-            查看识别结果
-          </Button>
-        ) : null}
-        {card.activeTaskId ? (
-          <Button size="xs" variant="outline" onClick={onOpenTasks}>
-            查看进度
-          </Button>
-        ) : (
-          <Button size="xs" variant="outline" loading={pendingScan} onClick={onScan}>
-            开始扫描
-          </Button>
-        )}
-      </div>
-    </article>
   );
 }
 

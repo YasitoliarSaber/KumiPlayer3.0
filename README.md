@@ -9,8 +9,9 @@ KumiPlayer 是一款面向 Windows 的本地 / 网盘媒体库与 MPV 播放应�
 - 上一次未完成前端重构及其 Design System、配色、原型、页面布局、P0—P7 路线图、工程蓝图和验收矩阵已废止，不作为施工或验收依据。
 - 后续方向为 Electron + React + TypeScript；优先采用成熟组件库，保持模块化、风格统一和组件可替换，避免巨型页面与全局 CSS。
 - **视觉依据**：当前正在运行的界面已被用户选定为视觉复刻参考。正式页面以用户确认的单页截图与 HTML 为视觉依据，用新架构实现；实现层仍不导入旧 Fluent 组件、旧主题变量与旧全局 CSS。
-- 本轮（2026-10-15）已完成最小基础切片：`src/main`、`src/preload`、`src/renderer`、`src/shared/contracts` 四个边界，`electron.vite.config.ts`（输出到 `.build/desktop`），以及 `src/desktop-helper` 的 Windows Job Object 进程宿主。业务页面尚未接入，导航与配色仍待设计确认。
-- **网页优先（2026-10-15 起）**：新前端先在普通浏览器开发与验收。`npm run dev`（等价 `dev:web:mock`）在 127.0.0.1:5273 打开完整演示应用；`build:web:mock` 输出 `.build/web`，`preview:web:mock` 在 5274 预览构建产物。演示数据来自本机确定性目录与 `.context/artwork-export` 选定素材，**不启动 Python 后端、不注册业务网关、不访问真实媒体库或外网**。
+- 工程沿用 `src/main`、`src/preload`、`src/renderer`、`src/shared/contracts` 四个边界和既有进程宿主。网页业务页已实施，正在逐项对齐真实后端；当前状态与缺口见 [前后端联动清单](docs/current/前后端联动清单.md)。Electron 打包不属于当前联动任务。
+- **网页优先**：双击「KumiPlayer 网页开发版」或运行 `npm run dev`（等价 `dev:web`），启动真实 Python 后端并打开同一网页应用，默认 `http://localhost:5273/`。后续 UI 优化只维护这个 Renderer；下载的原型不再作为另一套演示产品维护。`?demo=1` / `dev:web:mock` 仅用于隔离测试，不访问真实库，不作为日常开发入口。
+- **UI 唯一基准**：[前端 UI 基准](docs/01_项目基准/前端UI基准.md) 保存精修原型的有效 token、组件、公共布局和用户最新修订；后续增减功能先核对并维护这一个文件。
 - **组件库**：新前端使用 shadcn/ui + Radix UI + Tailwind CSS（`@mantine/*` 已从依赖中移除）；影视专用组件（海报卡、背景橱窗、剧集缩略图、季集与版本）由项目自有实现。样式唯一入口为 `src/renderer/styles/tailwind.css`；全局基础样式只能经 `layer(base)` 导入，控件使用共享组件，页面布局使用 CSS Modules，禁止从脚本入口另行导入无层级 reset。主题变量在同一入口定义，构建与测试通过仍需补真实浏览器的外观和布局检查。
 - **旧前端已归档**：本地 Git 标签 `legacy-tauri-frontend`（指向 `e98ad0b`）是旧 Tauri/Fluent 活动入口的最后状态，可 `git switch --detach legacy-tauri-frontend` 或从该标签取出文件；旧前端源码仍在 `src/` 中，但默认入口已让位给网页版，仅保留 `npm run dev:legacy`（Vite 1420）用于对照。迁移期两者共用同一份后端与数据边界。
 - Electron 承载仍属"已验证候选、未正式锁定"：启动/鉴权就绪/退出回收、具名桥接、严格 CSP 已有隔离验证证据；Windows 打包、性能预算、正式切换与安装矩阵仍待后续关卡（本轮不做 EXE/安装包）。
@@ -95,7 +96,7 @@ OpenList 在线扫描先读取少量真实视频样本，比较连接根、提�
 
 双击根目录的 **`启动网页开发版.cmd`**。它会启动源码后端与网页开发服务，接通真实媒体库后自动打开默认浏览器；重复双击会打开已有网页。保持启动窗口运行，停止时按 `Ctrl+C` 或输入 `q` 回车；不会关闭复用的其他应用。网页默认从本机 5273 端口开始，遇到占用会选择空闲端口。
 
-入口复用已安装的 Node.js、Python 和项目依赖，不自动安装依赖、不打包 EXE。后端启动失败时，窗口会保留错误提示，详细日志位于本地 `.context/web-dev-backend.log`。仅查看演示界面时，可在已打开的网址后加 `?demo=1`。
+入口复用已安装的 Node.js、Python 和项目依赖，不自动安装依赖、不打包 EXE。网页和后端使用本机 IPv6 回环与同源鉴权，令牌不注入网页。后端启动失败时，窗口会保留错误提示，详细日志位于本地 `.context/web-dev-backend.log`。更新连接方案后，旧启动窗口需输入 `q` 回车正常关闭，再重新双击；不会结束现有应用或同时启动第二个后端访问同一库。
 
 ### 开发版（当前源码目录）
 
@@ -208,8 +209,8 @@ npm run build          # tsc -b && vite build
 npm run check:versions # 各层版本一致性
 
 # 新前端（网页优先；与上面的旧前端构建互不影响）
-npm run dev                 # 等价 dev:web:mock → http://127.0.0.1:5273/ （演示数据，不连后端）
-npm run build:web:mock      # 网页构建产物 → .build/web
+npm run dev                 # 真实后端 + 网页 → http://localhost:5273/，自动打开浏览器
+npm run build:web           # 同一网页构建 → .build/web
 npm run preview:web:mock    # 预览构建产物 → http://127.0.0.1:5274/
 npm run mock:assets         # 从本地素材导出目录准备演示素材 → .build/mock-assets/__mock
 npm run typecheck:desktop   # main / preload / renderer 三份隔离类型检查

@@ -128,6 +128,21 @@ describe('浏览器 HTTP 传输', () => {
     expect(deniedDownload.ok).toBe(false);
   });
 
+  it('代理 502 分类为连接不可用，扫描写请求不会自动重发', async () => {
+    let calls = 0;
+    const transport = createBrowserTransport({ apiBase: '' }, async () => {
+      calls += 1;
+      return new Response('', { status: 502, headers: { 'Content-Type': 'text/plain' } });
+    });
+    const result = await transport.call('sources.durableScan.start', { body: { source: 'local', root_path: 'C:/fixture' } });
+    expect(calls).toBe(1);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe('unavailable');
+      expect(result.error.message).toContain('避免重复执行');
+    }
+  });
+
   it('基地址只做规范化拼接，不写入任何令牌', () => {
     expect(normalizeApiBase('http://127.0.0.1:37821/')).toBe('http://127.0.0.1:37821');
     expect(resolveRequestUrl({ apiBase: 'http://127.0.0.1:37821' }, '/api/library')).toBe(

@@ -32,7 +32,7 @@ export default defineConfig({
     },
   },
   server: {
-    host: '127.0.0.1',
+    host: '::1',
     port: 5273,
     strictPort: true,
     proxy: {
@@ -49,16 +49,21 @@ export default defineConfig({
        * 不读取 `VITE_*`，令牌不会进入构建产物、URL 或页面存储。
        */
       '/api': {
-        target: process.env.KUMIPLAYER_API_BASE ?? 'http://127.0.0.1:37821',
+        target: process.env.KUMIPLAYER_API_BASE ?? 'http://localhost:37821',
         changeOrigin: true,
         /**
-         * 上游 uvicorn 会在空闲后关闭连接；复用池化 keep-alive socket 会得到 ECONNRESET。
-         * 开发代理是单用户本机链路，用每次新建连接换取确定性，不做连接池复用。
+         * 连接错误不自动重发，尤其不能重复提交扫描/确认等写请求。
          */
         agent: false,
         proxyTimeout: 60_000,
         timeout: 60_000,
         configure: (proxy) => {
+          proxy.on('error', (_error, _request, response) => {
+            if ('writeHead' in response && !response.headersSent) {
+              response.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+              response.end(JSON.stringify({ detail: '网页未接通本机后端，请重新启动网页开发版。若刚提交了操作，请先查看导入记录确认结果，再决定是否重试。' }));
+            }
+          });
           const token = (process.env.KUMIPLAYER_API_TOKEN ?? '').trim();
           if (token.length === 0) {
             return;
@@ -102,8 +107,8 @@ function devSessionPlugin() {
         return html;
       }
       // 一键入口走同源代理，避免复用后端时依赖额外的跨域放行。
-      const apiBase = process.env.KUMIPLAYER_WEB_SAME_ORIGIN === '1'
-        ? '' : process.env.KUMIPLAYER_API_BASE ?? 'http://127.0.0.1:37821';
+      if (process.env.KUMIPLAYER_WEB_SAME_ORIGIN === '1') return html;
+      const apiBase = process.env.KUMIPLAYER_API_BASE ?? 'http://localhost:37821';
       const payload = JSON.stringify({ apiBase, apiToken: token });
       return html.replace(
         '</head>',

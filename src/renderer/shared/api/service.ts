@@ -160,6 +160,11 @@ export interface SourceCard {
   readonly location: string;
   readonly contentScope: 'library' | 'ongoing';
   readonly workCount: number;
+  readonly workCountKnown?: boolean;
+  readonly hasConfirmedBaseline?: boolean;
+  /** 后端保存的原始扫描定位符；展示用 location 可能经过压缩，不能用于重扫。 */
+  readonly scanPath?: string;
+  readonly connectionId?: string;
   readonly lastScanAt: string;
   readonly status: SourceStatus;
   readonly statusLabel: string;
@@ -403,6 +408,7 @@ export interface ScanProgress {
 
 export interface SourceScanRequest {
   readonly source?: 'local' | 'tree' | 'openlist' | 'hybrid';
+  readonly provider?: 'pan115' | 'baidu' | 'quark';
   readonly rootPath?: string;
   readonly treeFile?: string;
   readonly contentScope?: 'library' | 'ongoing';

@@ -8,6 +8,12 @@ const { spawn } = require('node:child_process');
 const { randomBytes, randomUUID } = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
 const { createInterface } = require('node:readline');
+const { setDefaultResultOrder } = require('node:dns');
+
+// 本机 IPv4 回环在部分网络过滤环境中被重置；使用已受后端 Host 保护允许的
+// localhost + IPv6 回环。只绑定 ::1，不扩大到局域网，也不重放扫描写请求。
+setDefaultResultOrder('ipv6first');
+const loopback = '::1';
 
 const root = path.resolve(__dirname, '../..');
 const noOpen = process.argv.includes('--no-open') || process.env.KUMIPLAYER_WEB_DEV_NO_OPEN === '1';
@@ -43,12 +49,12 @@ function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; }
 }
 
-async function availablePort(start) {
+async function availablePort(start, host = loopback) {
   for (let port = start; port <= Math.min(start + 20, 65535); port += 1) {
     const free = await new Promise((resolve) => {
       const probe = net.createServer();
       probe.once('error', () => resolve(false));
-      probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
+      probe.listen(port, host, () => probe.close(() => resolve(true)));
     });
     if (free) return port;
   }
@@ -81,6 +87,9 @@ async function acquire(lockFile) {
     if (!alive(state.pid)) { fs.unlinkSync(lockFile); continue; }
     // 不接收任意文件中的 URL，防止损坏状态打开其他站点。
     if (/^http:\/\/127\.0\.0\.1:\d+\/$/.test(state.url)) {
+      throw new Error('旧网页开发窗口仍在运行。请在该启动窗口输入 q 并回车，再重新打开快捷方式，以启用修正后的连接。');
+    }
+    if (/^http:\/\/localhost:\d+\/$/.test(state.url)) {
       const health = await jsonAt(`${state.url}api/health`);
       if (health?.app === 'KumiPlayer' && health.instance_id === state.instanceId) return state.url;
     }
@@ -95,7 +104,7 @@ async function main() {
   }
   const backendPort = portNumber(process.env.KUMIPLAYER_PORT, 37821);
   const preferredWebPort = portNumber(process.env.KUMIPLAYER_WEB_DEV_PORT, 5273);
-  const backendBase = `http://127.0.0.1:${backendPort}`;
+  const backendBase = `http://localhost:${backendPort}`;
   fs.mkdirSync(contextDir, { recursive: true });
   const lockFile = path.join(contextDir, `web-dev-${backendPort}.json`);
   const existingUrl = await acquire(lockFile);
@@ -116,13 +125,18 @@ async function main() {
   process.on('SIGINT', requestStop);
   process.on('SIGTERM', requestStop);
   try {
-    let health = await jsonAt(`${backendBase}/api/health`);
+    // 先判定绑定族，防止双栈回退把旧 IPv4 后端当成修正后的服务复用。
+    const ipv6Busy = await availablePort(backendPort) !== backendPort;
+    if (!ipv6Busy && await availablePort(backendPort, '127.0.0.1') !== backendPort) {
+      throw new Error('旧的 IPv4 后端仍在运行。请先正常关闭其启动窗口，再重新打开网页开发版；不会启动第二个后端访问同一媒体库。');
+    }
+    let health = ipv6Busy ? await jsonAt(`${backendBase}/api/health`) : null;
     if (health && health.app !== 'KumiPlayer') throw new Error('后端端口被其他服务占用，请关闭冲突服务或更换开发端口。');
     if (health && !await jsonAt(`${backendBase}/api/config`, token)) {
       throw new Error('已有后端的会话不可复用。请先正常关闭已运行的 KumiPlayer，再双击此入口；不会结束现有应用。');
     }
     // 已有可工作的 Vite 可以直接复用；健康检查与配置请求均需通过代理。
-    const candidate = `http://127.0.0.1:${preferredWebPort}/`;
+    const candidate = `http://localhost:${preferredWebPort}/`;
     const webHealth = health ? await jsonAt(`${candidate}api/health`) : null;
     let url;
     if (webHealth?.app === 'KumiPlayer' && webHealth.instance_id === health.instance_id
@@ -130,9 +144,12 @@ async function main() {
       url = candidate;
     } else {
       const webPort = await availablePort(preferredWebPort);
-      url = `http://127.0.0.1:${webPort}/`;
+      url = `http://localhost:${webPort}/`;
       if (!health) {
         if (await availablePort(backendPort) !== backendPort) throw new Error('后端端口已被占用，不会启动第二个后端。');
+        if (await availablePort(backendPort, '127.0.0.1') !== backendPort) {
+          throw new Error('旧的 IPv4 后端仍在运行。请先正常关闭其启动窗口，再重新打开网页开发版；不会启动第二个后端访问同一媒体库。');
+        }
         token ||= randomBytes(32).toString('hex');
         const python = [path.join(root, 'backend/.venv/Scripts/python.exe'), path.join(root, '.venv/Scripts/python.exe')]
           .find((file) => fs.existsSync(file)) ?? 'python';
@@ -142,7 +159,7 @@ async function main() {
         console.log('正在启动本机后端……');
         backend = spawn(python, ['desktop_backend.py'], {
           cwd: path.join(root, 'backend'), windowsHide: true,
-          env: { ...process.env, PYTHONUTF8: '1', KUMIPLAYER_HOST: '127.0.0.1',
+          env: { ...process.env, PYTHONUTF8: '1', KUMIPLAYER_HOST: loopback,
             KUMIPLAYER_PORT: String(backendPort), KUMIPLAYER_API_TOKEN: token,
             KUMIPLAYER_RUNTIME_KIND: 'source', KUMIPLAYER_RUNTIME_ID: root,
             KUMIPLAYER_INSTANCE_ID: instanceId, KUMIPLAYER_PARENT_PID: String(process.pid),
@@ -169,7 +186,7 @@ async function main() {
       delete process.env.VITE_RENDERER_SERVICE;
       const { createServer } = await import('vite');
       server = await createServer({ configFile: path.join(root, 'vite.web.config.ts'),
-        mode: 'development', server: { host: '127.0.0.1', port: webPort, strictPort: true, open: false } });
+        mode: 'development', server: { host: loopback, port: webPort, strictPort: true, open: false } });
       await server.listen();
     }
     if (stopping) return;

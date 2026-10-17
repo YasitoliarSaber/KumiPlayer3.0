@@ -83,6 +83,11 @@ function realService(blockingIssues: number): MediaService {
   };
   return {
     ...base,
+    listSources: async () => [{
+      id: 'root_1', name: '动画导入', kind: 'openlist', providerLabel: 'OpenList', location: '/anime',
+      contentScope: 'ongoing', workCount: 2, lastScanAt: '', status: 'idle', statusLabel: '已完成',
+      phase: 'execute', message: '', activeTaskId: null, canResume: false,
+    }],
     listScanSchedules: async () => [SCHEDULE],
     startSourceScan: async () => SCAN,
     getSourceScan: async () => SCAN,
@@ -130,11 +135,11 @@ beforeEach(() => {
   }));
 });
 
-function renderManage(service: MediaService) {
+function renderManage(service: MediaService, entry = '/manage') {
   return render(
     <QueryClientProvider client={createAppQueryClient()}>
       <ServiceProvider service={service}>
-        <MemoryRouter initialEntries={['/manage']}>
+        <MemoryRouter initialEntries={[entry]}>
           <AppShell>
             <Routes>
               <Route path="/manage" element={<MediaManagementPage />} />
@@ -147,23 +152,33 @@ function renderManage(service: MediaService) {
 }
 
 describe('真实后端模式的媒体管理', () => {
-  it('展示状态摘要、来源卡与任务表，而不是演示流程', async () => {
-    renderManage(realService(0));
+  it('总览仅展示作品与导入卡，导入配置和任务表不混入首页', async () => {
+    const service = realService(0);
+    const listTasks = vi.spyOn(service, 'listTasks');
+    renderManage(service);
 
-    expect(await screen.findByText('状态摘要')).toBeTruthy();
-    expect(await screen.findByText('动画来源')).toBeTruthy();
-    expect(screen.getByText(/作业 排队 0 · 运行 1 · 失败 0/)).toBeTruthy();
-    // 真实模式不再渲染演示用的「新建导入」按钮。
+    expect(await screen.findByRole('region', { name: '已入库作品' })).toBeTruthy();
+    expect(await screen.findByRole('article', { name: '动画导入导入' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: '导入' })).toBeTruthy();
+    expect(screen.queryByText('内容来源')).toBeNull();
+    expect(screen.queryByRole('region', { name: '导入配置' })).toBeNull();
+    expect(screen.queryByText('扫描与任务')).toBeNull();
     expect(screen.queryByRole('button', { name: '新建导入' })).toBeNull();
-    expect(screen.getAllByRole('button', { name: /开始扫描/ }).length).toBeGreaterThan(0);
+    expect(listTasks).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '导入媒体' }));
+    expect(await screen.findByRole('region', { name: '导入配置' })).toBeTruthy();
+    expect(screen.getByLabelText('本地目录路径')).toBeTruthy();
   });
 
   it('扫描 → 识别预览 → 确认导入按后端能力真实推进', async () => {
-    renderManage(realService(0));
-    await screen.findByText('动画来源');
+    const service = realService(0);
+    const start = vi.spyOn(service, 'startSourceScan');
+    renderManage(service, '/manage?view=import');
+    fireEvent.change(await screen.findByLabelText('本地目录路径'), { target: { value: 'D:\\Fixtures\\Anime' } });
 
     fireEvent.click(screen.getAllByRole('button', { name: /开始扫描/ })[0]!);
-    await waitFor(() => expect(screen.getByText(/扫描已创建：/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/已开始扫描。/)).toBeTruthy());
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ source: 'local', rootPath: 'D:\\Fixtures\\Anime', contentScope: 'library', scanMode: 'full' }));
 
     fireEvent.click(screen.getByRole('button', { name: '生成识别预览' }));
     await waitFor(() => expect(screen.getByText('审核识别结果')).toBeTruthy());
@@ -176,8 +191,8 @@ describe('真实后端模式的媒体管理', () => {
   });
 
   it('存在阻断识别问题时不允许确认导入', async () => {
-    renderManage(realService(1));
-    await screen.findByText('动画来源');
+    renderManage(realService(1), '/manage?view=import');
+    fireEvent.change(await screen.findByLabelText('本地目录路径'), { target: { value: 'D:\\Fixtures\\Anime' } });
 
     fireEvent.click(screen.getAllByRole('button', { name: /开始扫描/ })[0]!);
     await waitFor(() => expect(screen.getByRole('button', { name: '生成识别预览' })).toBeTruthy());
@@ -186,5 +201,34 @@ describe('真实后端模式的媒体管理', () => {
     await waitFor(() => expect(screen.getByText(/1 个阻断问题/)).toBeTruthy());
     const confirm = screen.getByRole('button', { name: /确认并执行/ }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
+  });
+
+  it('从导入卡恢复扫描，返回总览不取消后端任务', async () => {
+    const service = realService(0);
+    const get = vi.spyOn(service, 'getSourceScan');
+    const start = vi.spyOn(service, 'startSourceScan');
+    const cancel = vi.spyOn(service, 'cancelSourceScan');
+    renderManage(service);
+    fireEvent.click(await screen.findByRole('button', { name: '查看导入' }));
+    await waitFor(() => expect(get).toHaveBeenCalledWith('scan_1'));
+    expect(await screen.findByText('扫描完成')).toBeTruthy();
+    expect(start).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '返回媒体管理' }));
+    expect(await screen.findByRole('region', { name: '导入' })).toBeTruthy();
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it('首次 OpenList 导入使用完整扫描，代理失败保留输入且不跳到假成功', async () => {
+    const service = realService(0);
+    const start = vi.spyOn(service, 'startSourceScan').mockRejectedValue(new Error('网页未接通本机后端'));
+    renderManage(service, '/manage?view=import');
+    fireEvent.click(await screen.findByRole('radio', { name: 'OpenList', exact: true }));
+    fireEvent.change(screen.getByLabelText('远端目录'), { target: { value: '/anime' } });
+    fireEvent.click(screen.getByRole('button', { name: '开始扫描' }));
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', '网页未接通本机后端');
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ source: 'openlist', rootPath: '/anime', scanMode: 'full' }));
+    expect(screen.getByLabelText('远端目录')).toHaveProperty('value', '/anime');
+    expect(screen.queryByText(/已开始扫描。/)).toBeNull();
   });
 });

@@ -171,6 +171,8 @@ function toSourceStatus(overall: string): SourceStatus {
       return 'scanning';
     case 'cancelled':
       return 'cancelled';
+    case 'failed':
+      return 'failed';
     default:
       return 'idle';
   }
@@ -181,6 +183,10 @@ function toSourceCard(payload: unknown): SourceCard {
   const rootId = str(record.root_id);
   const scan = asRecord(record.scan);
   const progress = asRecord(record.progress);
+  const active = asRecord(record.active_task);
+  const sourceMode = str(record.source_mode);
+  const ingestMethod = str(record.ingest_method);
+  const provider = str(record.provider);
   const overall = str(record.overall_status, 'completed');
   const status = toSourceStatus(overall);
   const phaseRaw = str(record.phase);
@@ -190,17 +196,26 @@ function toSourceCard(payload: unknown): SourceCard {
     id: rootId,
     name: str(record.display_name) || str(record.provider),
     kind: (str(record.provider) || 'local') as SourceCard['kind'],
-    providerLabel: str(record.provider),
+    providerLabel: sourceMode.includes('tree_openlist') ? 'TXT + OpenList'
+      : ingestMethod.includes('openlist') || sourceMode.includes('openlist') ? 'OpenList'
+      : provider === 'local' ? '本地目录'
+      : ({ pan115: '115 目录树', baidu: '百度目录树', quark: '夸克目录树' } as Record<string, string>)[provider] ?? '目录树 TXT',
     location: str(record.display_path) || str(record.source_locator),
     contentScope: record.content_scope === 'ongoing' ? 'ongoing' : 'library',
     workCount: typeof record.work_count === 'number' ? record.work_count : 0,
+    workCountKnown: typeof record.work_count === 'number',
+    hasConfirmedBaseline: record.has_confirmed_baseline === true,
+    scanPath: str(record.source_locator),
+    connectionId: str(record.connection_id),
     lastScanAt: str(record.updated_at),
     status,
-    statusLabel: str(progress.stage) || overall,
+    statusLabel: ({ completed: record.has_confirmed_baseline === false ? '扫描完成' : '已完成', running: phase === 'scan' ? '扫描中' : '处理中', queued: '等待中',
+      needs_attention: phase === 'review' ? '待确认' : '需要处理', cancelled: '已取消', failed: '失败',
+      draft: '待确认', paused: '已暂停' } as Record<string, string>)[overall] ?? '待处理',
     phase,
     message: str(record.last_error) || str(progress.message),
-    activeTaskId: str(scan.scan_id) || null,
-    canResume: record.deletion_retry_required === true || typeof record.pending_cleanup === 'object',
+    activeTaskId: Object.keys(active).length ? str(active.scan_id) || str(active.revision_id) || str(scan.scan_id) || null : null,
+    canResume: record.can_resume === true,
   };
 }
 
@@ -282,8 +297,9 @@ function scanBody(request: SourceScanRequest): Record<string, unknown> {
     body.tree_file = request.treeFile;
   }
   if (request.contentScope) {
-    body.content_scope = request.contentScope;
+    body.content_scope = request.contentScope === 'ongoing' ? 'ongoing' : 'completed';
   }
+  if (request.provider) body.provider = request.provider;
   if (request.scanMode) {
     body.scan_mode = request.scanMode;
   }

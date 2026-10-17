@@ -198,7 +198,9 @@ export function createBrowserTransport(
           ok: false,
           error: contentTypeIsJson(response)
             ? errorForStatus(response.status, payload)
-            : failure('protocol', `后端返回了非 JSON 响应（${response.status}）`, { status: response.status }),
+            : response.status === 502 || response.status === 503 || response.status === 504
+              ? failure('unavailable', '网页未接通本机后端。请检查启动窗口；已提交的操作请先查看导入记录，避免重复执行。', { status: response.status })
+              : failure('protocol', `后端返回了非 JSON 响应（${response.status}）`, { status: response.status }),
         };
       }
       if (!contentTypeIsJson(response)) {

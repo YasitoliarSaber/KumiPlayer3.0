@@ -75,6 +75,7 @@ export function useSources(): UseQueryResult<readonly import('./service').Source
   return useQuery({
     queryKey: demoQueryKeys.sources,
     queryFn: ({ signal }) => service.listSources(signal),
+    refetchInterval: typeof service.startSourceScan === 'function' ? 5000 : false,
   });
 }
 

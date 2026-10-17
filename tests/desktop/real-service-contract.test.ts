@@ -42,6 +42,28 @@ function stubTransport(
 }
 
 describe('新端点的具名操作解析', () => {
+  it('扫描按真实后端枚举提交 content_scope，并保留 TXT 提供方', async () => {
+    const recorded: Recorded[] = [];
+    const service = createHttpMediaService({ transport: stubTransport({
+      'sources.durableScan.start': { scan_id: 'scan_1', root_id: 'root_1', status: 'queued' },
+    }, recorded) });
+    await service.startSourceScan!({ source: 'tree', contentScope: 'library', scanMode: 'full',
+      treeFile: 'C:/fixtures/tree.txt', provider: 'baidu' });
+    expect(recorded[0]?.options.body).toEqual({ source: 'tree', content_scope: 'completed', scan_mode: 'full',
+      tree_file: 'C:/fixtures/tree.txt', provider: 'baidu' });
+    await service.startSourceScan!({ source: 'local', contentScope: 'ongoing' });
+    expect(recorded[1]?.options.body?.content_scope).toBe('ongoing');
+  });
+
+  it('已完成扫描不会被映射成仍有活动任务，状态不暴露英文内部枚举', async () => {
+    const service = createHttpMediaService({ transport: stubTransport({ 'sources.libraries': { cards: [{
+      root_id: 'root_1', provider: 'local', display_name: '动画', overall_status: 'completed',
+      phase: 'execute', work_count: 4, scan: { scan_id: 'old_scan', status: 'completed' },
+      progress: { stage: 'metadata' }, active_task: null, can_resume: false,
+    }] } }) });
+    const cards = await service.listSources();
+    expect(cards[0]).toMatchObject({ activeTaskId: null, statusLabel: '已完成', canResume: false, workCount: 4 });
+  });
   it('备份导出 / 下载 / 恢复确认指向固定路径', () => {
     expect(resolveHttpTarget({ operation: 'backup.export', requestId: 'r' })).toEqual({
       ok: true,

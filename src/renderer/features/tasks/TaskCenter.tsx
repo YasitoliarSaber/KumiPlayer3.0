@@ -4,13 +4,14 @@
  */
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import type { TaskEntry, TaskStatus } from '../../shared/api/service';
 import { demoQueryKeys, useMediaService, useTasks } from '../../shared/api/service-context';
 import { EmptySurface, ErrorSurface, LoadingSurface, ProgressBar, StatusChip } from '../../shared/ui/Surface';
 import { Button } from '@/shared/ui/button';
+import { SegmentedControl } from '@/shared/ui/segmented';
 import styles from './TaskCenter.module.css';
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -36,6 +37,9 @@ export function TaskCenter() {
   const service = useMediaService();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [view, setView] = useState<'active' | 'history'>('active');
+  const [notice, setNotice] = useState('');
+  const real = typeof service.startSourceScan === 'function';
 
   const refresh = useCallback(
     () => queryClient.invalidateQueries({ queryKey: demoQueryKeys.tasks }),
@@ -58,13 +62,20 @@ export function TaskCenter() {
   }, [tasks.data]);
 
   if (tasks.isPending) {
-    return <LoadingSurface label="正在读取任务" detail="演示任务来自本机内存状态" />;
+    return <LoadingSurface label="正在读取任务" />;
   }
   if (tasks.isError) {
     return <ErrorSurface detail={tasks.error?.message ?? '任务读取失败'} onRetry={() => void tasks.refetch()} />;
   }
 
-  const items = tasks.data ?? [];
+  const all = tasks.data ?? [];
+  const items = all.filter((task) => view === 'active'
+    ? ['queued', 'running', 'cancelling'].includes(task.status)
+    : !['queued', 'running', 'cancelling'].includes(task.status));
+  const run = async (action: () => Promise<unknown>) => {
+    try { await action(); await refresh(); setNotice(''); }
+    catch (error) { setNotice(error instanceof Error ? error.message : '操作未完成'); }
+  };
 
   return (
     <section className={styles.page} data-route="tasks">
@@ -72,16 +83,20 @@ export function TaskCenter() {
         <div>
           <h1 className={styles.title}>任务中心</h1>
           <p className={styles.subtitle}>
-            演示任务完全在本机模拟：不启动后台 worker、不访问来源、不写入数据库。
+            {real ? '当前任务与历史记录分开查看；离开页面不会取消后台操作。' : '测试数据中的任务；不会操作真实媒体库。'}
           </p>
         </div>
         <Button variant="outline" onClick={() => navigate('/manage')}>
-          触发一个新任务
+          返回媒体管理
         </Button>
       </header>
 
+      <SegmentedControl ariaLabel="任务视图" value={view} onValueChange={setView}
+        options={[{ value: 'active', label: '当前任务' }, { value: 'history', label: '历史记录' }]} />
+      {notice ? <p role="alert">{notice}</p> : null}
+
       <div className={styles.summary}>
-        {(['queued', 'running', 'succeeded', 'failed', 'cancelled'] as TaskStatus[]).map((status) => (
+        {((view === 'active' ? ['queued', 'running', 'cancelling'] : ['succeeded', 'failed', 'cancelled']) as TaskStatus[]).map((status) => (
           <span key={status} className={styles.summaryItem}>
             <StatusChip tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</StatusChip>
             <strong>{counts[status]}</strong>
@@ -92,8 +107,8 @@ export function TaskCenter() {
       {items.length === 0 ? (
         <EmptySurface
           kicker="任务"
-          title="还没有任务"
-          detail="在媒体管理里发起一次扫描或确认，这里就会出现对应的等待、进行与终态记录。"
+          title={all.length === 0 ? '还没有任务' : view === 'active' ? '当前没有运行中的任务' : '还没有历史记录'}
+          detail={view === 'active' ? '已结束的任务收在历史记录中。' : '这里保留已完成、失败和取消的任务，便于查阅与恢复。'}
           action={<Button variant="outline" onClick={() => navigate('/manage')}>前往媒体管理</Button>}
         />
       ) : (
@@ -102,8 +117,8 @@ export function TaskCenter() {
             <TaskRow
               key={task.id}
               task={task}
-              onCancel={() => void service.cancelTask(task.id).then(refresh)}
-              onRetry={() => void service.retryTask(task.id).then(refresh)}
+              onCancel={() => void run(() => service.cancelTask(task.id))}
+              onRetry={() => void run(() => service.retryTask(task.id))}
             />
           ))}
         </ul>
@@ -151,7 +166,7 @@ function TaskRow({
             <Button
               size="xs"
               variant="outline"
-              title="取消作用于整个修订（演示）"
+              title="终止可能影响同一批导入的后续任务"
               onClick={onCancel}
               disabled={task.status === 'cancelling'}
             >
