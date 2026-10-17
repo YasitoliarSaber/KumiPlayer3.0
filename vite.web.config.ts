@@ -101,7 +101,9 @@ function devSessionPlugin() {
       if (token.length === 0) {
         return html;
       }
-      const apiBase = process.env.KUMIPLAYER_API_BASE ?? 'http://127.0.0.1:37821';
+      // 一键入口走同源代理，避免复用后端时依赖额外的跨域放行。
+      const apiBase = process.env.KUMIPLAYER_WEB_SAME_ORIGIN === '1'
+        ? '' : process.env.KUMIPLAYER_API_BASE ?? 'http://127.0.0.1:37821';
       const payload = JSON.stringify({ apiBase, apiToken: token });
       return html.replace(
         '</head>',
