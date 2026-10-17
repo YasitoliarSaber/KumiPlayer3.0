@@ -20,8 +20,9 @@ export interface PosterGridProps {
   readonly imageMode?: 'poster' | 'fanart';
 }
 
-const MIN_CARD_WIDTH = 150;
-const GAP = 18;
+const MIN_CARD_WIDTH = 112;
+const COLUMN_GAP = 16;
+const ROW_GAP = 18;
 // 海报卡固定 64px 文本区 + 8px 图文间距，必须与 PosterCard 一致。
 const META_HEIGHT = 72;
 const OVERSCAN = 2;
@@ -61,8 +62,9 @@ export function PosterGrid({
 
   const columns = resolveColumns(width, desiredColumns);
   const rowCount = Math.ceil(works.length / columns);
-  const cardWidth = width > 0 ? (width - GAP * (columns - 1)) / columns : MIN_CARD_WIDTH;
-  const rowHeight = Math.ceil(cardWidth * (imageMode === 'fanart' ? 9 / 16 : 3 / 2)) + META_HEIGHT + GAP;
+  const cardWidth = width > 0 ? (width - COLUMN_GAP * (columns - 1)) / columns : MIN_CARD_WIDTH;
+  const rowHeight = Math.ceil(cardWidth * (imageMode === 'fanart' ? 9 / 16 : 3 / 2))
+    + (imageMode === 'fanart' ? 52 : META_HEIGHT) + ROW_GAP;
 
   const virtualizer = useVirtualizer({
     count: rowCount,
@@ -83,7 +85,7 @@ export function PosterGrid({
   const rows = virtualizer.getVirtualItems();
 
   return (
-    <div ref={containerRef} className="relative w-full" data-virtual-rows={rows.length}>
+    <div ref={containerRef} className="relative w-full" data-virtual-rows={rows.length} data-poster-columns={columns}>
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {rows.map((row) => {
           const start = row.index * columns;
@@ -91,7 +93,7 @@ export function PosterGrid({
           return (
             <div
               key={row.key}
-              className="absolute inset-x-0 top-0 grid gap-[18px] pb-[18px]"
+              className="absolute inset-x-0 top-0 grid gap-x-4 pb-[18px]"
               style={{
                 transform: `translateY(${row.start - scrollMargin}px)`,
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
@@ -108,9 +110,10 @@ export function PosterGrid({
   );
 }
 
-/** 列数由容器宽度决定，并受海报墙密度设置限制。 */
+/** 桌面窗口落实用户选定的 6–9 列；小窗口才按可读宽度降列。 */
 export function resolveColumns(width: number, desired: number): number {
-  const byWidth = width > 0 ? Math.floor((width + GAP) / (MIN_CARD_WIDTH + GAP)) : 2;
-  const target = Number.isFinite(desired) ? Math.max(2, Math.min(10, Math.floor(desired))) : 8;
-  return Math.max(2, Math.min(target, Math.max(byWidth, 2)));
+  const target = Number.isFinite(desired) ? Math.max(6, Math.min(9, Math.floor(desired))) : 8;
+  if (width >= 600) return target;
+  const byWidth = width > 0 ? Math.floor((width + COLUMN_GAP) / (MIN_CARD_WIDTH + COLUMN_GAP)) : 2;
+  return Math.max(2, Math.min(target, byWidth));
 }

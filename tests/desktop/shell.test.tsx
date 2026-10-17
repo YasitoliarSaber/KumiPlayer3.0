@@ -14,12 +14,12 @@ import { HomePage } from '../../src/renderer/features/home/HomePage';
 import { PosterWallPage } from '../../src/renderer/features/library/PosterWallPage';
 import { RecentPage } from '../../src/renderer/features/recent/RecentPage';
 import { WorkDetailPage } from '../../src/renderer/features/work/WorkDetailPage';
+import { WorkManagementSheet } from '../../src/renderer/features/work/WorkManagementSheet';
 import { MediaManagementPage } from '../../src/renderer/features/manage/MediaManagementPage';
 import { TaskCenter } from '../../src/renderer/features/tasks/TaskCenter';
 import { SettingsPage } from '../../src/renderer/features/settings/SettingsPage';
 import { AppShell } from '../../src/renderer/shell/AppShell';
 import { ServiceProvider } from '../../src/renderer/shared/api/service-context';
-import { resolveServiceMode } from '../../src/renderer/app/service-mode';
 import { useUiStore } from '../../src/renderer/app/ui-store';
 import { buildMockCatalog } from '../../src/renderer/mock/catalog';
 import { DEFAULT_SETTINGS, getDemoState, resetDemoState, updateDemoState } from '../../src/renderer/mock/demo-store';
@@ -132,13 +132,20 @@ function renderPage(
 }
 
 describe('公共框架', () => {
+  it('进入其他页面时清除主滚动区的旧偏移', async () => {
+    renderPage(<HomePage />);
+    const main = screen.getByTestId('main-scroll');
+    main.scrollTop = 420;
+    fireEvent.click(screen.getByRole('link', { name: '媒体管理', exact: true }));
+    await waitFor(() => expect(main.scrollTop).toBe(0));
+  });
+
   it('标题栏、侧栏与主导航都在，且侧栏显示分类计数', async () => {
     renderPage(<HomePage />);
     expect(screen.getByText('KumiPlayer')).toBeTruthy();
-    // 顶栏徽标反映当前服务实现（浏览器默认本机后端；显式演示入口才是演示模式）。
-    expect(
-      screen.getByText(resolveServiceMode().mode === 'demo' ? '演示模式' : '本机后端'),
-    ).toBeTruthy();
+    expect(screen.queryByText('演示模式')).toBeNull();
+    expect(screen.queryByText('本机后端')).toBeNull();
+    expect(screen.queryByText('本地账户')).toBeNull();
     expect(screen.getByRole('navigation', { name: '媒体库导航' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '搜索作品（Ctrl+K）' })).toBeTruthy();
     const titlebar = screen.getByRole('banner');
@@ -300,10 +307,12 @@ describe('最近观看', () => {
 });
 
 describe('作品详情', () => {
-  it('渲染季集、版本与侧栏资料，播放会启动演示播放会话', async () => {
+  it('详情主画面展示季集，资料放入抽屉，播放与版本仍可用', async () => {
     const target = catalog.works[0]!;
     renderPage(<WorkDetailPage />, '/work/:workId', `/work/${target.id}`);
-    await waitFor(() => expect(screen.getByText('资料状态')).toBeTruthy(), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: target.title })).toBeTruthy(), { timeout: 4000 });
+    expect(screen.queryByText('资料状态')).toBeNull();
+    expect(screen.queryByRole('region', { name: '演员' })).toBeNull();
 
     const seasonTabs = screen.getAllByRole('tab');
     expect(seasonTabs.length).toBeGreaterThan(0);
@@ -313,7 +322,21 @@ describe('作品详情', () => {
     await waitFor(() => expect(getDemoState().playback?.workId).toBe(target.id));
 
     expect(screen.getAllByRole('button', { name: '选择版本' }).length).toBeGreaterThan(0);
-    expect(screen.getByText('资料状态')).toBeTruthy();
+    expect(screen.queryByText('资料状态')).toBeNull();
+  });
+
+  it('管理抽屉保留资料、观看状态与匹配入口', async () => {
+    const target = catalog.works[0]!;
+    const detail = await service.getWorkDetail(target.id);
+    const changed = vi.fn(() => Promise.resolve());
+    renderPage(<WorkManagementSheet work={detail} open onOpenChange={vi.fn()} onChanged={changed} />);
+    const sheet = await screen.findByRole('dialog', { name: '资料与管理' });
+    expect(within(sheet).getByText('资料状态')).toBeTruthy();
+    expect(within(sheet).getByText('来源与位置')).toBeTruthy();
+    expect(within(sheet).getByRole('button', { name: '搜索候选' })).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('button', { name: '已看完', exact: true }));
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+    expect((await service.getWorkDetail(target.id)).watch.status).toBe('watched');
   });
 
   it('收藏按钮写入演示存储', async () => {
@@ -322,6 +345,7 @@ describe('作品详情', () => {
     const favorite = await screen.findByRole('button', { name: /收藏/ });
     fireEvent.click(favorite);
     await waitFor(() => expect(getDemoState().favorite[target.id]).toBe(true));
+    await waitFor(() => expect(screen.getByRole('button', { name: '已收藏', exact: true })).toBeTruthy());
   });
 
   it('季切换 Tabs 支持键盘方向键（Radix 原语，无需自写实现）', async () => {

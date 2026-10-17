@@ -24,8 +24,14 @@ describe('海报展示契约', () => {
 
   it('无效、过大与小数列数不能破坏虚拟网格', () => {
     expect(resolveColumns(2000, Number.NaN)).toBe(8);
-    expect(resolveColumns(2000, 100)).toBe(10);
-    expect(resolveColumns(2000, 3.8)).toBe(3);
-    expect(resolveColumns(400, -1)).toBe(2);
+    expect(resolveColumns(2000, 100)).toBe(9);
+    expect(resolveColumns(2000, 3.8)).toBe(6);
+    expect(resolveColumns(280, -1)).toBe(2);
+  });
+
+  it('桌面容器落实选定密度，小窗口自动降列且不横向溢出', () => {
+    expect(resolveColumns(976, 8)).toBe(8);
+    expect(resolveColumns(976, 9)).toBe(9);
+    expect(resolveColumns(400, 8)).toBe(3);
   });
 });

@@ -34,12 +34,11 @@ import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-rout
 import { SOURCE_LABELS, useUiStore, type SourceFilter } from '@/app/ui-store';
 import { useNavHistoryState, useRecordLocation } from '@/app/nav-history';
 import { detectHost } from '@/app/platform';
-import { resolveServiceMode } from '@/app/service-mode';
 import { demoQueryKeys, useLibrary } from '@/shared/api/service-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDemoState } from '@/mock/demo-store';
 import type { LibraryView, WorkSummary } from '@/shared/api/service';
-import { Badge } from '@/shared/ui/badge';
+import { Avatar, AvatarFallback } from '@/shared/ui/avatar';
 import { Button } from '@/shared/ui/button';
 import {
   DropdownMenu,
@@ -100,6 +99,12 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   const application = useDemoState().settings.application;
   const sidebarMode = useUiStore((state) => state.sidebarMode);
   const mainRef = useCallback((node: HTMLElement | null) => setMain(node), []);
+
+  // 主滚动区跨路由复用，不能把上一页的偏移带进新页面。
+  // 用被动 effect 留出旧页面保存位置的机会；海报墙随后按自身筛选恢复位置。
+  useEffect(() => {
+    if (main) main.scrollTop = 0;
+  }, [main, location.pathname]);
 
   // 首次使用引导只在"未完成且未推迟"时自动打开一次；关掉后不会反复弹出。
   const autoOpened = useRef(false);
@@ -219,9 +224,6 @@ function TitleBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
 
         <div className={styles.brand}>
           <span className={styles.brandName}>KumiPlayer</span>
-          <Badge variant="soft" className="hidden sm:inline-flex">
-            {resolveServiceMode().mode === 'demo' ? '演示模式' : '本机后端'}
-          </Badge>
         </div>
       </div>
 
@@ -287,6 +289,7 @@ function Sidebar({ onOpenSearch }: { readonly onOpenSearch: () => void }) {
           aria-label={expanded ? '收起为图标栏' : '展开完整侧栏'}
         >
           <span className={styles.sidebarHeaderLabel}>媒体库</span>
+          <span className={styles.sidebarHeaderLine} aria-hidden="true" />
           <span className={styles.sidebarHeaderIcon} aria-hidden="true">
             {expanded ? <PanelLeftClose /> : <PanelLeftOpen />}
           </span>
@@ -367,12 +370,11 @@ function NavList({
         ))}
         {/* 本地账户入口：浏览器版本没有登录能力，只显示本机身份，不造假登录态。 */}
         <div className={styles.sidebarUser} aria-label="本机账户">
-          <span className={styles.sidebarUserAvatar} aria-hidden="true">
-            K
-          </span>
+          <Avatar className={styles.sidebarUserAvatar} aria-hidden="true">
+            <AvatarFallback>K</AvatarFallback>
+          </Avatar>
           <span className={styles.sidebarUserText}>
             <span className={styles.sidebarUserName}>Kumi</span>
-            <span className={styles.sidebarUserSub}>本地账户</span>
           </span>
         </div>
       </div>

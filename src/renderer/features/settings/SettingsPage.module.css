@@ -90,6 +90,8 @@
   overscroll-behavior-y: contain;
   scrollbar-gutter: stable;
   padding: 2px 4px 24px 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .notice {

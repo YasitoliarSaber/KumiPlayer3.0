@@ -1,5 +1,5 @@
 /**
- * 海报卡（影视专用自有组件）：海报 → 评分 → 收藏 → 进度 → 标题 → 副标题。
+ * 海报卡（影视领域组件）：图片、观看进度、标题与副标题，不叠加评分或收藏徽标。
  * 只展示已给定的展示数据，不推导作品事实。
  */
 
@@ -57,10 +57,10 @@ function PosterCardComponent({ work, variant = 'poster', onOpen, eager = false, 
           </span>
         ) : null}
       </span>
-      <span className={cn('flex w-full min-w-0 flex-col gap-1', wide ? 'h-11' : 'h-16')}>
+      <span className={cn('flex w-full min-w-0 flex-col gap-1', landscape ? 'h-11' : 'h-16')}>
         <span className={cn(
           'text-[14px] leading-[1.35] font-semibold text-foreground group-hover:text-[var(--accent-strong)]',
-          wide ? 'line-clamp-1 h-[1.35em]' : 'line-clamp-2 h-[2.7em]',
+          landscape ? 'line-clamp-1 h-[1.35em]' : 'line-clamp-2 h-[2.7em]',
         )} title={work.title}>
           {work.title}
         </span>

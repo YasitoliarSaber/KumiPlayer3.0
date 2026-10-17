@@ -1,12 +1,13 @@
 /**
  * 作品详情：背景与海报/标志、简介与元信息、季集切换、缩略图、版本选择、
- * 收藏、模拟播放与更多菜单。复刻当前应用详情页的信息层级与操作位置。
+ * 收藏与更多菜单。布局以最终原型为准，管理操作使用同一套 Radix 抽屉。
  */
 
 import {
   ArrowLeft,
   Check,
   CirclePlay,
+  ChevronDown,
   Database,
   FolderOpen,
   Heart,
@@ -21,7 +22,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { EpisodeEntry, WorkDetail } from '../../shared/api/service';
 import { demoQueryKeys, useMediaService, useWorkDetail } from '../../shared/api/service-context';
 import { Artwork } from '../../shared/ui/Artwork';
-import { ProgressBar, StatusChip } from '../../shared/ui/Surface';
+import { ProgressBar } from '../../shared/ui/Surface';
 import { ErrorSurface, LoadingSurface } from '../../shared/ui/Surface';
 import { Button } from '@/shared/ui/button';
 import {
@@ -45,7 +46,7 @@ import {
 import { Input } from '@/shared/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/shared/ui/tabs';
 import { SOURCE_LABELS } from '@/app/ui-store';
-import { BangumiPanel, ManualScrapePanel } from './WorkMetadataPanels';
+import { WorkManagementSheet } from './WorkManagementSheet';
 import styles from './WorkDetailPage.module.css';
 
 export function WorkDetailPage() {
@@ -58,12 +59,14 @@ export function WorkDetailPage() {
   const [seasonIndex, setSeasonIndex] = useState(0);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [managementOpen, setManagementOpen] = useState(false);
   const [pendingTitle, setPendingTitle] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [togglingFavorite, setTogglingFavorite] = useState(false);
   // 作品来源选择：真实影响播放使用哪个 Asset，不只是改标签。
   const [preferredSource, setPreferredSource] = useState<string>('');
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const dragRef = useDragScroll();
 
   const work = detail.data;
@@ -76,11 +79,15 @@ export function WorkDetailPage() {
     setBusy(false);
     setTogglingFavorite(false);
     setPreferredSource('');
+    setManagementOpen(false);
   }, [workId]);
 
   const refreshLibrary = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: demoQueryKeys.library }),
-    [queryClient],
+    () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: demoQueryKeys.library }),
+      queryClient.invalidateQueries({ queryKey: demoQueryKeys.detail(workId) }),
+    ]),
+    [queryClient, workId],
   );
 
   const play = useCallback(
@@ -129,10 +136,11 @@ export function WorkDetailPage() {
 
   return (
     <article className={styles.page} data-route="work-detail">
+      <div className={styles.backdrop} aria-hidden="true">
+        <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt="" loading="eager" className={styles.heroBackdropBlur} />
+        <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt="" loading="eager" className={styles.heroBackdrop} />
+      </div>
       <div className={styles.hero}>
-        {/* 模糊铺满 + contain 清晰两层背景；正文只叠左侧 scrim。 */}
-        <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt="" className={styles.heroBackdropBlur} />
-        <Artwork artwork={work.artwork.fanart ?? work.artwork.poster} alt="" className={styles.heroBackdrop} />
         <span className={styles.heroShade} aria-hidden="true" />
         <button type="button" className={styles.heroBack} onClick={() => navigate(-1)}>
           <ArrowLeft aria-hidden="true" />
@@ -140,35 +148,55 @@ export function WorkDetailPage() {
         </button>
         <div className={styles.heroBody}>
           <div className={styles.heroPoster}>
-            <Artwork artwork={work.artwork.poster} alt={work.title} fallbackLabel={work.title} />
+            <Artwork artwork={work.artwork.poster} alt={work.title} fallbackLabel={work.title} loading="eager" />
           </div>
           <div className={styles.heroCopy}>
-            {work.artwork.clearlogo ? (
-              <Artwork artwork={work.artwork.clearlogo} alt={work.title} kind="logo" className={styles.heroLogo} />
-            ) : (
-              <h1 className={styles.heroTitle}>{work.title}</h1>
-            )}
+            <h1 className={work.artwork.clearlogo ? styles.logoTitle : styles.heroTitle}>
+              {work.artwork.clearlogo ? <>
+                <span className="sr-only">{work.title}</span>
+                <Artwork artwork={work.artwork.clearlogo} alt="" fallbackLabel={work.title} kind="logo" loading="eager" className={styles.heroLogo} />
+              </> : work.title}
+            </h1>
             {work.originalTitle && work.originalTitle !== work.title ? (
               <p className={styles.heroOriginal}>{work.originalTitle}</p>
             ) : null}
             <div className={styles.heroMeta}>
-              {work.rating > 0 ? <span className={styles.metaChip}>★ {work.rating.toFixed(1)}</span> : null}
-              <span className={styles.metaChip}>{work.year}</span>
-              <span className={styles.metaChip}>
+              {work.rating > 0 ? <span className={styles.metaItem}>★ {work.rating.toFixed(1)}</span> : null}
+              <span className={styles.metaItem}>{work.year}</span>
+              <span className={styles.metaItem}>
                 {work.mediaType === 'movie' ? '剧场版' : `共 ${work.seasonCount} 季`}
               </span>
-              <span className={styles.metaChip}>{work.episodeCount} 集</span>
-              <span className={styles.metaChip}>{work.assetCount} 个版本</span>
+              <span className={styles.metaItem}>{work.episodeCount} 集</span>
             </div>
             <div className={styles.heroTags}>
-              {work.genres.map((genre) => (
-                <StatusChip key={genre}>{genre}</StatusChip>
-              ))}
-              {work.tags.slice(0, 2).map((tag) => (
-                <StatusChip key={tag} tone="info">
-                  {tag}
-                </StatusChip>
-              ))}
+              {/* 作品来源：单一选择器（原型已把多枚来源胶囊收敛为互斥菜单）。 */}
+              {work.sources.length > 0 ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="xs" className={styles.sourcePicker}>
+                      <Database className="size-4" />
+                      {sourceLabel(preferredSource || work.sources[0]!)}
+                      <ChevronDown aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-[13rem]">
+                    <DropdownMenuLabel>作品来源</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={preferredSource || work.sources[0]}
+                      onValueChange={setPreferredSource}
+                    >
+                      {work.sources.map((source) => (
+                        <DropdownMenuRadioItem key={source} value={source}>
+                          {sourceLabel(source)}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
+              <span className={styles.genreList}>
+                {work.genres.slice(0, 3).map((genre) => <span key={genre}>{genre}</span>)}
+              </span>
             </div>
             <p className={styles.heroPlot}>{work.plot}</p>
             <div className={styles.heroActions}>
@@ -192,6 +220,7 @@ export function WorkDetailPage() {
               <span title={work.watch.favorite ? '取消收藏' : '加入收藏'} className="inline-flex">
                 <Button
                   variant={work.watch.favorite ? 'subtle' : 'outline'}
+                  className={styles.onArtworkButton}
                   loading={togglingFavorite}
                   aria-busy={togglingFavorite}
                   onClick={() => {
@@ -203,6 +232,7 @@ export function WorkDetailPage() {
                     void service
                       .setFavorite(work.id, !work.watch.favorite)
                       .then(refreshLibrary)
+                      .catch((error: unknown) => setNotice(error instanceof Error ? error.message : '收藏状态未保存'))
                       .finally(() => setTogglingFavorite(false));
                   }}
                 >
@@ -210,38 +240,16 @@ export function WorkDetailPage() {
                   {work.watch.favorite ? '已收藏' : '收藏'}
                 </Button>
               </span>
-              {/* 作品来源：单一选择器（原型已把多枚来源胶囊收敛为互斥菜单）。 */}
-              {work.sources.length > 0 ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline">
-                      <Database className="size-4" />
-                      {sourceLabel(preferredSource || work.sources[0]!)}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="min-w-[13rem]">
-                    <DropdownMenuLabel>作品来源</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={preferredSource || work.sources[0]}
-                      onValueChange={setPreferredSource}
-                    >
-                      {work.sources.map((source) => (
-                        <DropdownMenuRadioItem key={source} value={source}>
-                          {sourceLabel(source)}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : null}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline">
+                  <Button ref={moreButtonRef} variant="outline" className={styles.onArtworkButton}>
                     <MoreHorizontal className="size-4" />
-                    更多
+                    更多操作
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setManagementOpen(true)}>资料与管理</DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => setNotice('已排队重新刮削资料（演示，不会访问在线服务）')}
                   >
@@ -361,23 +369,8 @@ export function WorkDetailPage() {
             ))}
           </ul>
 
-          <section className={styles.castSection} aria-label="演员">
-            <h2 className={styles.blockTitle}>演员与制作</h2>
-            <div className={styles.castRow}>
-              {work.cast.map((person) => (
-                <div key={`${person.name}-${person.role}`} className={styles.castCard}>
-                  <span className={styles.castAvatar} aria-hidden="true">
-                    {person.name.slice(0, 1)}
-                  </span>
-                  <span className={styles.castName}>{person.name}</span>
-                  <span className={styles.castRole}>{person.role}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-
           {work.related.length > 0 ? (
-            <section className={styles.castSection} aria-label="相关推荐">
+            <section className={styles.relatedSection} aria-label="相关推荐">
               <h2 className={styles.blockTitle}>相关作品</h2>
               <div className={styles.relatedRow}>
                 {work.related.slice(0, 6).map((item) => (
@@ -401,41 +394,10 @@ export function WorkDetailPage() {
           ) : null}
         </section>
 
-        <aside className={styles.side} aria-label="资料与操作">
-          <SidePanel title="资料状态">
-            <DetailRow label="资料提供方" value={work.metadata.provider} />
-            <DetailRow label="提供方 ID" value={work.metadata.providerId} />
-            <DetailRow label="状态" value={work.metadata.state} />
-            <DetailRow label="资料更新时间" value={work.metadata.updatedAt.slice(0, 10)} />
-          </SidePanel>
-
-          <SidePanel title="观看状态">
-            <div className={styles.stateRow}>
-              {STATUS_OPTIONS.map((option) => (
-                <Button
-                  key={option.value}
-                  size="xs"
-                  variant={work.watch.status === option.value ? 'subtle' : 'outline'}
-                  onClick={() =>
-                    void service.setWatchStatus(work.id, option.value).then(refreshLibrary)
-                  }
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-          </SidePanel>
-
-          <SidePanel title="来源与位置">
-            <DetailRow label="来源" value={work.sources.join(' / ')} />
-            <DetailRow label="位置" value={work.location} />
-            {work.collections.length > 0 ? <DetailRow label="合集" value={work.collections.join('、')} /> : null}
-          </SidePanel>
-
-          <ManualScrapePanel work={work} />
-          <BangumiPanel work={work} />
-        </aside>
       </div>
+
+      <WorkManagementSheet work={work} open={managementOpen} onOpenChange={setManagementOpen} onChanged={refreshLibrary}
+        onReturnFocus={() => moreButtonRef.current?.focus({ preventScroll: true })} />
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
@@ -489,34 +451,6 @@ export function WorkDetailPage() {
         </DialogContent>
       </Dialog>
     </article>
-  );
-}
-
-const STATUS_OPTIONS = [
-  { value: 'watching' as const, label: '追更中' },
-  { value: 'watched' as const, label: '已看完' },
-  { value: 'on_hold' as const, label: '搁置' },
-  { value: 'dropped' as const, label: '弃番' },
-  { value: '' as const, label: '未标记' },
-];
-
-function SidePanel({ title, children }: { readonly title: string; readonly children: React.ReactNode }) {
-  return (
-    <section className={styles.panel}>
-      <h2 className={styles.panelTitle}>{title}</h2>
-      <div className={styles.panelBody}>{children}</div>
-    </section>
-  );
-}
-
-function DetailRow({ label, value }: { readonly label: string; readonly value: string }) {
-  return (
-    <div className={styles.detailRow}>
-      <span className={styles.detailLabel}>{label}</span>
-      <span className={styles.detailValue} title={value}>
-        {value}
-      </span>
-    </div>
   );
 }
 

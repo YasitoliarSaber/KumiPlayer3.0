@@ -1,6 +1,6 @@
 /**
  * 首页：媒体展示橱窗 + 继续观看 + 分类分区。
- * 结构、信息密度与分区顺序复刻当前应用首页，不做新的视觉设计。
+ * 结构、比例、分区留白遵循精修原型，领域数据继续来自统一服务。
  */
 
 import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';

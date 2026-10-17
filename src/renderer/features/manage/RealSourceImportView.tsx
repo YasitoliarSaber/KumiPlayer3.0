@@ -210,17 +210,12 @@ export function RealSourceImportView() {
         </p>
       ) : null}
 
-      <section className={styles.panel} aria-label="状态摘要">
-        <h2 className={styles.panelTitle}>状态摘要</h2>
-        <div className="flex flex-wrap gap-6 pt-1 text-[13px]">
+      <section className={styles.summaryGrid} aria-label="状态摘要">
+        <h2 className="sr-only">状态摘要</h2>
           <Metric label="已入库作品" value={works} />
           <Metric label="进行中任务" value={runningTasks} />
           <Metric label="失败任务" value={failedTasks} tone={failedTasks > 0 ? 'danger' : undefined} />
           <Metric label="待识别草稿" value={draftCount} />
-        </div>
-        <p className={styles.panelHint}>
-          这里分开显示扫描、识别草稿与后台作业；数字都来自后端真实行，没有连续进度百分比。
-        </p>
       </section>
 
       <section className={styles.panel} aria-label="导入媒体">
@@ -519,9 +514,9 @@ export function RealSourceImportView() {
 
 function Metric({ label, value, tone }: { readonly label: string; readonly value: number; readonly tone?: 'danger' }) {
   return (
-    <span className="flex flex-col">
+    <span className={styles.summaryCard}>
       <span
-        className="text-[20px] font-semibold tabular-nums"
+        className={styles.summaryValue}
         style={tone === 'danger' && value > 0 ? { color: 'var(--destructive)' } : undefined}
       >
         {value}

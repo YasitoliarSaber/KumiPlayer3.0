@@ -76,7 +76,12 @@
   gap: 6px;
   font-size: var(--text-xs);
   color: var(--text-muted);
+  align-items: baseline;
+  min-width: 0;
 }
+
+.separator { color: var(--text-muted); opacity: 0.6; }
+.status { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 .code {
   font-weight: 600;
